@@ -58,6 +58,8 @@ def payload(folder):
     info = json.loads((folder / 'build-info.json').read_text())
     if info.get('configuration') != 'PRODUCTION' or info.get('configuration_validation') != 'PASS':
         raise ValueError('Production configuration verification missing')
+    if info.get('password_configuration_validation') != 'PASS' or info.get('password_validation_method') != 'built-dll-native-bridge':
+        raise ValueError('Built DLL password verification missing')
     if not (folder / 'rustdesk/librustdesk.dll').is_file():
         raise ValueError('Compiled library missing')
     for file in folder.rglob('*'):
@@ -79,10 +81,12 @@ def compiled(library):
     if any(marker in data for marker in FORBIDDEN):
         raise ValueError('Test fixture remains in compiled library')
     for name, value in values.items():
-        if name == 'RUSTDESK_RELAY_SERVER' and not value:
+        if name == 'RUSTDESK_PASSWORD' or (name == 'RUSTDESK_RELAY_SERVER' and not value):
             continue
         if value.encode() not in data:
             raise ValueError(name + ': compiled injection not verified (value withheld)')
+    from native_config_probe import verify
+    verify(library)
     print('Compiled production configuration: PASS (values withheld)')
 
 if __name__ == '__main__':

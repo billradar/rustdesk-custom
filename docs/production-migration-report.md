@@ -109,3 +109,33 @@ At this verification, production workflow_runs total_count=0 and test schedule t
 Workflow registration is not compile or Release validation. Production acceptance remains pending.
 The next run is release-check with upstream_ref=1.4.9, dry_run=true, force_rebuild=false.
 Do not enable production publishing or supply a dry_run_id until that first real run is successful.
+
+## Dry-run packaging correction (2026-10-01)
+
+Run https://github.com/billradar/rustdesk-custom/actions/runs/36841915464:
+Standard and SOS Rust/Flutter compilation succeeded; packaging failed while scanning for
+contiguous RUSTDESK_PASSWORD bytes. Release validation/publishing were skipped.
+The production inputs and extracted native-helper checks passed; that does not by itself
+prove the packaged DLL's password. Compiler optimization is a possible explanation,
+not a confirmed result for the failed DLL (no client artifact was uploaded).
+
+The corrected build verification retains the source/helper checks and public configuration
+presence checks, verifies packaged DLL == freshly built Cargo DLL, then loads the built DLL
+in an isolated Windows process. Through existing FRB 1.x exports it runs main_init and reads
+hard options password and verification-method. Comparison is in memory, no password or
+password digest is printed/saved; native output is suppressed; timeout, missing exports,
+initialization/query failure, wrong password or wrong verification method stops packaging.
+Temporary user/app configuration and logs are discarded; no core_main, UI, server start or
+remote-session API is called. Frozen v1/v2 patch contents and password behavior are unchanged.
+Build info records password_configuration_validation and password_validation_method;
+production payload validation rejects missing native verification evidence.
+
+Validation: 31 local tests PASS, including a compiled fictional C fixture implementing the
+same ctypes bridge ABI and negative password/method/init/query/timeout cases. This fixture
+is not the real RustDesk Windows DLL. Real Windows probe and corrected production Dry Run:
+PENDING ACTIONS RUN. No production Release has been created.
+
+Runtime/UI Validation: SKIPPED BY USER.
+Real Remote Session Validation: NOT TESTED.
+Code Signing: NOT ENABLED.
+Password Security V2: DEFERRED.

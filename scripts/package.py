@@ -56,17 +56,25 @@ elif command == 'package':
     library = (release / 'librustdesk.dll').read_bytes()
     # Test binaries must carry the compile-time inputs, rather than merely having env vars.
     # Never print the values, password digest, or any part of the executable.
-    for name in ['RUSTDESK_ID_SERVER', 'RUSTDESK_API_SERVER', 'RUSTDESK_KEY', 'RUSTDESK_PASSWORD']:
+    for name in ['RUSTDESK_ID_SERVER', 'RUSTDESK_API_SERVER', 'RUSTDESK_KEY']:
         value = os.environ.get(name, '').encode()
         if not value or value not in library:
             raise SystemExit(f'Compiled configuration not found: {name} (value withheld)')
     relay = os.environ.get('RUSTDESK_RELAY_SERVER', '').encode()
     if relay and relay not in library:
         raise SystemExit('Compiled relay configuration not found (value withheld)')
+    # Do not assume optimized short strings survive as contiguous DLL bytes.
+    # Query the built DLL's existing configuration API instead.
+    native_library = tree / 'target/release/librustdesk.dll'
+    if not native_library.is_file() or native_library.read_bytes() != library:
+        raise SystemExit('Packaged DLL differs from the freshly built Rust DLL')
     configuration = os.environ.get('BUILD_CONFIGURATION', 'TEST ONLY')
     if configuration == 'PRODUCTION':
         from production_config import compiled
         compiled(release / 'librustdesk.dll')
+    else:
+        from native_config_probe import verify
+        verify(release / 'librustdesk.dll')
     print('Compiled configuration presence: PASS (values withheld)')
     topmost = Path(os.environ['RUSTDESK_TOPMOST_DLL'])
     if not topmost.is_file():
@@ -99,6 +107,8 @@ elif command == 'package':
         'custom_repository': os.environ.get('GITHUB_REPOSITORY', 'billradar/rustdesk-custom'),
         'architecture': 'x86_64',
         'configuration_validation': 'PASS',
+        'password_configuration_validation': 'PASS',
+        'password_validation_method': 'built-dll-native-bridge',
         'custom_repository_sha': git(root, 'rev-parse', 'HEAD'),
         'common_patch_hash': patch_hash(root, 'common'),
         'sos_patch_hash': patch_hash(root, 'sos') if variant == 'sos' else None,

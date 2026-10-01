@@ -61,7 +61,9 @@ class ProductionGateTests(automation.ReleaseGateTests):
         info = super().payload(folder, variant)
         info.update(configuration='PRODUCTION', configuration_validation='PASS',
                     custom_repository='billradar/rustdesk-custom', architecture='x86_64',
-                    server_config_fingerprint='e'*64)
+                    server_config_fingerprint='e'*64,
+                    password_configuration_validation='PASS',
+                    password_validation_method='built-dll-native-bridge')
         (folder/'rustdesk/librustdesk.dll').write_bytes((folder/'rustdesk/rustdesk.exe').read_bytes())
         (folder/'build-info.json').write_text(json.dumps(info)); self.sums(folder)
         return info
