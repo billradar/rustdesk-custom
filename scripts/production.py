@@ -65,6 +65,16 @@ def discover(ref, force=False, dry_run=True):
     print(json.dumps(data, indent=2))
     return data
 
+def scan_job_log(job_id):
+    # gh rejects ANSI controls by default; permit them only into captured memory.
+    # Never render or print downloaded logs. Scan raw and de-coloured text so
+    # terminal formatting cannot hide a known credential pattern.
+    text = gh('api', '--allow-escape-sequences',
+              f'repos/{REPOSITORY}/actions/jobs/{job_id}/logs')
+    scan_bytes(text.encode())
+    normalized = re.sub(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))', '', text)
+    scan_bytes(normalized.encode())
+
 def assets(root):
     guard()
     # Check completed source/build jobs before either dry-run approval or publishing.
@@ -77,7 +87,7 @@ def assets(root):
         jobs = api(f'repos/{REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100&page={page}')['jobs']
         for job in jobs:
             if job['status'] == 'completed' and job['conclusion'] == 'success':
-                scan_bytes(gh('api', f'repos/{REPOSITORY}/actions/jobs/{job["id"]}/logs').encode())
+                scan_job_log(job["id"])
         if len(jobs) < 100:
             break
         page += 1

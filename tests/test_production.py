@@ -132,3 +132,20 @@ class ProductionDiscoveryTests(unittest.TestCase):
              patch.object(production,'request') as writes, self.assertRaisesRegex(ValueError,'credential'):
             production.publish(Path('.'), '')
         writes.assert_not_called()
+
+class JobLogScanTests(unittest.TestCase):
+    def test_ansi_logs_are_captured_and_scanned_without_output(self):
+        out=io.StringIO()
+        with patch.object(production,'gh',return_value='\x1b[32mFinished\x1b[0m'), contextlib.redirect_stdout(out) as output:
+            production.scan_job_log(12)
+            production.gh.assert_called_once_with('api','--allow-escape-sequences',f'repos/{production.REPOSITORY}/actions/jobs/12/logs')
+        self.assertEqual(output.getvalue(),'')
+    def test_color_split_credential_still_blocks(self):
+        token='ghp_'+'a'*36
+        formatted=token[:10]+'\x1b[32m'+token[10:]+'\x1b[0m'
+        with patch.object(production,'gh',return_value=formatted), self.assertRaisesRegex(ValueError,'credential'):
+            production.scan_job_log(12)
+    def test_unreadable_log_blocks(self):
+        import subprocess
+        with patch.object(production,'gh',side_effect=subprocess.CalledProcessError(1,['gh','api'])), self.assertRaises(subprocess.CalledProcessError):
+            production.scan_job_log(12)

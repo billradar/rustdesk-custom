@@ -139,3 +139,20 @@ Runtime/UI Validation: SKIPPED BY USER.
 Real Remote Session Validation: NOT TESTED.
 Code Signing: NOT ENABLED.
 Password Security V2: DEFERRED.
+
+## Corrected DLL validation and job-log reader (2026-10-01)
+
+Run https://github.com/billradar/rustdesk-custom/actions/runs/36848825478 used
+f5a2b5be4fe924cef7525031670f6a4f608381e2. Standard job 110330072163 and SOS
+job 110330072237 both succeeded and uploaded client artifacts. Actual built-DLL
+password/verification-method checks, compiled production configuration, individual
+metadata/checksums/AMD64 validation, and known fixture/credential payload scans PASS.
+Runtime/UI remains SKIPPED BY USER; real remote session remains NOT TESTED.
+
+Paired validate job 110343103931 failed before paired provenance acceptance because
+GitHub CLI refused logs containing terminal escape sequences. No Release was created.
+The log reader now uses gh api --allow-escape-sequences only into captured memory;
+no downloaded logs are printed. It scans both raw text and text with ANSI CSI/OSC
+formatting removed. Log download failures and credential detection still block.
+34 local tests PASS, including coloured logs, colour-split credentials, and unreadable
+logs. Corrected paired validation and overall Production Dry Run: PENDING ACTIONS RUN.
