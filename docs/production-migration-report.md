@@ -27,12 +27,12 @@ Compatibility follows official default branch and has no release/write path; ori
 
 ## Configuration
 
-RUSTDESK_ID_SERVER (Variable): NOT CONFIGURED.
-RUSTDESK_RELAY_SERVER (Variable): NOT CONFIGURED.
-RUSTDESK_API_SERVER (Variable): NOT CONFIGURED.
-RUSTDESK_KEY (Variable, public key): NOT CONFIGURED.
-RUSTDESK_PASSWORD (Secret): NOT CONFIGURED.
-PRODUCTION_RELEASE_ENABLED (Variable): NOT CONFIGURED / DISABLED.
+RUSTDESK_ID_SERVER (Variable): NOT VERIFIED (repository configuration read not available).
+RUSTDESK_RELAY_SERVER (Variable): NOT VERIFIED (repository configuration read not available).
+RUSTDESK_API_SERVER (Variable): NOT VERIFIED (repository configuration read not available).
+RUSTDESK_KEY (Variable, public key): NOT VERIFIED (repository configuration read not available).
+RUSTDESK_PASSWORD (Secret): NOT VERIFIED (repository configuration read not available).
+PRODUCTION_RELEASE_ENABLED (Variable): NOT VERIFIED; keep disabled until Dry Run passes.
 No production value or secret was requested from, read from or modified in the old repositories.
 
 ## Local verification
@@ -95,3 +95,17 @@ The repository is now initialized and code migration has been performed. Configu
 on GitHub, or approve a browser fallback for unsupported connector operations.
 Never send the fixed password in chat or put it in Git. Once the initialized repository exists,
 file/tree/commit migration can continue via the existing connector, preserving a clean forward history.
+
+## Remote migration verification
+
+Production adapter commit: `0abb885e73be892d390a7f247535732b95909ec3`.
+Remote main contains 45 maintenance files; frozen patch/core Git blobs exactly match source baseline.
+GitHub registered all three workflows as active:
+- release-check.yml: 371959432
+- test-build.yml: 371959434
+- upstream-compatibility.yml: 371959438
+
+At this verification, production workflow_runs total_count=0 and test schedule total_count=0.
+Workflow registration is not compile or Release validation. Production acceptance remains pending.
+The next run is release-check with upstream_ref=1.4.9, dry_run=true, force_rebuild=false.
+Do not enable production publishing or supply a dry_run_id until that first real run is successful.

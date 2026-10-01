@@ -1,0 +1,32 @@
+{
+  "source_repository": "billradar/rustdesk-custom-test",
+  "source_commit": "d40235baa3e414dac3f52c1866c4c563e62b4390",
+  "production_repository": "billradar/rustdesk-custom",
+  "initial_commit": "3336a8ddbbd6fecac30a4c81220222acb7751397",
+  "frozen_core_commit": "952c8100a100a1b82fad4b28c218b097d8eae214",
+  "production_adapter_commit": "0abb885e73be892d390a7f247535732b95909ec3",
+  "remote_frozen_blobs": "EXACT MATCH",
+  "workflow_registration": "ACTIVE",
+  "workflows": [
+    {
+      "path": ".github/workflows/release-check.yml",
+      "id": 371959432
+    },
+    {
+      "path": ".github/workflows/test-build.yml",
+      "id": 371959434
+    },
+    {
+      "path": ".github/workflows/upstream-compatibility.yml",
+      "id": 371959438
+    }
+  ],
+  "production_configuration": "NOT VERIFIED",
+  "production_dry_run": "NOT RUN",
+  "production_release": "NOT CREATED",
+  "phase3_schedule": "CONFIGURED / NOT OBSERVED",
+  "runtime_ui": "SKIPPED BY USER",
+  "real_remote_session": "NOT TESTED",
+  "old_repositories": "ZERO WRITES",
+  "recorded_at": "2026-10-01T08:38:54.403Z"
+}
