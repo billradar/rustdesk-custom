@@ -23,6 +23,10 @@ class CompilerConfigTests(unittest.TestCase):
         from production_config import configured
         with patch.dict(os.environ,VALUES,clear=True):self.assertEqual(configured(),VALUES)
     def test_short_password_checked_in_compiled_function(self):config_mir.verify(MIR,VALUES)
+    def test_rustc_trimmed_module_paths(self):config_mir.verify(MIR.replace('common::',''),VALUES)
+    def test_ambiguous_function_names_fail_closed(self):
+        for extra in [MIR,MIR.replace('common::','')]:
+            with self.assertRaises(ValueError):config_mir.verify(MIR+extra,VALUES)
     def test_wrong_or_missing_config_blocks_without_disclosure(self):
         for before,after in [('aaaa','bbbb'),('password','wrong-option'),('https://api.example.com','https://bad.example.com'),('relay.example.com','other.example.com')]:
             with self.assertRaises(ValueError) as error:config_mir.verify(MIR.replace(before,after),VALUES)
@@ -63,5 +67,5 @@ common::apply_custom_build_defaults().len()+common::get_api_server_().len()
 '''
         with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{**VALUES,'CONFIG_MIR_DIR':tmp,'PLATFORM_ARCH':'armv7'}):
             path=Path(tmp)/'lib.rs';path.write_text(source)
-            config_mir.wrapper([compiler,'--crate-name','librustdesk','--crate-type','cdylib','--emit=link','-O','--out-dir',tmp,str(path)])
+            self.assertEqual(config_mir.wrapper([compiler,'--crate-name','librustdesk','--crate-type','cdylib','--emit=link','-O','--out-dir',tmp,str(path)]),0)
             self.assertTrue((Path(tmp)/'validated.json').exists())

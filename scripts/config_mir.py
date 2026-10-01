@@ -4,8 +4,11 @@ import json,os,re,subprocess,sys
 from pathlib import Path
 
 def function(text,name):
-    match=re.search(r'^fn '+re.escape(name)+r'\([^\n]*',text,re.M)
-    if not match:raise ValueError('PLATFORM_API: configuration function missing from compiled MIR')
+    # rustc 1.75 trims module paths when a function name is unambiguous.
+    # Accept its qualified or trimmed spelling, but never choose among duplicates.
+    matches=list(re.finditer(r'^fn (?:'+re.escape(name)+'|'+re.escape(name.rsplit('::',1)[-1])+r')\([^\n]*',text,re.M))
+    if len(matches)!=1:raise ValueError('PLATFORM_API: configuration function missing or ambiguous in compiled MIR')
+    match=matches[0]
     end=re.search(r'^}',text[match.end():],re.M)
     if not end:raise ValueError('PLATFORM_API: incomplete compiled MIR')
     return text[match.start():match.end()+end.end()]

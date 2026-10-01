@@ -38,3 +38,10 @@ Stable run `36900570936` and CI `36899887344`, maintenance commit `fbcc3f2dd6c76
 The repair completes the test-only environment with `example.com` endpoints and an explicitly fictional 32-byte public key. It does not use repository production credentials or weaken required-input validation. An additional test validates fixture completeness with an otherwise empty environment, so this problem is caught locally even when Rust is unavailable. Platform repair acceptance remains pending a fresh Actions run.
 
 Runtime/UI: SKIPPED BY USER. Real remote session: NOT TESTED. Production code signing: NOT ENABLED. Password Security V2: DEFERRED. Old repositories: ZERO WRITES.
+# Follow-up: real Rust 1.75 MIR name formatting
+
+Stable run 36901039671 and CI run 36900991585 failed in the real-compiler regression test before platform builds. Rust 1.75 emitted `fn apply_custom_build_defaults` and `fn get_api_server_`, while the validator expected module-qualified names. This was a validator defect, not evidence of a platform compile failure.
+
+The parser now accepts qualified or compiler-trimmed names only when there is exactly one match. Missing or ambiguous functions still block the build. Added regression coverage for trimmed names and duplicate functions. The compiler return code is asserted explicitly.
+
+Local verification used the SHA-256-verified official Rust 1.75.0 Linux compiler: all 68 tests passed, including the real compiler/link/MIR wrapper test; no tests were skipped. Configuration fixtures were fictional. Actions and cross-platform validation of this follow-up remain pending until new runs complete. Patch sets and build commands were unchanged.
