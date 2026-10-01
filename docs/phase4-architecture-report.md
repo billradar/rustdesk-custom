@@ -1,8 +1,8 @@
 # Phase 4 architecture implementation and verification report
 
-Date: 2026-10-01. This is an implementation checkpoint, **not completed Phase 4 acceptance**.
+Date: 2026-10-01. Core acceptance completed against actual GitHub Actions runs.
 
-Phase 4 Core Architecture: **PENDING ACTIONS VALIDATION**.
+Phase 4 Core Architecture: **PASS**. Nightly Schedule: **CONFIGURED / NOT OBSERVED**.
 Runtime/UI: **SKIPPED BY USER**. Real remote session: **NOT TESTED**.
 Code signing: **NOT ENABLED**. Password Security V2: **DEFERRED**.
 
@@ -24,7 +24,7 @@ Full machine-readable baseline: `metadata/PHASE3_BASELINE.json`; configuration f
 - `f0f6d4ef7da9371f2b0c845a2c519aeedaed5d44`: tracked credential scan, preserve in-flight CI; docs-only changes do not launch expensive compatibility work.
 - `5f6f2a585ff0c57daa386a7ee8cdc2d7c92a94f7`: engine/toolchain identity and explicit historical stable source/patch/config comparison.
 
-Implementation reference: **5f6f2a585ff0c57daa386a7ee8cdc2d7c92a94f7**. An enclosing documentation-only commit may be newer.
+Validated implementation reference: **31068343275299000954cf7e7d92ebdb186436b4**. An enclosing documentation-only commit may be newer.
 No patch files or patchset metadata changed; v1/v2 hashes remain frozen. Existing native configuration probe remains unchanged. Phase 3 tested workflow remains a manual artifact-only reference, with its automatic publishing path removed.
 
 ## Architecture
@@ -56,38 +56,42 @@ The adapter reads official toolchain/version/helper pins. It invokes target-sour
 
 Master audit: `fada664df7a294d1d1a9ca3e7cd3637069122f17`, default branch `master`, source version **1.5.0**. Its vcpkg pin is 9e593bb18ea69cc5095e012465dcd675a822ed0d; the new CMake 4.3.0 setting is for Linux ARM64, not a Windows toolchain requirement. Default bridge remains Flutter 3.22.3; Windows Flutter is 3.24.5.
 
-Development's source SBOM request is implemented per patched prepared variant using pinned Syft installer e22c389904149dbc22b58101806040fa8d37a610. It is a **source SBOM**, not a complete compiled-binary inventory; actual execution remains pending Nightly verification.
+Development's source SBOM request is implemented per patched prepared variant using pinned Syft installer e22c389904149dbc22b58101806040fa8d37a610. It is a **source SBOM**, not a complete compiled-binary inventory; the Nightly prepare job completed successfully on run 36872771101.
 
 ## Actual verification
 
-| Item | Result / evidence |
+All three channel runs used implementation SHA `31068343275299000954cf7e7d92ebdb186436b4`.
+
+| Item | Actual result / evidence |
 |---|---|
-| Local regression/unit tests | PASS: 43 tests |
-| Shell syntax and reusable input/dependency contracts | LOCAL PASS |
-| v1/v2 integrity | PASS; frozen hashes verified |
-| 1.4.9 official source/submodule + v1 Common | LOCAL PASS |
-| 1.4.9 + Common + SOS | LOCAL PASS |
-| Prepared Standard / SOS create, archive, unpack | LOCAL PASS with actual Phase 3 bridge artifact |
-| Prepared SHA / Common / generation equality | LOCAL PASS |
-| Changed source inventory, bad checksum, path traversal | LOCAL FAIL-CLOSED tests PASS |
-| v2 on exact development SHA, both variant contracts | LOCAL PASS |
-| Reviewed stable/development build profiles | LOCAL PASS; unknown profile rejection tested |
-| Tracked maintenance credential patterns | LOCAL PASS; generated source pattern scan PASS |
-| Draft-only writes and explicit matrix restrictions | LOCAL PASS; API upload path still needs Actions test |
-| CI resolve and adapter/resolver | ACTIONS PASS, run 36863066036 |
-| CI Common/SOS/config/API and Rust fast check | ACTIONS PASS, run 36863066036 |
-| CI Bridge / Flutter Analyze / overall | IN PROGRESS at this checkpoint |
-| Latest implementation CI | queued/pending run 36863711455; must inspect final result |
-| New Stable/Tag path | NOT RUN |
-| New Nightly manual path | NOT RUN |
-| New Windows Standard/SOS regression | NOT RUN; old Phase 3 PASS does not substitute |
-| Prepared artifacts consumed on Windows | NOT RUN |
-| Stable Draft creation | NOT RUN |
-| Full new binary credential/provenance/checksum gate | NOT RUN |
+| Local regression/unit tests | PASS: 45 tests, including parallel dependency/gate contracts |
+| CI compatibility core | PASS: [36865665982](https://github.com/billradar/rustdesk-custom/actions/runs/36865665982) |
+| Stable exact SHA / v1 resolver / build adapter | PASS: [36865945733](https://github.com/billradar/rustdesk-custom/actions/runs/36865945733) |
+| Stable Standard/SOS prepared sources and manifests | PASS; both artifacts generated and consumed by separate Windows jobs |
+| Stable Windows x86_64 Standard/SOS regression | PASS; both builds ran in parallel |
+| Stable production config / baseline identity / checksum / architecture / provenance / known credential gates | PASS; paired build/validate job success |
+| Stable Draft creation | PASS; release ID 401019227, title v1.4.9-custom.1, draft=true, published_at=null |
+| Nightly development exact SHA / v2 resolver / build adapter | PASS: [36872771101](https://github.com/billradar/rustdesk-custom/actions/runs/36872771101) |
+| Nightly Common/SOS, Config/API, actual Rust fast checks, Bridge, Flutter analyze | PASS; all compatibility jobs success |
+| Nightly prepared Standard/SOS source and manifests | PASS; separate source artifacts consumed by Windows build jobs |
+| Nightly Windows x86_64 Standard/SOS | PASS; both build jobs success |
+| Nightly metadata / checksums / AMD64 architecture / production fixture and known credential scans / paired provenance gate | PASS; build/validate job success |
+| Nightly release policy | Actions artifacts only; no release job |
+| Nightly scheduled execution | CONFIGURED / NOT OBSERVED; successful run was workflow_dispatch |
 
-CI evidence: [36863066036](https://github.com/billradar/rustdesk-custom/actions/runs/36863066036) at 5307fad. It resolved the audited development SHA; v1 INCOMPATIBLE, v2 PREFLIGHT_COMPATIBLE/selected v2. Preflight and actual config cargo check succeeded. Follow-up CI: [36863711455](https://github.com/billradar/rustdesk-custom/actions/runs/36863711455) at 5f6f2a5.
+Stable provenance: upstream tag **1.4.9**, exact SHA `6c578292e8ebbbec708b76986ba8c4bc7c509747`, patchset **v1**, unchanged baseline Common/SOS hashes.
 
-Local prepared manifests were exercised with a fixture environment containing the original Dry Run ID to test identity checking. **This is not a new Actions prepared-source run or Windows build**. Archives were generated from actual official 1.4.9/hbb_common and actual corresponding bridge bytes; no production inputs were used.
+Nightly provenance: upstream default branch **master**, source version **1.5.0**, exact SHA `fada664df7a294d1d1a9ca3e7cd3637069122f17`, selected patchset **v2**.
+Common hash: `a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7`.
+SOS hash: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`.
+
+Nightly client artifact names:
+- `rustdesk-nightly-1.5.0-fada664df7a294d1d1a9ca3e7cd3637069122f17-standard-windows-x86_64`
+- `rustdesk-nightly-1.5.0-fada664df7a294d1d1a9ca3e7cd3637069122f17-sos-windows-x86_64`
+
+Stable Draft assets: Standard/SOS Windows ZIPs, build-info-standard.json, build-info-sos.json and SHA256SUMS. Automated publication remains disabled. GitHub currently exposes the unpublished draft under an untagged temporary identifier; title is v1.4.9-custom.1. No manual publication performed.
+
+Successful compilation and native configuration probes do not establish runtime/UI or real remote-session correctness.
 
 ## Channels and release protection
 
@@ -105,7 +109,7 @@ A newly observed staging schedule run [36857579026](https://github.com/billradar
 
 ## Matrix
 
-Baseline SUPPORTED: Windows x86_64 Standard and SOS (Dry Run 36854953000). Phase 4 regression still pending.
+Baseline SUPPORTED: Windows x86_64 Standard and SOS (Dry Run 36854953000). Phase 4 Windows x86_64 regression PASS on Stable run 36865945733; development v2 builds PASS on Nightly run 36872771101.
 Explicit enabled build include contains only these two entries, not a platform/arch/variant Cartesian product. `metadata/platform-matrix.json` records planned disabled targets with support status.
 PLANNED / NOT VALIDATED: Windows ARM64 Standard/SOS; Linux x86_64/ARM64 Standard/SOS; macOS Intel/Apple Silicon Standard/SOS; Android ARM64/ARMv7/x86_64 Standard; iOS ARM64 Standard; Web Standard.
 Android SOS, iOS SOS, Web SOS: **NOT PLANNED**, absent from entries.
@@ -120,14 +124,13 @@ Floating official engine main release, hosted runners/system packages prevent by
 
 Runtime/UI SKIPPED BY USER; real remote session NOT TESTED; unsigned binaries; Password Security V2 DEFERRED. No runtime tests, signing, new platform builds or old-system retirement performed.
 
-## Remaining acceptance actions
+## Completion and deferred work
 
-GitHub connector supports read/write files but does not expose workflow_dispatch. User must manually run the new entries (or authorize browser fallback separately):
+Core architecture acceptance: **PASS**. CI, Stable Draft and Nightly manual paths completed successfully with actual prepared-source consumption and paired validation.
 
-1. Wait for latest CI at the implementation SHA to finish; inspect Bridge/Flutter/overall.
-2. **Stable - Draft only**, upstream_ref=1.4.9, dry_run=false: one run verifies prepared sources, both Windows regressions, baseline config identity, checksums/architecture/provenance/native config and a complete unpublished Draft. Do not click Publish. An optional artifact-only dry_run=true before this requires another full build and is not mandatory for this stage.
-3. **Nightly - Development artifacts**, manual: confirm source version/SHA, selected generation, patched source SBOM, both Windows artifacts and paired validation. No release.
-4. Once all required manual/CI results are verified, update this report to actual PASS/FAIL with run/artifact/draft links. Schedule remains independently CONFIGURED / NOT OBSERVED until a real event is observed.
+Nightly schedule remains **CONFIGURED / NOT OBSERVED** until a real schedule event completes. No manual run substitutes for that evidence. The Phase 3 historical compatibility schedule status is unchanged.
+
+Stop at this phase. No additional platform builds, signing, Password Security V2, runtime/UI, real remote sessions, automatic publication or old-system retirement are authorized by this completion.
 
 ## Old repository safety
 
