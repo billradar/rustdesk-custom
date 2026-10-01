@@ -31,4 +31,10 @@ Local verification: 65 tests, 64 PASS / 1 SKIPPED. The skipped test requires a r
 
 Rerun the Stable workflow from current `main`, tag `1.4.9`, with force-rebuild, artifacts-only/dry-run and experimental targets enabled. GitHub's rerun button uses the old commit and cannot test these code changes.
 
+## Follow-up preflight fixture failure
+
+Stable run `36900570936` and CI `36899887344`, maintenance commit `fbcc3f2dd6c7617b1ec459a98a18ecb1b4adf247`, failed in `Automation gate regression tests` before platform compilation. The new real-compiler MIR test supplied only password/Relay/API fixtures; the strict input validator correctly rejected the missing fictional ID Server. Its fictional public Key was missing too.
+
+The repair completes the test-only environment with `example.com` endpoints and an explicitly fictional 32-byte public key. It does not use repository production credentials or weaken required-input validation. An additional test validates fixture completeness with an otherwise empty environment, so this problem is caught locally even when Rust is unavailable. Platform repair acceptance remains pending a fresh Actions run.
+
 Runtime/UI: SKIPPED BY USER. Real remote session: NOT TESTED. Production code signing: NOT ENABLED. Password Security V2: DEFERRED. Old repositories: ZERO WRITES.

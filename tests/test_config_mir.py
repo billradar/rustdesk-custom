@@ -4,7 +4,8 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import config_mir
 
-VALUES={'RUSTDESK_PASSWORD':'aaaa','RUSTDESK_RELAY_SERVER':'relay.example.com','RUSTDESK_API_SERVER':'https://api.example.com'}
+VALUES={'RUSTDESK_PASSWORD':'aaaa','RUSTDESK_RELAY_SERVER':'relay.example.com','RUSTDESK_API_SERVER':'https://api.example.com',
+        'RUSTDESK_ID_SERVER':'id.example.com','RUSTDESK_KEY':'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='}
 MIR='''fn common::apply_custom_build_defaults() -> () {
     _1 = const "password";
     _2 = const "aaaa";
@@ -18,6 +19,9 @@ fn common::get_api_server_(_1: String, _2: String) -> String {
 }
 '''
 class CompilerConfigTests(unittest.TestCase):
+    def test_compiler_fixture_is_complete_without_repository_secrets(self):
+        from production_config import configured
+        with patch.dict(os.environ,VALUES,clear=True):self.assertEqual(configured(),VALUES)
     def test_short_password_checked_in_compiled_function(self):config_mir.verify(MIR,VALUES)
     def test_wrong_or_missing_config_blocks_without_disclosure(self):
         for before,after in [('aaaa','bbbb'),('password','wrong-option'),('https://api.example.com','https://bad.example.com'),('relay.example.com','other.example.com')]:
