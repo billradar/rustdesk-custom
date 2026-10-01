@@ -125,10 +125,9 @@ Runtime/UI SKIPPED BY USER; real remote session NOT TESTED; unsigned binaries; P
 GitHub connector supports read/write files but does not expose workflow_dispatch. User must manually run the new entries (or authorize browser fallback separately):
 
 1. Wait for latest CI at the implementation SHA to finish; inspect Bridge/Flutter/overall.
-2. **Stable - Draft only**, upstream_ref=1.4.9, dry_run=true: confirm prepared artifacts and both Windows regression builds, baseline config identity, paired checksums/architecture/provenance/native config scan.
-3. **Stable - Draft only**, upstream_ref=1.4.9, dry_run=false: confirm complete unpublished Draft only. Do not click Publish as part of this stage.
-4. **Nightly - Development artifacts**, manual: confirm source version/SHA, selected generation, patched source SBOM, both Windows artifacts and paired validation. No release.
-5. Once all required manual/CI results are verified, update this report to actual PASS/FAIL with run/artifact/draft links. Schedule remains independently CONFIGURED / NOT OBSERVED until a real event is observed.
+2. **Stable - Draft only**, upstream_ref=1.4.9, dry_run=false: one run verifies prepared sources, both Windows regressions, baseline config identity, checksums/architecture/provenance/native config and a complete unpublished Draft. Do not click Publish. An optional artifact-only dry_run=true before this requires another full build and is not mandatory for this stage.
+3. **Nightly - Development artifacts**, manual: confirm source version/SHA, selected generation, patched source SBOM, both Windows artifacts and paired validation. No release.
+4. Once all required manual/CI results are verified, update this report to actual PASS/FAIL with run/artifact/draft links. Schedule remains independently CONFIGURED / NOT OBSERVED until a real event is observed.
 
 ## Old repository safety
 
