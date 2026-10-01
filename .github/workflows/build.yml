@@ -165,29 +165,20 @@ jobs:
       env:
         VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
       run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
-    - name: Build official WindowInjection helper
-      shell: pwsh
-      run: '$ErrorActionPreference = ''Stop''
-
-        git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
-
-        if ($LASTEXITCODE -ne 0) { throw ''WindowInjection clone failed'' }
-
-        git -C .work/topmost checkout --detach $env:HELPER_SHA
-
-        if ($LASTEXITCODE -ne 0) { throw ''WindowInjection checkout failed'' }
-
-        Push-Location .work/topmost
-
-        & MSBuild.exe WindowInjection/WindowInjection.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10
-
-        if ($LASTEXITCODE -ne 0) { throw ''WindowInjection build failed'' }
-
-        Pop-Location
-
-        '
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: windows-helper-${{ github.run_id }}
+        path: .work/topmost
+    - name: Verify shared helper provenance and digest
+      shell: bash
       env:
         HELPER_SHA: ${{ steps.profile.outputs.helper_commit }}
+      run: "python3 - <<'PYCODE'\nimport hashlib,json,os,struct\nfrom pathlib import Path\nroot=Path('.work/topmost');info=json.loads((root/'helper-info.json').read_text())\n\
+        for key,value in [('upstream_sha',os.environ['UPSTREAM_EXPECTED_SHA']),('helper_commit',os.environ['HELPER_SHA']),('architecture','x86_64'),('workflow_run',os.environ['GITHUB_RUN_ID'])]:\n\
+        \ if info[key]!=value:raise ValueError('Shared helper identity mismatch: '+key)\nb=(root/'WindowInjection/x64/Release/WindowInjection.dll').read_bytes()\n\
+        if hashlib.sha256(b).hexdigest()!=info['sha256']:raise ValueError('Shared helper checksum mismatch')\noff=struct.unpack_from('<I',b,0x3c)[0]\n\
+        if b[:2]!=b'MZ' or b[off:off+4]!=b'PE\\0\\0' or struct.unpack_from('<H',b,off+4)[0]!=0x8664:raise ValueError('Shared\
+        \ helper is not AMD64')\nprint('Shared helper checksum/architecture/source: PASS')\nPYCODE\n"
     - name: Build and verify selected variant
       env:
         UPSTREAM_REF: ${{ inputs.upstream_sha }}
