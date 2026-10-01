@@ -1,0 +1,40 @@
+# Phase 5 immutable baseline
+
+Frozen before platform changes on 2026-10-01.
+
+```json
+{
+  "repository": "billradar/rustdesk-custom",
+  "branch": "main",
+  "commit_sha": "b5340feab29a9e624a7f523c0d825cbaa1099773",
+  "validated_workflow_sha": "31068343275299000954cf7e7d92ebdb186436b4",
+  "workflow_sha256": {
+    "build.yml": "4e943e8572f950195c243a5290b20fe98602b7bd49c45ddbfdd54aa5f57811a2",
+    "prepare-source.yml": "d4111ad9838b5a61bc6c43721fdd8622d9b088f0cc1d2fdccd25e4cf9e70172f",
+    "tag.yml": "bc603a1b4c516012f5abbb475817fb5047f26c9d2f1743ac04380765d0912ea3",
+    "upstream-compatibility.yml": "15227cadec3070f2fb7d9f5e3bba08fc766c1f6901a15182bbad54513bbdc7d2",
+    "compat-check.yml": "112d58bbdce3477f6cdfc34be02fd30468990f346d9bf7879198729add35c2fb",
+    "nightly.yml": "13756819d8ee70a507677c635f9f8efa937706650a1e8a36ce1419ae94728819",
+    "test-build.yml": "7f3652601eddd98f5986eecf78898e84245fb7636ec6d658101f70a2a6d55483",
+    "ci.yml": "cdbfcadfd32963f755a0de2543d75cc7499469ada37fbb7ffb3f556e9b8dffab",
+    "release-check.yml": "035030ba1e09fb026a9df59fe54580ba7beae7ad6ec4b9b8ce0e96e7bcfe667e"
+  },
+  "patchsets": {
+    "v1": {
+      "common": "87b7fb949b3bbc55c6d1e166909e167ebb8e0b6586630c0269f6440ba0542531",
+      "sos": "d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34"
+    },
+    "v2": {
+      "common": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7",
+      "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+    }
+  },
+  "stable_run": 36865945733,
+  "nightly_run": 36872771101,
+  "ci_run": 36865665982
+}
+```
+
+Stable: 1.4.9 / 6c578292e8ebbbec708b76986ba8c4bc7c509747 / v1. Nightly: master / 1.5.0 / fada664df7a294d1d1a9ca3e7cd3637069122f17 / v2.
+
+Runtime/UI: SKIPPED BY USER. Real remote session: NOT TESTED. Code signing: NOT ENABLED. Password Security V2: DEFERRED.
