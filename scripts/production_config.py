@@ -24,12 +24,16 @@ def scan_bytes(data):
 def configured():
     values = {name: os.environ.get(name, '') for name in NAMES}
     for name, value in values.items():
+        if name == 'RUSTDESK_RELAY_SERVER' and not value:
+            continue  # Historical clients rely on upstream relay discovery.
         if not value or len(value) > 4096 or any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError(name + ': missing or unsupported input (value withheld)')
         scan_bytes(value.encode())
         if any(marker in value.encode() for marker in FORBIDDEN) or '.invalid' in value.lower():
             raise ValueError(name + ': fictional fixture forbidden in production')
     for name in ('RUSTDESK_ID_SERVER', 'RUSTDESK_RELAY_SERVER'):
+        if name == 'RUSTDESK_RELAY_SERVER' and not values[name]:
+            continue
         if not re.fullmatch(r'[A-Za-z0-9.\-:\[\]]+', values[name]):
             raise ValueError(name + ': invalid hostname/address format')
     url = urlparse(values['RUSTDESK_API_SERVER'])
@@ -46,7 +50,7 @@ def configured():
 
 def server_fingerprint():
     # Only public infrastructure configuration; deliberately excludes the password.
-    values = {name: os.environ[name] for name in NAMES if name != 'RUSTDESK_PASSWORD'}
+    values = {name: os.environ.get(name, '') for name in NAMES if name != 'RUSTDESK_PASSWORD'}
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 def payload(folder):
@@ -75,6 +79,8 @@ def compiled(library):
     if any(marker in data for marker in FORBIDDEN):
         raise ValueError('Test fixture remains in compiled library')
     for name, value in values.items():
+        if name == 'RUSTDESK_RELAY_SERVER' and not value:
+            continue
         if value.encode() not in data:
             raise ValueError(name + ': compiled injection not verified (value withheld)')
     print('Compiled production configuration: PASS (values withheld)')

@@ -25,20 +25,20 @@ Settings → Secrets and variables → Actions。
 | 类型 | 名称 | 用途 |
 |---|---|---|
 | Variable | RUSTDESK_ID_SERVER | rendezvous 默认地址 |
-| Variable | RUSTDESK_RELAY_SERVER | relay 默认地址 |
+| Variable（可选） | RUSTDESK_RELAY_SERVER | 显式 relay；不配置/留空保持旧版自动发现 |
 | Variable | RUSTDESK_API_SERVER | HTTPS API 地址，无 URL 用户名/密码 |
 | Variable | RUSTDESK_KEY | base64 32-byte server public key，绝非私钥 |
 | Secret | RUSTDESK_PASSWORD | 当前历史固定密码初始化输入 |
 | Variable | PRODUCTION_RELEASE_ENABLED | 默认不配置；验证后设 true 才允许正式发布及 stable schedule |
 
-缺少生产配置时构建失败；不会 fallback 到测试配置。仅客户端 build steps 读取固定密码 Secret，不向第三方安装 Actions 暴露该环境变量。
+缺少 ID、API、公钥或密码时构建失败；不会 fallback 到测试配置。Relay 可省略，保持旧库的 upstream 自动发现行为。仅客户端 build steps 读取固定密码 Secret，不向第三方安装 Actions 暴露该环境变量。
 Resolver、compile preflight、Bridge/Flutter analyze 使用公开虚构配置；这些中间诊断不是正式客户端。
 客户端分别在两份全新工作树编译，生产参数必须确实出现在最终 native library 中；值不写日志或 build-info。
 服务器配置 fingerprint 排除密码，只用于 Standard/SOS 以及首次 Dry Run 的来源一致性检查。
 
 ## 首次运行
 
-在正式仓库配置上表四个 Variables 与一个 Secret，先保持发布开关关闭。
+在正式仓库配置必需的 ID/API/公钥三个 Variables 与一个 Secret；Relay 可选，先保持发布开关关闭。
 Actions → Production - Stable Standard and SOS release → Run workflow：
 
 1. upstream_ref=1.4.9，dry_run=true，force_rebuild=false，dry_run_id 留空。

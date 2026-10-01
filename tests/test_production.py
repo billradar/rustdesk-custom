@@ -20,6 +20,17 @@ class ProductionInputTests(unittest.TestCase):
                     RUSTDESK_API_SERVER='https://api.example.com', RUSTDESK_KEY='AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
                     RUSTDESK_PASSWORD='UNIT-TEST-PASSWORD-NOT-A-PRODUCTION-CREDENTIAL')
 
+    def test_empty_relay_preserves_historical_discovery(self):
+        for relay in ('', None):
+            values = self.values()
+            if relay is None:
+                values.pop('RUSTDESK_RELAY_SERVER')
+            else:
+                values['RUSTDESK_RELAY_SERVER'] = relay
+            with patch.dict(os.environ, values, clear=True), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(config.configured()['RUSTDESK_RELAY_SERVER'], '')
+                self.assertEqual(len(config.server_fingerprint()), 64)
+
     def test_input_never_prints_values(self):
         out = io.StringIO()
         with patch.dict(os.environ, self.values()), contextlib.redirect_stdout(out):
