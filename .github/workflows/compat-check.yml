@@ -70,6 +70,8 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements-build.txt
+    - name: Scan tracked maintenance files for known CI credentials
+      run: python3 scripts/scan_repository.py
     - name: Require exact official source identity
       env:
         UP_SHA: ${{ inputs.upstream_sha }}
