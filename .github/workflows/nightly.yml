@@ -2,7 +2,12 @@ name: Nightly - Development artifacts
 'on':
   schedule:
   - cron: 0 2 * * *
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      include_experimental:
+        type: boolean
+        default: true
+        description: Include experimental Linux/macOS/Android targets; never promote automatically
 permissions:
   contents: read
   actions: read
@@ -73,6 +78,7 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
+      include_experimental: ${{ github.event_name == 'schedule' || inputs.include_experimental }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}

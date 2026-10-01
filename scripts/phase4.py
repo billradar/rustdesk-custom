@@ -26,6 +26,12 @@ def resolve(channel,ref='',force=False):
         if not re.fullmatch('[1-9][0-9]{0,5}',revision):raise ValueError('Invalid revision')
         data['revision']=revision;data['release_tag']=f'v{data["version"]}-custom.{revision}'
         existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
+        if not existing:
+            # GitHub may expose an unpublished draft under a temporary untagged ID.
+            drafts=[r for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])
+                    if r.get('draft') and r.get('name')==data['release_tag']]
+            if len(drafts)>1:raise ValueError('Duplicate revision drafts; manual review required')
+            existing=drafts[0] if drafts else None
         if existing:
             body=existing.get('body') or ''
             generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
@@ -35,6 +41,11 @@ def resolve(channel,ref='',force=False):
                       f'SOS Patch Hash: {patch_hash("sos",name)}','Automation-State: complete']
             required={'SHA256SUMS','build-info-standard.json','build-info-sos.json',
                       f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+            inventory=re.search(r'^Asset Inventory: (\[.*\])$',body,re.M)
+            if inventory:
+                supplied=json.loads(inventory.group(1))
+                if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
+                required=set(supplied)
             if existing['prerelease'] or not all(x in body for x in expected) or {x['name'] for x in existing['assets'] if x['state']=='uploaded'}!=required:
                 raise ValueError('Existing release incomplete or incompatible; never overwrite')
             data['build_needed']=force;data['draft_needed']=False
@@ -94,6 +105,8 @@ def draft(root):
     _,directory=assets(root)
     info=infos['standard'];tag=f'v{info["upstream_tag"].lstrip("v")}-custom.{info["patch_revision"]}'
     if api(f'repos/{REPOSITORY}/releases/tags/{tag}',missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
+    if any(r.get('draft') and r.get('name')==tag for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])):
+        raise ValueError('Existing unpublished revision draft; never replace it')
     notes='\n'.join([f'Upstream: rustdesk/rustdesk',f'Upstream Tag: {info["upstream_tag"]}',f'Upstream SHA: {info["upstream_sha"]}',
         f'Patch Set: {info["patchset"]}',f'Custom Repository SHA: {info["custom_repository_sha"]}',f'Common Patch Hash: {info["common_patch_hash"]}',
         f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',f'Prepared Source Run: {info["prepare_run"]}',f'Build Run: {info["build_run"]}',

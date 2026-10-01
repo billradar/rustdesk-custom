@@ -13,3 +13,39 @@
 | Native config probe | per final DLL | verifies actual packaged config, including password, without printing values |
 
 Prepared source contains no production inputs. Configuration enters only platform compile jobs. Cargo/Flutter dependency caches are optional acceleration. Prepared source is a run-bound artifact and must be verified after download.
+
+## Phase 5 fan-out / fan-in
+
+```mermaid
+flowchart TD
+  R["Resolve exact SHA"] --> C["Compatibility and resolver"]
+  C --> P["Prepared Standard / SOS artifacts"]
+  P --> W["Windows targets"]
+  P --> L["Linux targets"]
+  P --> M["macOS targets"]
+  P --> A["Android Standard targets"]
+  W --> V["Independent validation"]
+  L --> V
+  M --> V
+  A --> V
+  V --> G["Aggregate required targets and provenance"]
+  G --> D["Stable Draft / Nightly artifacts"]
+```
+
+Each target is a separate platform/architecture/variant job, `fail-fast: false`, with no dependency on another platform's build. Actual runner overlap still needs Phase 5 Actions evidence. Existing Windows pair validation remains a regression gate. Aggregate waits for all selected target jobs and records failed experimental targets without promoting them.
+
+| Dependency | Class | Phase 5 treatment |
+|---|---|---|
+| Exact SHA, patch resolver | SHARED | Central selection only |
+| Standard / SOS archive and manifest | VARIANT-SPECIFIC, shared across platforms | Artifact, verified before every consumer |
+| Default Bridge source | SHARED only within reviewed profile | Already embedded in prepared source; Windows ARM requires a different profile and remains planned |
+| Windows helper binary | PLATFORM-SPECIFIC + ARCH-SPECIFIC | Existing x64 helper only; never reused on Linux/macOS |
+| Compiler, Flutter, NDK, vcpkg | PLATFORM-SPECIFIC + ARCH-SPECIFIC | Read/check the exact-source official profile; downloads/cache are not provenance |
+| Linux container dependency install | PLATFORM-SPECIFIC + ARCH-SPECIFIC | Official recipe, no client configuration stored in image layers |
+| Client compile/config injection | VARIANT-SPECIFIC + PLATFORM-SPECIFIC + ARCH-SPECIFIC | Independent job; no shared compiled app |
+| deb/rpm, DMG, APK | PLATFORM-SPECIFIC + ARCH-SPECIFIC | Native package validation on target runner; explicit unsigned/test-signing status |
+| Native configuration probe | PLATFORM-SPECIFIC | Windows/Linux/macOS library ABI probe, no UI/server/session; Android byte validation only |
+| Source SBOM | VARIANT-SPECIFIC | Patched source inventory, not an unpatched upstream binary SBOM |
+| Checksums/provenance aggregate | SHARED | Expected required set, unique target identity, shared SHA/Common/variant-source identity |
+
+Windows ARM64/iOS/Web are not enabled platform consumers at this checkpoint. See `platform-support.md` for precise reasons. There are no platform source patches yet; if needed, their hash must enter provenance before promotion.

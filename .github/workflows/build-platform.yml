@@ -1,0 +1,152 @@
+name: Reusable Experimental Platform Build
+'on':
+  workflow_call:
+    inputs:
+      platform: {type: string, required: true}
+      arch: {type: string, required: true}
+      variant: {type: string, required: true}
+      runner: {type: string, required: true}
+      upstream_ref: {type: string, required: true}
+      upstream_sha: {type: string, required: true}
+      upstream_version: {type: string, required: true}
+      patchset: {type: string, required: true}
+      channel: {type: string, required: true}
+      source_artifact: {type: string, required: true}
+    secrets:
+      RUSTDESK_KEY: {required: true}
+      RUSTDESK_PASSWORD: {required: true}
+permissions:
+  contents: read
+jobs:
+  platform-build:
+    name: ${{ inputs.platform }}-${{ inputs.arch }}-${{ inputs.variant }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 240
+    defaults:
+      run: {shell: bash}
+    env:
+      PLATFORM: ${{ inputs.platform }}
+      PLATFORM_ARCH: ${{ inputs.arch }}
+      VARIANT: ${{ inputs.variant }}
+      PATCHSET: ${{ inputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_REF: ${{ inputs.upstream_ref }}
+      UPSTREAM_VERSION: ${{ inputs.upstream_version }}
+      BUILD_CHANNEL: ${{ inputs.channel }}
+      BUILD_CONFIGURATION: PRODUCTION
+      RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
+      RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
+      RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/prepared-input/source
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with: {persist-credentials: false}
+    - name: Isolated reviewed parser environment
+      run: |
+        python3 -m venv .work/python
+        .work/python/bin/python -m pip install -r requirements-build.txt
+        echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: ${{ inputs.source_artifact }}
+        path: .work/source-bundle
+    - id: source
+      name: Verify immutable prepared input before native dependencies
+      run: |
+        [[ "$VARIANT" != sos || "$PLATFORM" == linux || "$PLATFORM" == macos ]] || exit 1
+        python3 scripts/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET"
+    - id: profile
+      name: Verify reviewed official target before native dependencies
+      env:
+        EXPECTED_RUNNER: ${{ inputs.runner }}
+      run: |
+        python3 scripts/platform_adapter.py "$PREPARED_SOURCE_DIR" --platform "$PLATFORM" --arch "$PLATFORM_ARCH" --output .work/platform-profile.json
+        python3 - <<'PY'
+        import json,os
+        p=json.load(open('.work/platform-profile.json'))
+        if p['runner']!=os.environ['EXPECTED_RUNNER']:raise ValueError('BUILD_COMPAT: official runner mismatch')
+        PY
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      id: rust
+      with:
+        toolchain: ${{ steps.profile.outputs.rust }}
+        targets: ${{ steps.profile.outputs.target }}
+        components: rustfmt
+    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+      id: flutter
+      if: inputs.platform != 'linux'
+      with:
+        flutter-version: ${{ steps.profile.outputs.flutter }}
+        channel: stable
+    - name: Android official host dependencies
+      id: dependencies
+      if: inputs.platform == 'android'
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y clang cmake curl gcc-multilib g++-multilib libayatana-appindicator3-dev libasound2-dev libc6-dev libclang-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgtk-3-dev libpulse-dev libva-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxdo-dev libxfixes-dev llvm-dev nasm ninja-build openjdk-17-jdk-headless pkg-config tree wget
+    - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+      id: ndk
+      if: inputs.platform == 'android'
+      with:
+        ndk-version: ${{ steps.profile.outputs.ndk }}
+        add-to-path: true
+    - name: Exact-source ARM Linux CMake requirement
+      if: inputs.platform == 'linux' && inputs.arch == 'aarch64' && steps.profile.outputs.cmake != ''
+      env:
+        CMAKE_VERSION: ${{ steps.profile.outputs.cmake }}
+      run: |
+        python3 -m pip install "cmake==$CMAKE_VERSION"
+    - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+      id: vcpkg
+      with:
+        vcpkgDirectory: ${{ inputs.platform == 'macos' && format('{0}/.work/vcpkg', github.workspace) || '/opt/artifacts/vcpkg' }}
+        vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
+        doNotCache: true
+    - name: Official-compatible compile, package and independent gates
+      id: build
+      env:
+        RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+        ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+      run: python3 scripts/run_platform.py
+    - name: Upload validated target only
+      id: upload
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ inputs.variant }}-${{ inputs.platform }}-${{ inputs.arch }}
+        path: artifacts/rustdesk-*/
+        if-no-files-found: error
+        retention-days: 14
+    - name: Record early toolchain/infra failures without environment dumps
+      if: always()
+      env:
+        SOURCE_OUTCOME: ${{ steps.source.outcome }}
+        PROFILE_OUTCOME: ${{ steps.profile.outcome }}
+        RUST_OUTCOME: ${{ steps.rust.outcome }}
+        FLUTTER_OUTCOME: ${{ steps.flutter.outcome }}
+        DEPS_OUTCOME: ${{ steps.dependencies.outcome }}
+        VCPKG_OUTCOME: ${{ steps.vcpkg.outcome }}
+        NDK_OUTCOME: ${{ steps.ndk.outcome }}
+        UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
+      run: |
+        python3 - <<'PY'
+        import json,os
+        from pathlib import Path
+        folder=Path('.work/target-diagnostic');folder.mkdir(parents=True,exist_ok=True)
+        path=folder/'diagnostic.json'
+        if not path.exists():
+            keys=[('SOURCE_OUTCOME','PROVENANCE'),('PROFILE_OUTCOME','BUILD_COMPAT'),('RUST_OUTCOME','TOOLCHAIN'),('FLUTTER_OUTCOME','TOOLCHAIN'),('DEPS_OUTCOME','DEPENDENCY'),('VCPKG_OUTCOME','DEPENDENCY'),('NDK_OUTCOME','TOOLCHAIN')]
+            failed=next(((k,c) for k,c in keys if os.environ.get(k)=='failure'),('UNKNOWN','INFRASTRUCTURE'))
+            path.write_text(json.dumps({'target':os.environ['PLATFORM']+'-'+os.environ['PLATFORM_ARCH']+'-'+os.environ['VARIANT'],'result':'FAIL','failure_category':failed[1],'failed_step':failed[0],'upstream_sha':os.environ['UPSTREAM_EXPECTED_SHA'],'build_run':os.environ['GITHUB_RUN_ID']},indent=2)+'\n')
+        elif os.environ.get('UPLOAD_OUTCOME')=='failure':
+            data=json.loads(path.read_text());data.update(result='FAIL',failure_category='INFRASTRUCTURE',failed_step='UPLOAD');path.write_text(json.dumps(data,indent=2)+'\n')
+        PY
+    - name: Preserve target diagnostic, never a failed client bundle
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: diagnostic-${{ inputs.platform }}-${{ inputs.arch }}-${{ inputs.variant }}-${{ github.run_id }}
+        path: .work/target-diagnostic/
+        if-no-files-found: warn
+        retention-days: 14

@@ -54,8 +54,12 @@ Development upstream requests source SBOM: generate per patched prepared variant
 
 ## Support and validation
 
-Supported baseline: Windows x86_64 Standard/SOS (Phase 3 dry run 36854953000). Phase 4 core regression is separate and must be observed before declaring Phase 4 PASS.
-Planned / not validated: Windows ARM64, Linux/macOS Standard/SOS; Android/iOS/Web Standard only. Android/iOS/Web SOS are not planned. Explicit enabled matrix contains only Windows x64 Standard/SOS. See `metadata/platform-matrix.json`.
+Supported baseline: Windows x86_64 Standard/SOS, with Phase 4 Stable run 36865945733 and Nightly run 36872771101. Phase 5 regression is pending.
+Linux x86_64/ARM64 and macOS x86_64/ARM64 Standard/SOS, plus Android ARM64/ARMv7/x86_64 Standard, are EXPERIMENTAL / NOT VALIDATED. Windows ARM64 and iOS remain PLANNED; Web is BLOCKED by the audited official disabled job. Android/iOS/Web SOS are forbidden. See [platform support](docs/platform-support.md).
+
+Phase 5 extends the same prepared-source build core with an explicit parallel matrix and `fail-fast: false`. Stable defaults to supported targets only. Manual Stable `include_experimental=true` always disables Draft creation; use artifacts-only plus force rebuild to regress an existing revision. Nightly includes experimental targets by default, with a manual opt-out. A full experimental run currently starts 13 target builds and may consume substantial runner time.
+
+Each new platform adapter verifies the exact source's reviewed official build interface before toolchain preparation. Unknown changes fail closed. Platform jobs independently package/validate; aggregate verifies required artifacts and shared source identities, preserving experimental diagnostics. Only actual Actions evidence can promote a target in `metadata/platform-matrix.json`. Android packages use debug/test signing, not production signing. [Phase 5 checkpoint](docs/phase5-acceptance.md) records what remains untested.
 
 Runtime/UI: **SKIPPED BY USER**. Real remote session: **NOT TESTED**. Code signing: **NOT ENABLED**. Nightly schedule is configured; only an observed schedule event can prove execution.
 

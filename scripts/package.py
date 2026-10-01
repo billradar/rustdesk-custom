@@ -137,6 +137,11 @@ elif command == 'package':
     if configuration == 'PRODUCTION':
         from production_config import server_fingerprint
         info['server_config_fingerprint'] = server_fingerprint()
+    info.update(prepared_source_identity=info.get('prepared_source_manifest_hash'),
+                platform_patch_hash=None, runner=os.environ.get('RUNNER_OS'),
+                runner_arch=os.environ.get('RUNNER_ARCH'), runner_image=os.environ.get('ImageOS'),
+                build_job=os.environ.get('GITHUB_JOB'), package_type='portable-flutter-bundle',
+                signed_status='NOT ENABLED')
     (folder / 'build-info.json').write_text(json.dumps(info, indent=2) + '\n')
     shutil.copy2(root / 'patchsets' / os.environ.get('PATCHSET', 'v1') / 'patchset.json', folder / 'patchset.json')
     # Preserve corresponding patch source and the AGPL licence with the test bundle.

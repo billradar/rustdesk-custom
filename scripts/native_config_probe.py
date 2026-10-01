@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify built Windows DLL defaults through its existing FRB 1.x ABI.
+"""Verify built 64-bit desktop library defaults through its existing FRB 1.x ABI.
 
 No UI, core_main, server start, remote session, password output or password hash.
 The parent runs this in a disposable process and never prints native output.
@@ -132,14 +132,14 @@ def inspect_library(library, app_dir):
 
 def verify(library):
     library = Path(library).resolve()
-    if os.name != 'nt' or C.sizeof(C.c_void_p) != 8:
-        raise ValueError('Native configuration probe requires Windows x86_64')
+    if C.sizeof(C.c_void_p) != 8 or sys.platform not in ('win32', 'linux', 'darwin'):
+        raise ValueError('Native configuration probe requires a supported 64-bit desktop host')
     if not library.is_file():
         raise ValueError('Built library missing')
     # Never publish native logs, a crash dump, or the expected password digest.
     with tempfile.TemporaryDirectory(prefix='rustdesk-config-check-') as app_dir:
         env = dict(os.environ, APPDATA=app_dir, LOCALAPPDATA=app_dir,
-                   USERPROFILE=app_dir, HOME=app_dir)
+                   USERPROFILE=app_dir, HOME=app_dir, XDG_CONFIG_HOME=app_dir, XDG_DATA_HOME=app_dir)
         try:
             result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                                      '--child', str(library), app_dir],
@@ -153,12 +153,13 @@ def verify(library):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 3 and sys.argv[1] == '--verify-library':
+        verify(sys.argv[2]);sys.exit(0)
     if len(sys.argv) != 4 or sys.argv[1] != '--child':
         raise SystemExit('Internal configuration probe invocation required')
     try:
-        if os.name != 'nt':
-            raise ValueError('Windows required')
-        directory = os.add_dll_directory(str(Path(sys.argv[2]).resolve().parent))
+        if os.name == 'nt':
+            directory = os.add_dll_directory(str(Path(sys.argv[2]).resolve().parent))
         inspect_library(sys.argv[2], sys.argv[3])
     except BaseException:
         os._exit(1)

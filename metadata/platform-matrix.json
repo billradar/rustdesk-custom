@@ -7,8 +7,12 @@
       "runner": "windows-2022",
       "enabled": true,
       "support_status": "SUPPORTED",
-      "evidence_run": 36854953000,
-      "phase4_regression": "NOT RUN"
+      "evidence_run": 36865945733,
+      "phase4_regression": "PASS",
+      "id": "windows-x86_64-standard",
+      "required": true,
+      "experimental": false,
+      "nightly_evidence_run": 36872771101
     },
     {
       "platform": "windows",
@@ -17,128 +21,203 @@
       "runner": "windows-2022",
       "enabled": true,
       "support_status": "SUPPORTED",
-      "evidence_run": 36854953000,
-      "phase4_regression": "NOT RUN"
+      "evidence_run": 36865945733,
+      "phase4_regression": "PASS",
+      "id": "windows-x86_64-sos",
+      "required": true,
+      "experimental": false,
+      "nightly_evidence_run": 36872771101
     },
     {
       "platform": "windows",
       "arch": "aarch64",
       "variant": "standard",
       "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "support_status": "PLANNED",
+      "runner": "windows-11-arm",
+      "id": "windows-aarch64-standard",
+      "required": false,
+      "experimental": false,
+      "reason": "Dedicated ARM Flutter/Bridge and native probe adapter not yet implemented; not an x64 bridge consumer"
     },
     {
       "platform": "windows",
       "arch": "aarch64",
       "variant": "sos",
       "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "support_status": "PLANNED",
+      "runner": "windows-11-arm",
+      "id": "windows-aarch64-sos",
+      "required": false,
+      "experimental": false,
+      "reason": "Dedicated ARM Flutter/Bridge and native probe adapter not yet implemented; not an x64 bridge consumer"
     },
     {
       "platform": "linux",
       "arch": "x86_64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-22.04",
+      "id": "linux-x86_64-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "linux",
       "arch": "x86_64",
       "variant": "sos",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-22.04",
+      "id": "linux-x86_64-sos",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "linux",
       "arch": "aarch64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-22.04-arm",
+      "id": "linux-aarch64-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "linux",
       "arch": "aarch64",
       "variant": "sos",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-22.04-arm",
+      "id": "linux-aarch64-sos",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "macos",
       "arch": "x86_64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "macos-15-intel",
+      "id": "macos-x86_64-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "macos",
       "arch": "x86_64",
       "variant": "sos",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "macos-15-intel",
+      "id": "macos-x86_64-sos",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "macos",
       "arch": "aarch64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "macos-14",
+      "id": "macos-aarch64-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "macos",
       "arch": "aarch64",
       "variant": "sos",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "macos-14",
+      "id": "macos-aarch64-sos",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "android",
       "arch": "aarch64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-24.04",
+      "id": "android-aarch64-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "android",
       "arch": "armv7",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-24.04",
+      "id": "android-armv7-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "android",
       "arch": "x86_64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
+      "runner": "ubuntu-24.04",
+      "id": "android-x86_64-standard",
+      "required": false,
+      "experimental": true,
+      "evidence_run": null,
+      "validation": "NOT RUN"
     },
     {
       "platform": "ios",
       "arch": "aarch64",
       "variant": "standard",
       "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "support_status": "PLANNED",
+      "runner": "macos-latest",
+      "id": "ios-aarch64-standard",
+      "required": false,
+      "experimental": false,
+      "reason": "Official no-codesign archive path exists; final IPA signing/provisioning unavailable; build not attempted yet"
     },
     {
       "platform": "web",
       "arch": "web",
       "variant": "standard",
       "enabled": false,
-      "support_status": "PLANNED / NOT VALIDATED",
-      "runner": null
+      "support_status": "BLOCKED",
+      "runner": "ubuntu-22.04",
+      "id": "web-web-standard",
+      "required": false,
+      "experimental": false,
+      "reason": "Official build-rustdesk-web if: false in both reviewed snapshots; unsafe to claim reliable official support"
     }
   ]
 }

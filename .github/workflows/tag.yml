@@ -14,6 +14,10 @@ name: Stable - Draft only
         type: boolean
         description: Skip draft creation, keep artifacts only
         default: true
+      include_experimental:
+        type: boolean
+        default: false
+        description: Experimental target validation; forces artifacts-only, no Draft
   schedule:
   - cron: 41 5,17 * * *
 permissions:
@@ -86,6 +90,7 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
+      include_experimental: ${{ inputs.include_experimental || false }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -95,7 +100,7 @@ jobs:
     - compatibility
     - prepare
     - build
-    if: needs.resolve.outputs.draft_needed == 'true' && inputs.dry_run != true
+    if: needs.resolve.outputs.draft_needed == 'true' && inputs.dry_run != true && inputs.include_experimental != true
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -114,8 +119,12 @@ jobs:
       run: python3 -m pip install -r requirements-build.txt
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
-        pattern: rustdesk-*-windows-x86_64
+        pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
-    - name: Create complete Draft only; no publish path
-      run: python3 scripts/phase4.py draft
+    - name: Package inspectors for supported aggregate
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio
+    - name: Create complete supported Draft only; no publish path
+      run: python3 scripts/phase5.py draft --root .work/collected

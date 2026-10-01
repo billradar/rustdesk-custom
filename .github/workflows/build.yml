@@ -1,4 +1,4 @@
-name: Reusable Windows Build Core
+name: Reusable Cross-Platform Build Core
 'on':
   workflow_call:
     inputs:
@@ -29,6 +29,9 @@ name: Reusable Windows Build Core
       revision:
         type: string
         default: '1'
+      include_experimental:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -40,6 +43,27 @@ permissions:
 env:
   AUTOMATION_MODE: '1'
 jobs:
+  plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - id: plan
+      env:
+        CHANNEL: ${{ inputs.channel }}
+        EXPERIMENTAL: ${{ inputs.include_experimental }}
+      run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
+
+        python3 scripts/phase5.py plan --channel "$CHANNEL" "${args[@]}"'
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: target-plan-${{ github.run_id }}
+        path: .work/target-plan.json
+        if-no-files-found: error
   build:
     env:
       PATCHSET: ${{ inputs.patchset }}
@@ -201,6 +225,28 @@ jobs:
         path: artifacts/rustdesk-*-${{ matrix.variant }}-windows-x86_64/
         if-no-files-found: error
         retention-days: 14
+    needs: plan
+  platforms:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      platform: ${{ matrix.platform }}
+      arch: ${{ matrix.arch }}
+      variant: ${{ matrix.variant }}
+      runner: ${{ matrix.runner }}
+      upstream_ref: ${{ inputs.upstream_ref }}
+      upstream_sha: ${{ inputs.upstream_sha }}
+      upstream_version: ${{ inputs.upstream_version }}
+      patchset: ${{ inputs.patchset }}
+      channel: ${{ inputs.channel }}
+      source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
     needs: build
     runs-on: ubuntu-22.04
@@ -234,3 +280,47 @@ jobs:
 
           .work/production-release-assets/'
         if-no-files-found: error
+  aggregate:
+    needs:
+    - plan
+    - build
+    - validate
+    - platforms
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-22.04
+    env:
+      PATCHSET: ${{ inputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      BUILD_CONFIGURATION: PRODUCTION
+      CHANNEL: ${{ inputs.channel }}
+      EXPERIMENTAL: ${{ inputs.include_experimental }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements-build.txt
+    - name: Package inspectors
+      run: 'sudo apt-get update -y
+
+        sudo apt-get install -y rpm rpm2cpio cpio'
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        pattern: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-*
+        path: .work/all-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      if: inputs.include_experimental
+      with:
+        pattern: diagnostic-*
+        path: .work/all-targets/diagnostics
+        merge-multiple: false
+    - name: Fail-closed expected target and cross-platform provenance gate
+      run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
+
+        python3 scripts/phase5.py aggregate --channel "$CHANNEL" "${args[@]}"'
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: platform-aggregate-${{ github.run_id }}
+        path: .work/phase5-aggregate/
+        if-no-files-found: warn
