@@ -13,5 +13,7 @@
   "runtime_ui": "SKIPPED BY USER",
   "real_remote_session": "NOT TESTED",
   "code_signing": "NOT ENABLED",
-  "schedule": "CONFIGURED / NOT OBSERVED"
+  "schedule": "CONFIGURED / NOT OBSERVED",
+  "workflow_blob_sha": "2f651c966ae8f614f03aae13da509b4d4bfbc6a3",
+  "server_config_fingerprint": "03de2d3e9b5cb9f27975c41caf0d349756ec2922b695340465ba70b63e5729f6"
 }

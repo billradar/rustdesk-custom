@@ -126,6 +126,13 @@ elif command == 'package':
         info.update(prepare_run=manifest['prepare_workflow_run'], build_run=os.environ.get('GITHUB_RUN_ID'),
                     prepared_source_manifest_hash=hashlib.sha256((tree / 'source-manifest.json').read_bytes()).hexdigest(),
                     build_adapter_signature=manifest['build_adapter_signature'])
+        from build_adapter import check
+        profile = check(tree)
+        engine = os.environ.get('ENGINE_ARCHIVE_SHA256', '')
+        if not re.fullmatch('[0-9a-f]{64}', engine):
+            raise SystemExit('Official engine download identity missing')
+        info['engine_archive_sha256'] = engine
+        info['build_toolchain'] = {k: profile[k] for k in ('rust', 'flutter', 'llvm', 'vcpkg', 'helper_commit', 'bridge_rust', 'bridge_flutter', 'frb', 'cargo_expand')}
         shutil.copy2(tree / 'source-manifest.json', folder / 'source-manifest.json')
     if configuration == 'PRODUCTION':
         from production_config import server_fingerprint

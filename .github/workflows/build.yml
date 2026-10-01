@@ -138,7 +138,11 @@ jobs:
 
         Copy-Item .work/engine/* $engine -Recurse -Force
 
-        Get-FileHash .work/engine.zip -Algorithm SHA256
+        $hash = (Get-FileHash .work/engine.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+
+        "ENGINE_ARCHIVE_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+        Write-Output "Official engine SHA256: $hash"
 
         '
     - name: Apply official Flutter SDK dropdown patch

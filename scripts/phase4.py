@@ -77,6 +77,13 @@ def validate(root,channel):
             'patchset':infos['standard']['patchset'],'common_patch_hash':infos['standard']['common_patch_hash'],
             'sos_patch_hash':infos['sos']['sos_patch_hash'],'runtime_ui':'SKIPPED BY USER',
             'real_remote_session':'NOT TESTED','signing':'NOT ENABLED','credential_scan':'KNOWN PATTERNS ONLY'}
+    baseline=json.loads((ROOT/'metadata/PHASE3_BASELINE.json').read_text())
+    if infos['standard']['upstream_sha']==baseline['upstream_sha']:
+        comparisons={k: infos['standard'].get(k)==baseline[k] for k in ('upstream_sha','patchset','common_patch_hash','server_config_fingerprint')}
+        comparisons['sos_patch_hash']=infos['sos']['sos_patch_hash']==baseline['sos_patch_hash']
+        if not all(comparisons.values()):raise ValueError('Phase 3 source/patch/config regression identity mismatch')
+        report['Phase3 baseline comparison']=comparisons
+    else:report['Phase3 baseline comparison']='NOT APPLICABLE: different upstream SHA'
     Path('.work/channel-validation.json').write_text(json.dumps(report,indent=2)+'\n')
 
 def draft(root):
