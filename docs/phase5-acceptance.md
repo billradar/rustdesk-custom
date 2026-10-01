@@ -27,16 +27,16 @@ No frozen patch content changed. New runs resolve current upstream once; develop
 - Aggregate checks required targets, duplicates, source identities and per-variant pairing. Experimental failures remain visible in diagnostics; they do not become Stable required targets.
 - Stable Draft only; experimental Stable runs are artifacts-only. Nightly has no Release job.
 
-Local test checkpoint: 57 tests PASS. This does not prove compilation or packaging on GitHub runners.
+Initial local test checkpoint: 57 tests PASS. First Actions run and repair status: [first-run analysis](phase5-first-run-fixes.md). This does not prove repaired compilation or packaging on GitHub runners.
 
 ## Remaining acceptance
 
 | Requirement | Status |
 |---|---|
-| Windows x86_64 Standard/SOS Phase 5 regression | NOT RUN |
-| New platform compile/package/architecture/config gates | NOT RUN |
-| Cross-platform actual time-overlap evidence | NOT OBSERVED |
-| Aggregate on actual cross-platform artifacts | NOT RUN |
+| Windows x86_64 Standard/SOS Phase 5 regression | PASS, run 36889364030 |
+| New platform compile/package/architecture/config gates | Android ARM64 PASS; other attempted targets FAIL; repair retest pending |
+| Cross-platform actual time-overlap evidence | PASS, run 36889364030 |
+| Aggregate on actual cross-platform artifacts | PARTIAL; required Windows gate PASS |
 | Non-Windows platform promotion | NOT ACHIEVED |
 | Phase 5 Build Architecture acceptance | PENDING |
 | Cross-Platform Promotion | PENDING |

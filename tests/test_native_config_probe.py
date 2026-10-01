@@ -53,6 +53,11 @@ Obj *wire_main_get_hard_option(Bytes *key) {
     if(mode && strcmp(mode,"wrong-type")==0)data->type=0;
     discard(key);return pair(data,success);
 }
+void wire_main_get_api_server(int64_t port) {
+    Obj *code=calloc(1,sizeof(Obj)),*data=calloc(1,sizeof(Obj));
+    code->type=3;data->type=5;data->value.string="https://api.example.com";
+    Obj *o=pair(code,data);posted(port,o);free_WireSyncReturn(o);
+}
 '''
 
 
@@ -79,6 +84,12 @@ class NativeBridgeTests(unittest.TestCase):
 
     def test_short_password_through_compiled_native_bridge(self):
         self.inspect()
+
+    def test_native_api_query_and_mismatch(self):
+        with patch.dict(os.environ,RUSTDESK_PASSWORD='tst',BRIDGE_TEST_MODE='',RUSTDESK_API_SERVER='https://api.example.com'):
+            probe.inspect_library(self.library,self.root,check_api=True)
+        with patch.dict(os.environ,RUSTDESK_PASSWORD='tst',BRIDGE_TEST_MODE='',RUSTDESK_API_SERVER='https://wrong.example.com'):
+            with self.assertRaisesRegex(ValueError,'API server'):probe.inspect_library(self.library,self.root,check_api=True)
 
     def test_wrong_password_blocks_without_disclosure(self):
         for expected in ('bad', 'a-long-fictional-password', '虚构密码'):

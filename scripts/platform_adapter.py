@@ -47,7 +47,7 @@ def render(text,profile):
 def linux_scripts(tree,arch,out):
  p,j=check(tree,'linux',arch);s=next(s for s in j['steps'] if s.get('name')=='Build rustdesk' and 'with' in s);out.mkdir(parents=True,exist_ok=True)
  (out/'install.sh').write_text('set -euo pipefail\n'+render(s['with']['install'],p))
- (out/'build.sh').write_text('set -euo pipefail\ncd /workspace\n'+render(s['with']['run'],p)+'\ncd /workspace\npython3 /custom/scripts/native_config_probe.py --verify-library /workspace/target/release/liblibrustdesk.so\n')
+ (out/'build.sh').write_text('set -euo pipefail\ncd /workspace\n'+render(s['with']['run'],p)+'\n')
  return p
 if __name__=='__main__':
  a=argparse.ArgumentParser();a.add_argument('tree',type=Path);a.add_argument('--platform',required=True,choices=JOBS);a.add_argument('--arch',required=True);a.add_argument('--output',type=Path,required=True);a.add_argument('--linux-scripts',type=Path);a=a.parse_args()

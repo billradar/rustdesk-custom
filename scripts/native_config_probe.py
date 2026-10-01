@@ -70,7 +70,7 @@ def check_values(read_option, expected):
         raise ValueError('Built verification method mismatch')
 
 
-def inspect_library(library, app_dir):
+def inspect_library(library, app_dir, check_api=False):
     dll = C.CDLL(str(Path(library).resolve()))
     alloc = dll.new_uint_8_list_0
     alloc.argtypes, alloc.restype = [C.c_int32], C.POINTER(WireBytes)
@@ -100,12 +100,12 @@ def inspect_library(library, app_dir):
 
     @post_type
     def posted(port, message):
-        if port != 1:
+        if port not in (1, 2):
             return False
         try:
             result = decode(message)
             # Rust2Dart.success sends [0, data]; init returns unit/null.
-            success.append(result == [0, None])
+            success.append(result == [0, None] if port == 1 else result)
         except Exception:
             success.append(False)
         done.set()
@@ -128,9 +128,16 @@ def inspect_library(library, app_dir):
                 free(result)
 
     check_values(read_option, os.environ.get('RUSTDESK_PASSWORD', ''))
+    if check_api:
+        query = dll.wire_main_get_api_server
+        query.argtypes, query.restype = [C.c_int64], None
+        success.clear(); done.clear(); query(2)
+        expected = os.environ.get('RUSTDESK_API_SERVER', '').rstrip('/')
+        if not expected or not done.wait(20) or success != [[0, expected]]:
+            raise ValueError('Built API server query mismatch (value withheld)')
 
 
-def verify(library):
+def verify(library, check_api=False):
     library = Path(library).resolve()
     if C.sizeof(C.c_void_p) != 8 or sys.platform not in ('win32', 'linux', 'darwin'):
         raise ValueError('Native configuration probe requires a supported 64-bit desktop host')
@@ -140,6 +147,9 @@ def verify(library):
     with tempfile.TemporaryDirectory(prefix='rustdesk-config-check-') as app_dir:
         env = dict(os.environ, APPDATA=app_dir, LOCALAPPDATA=app_dir,
                    USERPROFILE=app_dir, HOME=app_dir, XDG_CONFIG_HOME=app_dir, XDG_DATA_HOME=app_dir)
+        env['RUSTDESK_PROBE_API'] = '1' if check_api else '0'
+        if sys.platform == 'linux':
+            env['LD_LIBRARY_PATH'] = str(library.parent) + ':' + env.get('LD_LIBRARY_PATH', '')
         try:
             result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                                      '--child', str(library), app_dir],
@@ -148,7 +158,18 @@ def verify(library):
         except subprocess.TimeoutExpired:
             raise ValueError('Built DLL configuration probe timed out') from None
         if result.returncode != 0:
-            raise ValueError('Built DLL password/configuration probe failed (values withheld)')
+            stages = {10: 'dynamic-library-load', 11: 'bridge-symbol',
+                      12: 'bridge-initialization', 13: 'password-or-verification', 14: 'api-query'}
+            stage = stages.get(result.returncode, 'native-process')
+            if sys.platform == 'linux' and stage == 'dynamic-library-load':
+                # Fixed library names only; never publish arbitrary loader exception text.
+                output = subprocess.run(['ldd', str(library)], stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, universal_newlines=True).stdout
+                import re
+                missing = re.findall(r'^\s*([A-Za-z0-9_.+-]+) => not found$', output, re.M)
+                if missing: print('DEPENDENCY: missing native libraries: ' + ', '.join(missing))
+            raise ValueError('PLATFORM_API: native configuration probe failed at ' + stage +
+                             ' (exit ' + str(result.returncode) + '; values withheld)')
     print('Built DLL password and verification method: PASS (values withheld)')
 
 
@@ -160,7 +181,14 @@ if __name__ == '__main__':
     try:
         if os.name == 'nt':
             directory = os.add_dll_directory(str(Path(sys.argv[2]).resolve().parent))
-        inspect_library(sys.argv[2], sys.argv[3])
+        inspect_library(sys.argv[2], sys.argv[3], os.environ.get('RUSTDESK_PROBE_API') == '1')
+    except OSError:
+        os._exit(10)
+    except AttributeError:
+        os._exit(11)
+    except ValueError as error:
+        message = str(error)
+        os._exit(14 if 'API server' in message else 13 if 'password' in message or 'verification' in message else 12)
     except BaseException:
         os._exit(1)
     # Terminate initialized library worker threads before deleting disposable files.

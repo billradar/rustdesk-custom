@@ -101,7 +101,7 @@ def validate(folder):
      if p.is_file() and not p.is_symlink():scan(p.read_bytes())
  return i
 
-def create(tree,platform,arch,variant,native_probe_pass=False):
+def create(tree,platform,arch,variant):
  tree=Path(tree);values=configured();m=json.loads((tree/'source-manifest.json').read_text());profile=json.loads(Path('.work/platform-profile.json').read_text())
  if platform in ('linux','macos'):
   library=tree/('target/release/liblibrustdesk.so' if platform=='linux' else 'target/release/liblibrustdesk.dylib')
@@ -110,12 +110,17 @@ def create(tree,platform,arch,variant,native_probe_pass=False):
  if not library.exists():raise ValueError('PACKAGE: native library not found')
  data=library.read_bytes();architecture(data,platform,arch);scan(data)
  for name,value in values.items():
-  if not value or (name=='RUSTDESK_PASSWORD' and platform!='android'):continue
+  if not value or name=='RUSTDESK_PASSWORD' or (platform=='macos' and name=='RUSTDESK_API_SERVER'):continue
   if value.encode() not in data:raise ValueError('PLATFORM_API: compiled input missing: '+name+' (withheld)')
- if platform=='macos':
+ if platform in ('macos','linux'):
   from native_config_probe import verify as probe
-  probe(library)
- elif platform=='linux' and not native_probe_pass:raise ValueError('PLATFORM_API: container native configuration probe required')
+  probe(library,check_api=True)
+ if platform=='android':
+  from config_mir import verify as verify_mir
+  folder=Path(os.environ['CONFIG_MIR_DIR'])
+  receipt=json.loads((folder/'validated.json').read_text())
+  if receipt!={'result':'PASS','target':arch,'method':'compiler-mir'}:raise ValueError('PLATFORM_API: compiler receipt mismatch')
+  verify_mir((folder/'client.mir').read_text(),values)
  version=os.environ['UPSTREAM_VERSION'];channel=os.environ['BUILD_CHANNEL'];dest=ROOT/'artifacts'/f'rustdesk-{channel}-{version}-{m["upstream_sha"]}-{variant}-{platform}-{arch}'
  dest.mkdir(parents=True,exist_ok=False);(dest/'packages').mkdir();(dest/'validation').mkdir();shutil.copy2(library,dest/'validation'/library.name)
  if platform=='linux':packages=list(tree.glob('rustdesk*.deb'))+list(tree.glob('rustdesk*.rpm'));kind='deb/rpm'
@@ -128,20 +133,25 @@ def create(tree,platform,arch,variant,native_probe_pass=False):
   with tempfile.TemporaryDirectory() as mount:
    subprocess.run(['hdiutil','attach','-readonly','-nobrowse','-mountpoint',mount,str(packages[0])],check=True,stdout=subprocess.DEVNULL)
    try:
-    matches=list(Path(mount).rglob('librustdesk.dylib'))
-    if len(matches)!=1 or sha(matches[0])!=sha(library):raise ValueError('PACKAGE: DMG native library differs')
+    matches=list(Path(mount).rglob('liblibrustdesk.dylib'))
+    bundled=list((tree/'flutter/build/macos/Build/Products/Release/RustDesk.app').rglob('liblibrustdesk.dylib'))
+    if len(matches)!=1 or len(bundled)!=1 or sha(matches[0])!=sha(bundled[0]):raise ValueError('PACKAGE: DMG differs from the actual Xcode bundle')
+    architecture(matches[0].read_bytes(),platform,arch)
+    probe(matches[0],check_api=True)
+    # Xcode may strip or ad-hoc sign its copy. Validate and retain the actual packaged library.
+    shutil.copy2(matches[0],dest/'validation'/library.name)
     app=next(Path(mount).glob('*.app'))
     exe=app/'Contents/MacOS/RustDesk';architecture(exe.read_bytes(),platform,arch)
    finally:subprocess.run(['hdiutil','detach',mount],check=True,stdout=subprocess.DEVNULL)
  signed='TEST SIGNED / NOT PRODUCTION SIGNED' if platform=='android' else 'NOT ENABLED'
  info={k:m[k] for k in ('variant','upstream_repository','upstream_ref','upstream_version','upstream_sha','patchset','common_patch_hash','sos_patch_hash','custom_repository','custom_repository_sha')}
- info.update(channel=channel,platform=platform,architecture=arch,platform_patch_hash=None,prepared_source_identity=sha(tree/'source-manifest.json'),prepare_run=m['prepare_workflow_run'],build_run=os.environ['GITHUB_RUN_ID'],workflow_run=os.environ['GITHUB_RUN_ID'],build_job=os.environ.get('GITHUB_JOB'),runner=os.environ.get('RUNNER_OS'),runner_arch=os.environ.get('RUNNER_ARCH'),runner_image=os.environ.get('ImageOS'),package_type=kind,signed_status=signed,configuration='PRODUCTION',configuration_validation='PASS',password_validation_method='static-compiled-constants' if platform=='android' else 'built-library-native-bridge',server_config_fingerprint=server_fingerprint(),build_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED',architecture_validation='PASS',package_validation='PASS',credential_scan='PASS',platform_adapter_signature=profile['signature'],build_toolchain={k:profile[k] for k in ['rust','flutter','vcpkg','ndk','cargo_ndk']})
+ info.update(channel=channel,platform=platform,architecture=arch,platform_patch_hash=None,prepared_source_identity=sha(tree/'source-manifest.json'),prepare_run=m['prepare_workflow_run'],build_run=os.environ['GITHUB_RUN_ID'],workflow_run=os.environ['GITHUB_RUN_ID'],build_job=os.environ.get('GITHUB_JOB'),runner=os.environ.get('RUNNER_OS'),runner_arch=os.environ.get('RUNNER_ARCH'),runner_image=os.environ.get('ImageOS'),package_type=kind,signed_status=signed,configuration='PRODUCTION',configuration_validation='PASS',password_validation_method='compiler-mir-and-package-native-identity' if platform=='android' else 'built-library-native-bridge',server_config_fingerprint=server_fingerprint(),build_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED',architecture_validation='PASS',package_validation='PASS',credential_scan='PASS',platform_adapter_signature=profile['signature'],build_toolchain={k:profile[k] for k in ['rust','flutter','vcpkg','ndk','cargo_ndk']})
  (dest/'build-info.json').write_text(json.dumps(info,indent=2)+'\n');shutil.copy2(tree/'source-manifest.json',dest/'source-manifest.json');shutil.copy2(tree/'LICENCE',dest/'LICENCE');shutil.copy2(ROOT/'README.md',dest/'SOURCE-README.md')
  for layer in ['common']+(['sos'] if variant=='sos' else []):shutil.copytree(ROOT/'patchsets'/m['patchset']/layer,dest/'patches'/layer)
  if (tree/'custom-source.sbom.json').exists():shutil.copy2(tree/'custom-source.sbom.json',dest/'custom-source.sbom.json')
  checksums(dest);validate(dest);print('Package/checksum/architecture/source/configuration/known credential gates: PASS')
 
 if __name__=='__main__':
- p=argparse.ArgumentParser();s=p.add_subparsers(dest='mode',required=True);a=s.add_parser('create');a.add_argument('--tree',type=Path,required=True);a.add_argument('--platform',required=True);a.add_argument('--arch',required=True);a.add_argument('--variant',required=True);a.add_argument('--native-probe-pass',action='store_true');a=s.add_parser('validate');a.add_argument('folder',type=Path);a=p.parse_args()
- if a.mode=='create':create(a.tree,a.platform,a.arch,a.variant,a.native_probe_pass)
+ p=argparse.ArgumentParser();s=p.add_subparsers(dest='mode',required=True);a=s.add_parser('create');a.add_argument('--tree',type=Path,required=True);a.add_argument('--platform',required=True);a.add_argument('--arch',required=True);a.add_argument('--variant',required=True);a=s.add_parser('validate');a.add_argument('folder',type=Path);a=p.parse_args()
+ if a.mode=='create':create(a.tree,a.platform,a.arch,a.variant)
  else:validate(a.folder)
