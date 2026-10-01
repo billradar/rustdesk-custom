@@ -1,0 +1,55 @@
+name: Diagnostics - Server connectivity
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connectivity:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: DNS TCP and HTTPS transport only
+        env:
+          ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
+          RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
+          API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+        shell: python
+        run: |
+          import socket, ssl, http.client, os, json, concurrent.futures
+          from urllib.parse import urlsplit
+          results=[]
+          def endpoint(value, default):
+              if not value: raise ValueError('Server variable is not configured')
+              u=urlsplit('//'+value)
+              if not u.hostname or u.username or u.password or u.path: raise ValueError('Invalid server address')
+              return u.hostname, u.port or default
+          def tcp(name, value, port):
+              try:
+                  host,port=endpoint(value,port)
+                  addresses=sorted({x[4][0] for x in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})
+                  with socket.create_connection((host,port),timeout=8): pass
+                  return {'check':name,'host':host,'port':port,'addresses':addresses,'result':'PASS'}
+              except Exception as e:
+                  return {'check':name,'result':'FAIL','error':str(e)}
+          def https():
+              try:
+                  u=urlsplit(os.environ['API_SERVER'])
+                  if u.scheme!='https' or not u.hostname or u.username or u.password: raise ValueError('HTTPS API variable invalid')
+                  c=http.client.HTTPSConnection(u.hostname,u.port or 443,timeout=10,context=ssl.create_default_context())
+                  c.request('HEAD',u.path or '/')
+                  r=c.getresponse()
+                  result={'check':'API HTTPS transport','result':'PASS','status':r.status,'note':'HTTP response proves transport only; API functionality not tested'}
+                  c.close();return result
+              except Exception as e:return {'check':'API HTTPS transport','result':'FAIL','error':str(e)}
+          relay=os.environ['RELAY_SERVER']
+          if not relay:
+              try: relay=endpoint(os.environ['ID_SERVER'],21116)[0]
+              except Exception: pass
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+              futures=[pool.submit(tcp,'ID TCP',os.environ['ID_SERVER'],21116),pool.submit(tcp,'Relay TCP',relay,21117),pool.submit(https)]
+              results=[f.result() for f in futures]
+          report={'checks':results,'UDP':'NOT TESTED','RustDesk protocol':'NOT TESTED','Runtime/UI':'SKIPPED BY USER','Real remote session':'NOT TESTED','password_used':False}
+          print(json.dumps(report,indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## Server connectivity (transport only)\n```json\n'+json.dumps(report,indent=2)+'\n```\n')
+          if any(r['result']!='PASS' for r in results):raise SystemExit(1)
