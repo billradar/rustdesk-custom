@@ -1,0 +1,241 @@
+name: Reusable Windows Build Core
+'on':
+  workflow_call:
+    inputs:
+      upstream_repository:
+        type: string
+        default: rustdesk/rustdesk
+      upstream_ref:
+        type: string
+        required: true
+      upstream_sha:
+        type: string
+        required: true
+      channel:
+        type: string
+        required: true
+      patchset:
+        type: string
+        required: true
+      upstream_version:
+        type: string
+        required: true
+      standard_artifact:
+        type: string
+        required: true
+      sos_artifact:
+        type: string
+        required: true
+      revision:
+        type: string
+        default: '1'
+    secrets:
+      RUSTDESK_KEY:
+        required: true
+      RUSTDESK_PASSWORD:
+        required: true
+permissions:
+  contents: read
+  actions: read
+env:
+  AUTOMATION_MODE: '1'
+jobs:
+  build:
+    env:
+      PATCHSET: ${{ inputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ inputs.channel == 'stable' && inputs.upstream_ref || '' }}
+      PATCH_REVISION: ${{ inputs.revision }}
+      BUILD_CONFIGURATION: PRODUCTION
+      RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
+      RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
+      RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      BUILD_CHANNEL: ${{ inputs.channel }}
+      UPSTREAM_VERSION: ${{ inputs.upstream_version }}
+      ARTIFACT_IDENTITY: ${{ inputs.channel == 'nightly' && format('nightly-{0}-{1}', inputs.upstream_version, inputs.upstream_sha)
+        || inputs.upstream_version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - platform: windows
+          arch: x86_64
+          variant: standard
+          runner: windows-2022
+          enabled: true
+          support_status: SUPPORTED
+          upstream_build_profile: windows-flutter-x64
+        - platform: windows
+          arch: x86_64
+          variant: sos
+          runner: windows-2022
+          enabled: true
+          support_status: SUPPORTED
+          upstream_build_profile: windows-flutter-x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements-build.txt
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
+        path: .work/source-bundle
+    - id: profile
+      name: Verify immutable prepared source before any dependency build
+      env:
+        VARIANT: ${{ matrix.variant }}
+      run: 'python3 scripts/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input --variant
+        "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET"
+
+        python3 scripts/build_adapter.py .work/prepared-input/source --output .work/build-profile.json'
+    - name: Validate production inputs without printing values
+      env:
+        RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+      run: python3 scripts/production_config.py inputs
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: test-bridge-${{ github.run_id }}
+        path: .work/bridge-files
+    - uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+      with:
+        version: ${{ steps.profile.outputs.llvm }}
+    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+      with:
+        flutter-version: ${{ steps.profile.outputs.flutter }}
+        channel: stable
+        architecture: x64
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: ${{ steps.profile.outputs.rust }}
+        targets: x86_64-pc-windows-msvc
+        components: rustfmt
+    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+    - name: Prepare upstream dependency recipes
+      run: echo "Dependency recipes are from verified Prepared Source"
+    - name: Install the official custom Flutter engine
+      shell: pwsh
+      run: '$ErrorActionPreference = ''Stop''
+
+        flutter precache --windows
+
+        if ($LASTEXITCODE -ne 0) { throw ''flutter precache failed'' }
+
+        $sdk = Split-Path (Split-Path (Get-Command flutter).Source)
+
+        $engine = Join-Path $sdk ''bin/cache/artifacts/engine/windows-x64-release''
+
+        Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile .work/engine.zip
+
+        Expand-Archive .work/engine.zip .work/engine
+
+        Copy-Item .work/engine/* $engine -Recurse -Force
+
+        Get-FileHash .work/engine.zip -Algorithm SHA256
+
+        '
+    - name: Apply official Flutter SDK dropdown patch
+      run: 'sdk=$(dirname "$(dirname "$(command -v flutter)")")
+
+        patch="$PWD/.work/prepared-input/source/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+
+        git -C "$sdk" apply --check "$patch"
+
+        git -C "$sdk" apply "$patch"
+
+        '
+    - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+      with:
+        vcpkgDirectory: C:\vcpkg
+        vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
+        doNotCache: true
+    - name: Install official vcpkg dependencies
+      working-directory: .work/prepared-input/source
+      env:
+        VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+      run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
+    - name: Build official WindowInjection helper
+      shell: pwsh
+      run: '$ErrorActionPreference = ''Stop''
+
+        git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
+
+        if ($LASTEXITCODE -ne 0) { throw ''WindowInjection clone failed'' }
+
+        git -C .work/topmost checkout --detach $env:HELPER_SHA
+
+        if ($LASTEXITCODE -ne 0) { throw ''WindowInjection checkout failed'' }
+
+        Push-Location .work/topmost
+
+        & MSBuild.exe WindowInjection/WindowInjection.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10
+
+        if ($LASTEXITCODE -ne 0) { throw ''WindowInjection build failed'' }
+
+        Pop-Location
+
+        '
+      env:
+        HELPER_SHA: ${{ steps.profile.outputs.helper_commit }}
+    - name: Build and verify selected variant
+      env:
+        UPSTREAM_REF: ${{ inputs.upstream_sha }}
+        VARIANT: ${{ matrix.variant }}
+        RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+      run: 'export PREPARED_SOURCE_DIR="$PWD/.work/prepared-input/source"
+
+        export RUSTDESK_BRIDGE_DIR="$(cygpath -w "$PWD/.work/bridge-files")"
+
+        export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
+
+        bash "scripts/build-$VARIANT.sh" "$UPSTREAM_REF"
+
+        '
+    - name: Upload verified production bundle
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ matrix.variant
+          }}-windows-x86_64
+        path: artifacts/rustdesk-*-${{ matrix.variant }}-windows-x86_64/
+        if-no-files-found: error
+        retention-days: 14
+  validate:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PATCHSET: ${{ inputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ inputs.channel == 'stable' && inputs.upstream_ref || '' }}
+      BUILD_CONFIGURATION: PRODUCTION
+      CHANNEL: ${{ inputs.channel }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements-build.txt
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        pattern: rustdesk-*-windows-x86_64
+        path: .work/collected
+        merge-multiple: false
+    - name: Verify paired prepared-source provenance, production config, checksum and architecture
+      run: python3 scripts/phase4.py validate --channel "$CHANNEL"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: channel-validation-${{ github.run_id }}
+        path: '.work/channel-validation.json
+
+          .work/production-release-assets/'
+        if-no-files-found: error

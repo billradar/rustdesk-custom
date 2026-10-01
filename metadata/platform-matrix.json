@@ -1,0 +1,144 @@
+{
+  "entries": [
+    {
+      "platform": "windows",
+      "arch": "x86_64",
+      "variant": "standard",
+      "runner": "windows-2022",
+      "enabled": true,
+      "support_status": "SUPPORTED",
+      "evidence_run": 36854953000,
+      "phase4_regression": "NOT RUN"
+    },
+    {
+      "platform": "windows",
+      "arch": "x86_64",
+      "variant": "sos",
+      "runner": "windows-2022",
+      "enabled": true,
+      "support_status": "SUPPORTED",
+      "evidence_run": 36854953000,
+      "phase4_regression": "NOT RUN"
+    },
+    {
+      "platform": "windows",
+      "arch": "aarch64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "windows",
+      "arch": "aarch64",
+      "variant": "sos",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "linux",
+      "arch": "x86_64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "linux",
+      "arch": "x86_64",
+      "variant": "sos",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "linux",
+      "arch": "aarch64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "linux",
+      "arch": "aarch64",
+      "variant": "sos",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "macos",
+      "arch": "x86_64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "macos",
+      "arch": "x86_64",
+      "variant": "sos",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "macos",
+      "arch": "aarch64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "macos",
+      "arch": "aarch64",
+      "variant": "sos",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "android",
+      "arch": "aarch64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "android",
+      "arch": "armv7",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "android",
+      "arch": "x86_64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "ios",
+      "arch": "aarch64",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    },
+    {
+      "platform": "web",
+      "arch": "web",
+      "variant": "standard",
+      "enabled": false,
+      "support_status": "PLANNED / NOT VALIDATED",
+      "runner": null
+    }
+  ]
+}

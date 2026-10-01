@@ -42,7 +42,7 @@ def discover(ref, force=False, dry_run=True):
         required = {'SHA256SUMS', 'build-info-standard.json', 'build-info-sos.json',
                     f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
                     f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-        if existing['draft'] or existing['prerelease'] or not all(x in body for x in expected) or asset_names != required:
+        if existing['prerelease'] or not all(x in body for x in expected) or asset_names != required:
             raise ValueError('Existing release incomplete or different; never overwrite, review revision')
     else:
         # An existing tag without a matching complete release is also a hard stop.
@@ -199,7 +199,7 @@ Source: exact upstream SHA + this maintenance commit and patches included in bot
     if {a['name']: a['size'] for a in uploaded if a['state'] == 'uploaded'} != expected:
         raise ValueError('Incomplete draft upload; release remains unpublished')
     result = request('PATCH', f'repos/{REPOSITORY}/releases/{draft["id"]}', {
-        'draft': False, 'prerelease': False, 'body': notes + '\nAutomation-State: complete\n'})
+        'draft': True, 'prerelease': False, 'body': notes + '\nAutomation-State: complete\n'})
     print(result['html_url'])
 
 if __name__ == '__main__':

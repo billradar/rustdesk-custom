@@ -1,0 +1,68 @@
+{
+  "profiles": [
+    {
+      "signature": "3e4512a1d834e5840cb5b5a54a27903a6d740834d2960d3ed7b3f706e3c319b5",
+      "upstream_version": "1.4.9",
+      "runner": "windows-2022",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "llvm": "15.0.6",
+      "vcpkg": "120deac3062162151622ca4860575a33844ba10b",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "bridge_flutter": "3.22.3",
+      "helper_commit": "ecd8d6a139eee76845ea66423fb739af450fda90",
+      "source_sbom_requested": false,
+      "id": "stable-149",
+      "reviewed_upstream_sha": "6c578292e8ebbbec708b76986ba8c4bc7c509747",
+      "critical": {
+        "tools": {
+          "RUST_VERSION": "1.75",
+          "FLUTTER_VERSION": "3.24.5",
+          "LLVM_VERSION": "15.0.6",
+          "VCPKG_COMMIT_ID": "120deac3062162151622ca4860575a33844ba10b"
+        },
+        "files": {
+          "build.py": "d43ed2eb0a5e0f054b568ea59ba06e19f32a862a45380268640dcee8a8e2c3d8",
+          "build.rs": "8ef5daa629f04d6d330d1080b9b5444281c538161118cc3abb1cf94f11bf25bd",
+          ".github/workflows/bridge.yml": "5f459496e0292c8a5e22a99b061d5f14d88749bc77ba0fbb81a124c93cc0b435",
+          ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+          ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
+        }
+      }
+    },
+    {
+      "signature": "f7e2a62a707393c4ea97c42fe00a5a9cca89c87666a11e64e643dd028c663489",
+      "upstream_version": "1.5.0",
+      "runner": "windows-2022",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "llvm": "15.0.6",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "bridge_flutter": "3.22.3",
+      "helper_commit": "ecd8d6a139eee76845ea66423fb739af450fda90",
+      "source_sbom_requested": true,
+      "id": "development-20261001",
+      "reviewed_upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17",
+      "critical": {
+        "tools": {
+          "RUST_VERSION": "1.75",
+          "FLUTTER_VERSION": "3.24.5",
+          "LLVM_VERSION": "15.0.6",
+          "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+        },
+        "files": {
+          "build.py": "88445cdf48d214fd9ff73d7fe2c878ad277f84c31839bb6ac94563d37f281708",
+          "build.rs": "3fc72873ebfb2a238a2ab58f69b984c2978829291856bdfe8d0b62dd958f621a",
+          ".github/workflows/bridge.yml": "b519191d9d9bd7f4350cc978c8fd6db366cf3152206835620a73f09a165b4d05",
+          ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+          ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+name: Nightly - Development artifacts
+'on':
+  schedule:
+  - cron: 0 2 * * *
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase4-nightly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+      build_needed: ${{ steps.resolve.outputs.build_needed }}
+      draft_needed: ${{ steps.resolve.outputs.draft_needed }}
+      revision: ${{ steps.resolve.outputs.revision }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - id: resolve
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
+        CHANNEL: nightly
+        FORCE: ${{ inputs.force_rebuild || false }}
+      run: 'args=()
+
+        [[ "$FORCE" != true ]] || args+=(--force)
+
+        python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: channel-discovery-${{ github.run_id }}
+        path: .work/channel.json
+        if-no-files-found: warn
+  compatibility:
+    needs: resolve
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+    if: needs.resolve.outputs.build_needed == 'true'
+  prepare:
+    needs:
+    - resolve
+    - compatibility
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+  build:
+    needs:
+    - resolve
+    - compatibility
+    - prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+      revision: ${{ needs.resolve.outputs.revision }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}

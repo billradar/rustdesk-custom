@@ -1,4 +1,4 @@
-name: Production - Stable Standard and SOS release
+name: Legacy Phase 3 Dry Run (reference only)
 permissions:
   contents: read
 concurrency:
@@ -30,7 +30,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         REQUESTED_REF: ${{ inputs.upstream_ref }}
         FORCE_REBUILD: ${{ inputs.force_rebuild }}
-        DRY_RUN: ${{ inputs.dry_run }}
+        DRY_RUN: 'true'
       run: 'args=()
 
         [[ "$FORCE_REBUILD" != true ]] || args+=(--force)
@@ -101,45 +101,7 @@ jobs:
         name: production-dry-run-validated
         path: .work/production-validation.json
         if-no-files-found: error
-  release:
-    needs:
-    - discover
-    - build
-    - validate
-    if: needs.discover.outputs.publish_needed == 'true' && needs.validate.result == 'success' && vars.PRODUCTION_RELEASE_ENABLED
-      == 'true'
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PATCHSET: ${{ needs.discover.outputs.patchset }}
-      UPSTREAM_EXPECTED_SHA: ${{ needs.discover.outputs.sha }}
-      UPSTREAM_TAG: ${{ needs.discover.outputs.tag }}
-      BUILD_CONFIGURATION: PRODUCTION
-      DRY_RUN_ID: ${{ inputs.dry_run_id }}
-    steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      with:
-        persist-credentials: false
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-      with:
-        pattern: rustdesk-*-windows-x86_64
-        path: .work/collected
-        merge-multiple: false
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-      if: inputs.dry_run_id != ''
-      with:
-        name: production-dry-run-validated
-        github-token: ${{ github.token }}
-        run-id: ${{ inputs.dry_run_id }}
-        path: .work/dry-run-evidence
-    - name: Validate both and stage ONE production draft
-      run: python3 scripts/production.py publish --dry-run-id "$DRY_RUN_ID"
 'on':
-  schedule:
-  - cron: 41 5,17 * * *
   workflow_dispatch:
     inputs:
       upstream_ref:

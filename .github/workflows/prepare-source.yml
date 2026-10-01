@@ -1,0 +1,75 @@
+name: Reusable Prepared Source
+'on':
+  workflow_call:
+    inputs:
+      upstream_repository:
+        type: string
+        default: rustdesk/rustdesk
+      upstream_ref:
+        type: string
+        required: true
+      upstream_sha:
+        type: string
+        required: true
+      channel:
+        type: string
+        required: true
+      patchset:
+        type: string
+        required: true
+    outputs:
+      standard_artifact:
+        value: ${{ jobs.prepare.outputs.standard_artifact }}
+      sos_artifact:
+        value: ${{ jobs.prepare.outputs.sos_artifact }}
+      upstream_version:
+        value: ${{ jobs.prepare.outputs.upstream_version }}
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      standard_artifact: ${{ steps.identity.outputs.standard_artifact }}
+      sos_artifact: ${{ steps.identity.outputs.sos_artifact }}
+      upstream_version: ${{ steps.identity.outputs.upstream_version }}
+    env:
+      PATCHSET: ${{ inputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_REF: ${{ inputs.upstream_ref }}
+      BUILD_CHANNEL: ${{ inputs.channel }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements-build.txt
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: test-bridge-${{ github.run_id }}
+        path: .work/bridge-files
+    - name: Install pinned Syft for exact-source upstream SBOM profile
+      uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610
+    - name: Prepare Common once and fork independent variant sources
+      run: 'bash scripts/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
+
+        python3 scripts/prepared_source.py prepare --base .work/official --output .work/prepared --ref "$UPSTREAM_REF" --sha
+        "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --bridge .work/bridge-files'
+    - id: identity
+      run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\na=json.loads(Path('.work/prepared/standard/source-manifest.json').read_text());\
+        \ b=json.loads(Path('.work/prepared/sos/source-manifest.json').read_text())\nfor k in ('upstream_sha','patchset','common_patch_hash','custom_repository_sha','prepare_workflow_run'):\n\
+        \ assert a[k]==b[k], k\nwith open(os.environ['GITHUB_OUTPUT'],'a') as f:\n for variant,m in [('standard',a),('sos',b)]:\n\
+        \  identity=m['common_patch_hash'] if variant=='standard' else m['sos_patch_hash']\n  f.write(variant+'_artifact=prepared-'+variant+'-'+m['upstream_sha']+'-'+identity+'\\\
+        n')\n f.write('upstream_version='+a['upstream_version']+'\\n')\nPYCODE"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.identity.outputs.standard_artifact }}
+        path: .work/prepared/prepared-standard/
+        retention-days: 7
+        if-no-files-found: error
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.identity.outputs.sos_artifact }}
+        path: .work/prepared/prepared-sos/
+        retention-days: 7
+        if-no-files-found: error

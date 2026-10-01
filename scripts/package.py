@@ -80,7 +80,7 @@ elif command == 'package':
     if not topmost.is_file():
         raise SystemExit('Missing WindowInjection.dll')
     shutil.copy2(topmost, release / 'WindowInjection.dll')
-    version = (os.environ.get('UPSTREAM_TAG') or 'source-' + git(tree, 'rev-parse', 'HEAD')[:12]).lstrip('v')
+    version = (os.environ.get('ARTIFACT_IDENTITY') or os.environ.get('UPSTREAM_TAG') or 'source-' + git(tree, 'rev-parse', 'HEAD')[:12]).lstrip('v')
     import re
     if not re.fullmatch(r'[0-9A-Za-z][0-9A-Za-z.-]{0,80}', version):
         raise SystemExit('Invalid artifact version')
@@ -102,7 +102,8 @@ elif command == 'package':
         'upstream_sha': sha,
         'upstream_tag': os.environ.get('UPSTREAM_TAG'),
         'patch_revision': os.environ.get('PATCH_REVISION', '1'),
-        'upstream_version': version,
+        'upstream_version': os.environ.get('UPSTREAM_VERSION', version),
+        'channel': os.environ.get('BUILD_CHANNEL', 'stable'),
         'hbb_common_sha': git(tree / 'libs/hbb_common', 'rev-parse', 'HEAD'),
         'custom_repository': os.environ.get('GITHUB_REPOSITORY', 'billradar/rustdesk-custom'),
         'architecture': 'x86_64',
@@ -120,12 +121,20 @@ elif command == 'package':
         'runtime_ui_validation': 'SKIPPED BY USER',
         'real_remote_session_validation': 'NOT TESTED',
     }
+    if (tree / 'source-manifest.json').exists():
+        manifest = json.loads((tree / 'source-manifest.json').read_text())
+        info.update(prepare_run=manifest['prepare_workflow_run'], build_run=os.environ.get('GITHUB_RUN_ID'),
+                    prepared_source_manifest_hash=hashlib.sha256((tree / 'source-manifest.json').read_bytes()).hexdigest(),
+                    build_adapter_signature=manifest['build_adapter_signature'])
+        shutil.copy2(tree / 'source-manifest.json', folder / 'source-manifest.json')
     if configuration == 'PRODUCTION':
         from production_config import server_fingerprint
         info['server_config_fingerprint'] = server_fingerprint()
     (folder / 'build-info.json').write_text(json.dumps(info, indent=2) + '\n')
     shutil.copy2(root / 'patchsets' / os.environ.get('PATCHSET', 'v1') / 'patchset.json', folder / 'patchset.json')
     # Preserve corresponding patch source and the AGPL licence with the test bundle.
+    if (tree / 'custom-source.sbom.json').exists():
+        shutil.copy2(tree / 'custom-source.sbom.json', folder / 'custom-source.sbom.json')
     shutil.copy2(tree / 'LICENCE', folder / 'LICENCE')
     shutil.copy2(root / 'README.md', folder / 'SOURCE-README.md')
     shutil.copytree(root / 'patchsets' / os.environ.get('PATCHSET', 'v1') / 'common', folder / 'patches/common')

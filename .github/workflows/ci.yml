@@ -1,0 +1,56 @@
+name: CI - Patch and Build compatibility
+'on':
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        type: string
+        description: CI ref; empty = official default branch
+        default: ''
+  pull_request: {}
+  push:
+    branches:
+    - main
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase4-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  resolve:
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+      build_needed: ${{ steps.resolve.outputs.build_needed }}
+      draft_needed: ${{ steps.resolve.outputs.draft_needed }}
+      revision: ${{ steps.resolve.outputs.revision }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - id: resolve
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
+        CHANNEL: ci
+        FORCE: ${{ inputs.force_rebuild || false }}
+      run: 'args=()
+
+        [[ "$FORCE" != true ]] || args+=(--force)
+
+        python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: channel-discovery-${{ github.run_id }}
+        path: .work/channel.json
+        if-no-files-found: warn
+  compatibility:
+    needs: resolve
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: ci
