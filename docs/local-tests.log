@@ -1,0 +1,55 @@
+test_forced_existing_revision_never_overwrites_release (test_automation.DiscoveryTests.test_forced_existing_revision_never_overwrites_release) ... ok
+test_new_stable_requests_build_and_publish (test_automation.DiscoveryTests.test_new_stable_requests_build_and_publish) ... ok
+test_no_new_version_is_clean_no_build_no_publish (test_automation.DiscoveryTests.test_no_new_version_is_clean_no_build_no_publish) ... ok
+test_official_release_metadata_controls_stability (test_automation.DiscoveryTests.test_official_release_metadata_controls_stability) ... ok
+test_unknown_incompatible_source_fails_closed (test_automation.GenerationTests.test_unknown_incompatible_source_fails_closed) ... ok
+test_v1_hashes_frozen_and_exact_mapping (test_automation.GenerationTests.test_v1_hashes_frozen_and_exact_mapping) ... ok
+test_checksum_architecture_and_runtime_lies_block (test_automation.ReleaseGateTests.test_checksum_architecture_and_runtime_lies_block) ... ok
+test_pair_requires_matching_source_and_both_variants (test_automation.ReleaseGateTests.test_pair_requires_matching_source_and_both_variants) ... ok
+test_completed_log_credential_blocks_before_publication (test_production.ProductionDiscoveryTests.test_completed_log_credential_blocks_before_publication) ... ok
+test_existing_complete_release_skips_build (test_production.ProductionDiscoveryTests.test_existing_complete_release_skips_build) ... ok
+test_first_release_without_dryrun_cannot_write (test_production.ProductionDiscoveryTests.test_first_release_without_dryrun_cannot_write) ... ok
+test_force_never_overwrites (test_production.ProductionDiscoveryTests.test_force_never_overwrites) ... ok
+test_incomplete_release_fails_closed (test_production.ProductionDiscoveryTests.test_incomplete_release_fails_closed) ... ok
+test_new_stable_dryrun_cannot_publish (test_production.ProductionDiscoveryTests.test_new_stable_dryrun_cannot_publish) ... ok
+test_wrong_repository_never_writes (test_production.ProductionDiscoveryTests.test_wrong_repository_never_writes) ... ok
+test_checksum_architecture_and_runtime_lies_block (test_production.ProductionGateTests.test_checksum_architecture_and_runtime_lies_block) ... ok
+test_fictional_marker_and_private_key_block_payload (test_production.ProductionGateTests.test_fictional_marker_and_private_key_block_payload) ... ok
+test_pair_requires_matching_source_and_both_variants (test_production.ProductionGateTests.test_pair_requires_matching_source_and_both_variants) ... ok
+test_production_payload_and_shared_server_gate (test_production.ProductionGateTests.test_production_payload_and_shared_server_gate) ... ok
+test_binary_credential_scan_covers_ascii_and_utf16 (test_production.ProductionInputTests.test_binary_credential_scan_covers_ascii_and_utf16) ... ok
+test_input_never_prints_values (test_production.ProductionInputTests.test_input_never_prints_values) ... ok
+test_missing_fixture_and_credential_inputs_block (test_production.ProductionInputTests.test_missing_fixture_and_credential_inputs_block) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.208s
+
+OK
+standard: metadata, checksums, Windows AMD64: PASS
+standard: metadata, checksums, Windows AMD64: PASS
+standard: metadata, checksums, Windows AMD64: PASS
+sos: metadata, checksums, Windows AMD64: PASS
+standard: metadata, checksums, Windows AMD64: PASS
+sos: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+standard: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+Production payload: no known test fixture or credential marker
+Production payload: no known test fixture or credential marker
+standard: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+standard: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+sos: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+standard: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+sos: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+standard: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+sos: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+standard: metadata, checksums, Windows AMD64: PASS
+Production payload: no known test fixture or credential marker
+sos: metadata, checksums, Windows AMD64: PASS

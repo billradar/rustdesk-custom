@@ -1,0 +1,386 @@
+name: Production - Standard and SOS Windows x64
+
+on:
+  workflow_call:
+    inputs:
+      upstream_ref:
+        type: string
+        required: true
+      upstream_tag:
+        type: string
+        default: ''
+      variant:
+        type: string
+        default: both
+      validation_only:
+        type: boolean
+        default: false
+      simulate_failure:
+        type: boolean
+        default: false
+      upstream_branch:
+        type: string
+        default: ''
+
+    secrets:
+      RUSTDESK_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.upstream_ref }}
+  cancel-in-progress: false
+
+env:
+  AUTOMATION_MODE: '1'
+
+jobs:
+  resolve:
+    runs-on: ubuntu-22.04
+    outputs:
+      sha: ${{ steps.resolve.outputs.upstream_sha }}
+      revision: ${{ steps.revision.outputs.revision }}
+      tag: ${{ steps.revision.outputs.tag }}
+      artifact_version: ${{ steps.revision.outputs.artifact_version }}
+      patchset: ${{ steps.patchset.outputs.patchset }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.upstream_ref }}
+        run: python3 scripts/upstream.py default --ref "$REQUESTED_REF"
+      - id: revision
+        env:
+          REQUESTED_REF: ${{ inputs.upstream_ref }}
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+          RESOLVED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+        run: |
+          python3 - <<'PYCODE'
+          import os,re
+          from pathlib import Path
+          revision=Path('patch-revision.txt').read_text().strip()
+          if not re.fullmatch(r'[1-9][0-9]{0,5}',revision):
+              raise SystemExit('Invalid revision')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('revision='+revision+'\n')
+              tag=os.environ['REQUESTED_TAG'] or (os.environ['REQUESTED_REF'] if re.fullmatch(r'v?[0-9]+\.[0-9]+\.[0-9]+',os.environ['REQUESTED_REF']) else '')
+              if tag and not re.fullmatch(r'v?[0-9]+\.[0-9]+\.[0-9]+',tag):
+                  raise SystemExit('Invalid upstream tag')
+              f.write('tag='+tag+'\n')
+              f.write('artifact_version='+(tag.lstrip('v') or 'source-'+os.environ['RESOLVED_SHA'][:12])+'\n')
+          PYCODE
+
+      - id: patchset
+        name: Resolve generation using frozen SHA and clean independent probes
+        env:
+          RESOLVED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+        run: |
+          source scripts/test-config.sh
+          bash scripts/select-patchset.sh "$RESOLVED_SHA"
+      - name: Preserve generation selection diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: patchset-selection-${{ github.run_id }}
+          path: .work/patchset-selection.json
+          if-no-files-found: warn
+
+  preflight:
+    needs: resolve
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+      UPSTREAM_TAG: ${{ needs.resolve.outputs.tag }}
+      UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+      SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
+      SELECTED_VARIANT: ${{ inputs.variant }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+      - name: Automation gate regression tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Patch/API/config gate before expensive Windows dependencies
+        run: |
+          source scripts/test-config.sh
+          args=()
+          if [[ "$SIMULATE_FAILURE" == true ]]; then args+=(--simulate-failure); fi
+          python3 scripts/compatibility.py prepare --sha "$UPSTREAM_EXPECTED_SHA" --variant "$SELECTED_VARIANT" "${args[@]}"
+      - name: Real hbb_common configuration API compilation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev pkg-config protobuf-compiler
+          source scripts/test-config.sh
+          python3 scripts/compatibility.py rust --variant "$SELECTED_VARIANT"
+      - name: Preserve diagnostics even on conflict
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: preflight-report-${{ github.run_id }}
+          path: |
+            .work/validation/*.json
+            .work/validation/*.md
+            .work/validation/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  bridge:
+    needs: [resolve, preflight]
+    env:
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+      UPSTREAM_TAG: ${{ needs.resolve.outputs.tag }}
+      UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    outputs:
+      matrix: ${{ steps.selection.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Validate selection and load fictional fixtures
+        id: selection
+        env:
+          SELECTED_VARIANT: ${{ inputs.variant }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          selected = os.environ['SELECTED_VARIANT']
+          if selected not in ('both', 'standard', 'sos'):
+              raise SystemExit('Invalid variant')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('matrix=' + json.dumps({'variant': ['standard', 'sos'] if selected == 'both' else [selected]}) + '\n')
+          PY
+          source scripts/test-config.sh
+          python3 - <<'PY'
+          import os
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              for key in ('RUSTDESK_ID_SERVER', 'RUSTDESK_RELAY_SERVER', 'RUSTDESK_API_SERVER', 'RUSTDESK_KEY', 'RUSTDESK_PASSWORD'):
+                  f.write(key + '=' + os.environ[key] + '\n')
+          PY
+      - name: Prepare exact official source
+        env:
+          UPSTREAM_REF: ${{ needs.resolve.outputs.sha }}
+        run: bash scripts/prepare.sh "$UPSTREAM_REF" .work/bridge
+      - name: Install official bridge prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libclang-dev libgtk-3-dev llvm-dev nasm ninja-build pkg-config
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+          components: rustfmt
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.22.3'
+          channel: stable
+      - name: Generate bridge using official baseline recipe
+        working-directory: .work/bridge
+        run: |
+          cargo install cargo-expand --version 1.0.95 --locked
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid --locked
+          sed -i 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+          (cd flutter && flutter pub get)
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+          cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
+          python3 ../../scripts/package.py bridge-info .
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: test-bridge-${{ github.run_id }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            .work/bridge/src/bridge_generated*.rs
+            .work/bridge/flutter/lib/generated_bridge*.dart
+            .work/bridge/flutter/macos/Runner/bridge_generated.h
+            .work/bridge/flutter/ios/Runner/bridge_generated.h
+            .work/bridge/bridge-info.json
+
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+      - name: Analyze patched Flutter interfaces against generated bridge
+        env:
+          SELECTED_VARIANT: ${{ inputs.variant }}
+        run: |
+          source scripts/test-config.sh
+          python3 scripts/compatibility.py prepare --sha "$UPSTREAM_EXPECTED_SHA" --variant "$SELECTED_VARIANT"
+          for variant in standard sos; do
+            [[ "$SELECTED_VARIANT" == both || "$SELECTED_VARIANT" == "$variant" ]] || continue
+            python3 scripts/package.py restore-bridge ".work/validation/$variant" .work/bridge
+          done
+          python3 scripts/compatibility.py analyze --variant "$SELECTED_VARIANT"
+      - name: Preserve Flutter compatibility diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: flutter-compatibility-report-${{ github.run_id }}
+          path: |
+            .work/validation/*.json
+            .work/validation/*.md
+            .work/validation/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  build:
+    needs: [resolve, bridge]
+    if: ${{ !inputs.validation_only }}
+    env:
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+      UPSTREAM_TAG: ${{ needs.resolve.outputs.tag }}
+      PATCH_REVISION: ${{ needs.resolve.outputs.revision }}
+      BUILD_CONFIGURATION: PRODUCTION
+      RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
+      RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
+      RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+      RUSTDESK_KEY: ${{ vars.RUSTDESK_KEY }}
+    runs-on: windows-2022
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.bridge.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Validate production inputs without printing values
+        env:
+          RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+        run: python3 scripts/production_config.py inputs
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: test-bridge-${{ github.run_id }}
+          path: .work/bridge-files
+      - uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+        with:
+          version: '15.0.6'
+      - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          architecture: x64
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+      - name: Prepare upstream dependency recipes
+        env:
+          UPSTREAM_REF: ${{ needs.resolve.outputs.sha }}
+        run: bash scripts/prepare.sh "$UPSTREAM_REF" .work/dependency-source
+      - name: Install the official custom Flutter engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter precache --windows
+          if ($LASTEXITCODE -ne 0) { throw 'flutter precache failed' }
+          $sdk = Split-Path (Split-Path (Get-Command flutter).Source)
+          $engine = Join-Path $sdk 'bin/cache/artifacts/engine/windows-x64-release'
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile .work/engine.zip
+          Expand-Archive .work/engine.zip .work/engine
+          Copy-Item .work/engine/* $engine -Recurse -Force
+          Get-FileHash .work/engine.zip -Algorithm SHA256
+      - name: Apply official Flutter SDK dropdown patch
+        run: |
+          sdk=$(dirname "$(dirname "$(command -v flutter)")")
+          patch="$PWD/.work/dependency-source/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          git -C "$sdk" apply --check "$patch"
+          git -C "$sdk" apply "$patch"
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: '120deac3062162151622ca4860575a33844ba10b'
+          doNotCache: true
+      - name: Install official vcpkg dependencies
+        working-directory: .work/dependency-source
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
+      - name: Build official WindowInjection helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
+          if ($LASTEXITCODE -ne 0) { throw 'WindowInjection clone failed' }
+          git -C .work/topmost checkout --detach ecd8d6a139eee76845ea66423fb739af450fda90
+          if ($LASTEXITCODE -ne 0) { throw 'WindowInjection checkout failed' }
+          Push-Location .work/topmost
+          & MSBuild.exe WindowInjection/WindowInjection.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10
+          if ($LASTEXITCODE -ne 0) { throw 'WindowInjection build failed' }
+          Pop-Location
+      - name: Build and verify selected variant
+        env:
+          UPSTREAM_REF: ${{ needs.resolve.outputs.sha }}
+          VARIANT: ${{ matrix.variant }}
+          RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+        run: |
+          export RUSTDESK_BRIDGE_DIR="$(cygpath -w "$PWD/.work/bridge-files")"
+          export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
+          bash "scripts/build-$VARIANT.sh" "$UPSTREAM_REF"
+      - name: Upload verified production bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rustdesk-${{ needs.resolve.outputs.artifact_version }}-${{ matrix.variant }}-windows-x86_64
+          path: artifacts/rustdesk-*-${{ matrix.variant }}-windows-x86_64/
+          if-no-files-found: error
+          retention-days: 14
+
+  validation-report:
+    needs: [resolve, preflight, bridge]
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: '*report-${{ github.run_id }}'
+          path: diagnostics
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: patchset-selection-${{ github.run_id }}
+          path: diagnostics/selection
+      - name: Report generation and actual compile coverage
+        env:
+          SELECTED: ${{ needs.resolve.outputs.patchset }}
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          BRIDGE_RESULT: ${{ needs.bridge.result }}
+        run: |
+          python3 - <<'PYCODE'
+          import json,os
+          from pathlib import Path
+          roots=list(Path('diagnostics').rglob('patchset-selection.json'))
+          report=json.loads(roots[0].read_text()) if roots else {'selected':None,'patchsets':[]}
+          passed=os.environ['PREFLIGHT_RESULT']=='success' and os.environ['BRIDGE_RESULT']=='success'
+          report['overall']='PASS' if passed else 'FAIL'
+          report['Rust fast check']='PASS' if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'
+          report['Flutter Analyze']='PASS' if os.environ['BRIDGE_RESULT']=='success' else 'NOT PASSED'
+          report['Bridge']='PASS' if os.environ['BRIDGE_RESULT']=='success' else 'NOT PASSED'
+          for item in report['patchsets']:
+              if item['patchset']==os.environ['SELECTED']:
+                  item['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'
+          Path('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## Patch Generation Compatibility\n```json\n'+json.dumps(report,indent=2)+'\n```\n')
+          PYCODE
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: generation-compatibility-${{ github.run_id }}
+          path: compatibility-report.json
