@@ -15,41 +15,66 @@ jobs:
           API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
         shell: python
         run: |
-          import socket, ssl, http.client, os, json, concurrent.futures
+          import socket, ssl, os, json, concurrent.futures
           from urllib.parse import urlsplit
-          results=[]
           def endpoint(value, default):
               if not value: raise ValueError('Server variable is not configured')
               u=urlsplit('//'+value)
               if not u.hostname or u.username or u.password or u.path: raise ValueError('Invalid server address')
               return u.hostname, u.port or default
-          def tcp(name, value, port):
+          def probe(name, host, port, https=False, path='/'):
+              report={'check':name,'host':host,'port':port,'result':'FAIL','attempts':[]}
               try:
-                  host,port=endpoint(value,port)
-                  addresses=sorted({x[4][0] for x in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})
-                  with socket.create_connection((host,port),timeout=8): pass
-                  return {'check':name,'host':host,'port':port,'addresses':addresses,'result':'PASS'}
+                  infos=socket.getaddrinfo(host,port,type=socket.SOCK_STREAM)
               except Exception as e:
-                  return {'check':name,'result':'FAIL','error':str(e)}
+                  report['dns']='FAIL';report['error']=str(e);return report
+              report['dns']='PASS'
+              seen=set()
+              for family,kind,proto,_,addr in infos:
+                  if (family,addr) in seen:continue
+                  seen.add((family,addr))
+                  attempt={'family':'IPv6' if family==socket.AF_INET6 else 'IPv4','address':addr[0]}
+                  try:
+                      with socket.socket(family,kind,proto) as s:
+                          s.settimeout(8);s.connect(addr)
+                          if https:
+                              with ssl.create_default_context().wrap_socket(s,server_hostname=host) as tls:
+                                  target=path.encode('ascii')
+                                  authority=host if port==443 else host+':'+str(port)
+                                  tls.sendall(b'HEAD '+target+b' HTTP/1.1\r\nHost: '+authority.encode('ascii')+b'\r\nConnection: close\r\n\r\n')
+                                  response=tls.recv(4096).split(b'\r\n',1)[0]
+                                  if not response.startswith(b'HTTP/'):raise ValueError('No valid HTTP response')
+                                  attempt['http_status']=response.decode('ascii',errors='replace')
+                      attempt['result']='PASS';report['result']='PASS'
+                  except Exception as e:
+                      attempt['result']='FAIL';attempt['error']=str(e)
+                  report['attempts'].append(attempt)
+              if https:report['coverage']='HTTPS transport only; API functionality not tested'
+              return report
+          def tcp(name,value,port):
+              try:
+                  host,port=endpoint(value,port);return probe(name,host,port)
+              except Exception as e:return {'check':name,'result':'FAIL','error':str(e)}
           def https():
               try:
                   u=urlsplit(os.environ['API_SERVER'])
-                  if u.scheme!='https' or not u.hostname or u.username or u.password: raise ValueError('HTTPS API variable invalid')
-                  c=http.client.HTTPSConnection(u.hostname,u.port or 443,timeout=10,context=ssl.create_default_context())
-                  c.request('HEAD',u.path or '/')
-                  r=c.getresponse()
-                  result={'check':'API HTTPS transport','result':'PASS','status':r.status,'note':'HTTP response proves transport only; API functionality not tested'}
-                  c.close();return result
+                  if u.scheme!='https' or not u.hostname or u.username or u.password or u.fragment:raise ValueError('HTTPS API variable invalid')
+                  path=u.path or '/'
+                  if u.query:path+='?'+u.query
+                  if any(x in path for x in ['\r','\n']):raise ValueError('Invalid API path')
+                  return probe('API HTTPS transport',u.hostname,u.port or 443,True,path)
               except Exception as e:return {'check':'API HTTPS transport','result':'FAIL','error':str(e)}
           relay=os.environ['RELAY_SERVER']
           if not relay:
-              try: relay=endpoint(os.environ['ID_SERVER'],21116)[0]
-              except Exception: pass
-          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+              try:relay=endpoint(os.environ['ID_SERVER'],21116)[0]
+              except Exception:pass
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
               futures=[pool.submit(tcp,'ID TCP',os.environ['ID_SERVER'],21116),pool.submit(tcp,'Relay TCP',relay,21117),pool.submit(https)]
-              results=[f.result() for f in futures]
-          report={'checks':results,'UDP':'NOT TESTED','RustDesk protocol':'NOT TESTED','Runtime/UI':'SKIPPED BY USER','Real remote session':'NOT TESTED','password_used':False}
+              control=pool.submit(probe,'Public network control','github.com',443)
+              results=[f.result() for f in futures];control=control.result()
+          report={'checks':results,'network_control':control,'UDP':'NOT TESTED','RustDesk protocol':'NOT TESTED','Runtime/UI':'SKIPPED BY USER','Real remote session':'NOT TESTED','password_used':False}
           print(json.dumps(report,indent=2))
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
               f.write('## Server connectivity (transport only)\n```json\n'+json.dumps(report,indent=2)+'\n```\n')
           if any(r['result']!='PASS' for r in results):raise SystemExit(1)
+          
