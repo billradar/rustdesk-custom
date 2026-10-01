@@ -1,0 +1,98 @@
+diff --git a/flutter/lib/desktop/pages/connection_page.dart b/flutter/lib/desktop/pages/connection_page.dart
+--- a/flutter/lib/desktop/pages/connection_page.dart
++++ b/flutter/lib/desktop/pages/connection_page.dart
+@@ -133,7 +133,7 @@
+             if (!isIncomingOnly) startServiceWidget(),
+             // ready && public
+             // No need to show the guide if is custom client.
+-            if (!isIncomingOnly) setupServerWidget(),
++            if (!isIncomingOnly && bind.mainGetBuildinOption(key: 'sos-mode') != 'Y') setupServerWidget(),
+           ],
+         );
+ 
+diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
+--- a/flutter/lib/desktop/pages/desktop_home_page.dart
++++ b/flutter/lib/desktop/pages/desktop_home_page.dart
+@@ -60,13 +60,19 @@
+   Widget build(BuildContext context) {
+     super.build(context);
+     final isIncomingOnly = bind.isIncomingOnly();
++    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
+     return _buildBlock(
+         child: Row(
+       crossAxisAlignment: CrossAxisAlignment.start,
+       children: [
+-        buildLeftPane(context),
+-        if (!isIncomingOnly) const VerticalDivider(width: 1),
+-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
++isSosMode
++          ? SizedBox(
++              width: 380,
++              child: buildLeftPane(context),
++            )
++          : buildLeftPane(context),
++        if (!isIncomingOnly && !isSosMode) const VerticalDivider(width: 1),
++        if (!isIncomingOnly && !isSosMode) Expanded(child: buildRightPane(context)),
+       ],
+     ));
+   }
+@@ -78,6 +84,7 @@
+ 
+   Widget buildLeftPane(BuildContext context) {
+     final isIncomingOnly = bind.isIncomingOnly();
++    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
+     final isOutgoingOnly = bind.isOutgoingOnly();
+     final children = <Widget>[
+       if (!isOutgoingOnly) buildPresetPasswordWarning(),
+@@ -98,7 +105,7 @@
+             Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+         builder: (_, data) {
+           if (data.hasData) {
+-            if (isIncomingOnly) {
++            if (isIncomingOnly || isSosMode) {
+               if (isInHomePage()) {
+                 Future.delayed(Duration(milliseconds: 300), () {
+                   _updateWindowSize();
+@@ -113,7 +120,7 @@
+       ),
+       buildPluginEntry(),
+     ];
+-    if (isIncomingOnly) {
++    if (isIncomingOnly || isSosMode) {
+       children.addAll([
+         Divider(),
+         OnlineStatusWidget(
+@@ -189,6 +196,7 @@
+ 
+   buildIDBoard(BuildContext context) {
+     final model = gFFI.serverModel;
++    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
+     return Container(
+       margin: const EdgeInsets.only(left: 20, right: 11),
+       height: 57,
+@@ -222,7 +230,7 @@
+                                   ?.color
+                                   ?.withOpacity(0.5)),
+                         ).marginOnly(top: 5),
+-                        buildPopupMenu(context)
++                        isSosMode ? const Offstage() : buildPopupMenu(context)
+                       ],
+                     ),
+                   ),
+@@ -390,6 +398,7 @@
+ 
+   buildTip(BuildContext context) {
+     final isOutgoingOnly = bind.isOutgoingOnly();
++    final isSosMode = bind.mainGetBuildinOption(key: 'sos-mode') == 'Y';
+     return Padding(
+       padding:
+           const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
+@@ -403,7 +412,7 @@
+                 Align(
+                   alignment: Alignment.centerLeft,
+                   child: Text(
+-                    translate("Your Desktop"),
++                    isSosMode ? (translate("Your Desktop") + " SOS\u7248") : translate("Your Desktop"),
+                     style: Theme.of(context).textTheme.titleLarge,
+                   ),
+                 ),

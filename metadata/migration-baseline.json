@@ -1,0 +1,312 @@
+{
+  "source_repository": "billradar/rustdesk-custom-test",
+  "source_branch": "main",
+  "source_commit": "d40235baa3e414dac3f52c1866c4c563e62b4390",
+  "production_repository": "billradar/rustdesk-custom",
+  "source_files": [
+    {
+      "path": ".github/workflows/release-check.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "17035fd7e8d6d123eb06d4740a28b5710036e8e5",
+      "size": 3566,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/17035fd7e8d6d123eb06d4740a28b5710036e8e5"
+    },
+    {
+      "path": ".github/workflows/test-build.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d2bb9c34219b422b7fb61ac22c04b129cb89947d",
+      "size": 17091,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/d2bb9c34219b422b7fb61ac22c04b129cb89947d"
+    },
+    {
+      "path": ".github/workflows/upstream-compatibility.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b14274606771f2c37658ee75be9722bf0a0ed226",
+      "size": 1179,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/b14274606771f2c37658ee75be9722bf0a0ed226"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5056b0b622862bd1820612897dc8106e7b698594",
+      "size": 37,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/5056b0b622862bd1820612897dc8106e7b698594"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a27ba720c3fede4232913d7d582b88d09a21989d",
+      "size": 13226,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/a27ba720c3fede4232913d7d582b88d09a21989d"
+    },
+    {
+      "path": "docs/api-migration-v1-to-v2.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e0fb28ac9c9f22f4d514bb0db2d424557cd0ef64",
+      "size": 6036,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/e0fb28ac9c9f22f4d514bb0db2d424557cd0ef64"
+    },
+    {
+      "path": "patch-revision.txt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d00491fd7e5bb6fa28c517a0bb32b8b506539d4d",
+      "size": 2,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/d00491fd7e5bb6fa28c517a0bb32b8b506539d4d"
+    },
+    {
+      "path": "patchsets/index.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "74e47364b2be7a0702afb29606d09d75c23b29c0",
+      "size": 182,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/74e47364b2be7a0702afb29606d09d75c23b29c0"
+    },
+    {
+      "path": "patchsets/v1/common/0001-hbb-server-defaults.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5b051009b23d86ca60bfde73fdc6fe895e64cd32",
+      "size": 526,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/5b051009b23d86ca60bfde73fdc6fe895e64cd32"
+    },
+    {
+      "path": "patchsets/v1/common/0002-client-defaults.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "95a883961f2234eae733ec322d746aba70ecb94c",
+      "size": 1826,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/95a883961f2234eae733ec322d746aba70ecb94c"
+    },
+    {
+      "path": "patchsets/v1/common/0003-hide-cm-setting.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c2d7000502c8dc4e83ffb3da7f267094ad7dddcb",
+      "size": 729,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/c2d7000502c8dc4e83ffb3da7f267094ad7dddcb"
+    },
+    {
+      "path": "patchsets/v1/patchset.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3d22e4355e65a452d56f6c1806930b4050082d8c",
+      "size": 930,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/3d22e4355e65a452d56f6c1806930b4050082d8c"
+    },
+    {
+      "path": "patchsets/v1/sos/0001-sos-mode.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c7b513bbd34694a1a0652abc1ced2f877152865",
+      "size": 496,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/4c7b513bbd34694a1a0652abc1ced2f877152865"
+    },
+    {
+      "path": "patchsets/v1/sos/0002-sos-home.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f39997fd957158fb26084e185d2d60c44d3dea11",
+      "size": 3891,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/f39997fd957158fb26084e185d2d60c44d3dea11"
+    },
+    {
+      "path": "patchsets/v1/sos/0003-sos-settings.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70a00f6b58e499448a995cd57c5bfdb6a0ca3b28",
+      "size": 2487,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/70a00f6b58e499448a995cd57c5bfdb6a0ca3b28"
+    },
+    {
+      "path": "patchsets/v2/common/0001-hbb-server-defaults.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5b051009b23d86ca60bfde73fdc6fe895e64cd32",
+      "size": 526,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/5b051009b23d86ca60bfde73fdc6fe895e64cd32"
+    },
+    {
+      "path": "patchsets/v2/common/0002-client-defaults.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5aa00be5199c73f0884b2ac0741dad2aa702d7e0",
+      "size": 2013,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/5aa00be5199c73f0884b2ac0741dad2aa702d7e0"
+    },
+    {
+      "path": "patchsets/v2/common/0003-hide-cm-setting.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c2d7000502c8dc4e83ffb3da7f267094ad7dddcb",
+      "size": 729,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/c2d7000502c8dc4e83ffb3da7f267094ad7dddcb"
+    },
+    {
+      "path": "patchsets/v2/patchset.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "54a37c0b4838da431a12cc11a8aa7d68497b5491",
+      "size": 1144,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/54a37c0b4838da431a12cc11a8aa7d68497b5491"
+    },
+    {
+      "path": "patchsets/v2/sos/0001-sos-mode.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c7b513bbd34694a1a0652abc1ced2f877152865",
+      "size": 496,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/4c7b513bbd34694a1a0652abc1ced2f877152865"
+    },
+    {
+      "path": "patchsets/v2/sos/0002-sos-home.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "48d090c3bc84f9ac20992c808ccd35d9c49fe8ee",
+      "size": 4437,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/48d090c3bc84f9ac20992c808ccd35d9c49fe8ee"
+    },
+    {
+      "path": "patchsets/v2/sos/0003-sos-settings.patch",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0c8d792b5e768a1283fa2a50eaee811500c21a76",
+      "size": 2525,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/0c8d792b5e768a1283fa2a50eaee811500c21a76"
+    },
+    {
+      "path": "scripts/apply-patches.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "056e3c11b7c45090f4981fb62430c95f9596d4cf",
+      "size": 1114,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/056e3c11b7c45090f4981fb62430c95f9596d4cf"
+    },
+    {
+      "path": "scripts/build-baseline.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bb657a622e92b8bed07cf5729572471f2edd6a6c",
+      "size": 1909,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/bb657a622e92b8bed07cf5729572471f2edd6a6c"
+    },
+    {
+      "path": "scripts/build-sos.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fa911ff36bfb8588ed1fc678d9e1dbb500d7953f",
+      "size": 151,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/fa911ff36bfb8588ed1fc678d9e1dbb500d7953f"
+    },
+    {
+      "path": "scripts/build-standard.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ed96d4ab7cbb4c8ec9c268dee0f8dd96394c6f80",
+      "size": 156,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/ed96d4ab7cbb4c8ec9c268dee0f8dd96394c6f80"
+    },
+    {
+      "path": "scripts/build-windows.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dfd23abc74f814e34080e1f757105f04aa8845ce",
+      "size": 1896,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/dfd23abc74f814e34080e1f757105f04aa8845ce"
+    },
+    {
+      "path": "scripts/compatibility.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0c303581d7ab9e8757e29ec0c9d65a5c7952de34",
+      "size": 13100,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/0c303581d7ab9e8757e29ec0c9d65a5c7952de34"
+    },
+    {
+      "path": "scripts/expected-ui.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c41128489d2241d86dd5ac47db84caa2ce2ddb7d",
+      "size": 1030,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/c41128489d2241d86dd5ac47db84caa2ce2ddb7d"
+    },
+    {
+      "path": "scripts/package.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f07d3d61edddfe21571a5aa887769180353c570b",
+      "size": 6215,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/f07d3d61edddfe21571a5aa887769180353c570b"
+    },
+    {
+      "path": "scripts/patchsets.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9ce14dadc9caf7393c8b0145555d84e3063fc2e3",
+      "size": 4355,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/9ce14dadc9caf7393c8b0145555d84e3063fc2e3"
+    },
+    {
+      "path": "scripts/prepare.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a14cfbf10c53eff49d7edc13c47a8df604d59c85",
+      "size": 1311,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/a14cfbf10c53eff49d7edc13c47a8df604d59c85"
+    },
+    {
+      "path": "scripts/release.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "752c99dda4cadea8c8bd8141b8c9c35d57a3b599",
+      "size": 8587,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/752c99dda4cadea8c8bd8141b8c9c35d57a3b599"
+    },
+    {
+      "path": "scripts/select-patchset.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9cdfa5d38ea10fb7a690d0fb7c29d67643ec70fe",
+      "size": 217,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/9cdfa5d38ea10fb7a690d0fb7c29d67643ec70fe"
+    },
+    {
+      "path": "scripts/test-config.sh",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "64126322a1bbfab3acf1f524034d179b75be3ca3",
+      "size": 437,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/64126322a1bbfab3acf1f524034d179b75be3ca3"
+    },
+    {
+      "path": "scripts/upstream.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "173e4a5e9ef75433c5d463efe6640b06e772e9d9",
+      "size": 5596,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/173e4a5e9ef75433c5d463efe6640b06e772e9d9"
+    },
+    {
+      "path": "scripts/verify-source.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fef149afa826ab3965b9601da5ea03493f1def2c",
+      "size": 6094,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/fef149afa826ab3965b9601da5ea03493f1def2c"
+    },
+    {
+      "path": "tests/test_automation.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4609759c82439165f431b38a3823e1c3e5f0e3a0",
+      "size": 7497,
+      "url": "https://api.github.com/repos/billradar/rustdesk-custom-test/git/blobs/4609759c82439165f431b38a3823e1c3e5f0e3a0"
+    }
+  ]
+}

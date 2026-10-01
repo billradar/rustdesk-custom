@@ -1,0 +1,46 @@
+{
+  "id": "v2",
+  "status": "compatibility_validated",
+  "baseline": {
+    "upstream_branch": "master",
+    "upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17",
+    "inspected_at": "2026-10-01"
+  },
+  "variants": {
+    "standard": {
+      "common": true,
+      "sos": false
+    },
+    "sos": {
+      "common": true,
+      "sos": true
+    }
+  },
+  "hashes": {
+    "common": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7",
+    "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+  },
+  "runtime_ui": {
+    "status": "skipped_by_user"
+  },
+  "real_remote_session": {
+    "status": "not_tested"
+  },
+  "revision": 1,
+  "derived_from": {
+    "patchset": "v1"
+  },
+  "reason": {
+    "type": "upstream_api_migration"
+  },
+  "validation": {
+    "patch_apply": "pass",
+    "rust_fast_check": "pass",
+    "flutter_analyze": "pass",
+    "bridge": "pass",
+    "windows_x86_64_build": "not_run",
+    "config_api_preflight": "pass",
+    "workflow_run": "https://github.com/billradar/rustdesk-custom-test/actions/runs/36828069170",
+    "custom_repository_sha": "ceb48ac57fcf4aa2d3467ff942637af8c51a2c3d"
+  }
+}
