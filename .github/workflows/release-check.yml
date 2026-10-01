@@ -22,7 +22,7 @@ jobs:
         RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
         RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
         RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
-        RUSTDESK_KEY: ${{ vars.RUSTDESK_KEY }}
+        RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
         RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
       run: python3 scripts/production_config.py inputs
     - id: upstream
@@ -62,6 +62,7 @@ jobs:
       upstream_tag: ${{ needs.discover.outputs.tag }}
       variant: both
     secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
     needs:

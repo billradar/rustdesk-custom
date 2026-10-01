@@ -27,7 +27,7 @@ Settings → Secrets and variables → Actions。
 | Variable | RUSTDESK_ID_SERVER | rendezvous 默认地址 |
 | Variable（可选） | RUSTDESK_RELAY_SERVER | 显式 relay；不配置/留空保持旧版自动发现 |
 | Variable | RUSTDESK_API_SERVER | HTTPS API 地址，无 URL 用户名/密码 |
-| Variable | RUSTDESK_KEY | base64 32-byte server public key，绝非私钥 |
+| Secret | RUSTDESK_KEY | base64 32-byte server public key，绝非私钥 |
 | Secret | RUSTDESK_PASSWORD | 当前历史固定密码初始化输入 |
 | Variable | PRODUCTION_RELEASE_ENABLED | 默认不配置；验证后设 true 才允许正式发布及 stable schedule |
 

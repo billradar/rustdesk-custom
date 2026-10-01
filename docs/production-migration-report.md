@@ -30,7 +30,7 @@ Compatibility follows official default branch and has no release/write path; ori
 RUSTDESK_ID_SERVER (Variable): NOT VERIFIED (repository configuration read not available).
 RUSTDESK_RELAY_SERVER (Variable): NOT VERIFIED (repository configuration read not available).
 RUSTDESK_API_SERVER (Variable): NOT VERIFIED (repository configuration read not available).
-RUSTDESK_KEY (Variable, public key): NOT VERIFIED (repository configuration read not available).
+RUSTDESK_KEY (Secret, public key): NOT VERIFIED (repository configuration read not available).
 RUSTDESK_PASSWORD (Secret): NOT VERIFIED (repository configuration read not available).
 PRODUCTION_RELEASE_ENABLED (Variable): NOT VERIFIED; keep disabled until Dry Run passes.
 No production value or secret was requested from, read from or modified in the old repositories.

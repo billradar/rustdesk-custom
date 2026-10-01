@@ -23,6 +23,8 @@ on:
         default: ''
 
     secrets:
+      RUSTDESK_KEY:
+        required: false
       RUSTDESK_PASSWORD:
         required: false
 
@@ -248,7 +250,7 @@ jobs:
       RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
       RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
       RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
-      RUSTDESK_KEY: ${{ vars.RUSTDESK_KEY }}
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
     runs-on: windows-2022
     timeout-minutes: 180
     strategy:
