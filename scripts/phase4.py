@@ -19,40 +19,60 @@ def outputs(data):
                 f.write(f'{k}={s}\n')
     print(json.dumps(data,indent=2))
 
-def resolve(channel,ref='',force=False):
+def matching_drafts(tag):
+    drafts=[]
+    for page in range(1,101):
+        rows=api(f'repos/{REPOSITORY}/releases?per_page=100&page={page}') or []
+        drafts += [r for r in rows if r.get('draft') and r.get('name')==tag]
+        if len(rows)<100:return drafts
+    raise ValueError('Release pagination exhausted; manual review required')
+
+def release_preflight(data,force=False):
+    if data.get("channel")!="stable":raise ValueError("Release preflight requires stable discovery")
+    if not re.fullmatch(r"[0-9a-f]{40}",data.get("upstream_sha","")):raise ValueError("Invalid locked upstream SHA")
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",data.get("version","")):raise ValueError("Invalid stable version")
+    if not re.fullmatch(r"[1-9][0-9]{0,5}",data.get("revision","")):raise ValueError("Invalid revision")
+    if data.get("release_tag")!=f'v{data["version"]}-custom.{data["revision"]}':raise ValueError("Release identity mismatch")
+    if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
+        raise ValueError('Locked stable ref mismatch')
+    existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
+    if not existing:
+        # GitHub may expose an unpublished draft under a temporary untagged ID.
+        drafts=matching_drafts(data['release_tag'])
+        if len(drafts)>1:raise ValueError('Duplicate revision drafts; manual review required')
+        existing=drafts[0] if drafts else None
+    if existing:
+        body=existing.get('body') or ''
+        generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
+        if generation is None:raise ValueError('Existing release missing generation identity')
+        name=generation.group(1);verify(name)
+        expected=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
+                  f'SOS Patch Hash: {patch_hash("sos",name)}','Automation-State: complete']
+        required={'SHA256SUMS','build-info-standard.json','build-info-sos.json',
+                  f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+        inventory=re.search(r'^Asset Inventory: (\[.*\])$',body,re.M)
+        if inventory:
+            supplied=json.loads(inventory.group(1))
+            if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
+            required=set(supplied)
+        if existing['prerelease'] or not all(x in body for x in expected) or {x['name'] for x in existing['assets'] if x['state']=='uploaded'}!=required:
+            raise ValueError('Existing release incomplete or incompatible; never overwrite')
+        data['build_needed']=force;data['draft_needed']=False
+    else:
+        if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True):raise ValueError('Existing tag without completed release; review revision')
+        data['build_needed']=True;data['draft_needed']=True
+    return data
+
+def resolve(channel,ref='',force=False,discovery_only=False):
     if channel=='stable':
         data=choose_stable(ref)
         revision=(ROOT/'patch-revision.txt').read_text().strip()
         if not re.fullmatch('[1-9][0-9]{0,5}',revision):raise ValueError('Invalid revision')
         data['revision']=revision;data['release_tag']=f'v{data["version"]}-custom.{revision}'
-        existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
-        if not existing:
-            # GitHub may expose an unpublished draft under a temporary untagged ID.
-            drafts=[r for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])
-                    if r.get('draft') and r.get('name')==data['release_tag']]
-            if len(drafts)>1:raise ValueError('Duplicate revision drafts; manual review required')
-            existing=drafts[0] if drafts else None
-        if existing:
-            body=existing.get('body') or ''
-            generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
-            if generation is None:raise ValueError('Existing release missing generation identity')
-            name=generation.group(1);verify(name)
-            expected=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
-                      f'SOS Patch Hash: {patch_hash("sos",name)}','Automation-State: complete']
-            required={'SHA256SUMS','build-info-standard.json','build-info-sos.json',
-                      f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-            inventory=re.search(r'^Asset Inventory: (\[.*\])$',body,re.M)
-            if inventory:
-                supplied=json.loads(inventory.group(1))
-                if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
-                required=set(supplied)
-            if existing['prerelease'] or not all(x in body for x in expected) or {x['name'] for x in existing['assets'] if x['state']=='uploaded'}!=required:
-                raise ValueError('Existing release incomplete or incompatible; never overwrite')
-            data['build_needed']=force;data['draft_needed']=False
-        else:
-            if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True):raise ValueError('Existing tag without completed release; review revision')
-            data['build_needed']=True;data['draft_needed']=True
         data['upstream_ref']=data['upstream_tag']
+        if not discovery_only:
+            data['channel']='stable'
+            release_preflight(data,force)
     else:
         repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
         if channel=='nightly' and ref:raise ValueError('Nightly must use official default branch')
@@ -125,7 +145,8 @@ def draft(root):
     print('Draft created; automatic publication disabled.')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--force',action='store_true');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
-    if a.mode=='resolve':resolve(a.channel,a.ref,a.force)
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--force',action='store_true');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
+    if a.mode=='resolve':resolve(a.channel,a.ref,a.force,a.discovery_only)
+    elif a.mode=='release-preflight':outputs(release_preflight(json.loads(a.discovery.read_text()),a.force))
     elif a.mode=='validate':validate(a.root,a.channel)
     else:draft(a.root)

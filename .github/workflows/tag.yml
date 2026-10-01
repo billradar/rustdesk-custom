@@ -32,8 +32,6 @@ jobs:
     outputs:
       upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
-      build_needed: ${{ steps.resolve.outputs.build_needed }}
-      draft_needed: ${{ steps.resolve.outputs.draft_needed }}
       revision: ${{ steps.resolve.outputs.revision }}
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -44,27 +42,57 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
         CHANNEL: stable
-        FORCE: ${{ inputs.force_rebuild || false }}
-      run: 'args=()
-
-        [[ "$FORCE" != true ]] || args+=(--force)
-
-        python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+      run: python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
         name: channel-discovery-${{ github.run_id }}
         path: .work/channel.json
         if-no-files-found: warn
-  compatibility:
+  draft-preflight:
+    name: Draft release preflight (no writes)
     needs: resolve
+    runs-on: ubuntu-22.04
+    # GitHub requires Contents write permission to view unpublished drafts.
+    # This release-lifecycle job only performs GETs and has no production inputs.
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      build_needed: ${{ steps.gate.outputs.build_needed }}
+      draft_needed: ${{ steps.gate.outputs.draft_needed }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: channel-discovery-${{ github.run_id }}
+        path: .work/discovery
+    - id: gate
+      name: Validate existing revision before any build
+      env:
+        GH_TOKEN: ${{ github.token }}
+        FORCE: ${{ inputs.force_rebuild || false }}
+      run: |
+        args=()
+        [[ "$FORCE" != true ]] || args+=(--force)
+        python3 scripts/phase4.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: release-preflight-${{ github.run_id }}
+        path: .work/channel.json
+        if-no-files-found: warn
+  compatibility:
+    needs: [resolve, draft-preflight]
     uses: ./.github/workflows/compat-check.yml
     with:
       upstream_repository: rustdesk/rustdesk
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-    if: needs.resolve.outputs.build_needed == 'true'
+    if: needs.draft-preflight.outputs.build_needed == 'true'
   prepare:
     needs:
     - resolve
@@ -97,10 +125,11 @@ jobs:
   draft:
     needs:
     - resolve
+    - draft-preflight
     - compatibility
     - prepare
     - build
-    if: needs.resolve.outputs.draft_needed == 'true' && inputs.dry_run != true && inputs.include_experimental != true
+    if: needs.draft-preflight.outputs.draft_needed == 'true' && inputs.dry_run != true && inputs.include_experimental != true
     runs-on: ubuntu-22.04
     permissions:
       contents: write

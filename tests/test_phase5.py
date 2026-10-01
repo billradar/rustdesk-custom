@@ -86,7 +86,7 @@ class AggregateTests(unittest.TestCase):
         name='v1.4.9-custom.1';sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
         names=['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example','body':'\n'.join(['Patch Set: v1','Upstream SHA: '+sha,'Common Patch Hash: '+phase5.patch_hash('common','v1'),'SOS Patch Hash: '+phase5.patch_hash('sos','v1'),'Automation-State: complete']),'assets':[{'name':n,'state':'uploaded'} for n in names]}
-        def api(path,**kwargs):return [draft] if path.endswith('releases?per_page=100') else None
+        def api(path,**kwargs):return [draft] if path.endswith('releases?per_page=100&page=1') else None
         with patch.object(phase4,'api',side_effect=api),patch.object(phase4,'choose_stable',return_value={'version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9'}),patch.object(phase4,'outputs') as outputs:
             phase4.resolve('stable','1.4.9',True)
             data=outputs.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])

@@ -41,6 +41,44 @@ class SourceBoundaryTests(unittest.TestCase):
                 prepared_source.verify_tree(root,'standard','a'*40,'v1','b'*40,3)
 
 class ChannelPolicyTests(unittest.TestCase):
+    def discovery(self):
+        return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,revision='1',release_tag='v1.4.9-custom.1')
+    def draft_fixture(self):
+        return dict(name='v1.4.9-custom.1',tag_name='untagged-123',draft=True,prerelease=False,
+            body=f'Automation-State: complete\nUpstream SHA: {"a"*40}\nPatch Set: v1\nCommon Patch Hash: {phase4.patch_hash("common","v1")}\nSOS Patch Hash: {phase4.patch_hash("sos","v1")}',
+            assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
+    def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
+        with patch.object(phase4,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(phase4,'api') as api,patch.object(phase4,'outputs') as out:
+            phase4.resolve('stable',discovery_only=True)
+            api.assert_not_called();self.assertNotIn('build_needed',out.call_args.args[0])
+    def test_untagged_draft_gate_and_force_artifacts_only(self):
+        for force in (False,True):
+            with patch.object(phase4,'api',side_effect=[None,[self.draft_fixture()]]),patch.object(phase4,'choose_stable') as resolve:
+                data=phase4.release_preflight(self.discovery(),force)
+                resolve.assert_not_called();self.assertEqual(data['build_needed'],force);self.assertFalse(data['draft_needed'])
+    def test_incomplete_or_mismatched_draft_blocks_before_build(self):
+        for mutate in ('missing-asset','wrong-sha','incomplete'):
+            draft=self.draft_fixture()
+            if mutate=='missing-asset':draft['assets'].pop()
+            elif mutate=='wrong-sha':draft['body']=draft['body'].replace('a'*40,'b'*40)
+            else:draft['body']=draft['body'].replace('Automation-State: complete','Automation-State: incomplete')
+            with patch.object(phase4,'api',side_effect=[None,[draft]]),self.assertRaisesRegex(ValueError,'incomplete or incompatible'):
+                phase4.release_preflight(self.discovery(),True)
+    def test_new_revision_permits_build_and_draft(self):
+        with patch.object(phase4,'api',side_effect=[None,[],None]):
+            data=phase4.release_preflight(self.discovery());self.assertTrue(data['build_needed']);self.assertTrue(data['draft_needed'])
+    def test_duplicate_and_later_page_drafts(self):
+        with patch.object(phase4,'api',side_effect=[None,[self.draft_fixture(),self.draft_fixture()]]),self.assertRaisesRegex(ValueError,'Duplicate'):
+            phase4.release_preflight(self.discovery())
+        with patch.object(phase4,'api',side_effect=[None,[{'draft':False}]*100,[self.draft_fixture()]]):
+            self.assertFalse(phase4.release_preflight(self.discovery())['build_needed'])
+    def test_release_preflight_workflow_permissions_and_gate(self):
+        jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft'})
+        self.assertIn('draft-preflight',jobs['compatibility']['needs'])
+        self.assertIn('needs.draft-preflight.outputs.build_needed',jobs['compatibility']['if'])
+        self.assertIn('needs.draft-preflight.outputs.draft_needed',jobs['draft']['if'])
+        self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
     def test_nightly_uses_default_branch_not_stable(self):
         with patch.object(phase4,'api',return_value={'default_branch':'development'}),patch.object(phase4,'resolve_ref',return_value='a'*40) as resolve,patch.object(phase4,'outputs') as output:
             phase4.resolve('nightly');resolve.assert_called_once_with('development')
