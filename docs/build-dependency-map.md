@@ -32,7 +32,7 @@ flowchart TD
   G --> D["Stable Draft / Nightly artifacts"]
 ```
 
-Each target is a separate platform/architecture/variant job, `fail-fast: false`, with no dependency on another platform's build. Actual runner overlap still needs Phase 5 Actions evidence. Existing Windows pair validation remains a regression gate. Aggregate waits for all selected target jobs and records failed experimental targets without promoting them.
+Each target is a separate platform/architecture/variant job, `fail-fast: false`, with no dependency on another platform's build. Actual runner overlap is proven by run 36902005326: Linux x86_64 Standard and macOS ARM64 Standard overlap 18:01:42–18:26:15 UTC on 2026-10-01. Existing Windows pair validation remains a regression gate. Aggregate waits for all selected target jobs and records failed experimental targets without promoting them.
 
 | Dependency | Class | Phase 5 treatment |
 |---|---|---|
@@ -44,7 +44,7 @@ Each target is a separate platform/architecture/variant job, `fail-fast: false`,
 | Linux container dependency install | PLATFORM-SPECIFIC + ARCH-SPECIFIC | Official recipe, no client configuration stored in image layers |
 | Client compile/config injection | VARIANT-SPECIFIC + PLATFORM-SPECIFIC + ARCH-SPECIFIC | Independent job; no shared compiled app |
 | deb/rpm, DMG, APK | PLATFORM-SPECIFIC + ARCH-SPECIFIC | Native package validation on target runner; explicit unsigned/test-signing status |
-| Native configuration probe | PLATFORM-SPECIFIC | Windows/Linux/macOS library ABI probe, no UI/server/session; Android byte validation only |
+| Native configuration probe | PLATFORM-SPECIFIC | Windows/Linux/macOS library ABI probe, no UI/server/session; Android compiler MIR plus packaged native library identity; production signing identity is not validated |
 | Source SBOM | VARIANT-SPECIFIC | Patched source inventory, not an unpatched upstream binary SBOM |
 | Checksums/provenance aggregate | SHARED | Expected required set, unique target identity, shared SHA/Common/variant-source identity |
 

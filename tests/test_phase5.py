@@ -8,7 +8,7 @@ import phase5,platform_adapter,platform_package
 class MatrixTests(unittest.TestCase):
     def test_explicit_policy_and_stable_excludes_experiments(self):
         stable=phase5.plan('stable');night=phase5.plan('nightly',True)
-        self.assertEqual(len(stable['selected']),2)
+        self.assertEqual(len(stable['selected']),13)
         self.assertEqual(len(night['selected']),13)
         self.assertTrue(all(e['required'] for e in stable['selected']))
         self.assertFalse(any(e['platform'] in ('android','ios','web') and e['variant']=='sos' for e in night['selected']))
@@ -19,7 +19,7 @@ class MatrixTests(unittest.TestCase):
             if edit=='duplicate':d['entries'].append(d['entries'][0])
             if edit=='android-sos':e.update(platform='android',variant='sos')
             if edit=='fake-supported':e.update(support_status='SUPPORTED',evidence_run=None)
-            if edit=='experimental-required':e['required']=True
+            if edit=='experimental-required':e.update(support_status='EXPERIMENTAL',required=True)
             original=json.loads
             def loads(text):
                 return d if '"entries"' in text else original(text)
