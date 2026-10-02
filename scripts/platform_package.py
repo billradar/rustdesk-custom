@@ -63,7 +63,13 @@ def validate(folder):
  elif i['signed_status'] not in ('NOT ENABLED','TEST SIGNED / NOT PRODUCTION SIGNED'):raise ValueError('Signing policy mismatch')
  for p in folder.rglob('*'):
   if p.is_file():scan(p.read_bytes())
- libs=list((folder/'validation').glob('*'))
+ if i['platform']=='android':
+  validation_native=folder/'validation'/'librustdesk.so'
+  if (folder/'validation').is_symlink() or not validation_native.is_file() or validation_native.is_symlink() or not validation_native.resolve().is_relative_to(folder.resolve()):raise ValueError('ARCH: canonical Android validation binary missing or unsafe')
+  if set((folder/'validation').iterdir())!={validation_native}:raise ValueError('ARCH: unexpected Android validation files')
+  libs=[validation_native]
+ else:
+  libs=list((folder/'validation').glob('*'))
  if not libs:raise ValueError('ARCH: validation binary missing')
  for p in libs:architecture(p.read_bytes(),i['platform'],i['architecture'])
  packages=list((folder/'packages').glob('*'))
@@ -73,7 +79,7 @@ def validate(folder):
   for p in packages:
    with zipfile.ZipFile(p) as z:
     name='lib/'+abi+'/librustdesk.so'
-    if z.read(name)!=libs[0].read_bytes():raise ValueError('PACKAGE: APK native library mismatch')
+    if z.read(name)!=validation_native.read_bytes():raise ValueError('PACKAGE: APK native library mismatch')
     for n in z.namelist():
      if not n.endswith('/'):scan(z.read(n))
  elif i['platform']=='linux':
@@ -126,7 +132,9 @@ def create(tree,platform,arch,variant):
   if receipt!={'result':'PASS','target':arch,'method':'compiler-mir'}:raise ValueError('PLATFORM_API: compiler receipt mismatch')
   verify_mir((folder/'client.mir').read_text(),values)
  version=os.environ['UPSTREAM_VERSION'];channel=os.environ['BUILD_CHANNEL'];dest=ROOT/'artifacts'/f'rustdesk-{channel}-{version}-{m["upstream_sha"]}-{variant}-{platform}-{arch}'
- dest.mkdir(parents=True,exist_ok=False);(dest/'packages').mkdir();(dest/'validation').mkdir();shutil.copy2(library,dest/'validation'/library.name)
+ dest.mkdir(parents=True,exist_ok=False);(dest/'packages').mkdir();(dest/'validation').mkdir()
+ validation_name='librustdesk.so' if platform=='android' else library.name
+ shutil.copy2(library,dest/'validation'/validation_name)
  if platform=='linux':packages=list(tree.glob('rustdesk*.deb'))+list(tree.glob('rustdesk*.rpm'));kind='deb/rpm'
  elif platform=='macos':packages=list(tree.glob('rustdesk*unsigned.dmg'));kind='unsigned-dmg'
  else:packages=list((tree/'signed-apk').glob('*.apk'));kind='debug-signed-apk'
