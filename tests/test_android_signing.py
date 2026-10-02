@@ -149,6 +149,13 @@ class ArtifactContractTests(unittest.TestCase):
             os.chdir(previous)
         return next((root/'artifacts').iterdir())
 
+    def validate_bundle(self, bundle):
+        # CI supplies real source/run identities; this synthetic bundle must
+        # exercise the same gates against its own explicit fixture identities.
+        env={'UPSTREAM_EXPECTED_SHA':'a'*40,'GITHUB_SHA':'b'*40,'GITHUB_RUN_ID':'99','PATCHSET':'v1'}
+        with patch.dict(os.environ,env):
+            platform_package.validate(bundle)
+
     def test_signing_workflow_requires_same_canonical_native_file(self):
         workflow=yaml.safe_load((ROOT/'.github/workflows/sign-android.yml').read_text())
         step=next(s for s in workflow['jobs']['sign']['steps'] if s.get('id')=='input')
@@ -171,7 +178,7 @@ class ArtifactContractTests(unittest.TestCase):
                 self.assertIn(platform_package.sha(native)+'  validation/librustdesk.so',(bundle/'SHA256SUMS').read_text())
                 with zipfile.ZipFile(next((bundle/'packages').glob('*.apk'))) as apk:
                     self.assertEqual(apk.read('lib/'+signing.ABIS[arch]+'/librustdesk.so'),native.read_bytes())
-                platform_package.validate(bundle)
+                self.validate_bundle(bundle)
 
     def test_noncanonical_extra_symlink_and_mismatched_native_fail_closed(self):
         for mode in ('old-name','extra-file','symlink','symlink-directory','different-bytes','checksum-coverage'):
@@ -188,4 +195,4 @@ class ArtifactContractTests(unittest.TestCase):
                 platform_package.checksums(bundle)
                 if mode=='checksum-coverage':
                     sums=bundle/'SHA256SUMS';sums.write_text('\n'.join(line for line in sums.read_text().splitlines() if not line.endswith('  validation/librustdesk.so'))+'\n')
-                with self.assertRaises(ValueError):platform_package.validate(bundle)
+                with self.assertRaises(ValueError):self.validate_bundle(bundle)
