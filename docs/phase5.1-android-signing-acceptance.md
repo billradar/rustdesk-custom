@@ -1,6 +1,6 @@
 # Phase 5.1 — Android existing production signing identity
 
-Phase 5.1: **FAIL / NOT YET ACCEPTED — real Actions validation pending**.
+Phase 5.1: **FAIL / BLOCKED — LEGACY SIGNING SECRETS NOT AVAILABLE**.
 
 ## Baseline and scope
 
@@ -62,13 +62,13 @@ Credential scan checks tracked maintenance files, metadata, input bundles, final
 
 `android-signing-validation.yml`: workflow_dispatch with official stable tag (default `1.4.9`), artifacts only. It also allows a main-branch commit touching this workflow with explicit `[validate-android-signing]` in its message to start an authorized validation without exposing Secrets or requiring browser dispatch. Other pushes do not execute this signing workflow's jobs. Availability preflight precedes compatibility/preparation and all three Android builds. Compatibility uses its CI mode and omits the Windows helper. No Desktop client is rebuilt.
 
-## Acceptance gates — pending actual Actions evidence
+## Acceptance gates — real missing-secret preflight observed
 
 | Gate | Current result |
 |---|---|
 | Legacy audit / schema / no new identity | PASS |
 | Legacy signature, package and public identity | PASS |
-| Production signing stage | NOT RUN |
+| Production signing stage | BLOCKED — four signing Secrets missing |
 | Certificate Match | NOT RUN |
 | Package Identity Match | NOT RUN |
 | New Signature Verification | NOT RUN |
@@ -77,9 +77,31 @@ Credential scan checks tracked maintenance files, metadata, input bundles, final
 | Signed Provenance | NOT RUN |
 | Exact signing Credential Leakage Scan | NOT RUN |
 | Local regression | PASS — 81 tests, 3 skipped under existing snapshot conditions |
-| CI / Real Actions validation | PENDING |
+| Changed workflow actionlint | PASS |
+| Tracked repository credential scan | PASS |
+| Actual missing-secret fail-closed preflight | PASS |
+| CI | PASS — run `36956528628`, implementation SHA `e7db8728708a125de55446df2a9e48180f0aabf9` |
+| Real Actions signing validation | FAIL / BLOCKED — run `36956528627` |
 
-New APK hashes, certificate/package comparisons, Actions Run ID, maintenance SHA, upstream SHA, Patch Set and Prepared Source identity will be recorded from completed verification artifacts. No pending Gate is treated as PASS.
+Implementation commit: `e7db8728708a125de55446df2a9e48180f0aabf9`, a direct descendant of the Phase 5 baseline. [Real signing validation run 36956528627](https://github.com/billradar/rustdesk-custom/actions/runs/36956528627) reached the actual Ubuntu 24.04 runner. Preflight job `110680587188` checked only availability and returned:
+
+```
+ANDROID_SIGNING_KEY: missing
+ANDROID_KEY_STORE_PASSWORD: missing
+ANDROID_KEY_PASSWORD: missing
+ANDROID_ALIAS: missing
+BLOCKED: LEGACY SIGNING SECRETS NOT AVAILABLE
+```
+
+Resolver, Compatibility, Prepared Source, Android Build, Production Signing and final verification were all SKIPPED by the dependency gate. No APK, private staging material or release was produced by this validation run. The actual old signing Action's runner execution compatibility is still NOT VALIDATED because signing never started. Missing-secret fail-closed behavior: PASS, established in real Actions.
+
+New APK SHA-256: NOT AVAILABLE. New certificate/package: NOT AVAILABLE. New upstream SHA / Patch Set / Prepared Source identity: NOT PRODUCED in this blocked signing run (Phase 5 evidence remains `6c578292e8ebbbec708b76986ba8c4bc7c509747`, `v1`, run `36902005326`; it is not substituted for new signing evidence). No pending Gate is treated as PASS.
+
+To unblock, configure the same four Secrets in **billradar/rustdesk-custom** from the user's original secure keystore/credential backup. Do not generate a substitute keystore, export GitHub Secret plaintext, send credentials in chat, or change the expected certificate. After configuration, dispatch **Android Production Signing Identity Validation** on current `main` with `upstream_ref=1.4.9`. This remains artifacts-only. Even matching certificate/package and equal versionCode do not establish a tested runtime upgrade.
+
+[CI regression run 36956528628](https://github.com/billradar/rustdesk-custom/actions/runs/36956528628): PASS. Resolver, reviewed adapter/patchset selection, both Standard/SOS preflight/config API compilation jobs, bridge generation, both Flutter analysis jobs and final validation-report succeeded. Windows helper was intentionally skipped in CI mode. New unit tests ran in real Actions as part of the existing suite.
+
+Signing Architecture: Production Signing Stage **IMPLEMENTED / EXECUTION BLOCKED**. Secrets Scoped To Android Signing: PASS (static workflow audit); actual private-key consumption NOT RUN. Prepared Source Contains Private Key: NO (unchanged implementation, no new prepared source produced in blocked run). New signed APK Checksum/Provenance/Credential Leakage Scan: NOT RUN. Repository and public metadata scans: PASS. New identity remains NOT VERIFIED.
 
 Static Upgrade Identity: NOT YET VALIDATED. Runtime Upgrade: NOT TESTED. This is an identity-validation build of `1.4.9`; a higher versionCode is not presumed. If it remains `2067`, report UPGRADE VERSION SEMANTICS NOT VALIDATED.
 
