@@ -13,6 +13,7 @@ def scan():
     for name in names:
         if not name:continue
         p=ROOT/name.decode();data=p.read_bytes()
+        if p.suffix.lower() in {'.jks','.keystore','.p12','.pfx'} or p.name=='key.properties' or data.startswith(b'\xfe\xed\xfe\xed') or re.search(rb'/u3\+7Q[A-Za-z0-9+/=\r\n]{80,}',data):raise ValueError('Signing material in tracked maintenance repository (value withheld)')
         if TOKEN.search(data) or BLOCK.search(data):raise ValueError('Known credential in tracked repository file: '+name.decode()+' (value withheld)')
     print('Tracked repository known credential scan: PASS (headers alone in synthetic tests are not private-key blocks)')
 

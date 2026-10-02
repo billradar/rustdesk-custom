@@ -119,9 +119,14 @@ jobs:
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
+      production_android_signing: ${{ inputs.dry_run != true && inputs.include_experimental != true }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+      ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+      ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
   draft:
     needs:
     - resolve
@@ -154,6 +159,6 @@ jobs:
     - name: Package inspectors for supported aggregate
       run: |
         sudo apt-get update -y
-        sudo apt-get install -y rpm rpm2cpio cpio
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Create complete supported Draft only; no publish path
       run: python3 scripts/phase5.py draft --root .work/collected

@@ -1,0 +1,78 @@
+name: Reusable Android Production Signing
+'on':
+  workflow_call:
+    inputs:
+      arch: {type: string, required: true}
+      channel: {type: string, required: true}
+      upstream_sha: {type: string, required: true}
+      upstream_version: {type: string, required: true}
+      patchset: {type: string, required: true}
+    secrets:
+      ANDROID_SIGNING_KEY: {required: true}
+      ANDROID_KEY_STORE_PASSWORD: {required: true}
+      ANDROID_KEY_PASSWORD: {required: true}
+      ANDROID_ALIAS: {required: true}
+permissions:
+  contents: read
+jobs:
+  sign:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      PATCHSET: ${{ inputs.patchset }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with: {persist-credentials: false}
+    - name: Present/missing only
+      env:
+        ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
+      run: python3 scripts/android_signing.py preflight
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-${{ inputs.arch }}
+        path: .work/android-build-input
+    - name: Select installed Android Build Tools and isolate signing workspace
+      run: |
+        echo "SIGNING_STAGE=$RUNNER_TEMP/android-signing" >> "$GITHUB_ENV"
+        export SIGNING_STAGE="$RUNNER_TEMP/android-signing"
+        tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+        [[ -x "$tools/apksigner" && -x "$tools/aapt" && -x "$tools/zipalign" ]]
+        echo "BUILD_TOOLS_VERSION=$(basename "$tools")" >> "$GITHUB_ENV"
+        echo "APKSIGNER=$tools/apksigner" >> "$GITHUB_ENV"
+        echo "AAPT=$tools/aapt" >> "$GITHUB_ENV"
+        python3 scripts/android_signing.py expected
+        python3 scripts/android_signing.py stage .work/android-build-input "$SIGNING_STAGE"
+    - name: Legacy-compatible production signing
+      id: signing
+      uses: r0adkll/sign-android-release@349ebdef58775b1e0d8099458af0816dc79b6407
+      with:
+        releaseDirectory: ${{ env.SIGNING_STAGE }}
+        signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+        alias: ${{ secrets.ANDROID_ALIAS }}
+        keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    - name: Real signature, certificate, package, ABI, checksum, provenance and credential gates
+      env:
+        SIGNED_APK: ${{ steps.signing.outputs.signedReleaseFile }}
+        ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
+      run: |
+        python3 scripts/android_signing.py finalize .work/android-build-input "$SIGNED_APK" .work/verified-signed
+        python3 scripts/android_signing.py scan metadata --secrets
+        python3 scripts/android_signing.py scan .work/android-build-input --secrets
+    - name: Remove temporary keystore regardless of outcome
+      if: always()
+      run: rm -rf -- "$SIGNING_STAGE"
+    - name: Upload verified signed public bundle only
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-${{ inputs.arch }}
+        path: .work/verified-signed/
+        if-no-files-found: error
+        retention-days: 14

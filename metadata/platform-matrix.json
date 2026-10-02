@@ -377,7 +377,8 @@
       "artifact_signing": "DEBUG/TEST ONLY",
       "production_signing_identity": "NOT VALIDATED",
       "production_signing_phase": "Phase 5.1",
-      "production_signing_identity_validation": "DEFERRED TO PHASE 5.1"
+      "production_signing_identity_validation": "PENDING REAL PHASE 5.1 ACTIONS VALIDATION",
+      "build_support": "SUPPORTED"
     },
     {
       "platform": "android",
@@ -416,7 +417,8 @@
       "artifact_signing": "DEBUG/TEST ONLY",
       "production_signing_identity": "NOT VALIDATED",
       "production_signing_phase": "Phase 5.1",
-      "production_signing_identity_validation": "DEFERRED TO PHASE 5.1"
+      "production_signing_identity_validation": "PENDING REAL PHASE 5.1 ACTIONS VALIDATION",
+      "build_support": "SUPPORTED"
     },
     {
       "platform": "android",
@@ -455,7 +457,8 @@
       "artifact_signing": "DEBUG/TEST ONLY",
       "production_signing_identity": "NOT VALIDATED",
       "production_signing_phase": "Phase 5.1",
-      "production_signing_identity_validation": "DEFERRED TO PHASE 5.1"
+      "production_signing_identity_validation": "PENDING REAL PHASE 5.1 ACTIONS VALIDATION",
+      "build_support": "SUPPORTED"
     },
     {
       "platform": "ios",

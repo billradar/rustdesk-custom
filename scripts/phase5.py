@@ -50,6 +50,7 @@ def aggregate(root,channel,experimental):
             windows_validate(path.parent)
         else:validate(path.parent)
         if i['channel']!=channel:raise ValueError('PROVENANCE: channel mismatch')
+        if platform=='android' and channel=='stable' and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Stable Android requires verified production identity')
         found[name]=i;folders[name]=path.parent
     windows={i['variant']:i for n,i in found.items() if n.startswith('windows-x86_64-')}
     if len(windows)==2:
@@ -80,7 +81,7 @@ def aggregate(root,channel,experimental):
             'required_gate':'PASS' if required_pass else 'FAIL','targets':results,'errors':errors,
             'channel':channel,'upstream_sha':os.environ['UPSTREAM_EXPECTED_SHA'],'patchset':os.environ['PATCHSET'],
             'build_run':os.environ['GITHUB_RUN_ID'],'custom_repository_sha':os.environ['GITHUB_SHA'],
-            'runtime_ui':'SKIPPED BY USER','real_remote_session':'NOT TESTED','code_signing':'NOT ENABLED'}
+            'runtime_ui':'SKIPPED BY USER','real_remote_session':'NOT TESTED','code_signing':'DESKTOP NOT ENABLED; ANDROID '+('PRODUCTION IDENTITY VERIFIED' if all(i.get('signing_identity_verified') for i in found.values() if i['platform']=='android') and any(i['platform']=='android' for i in found.values()) else 'TEST ONLY')}
     out=ROOT/'.work/phase5-aggregate';out.mkdir(parents=True,exist_ok=True)
     (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
     rows=[]
@@ -120,6 +121,7 @@ def draft(root):
     from release import request,gh
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong draft repository')
+    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true'
     report=aggregate(root,'stable',False)
     if report['result']!='PASS':raise ValueError('No complete supported aggregate')
     infos=[json.loads(p.read_text()) for p in root.rglob('build-info.json')]
@@ -136,8 +138,8 @@ def draft(root):
         'Required Targets: '+','.join(sorted(report['targets'])),
         'Asset Inventory: '+json.dumps(sorted(p.name for p in directory.iterdir())),
         'Build / Package / Checksum / Architecture / Provenance: PASS',
-        'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Code Signing: NOT ENABLED',
-        'Android artifacts, if included: TEST SIGNED / NOT PRODUCTION SIGNED','Password Security V2: DEFERRED',
+        'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Desktop Code Signing: NOT ENABLED',
+        'Android artifacts: PRODUCTION SIGNED / IDENTITY VERIFIED','Password Security V2: DEFERRED',
         'Embedded client configuration/password can be extracted by client owners.','Release policy: DRAFT ONLY; publication is a manual user decision.'])+'\n'
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)

@@ -32,11 +32,22 @@ name: Reusable Cross-Platform Build Core
       include_experimental:
         type: boolean
         default: false
+      production_android_signing:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
       RUSTDESK_PASSWORD:
         required: true
+      ANDROID_SIGNING_KEY:
+        required: false
+      ANDROID_KEY_STORE_PASSWORD:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+      ANDROID_ALIAS:
+        required: false
 permissions:
   contents: read
   actions: read
@@ -226,8 +237,24 @@ jobs:
         if-no-files-found: error
         retention-days: 14
     needs: plan
-  platforms:
+  android-signing-preflight:
     needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with: {persist-credentials: false}
+    - name: Android-only production signing availability before expensive builds
+      if: inputs.production_android_signing
+      env:
+        ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
+      run: |
+        python3 scripts/android_signing.py preflight
+        python3 scripts/android_signing.py expected
+  platforms:
+    needs: [plan, android-signing-preflight]
     if: needs.plan.outputs.count != '0'
     strategy:
       fail-fast: false
@@ -243,10 +270,30 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
+      production_signing: ${{ inputs.production_android_signing }}
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  android-sign:
+    needs: platforms
+    if: inputs.production_android_signing
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64, armv7, x86_64]
+    uses: ./.github/workflows/sign-android.yml
+    with:
+      arch: ${{ matrix.arch }}
+      channel: ${{ inputs.channel }}
+      upstream_sha: ${{ inputs.upstream_sha }}
+      upstream_version: ${{ inputs.upstream_version }}
+      patchset: ${{ inputs.patchset }}
+    secrets:
+      ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+      ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
   validate:
     needs: build
     runs-on: ubuntu-22.04
@@ -286,6 +333,7 @@ jobs:
     - build
     - validate
     - platforms
+    - android-sign
     if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-22.04
     env:
@@ -294,6 +342,7 @@ jobs:
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: ${{ inputs.channel }}
       EXPERIMENTAL: ${{ inputs.include_experimental }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.production_android_signing }}
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       with:
@@ -302,7 +351,7 @@ jobs:
     - name: Package inspectors
       run: 'sudo apt-get update -y
 
-        sudo apt-get install -y rpm rpm2cpio cpio'
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt'
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         pattern: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-*

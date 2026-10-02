@@ -1,0 +1,143 @@
+name: Android Production Signing Identity Validation
+# Validation entrypoint reviewed with actionlint; private staging uses step runtime context.
+'on':
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        type: string
+        default: '1.4.9'
+        description: Official stable tag; artifacts only, no release writes
+  push:
+    branches: [main]
+    paths:
+    - .github/workflows/android-signing-validation.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: android-signing-validation-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  android-signing-preflight:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[validate-android-signing]')
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with: {persist-credentials: false}
+    - name: Present/missing only; stop before any expensive build
+      env:
+        ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+        ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
+      run: |
+        python3 scripts/android_signing.py preflight
+        python3 scripts/android_signing.py expected
+  resolve:
+    needs: android-signing-preflight
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with: {persist-credentials: false}
+    - id: resolve
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REQUESTED_REF: ${{ inputs.upstream_ref || '1.4.9' }}
+      run: python3 scripts/phase4.py resolve --channel stable --ref "$REQUESTED_REF" --discovery-only
+  compatibility:
+    needs: resolve
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      # CI compatibility omits the Windows helper build. No Desktop client build runs.
+      channel: ci
+  prepare:
+    needs: [resolve, compatibility]
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+      channel: ci
+  android-build:
+    needs: [resolve, compatibility, prepare]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64, armv7, x86_64]
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      platform: android
+      arch: ${{ matrix.arch }}
+      variant: standard
+      runner: ubuntu-24.04
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+      channel: signing-validation
+      source_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      production_signing: true
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  android-sign:
+    needs: [resolve, compatibility, prepare, android-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64, armv7, x86_64]
+    uses: ./.github/workflows/sign-android.yml
+    with:
+      arch: ${{ matrix.arch }}
+      channel: signing-validation
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+    secrets:
+      ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+      ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
+  verify-all:
+    needs: [android-sign, resolve, compatibility]
+    runs-on: ubuntu-24.04
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with: {persist-credentials: false}
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        pattern: rustdesk-signing-validation-*-standard-android-*
+        path: .work/signed-android
+    - name: Independent final ABI inventory and all signed bundle gates
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y apksigner aapt
+        python3 - <<'PY'
+        import json,sys
+        from pathlib import Path
+        sys.path.insert(0,'scripts')
+        from platform_package import validate
+        root=Path('.work/signed-android')
+        results=[validate(p.parent) for p in root.rglob('build-info.json')]
+        if len(results)!=3 or {i['architecture'] for i in results}!={'aarch64','armv7','x86_64'}:raise ValueError('Missing/duplicate signed ABI')
+        if any(i['signed_status']!='PRODUCTION SIGNED / IDENTITY VERIFIED' for i in results):raise ValueError('Unverified signing identity')
+        if len({i['prepared_source_identity'] for i in results})!=1:raise ValueError('Prepared source mismatch')
+        if len({i['certificate_sha256'] for i in results})!=1:raise ValueError('Certificate mismatch across ABI')
+        from upstream import api
+        from production import scan_job_log
+        for page in range(1,11):
+          jobs=api('repos/'+__import__('os').environ['GITHUB_REPOSITORY']+'/actions/runs/'+__import__('os').environ['GITHUB_RUN_ID']+'/jobs?per_page=100&page='+str(page))['jobs']
+          for job in jobs:
+            if job['status']=='completed' and job['conclusion']=='success':scan_job_log(job['id'])
+          if len(jobs)<100:break
+        print('Three Android Standard ABI production signing identity and visible log credential gates: PASS')
+        PY
