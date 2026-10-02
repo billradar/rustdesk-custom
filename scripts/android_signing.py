@@ -40,6 +40,16 @@ def expected():
         raise ValueError('SIGNING: missing expected package')
     return data
 
+def yubikey_expected():
+    data = json.loads((ROOT / 'metadata/yubikey-android-signing-identity.json').read_text())
+    if data.get('identity_kind') != 'new-yubikey-hardware-signing-identity':
+        raise ValueError('SIGNING: unexpected YubiKey identity metadata')
+    if data.get('legacy_android_signing_identity') != 'NOT RECOVERED / NOT VALIDATED':
+        raise ValueError('SIGNING: legacy identity status must remain unvalidated')
+    if not re.fullmatch('[0-9a-f]{64}', data.get('certificate_sha256', '')):
+        raise ValueError('SIGNING: missing YubiKey certificate fingerprint')
+    return data
+
 def tool(name):
     return os.environ.get(name.upper(), name)
 
@@ -167,6 +177,9 @@ def finalize(folder, signed, output):
     print('Android signature/certificate/package/ABI/checksum/provenance: PASS')
 
 def verify_signed(folder, info):
+    if info.get('signing_method') == 'yubikey-piv-9c-pkcs11':
+        verify_yubikey_signed(folder, info)
+        return
     reference = expected()
     if info.get('signed') is not True or info.get('signing_identity_verified') is not True:
         raise ValueError('SIGNING: production signing receipt absent')
@@ -189,6 +202,40 @@ def verify_signed(folder, info):
             raise ValueError('SIGNING: identity receipt gate missing')
     if receipt.get('custom_repository_sha') != info['custom_repository_sha'] or str(receipt.get('workflow_run')) != str(info['build_run']):
         raise ValueError('SIGNING: receipt provenance mismatch')
+    leakage_scan(folder)
+
+def verify_yubikey_signed(folder, info):
+    reference = yubikey_expected()
+    if info.get('legacy_android_signing_identity') != 'NOT RECOVERED / NOT VALIDATED':
+        raise ValueError('SIGNING: legacy Android identity must remain unvalidated')
+    if info.get('signed') is not True or info.get('signing_identity_verified') is not True:
+        raise ValueError('SIGNING: YubiKey production signing receipt absent')
+    if info.get('signing_method') != 'yubikey-piv-9c-pkcs11':
+        raise ValueError('SIGNING: wrong hardware signing method')
+    if str(info.get('signing_run')) != str(info.get('build_run')):
+        raise ValueError('SIGNING: signing/build run mismatch')
+    packages = list((folder / 'packages').glob('*.apk'))
+    if len(packages) != 1:
+        raise ValueError('SIGNING: invalid production APK inventory')
+    actual = public_identity(packages[0])
+    identity_gate(actual, reference, info['architecture'])
+    for key in ('certificate_sha256', 'package_name', 'version_code', 'version_name', 'signing_schemes'):
+        if info.get(key) != actual[key]:
+            raise ValueError('SIGNING: APK/build-info mismatch: ' + key)
+    receipt = json.loads((folder / 'android-signing-verification.json').read_text())
+    for key in actual:
+        if receipt.get(key) != actual[key]:
+            raise ValueError('SIGNING: YubiKey receipt mismatch: ' + key)
+    if receipt.get('expected_certificate_sha256') != reference['certificate_sha256']:
+        raise ValueError('SIGNING: YubiKey expected fingerprint receipt mismatch')
+    if receipt.get('signing_method') != 'yubikey-piv-9c-pkcs11':
+        raise ValueError('SIGNING: receipt does not identify YubiKey PIV signing')
+    if receipt.get('piv_slot') != '9C' or receipt.get('pkcs11_id') != '02':
+        raise ValueError('SIGNING: receipt key slot or object ID mismatch')
+    if receipt.get('custom_repository_sha') != info.get('custom_repository_sha'):
+        raise ValueError('SIGNING: custom repository provenance mismatch')
+    if str(receipt.get('workflow_run')) != str(info.get('build_run')):
+        raise ValueError('SIGNING: signing workflow provenance mismatch')
     leakage_scan(folder)
 
 def main():

@@ -6,6 +6,10 @@ name: CI - Patch and Build compatibility
         type: string
         description: CI ref; empty = official default branch
         default: ''
+      force_rebuild:
+        type: boolean
+        description: Rebuild even if this upstream revision was already validated
+        default: false
   pull_request:
     paths-ignore:
     - docs/**

@@ -4,6 +4,14 @@ name: Nightly - Development artifacts
   - cron: 0 2 * * *
   workflow_dispatch:
     inputs:
+      upstream_ref:
+        type: string
+        description: Upstream ref; empty = official default branch
+        default: ''
+      force_rebuild:
+        type: boolean
+        description: Rebuild even if this upstream revision was already validated
+        default: false
       include_experimental:
         type: boolean
         default: true

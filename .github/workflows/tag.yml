@@ -123,10 +123,6 @@ jobs:
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
-      ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
-      ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      ANDROID_ALIAS: ${{ secrets.ANDROID_ALIAS }}
   draft:
     needs:
     - resolve

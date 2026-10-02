@@ -59,7 +59,7 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual((root/'private/signingKey.jks').stat().st_mode&0o777,0o600)
 
 class WorkflowTests(unittest.TestCase):
-    def test_keys_are_scoped_to_signing_only(self):
+    def test_yubikey_secret_and_hardware_signing_are_scoped(self):
         def load(name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
         for name in ['prepare-source.yml','compat-check.yml','build-platform.yml','ci.yml','nightly.yml']:
             self.assertFalse(any(n in (ROOT/'.github/workflows'/name).read_text() for n in signing.NAMES),name)
@@ -71,13 +71,31 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(w['jobs']['android-build']['strategy']['matrix']['arch'],['aarch64','armv7','x86_64'])
         sign=load('sign-android.yml')
         steps=sign['jobs']['sign']['steps']
-        action=next(s for s in steps if s.get('id')=='signing')
-        self.assertEqual(action['uses'],'r0adkll/sign-android-release@349ebdef58775b1e0d8099458af0816dc79b6407')
+        job=sign['jobs']['sign']
+        self.assertEqual(job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
+        self.assertEqual(job['environment']['name'],'android-production-signing')
+        self.assertEqual(job['concurrency'],{'group':'rustdesk-android-yubikey-signing','cancel-in-progress':False})
+        self.assertIn("github.repository == 'billradar/rustdesk-custom'",job['if'])
+        self.assertIn("github.ref == 'refs/heads/main'",job['if'])
+        self.assertIn(".github/workflows/tag.yml@refs/heads/main",job['if'])
+        self.assertIn(".github/workflows/android-signing-validation.yml@refs/heads/main",job['if'])
+        self.assertNotIn("github.event_name == 'pull_request'",job['if'])
+        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(job.get('env',{})))
+        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(sign.get('env',{})))
+        self.assertFalse(any(s.get('uses','').startswith('actions/checkout@') for s in steps))
+        action=next(s for s in steps if s.get('id')=='hardware-sign')
+        self.assertIn('YUBIKEY_PIV_PIN',action['env'])
+        self.assertIn('--ks-type PKCS11',action['run'])
+        self.assertIn('--ks-pass env:YUBIKEY_PIV_PIN',action['run'])
+        self.assertIn('set +x',action['run'])
+        for step in steps:
+            if step is not action:
+                self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(step))
         cleanup=next(s for s in steps if s.get('if')=='always()')
-        self.assertIn('SIGNING_STAGE',cleanup['run'])
-        upload=steps[-1]
+        self.assertIn('rustdesk-yubikey-signing',cleanup['run'])
+        upload=next(s for s in steps if s.get('uses','').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['with']['path'],'.work/verified-signed/')
-        self.assertEqual(sign['permissions'],{'contents':'read'})
+        self.assertEqual(sign['permissions'],{'contents':'read','actions':'read'})
         build=load('build.yml')
         for name in ['build','plan','validate','aggregate','platforms']:
             self.assertFalse(any(n in json.dumps(build['jobs'][name]) for n in signing.NAMES),name)
