@@ -383,3 +383,67 @@ LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
 ```
 
 The context diagnostic was added through PR #9 and merged at `e67cc9fda87b2bf574947b1225bbf20c248fef4b`. Local actionlint v1.7.12, the Android workflow tests (11), and `git diff --check` passed before merge. The production signing gate remains `false`. Per the failure stop condition, no additional probe or signing action was taken.
+
+## Phase 5.2B-2.6: Production Workflow Secret Context Structural Fix
+
+**Result: PASS for the direct Android signing-validation workflow's non-sensitive Environment Secret path. Production signing remains NOT VALIDATED.** This phase used only `SECRET_CONTEXT_PROBE`; the real PIN Secret value and all derived data were not observed.
+
+### Evidence adopted from Phase 5.2B-2.5
+
+The direct Environment-bound job had passed the non-sensitive Environment Secret probe, while an Environment Secret in the reusable-workflow job had failed. In the same reusable-workflow experiment, explicitly passed `workflow_call` dummy secret succeeded. GitHub's documented behavior and the observed matrix localized the visibility boundary to the Environment secret inside that reusable job. This phase does not repeat or reinterpret that matrix.
+
+### Current workflow and structural fix
+
+The manual `android-signing-validation.yml` dispatch on `main` now has a normal `android-sign` job rather than `uses: ./.github/workflows/sign-android.yml`. That job directly binds `environment.name: android-production-signing` and runs on the dedicated self-hosted ARM64 signing runner. It downloads and verifies the same-run Android build artifact, then runs the non-sensitive probe. The production PIN remains referenced only by the explicit, separately gated hardware-sign step; the workflow input `validation_enable_signing` defaults to `false`.
+
+The minimal fix removes the reusable-workflow boundary from this validation path so the job that owns the Environment also evaluates `secrets.SECRET_CONTEXT_PROBE`. The Environment secret's scope was not changed. This structural change does not claim that any separate stable/tag workflow which still calls the reusable signing workflow has been validated or repaired.
+
+### Merge and runtime verification
+
+| Item | Result |
+|---|---|
+| PR | [#13](https://github.com/billradar/rustdesk-custom/pull/13) |
+| Merge commit | `f1dd3bda06216a8de904e4f395f6e73c47da1226` |
+| CI | PASS; run [37138777409](https://github.com/billradar/rustdesk-custom/actions/runs/37138777409) |
+| Probe run | [37139262585](https://github.com/billradar/rustdesk-custom/actions/runs/37139262585), `workflow_dispatch` on `main` at merge commit |
+| Environment deployment | PASS; deployment `6830821952`, Environment `android-production-signing`, ref `main`, matching merge commit |
+| Runner metadata | `raspberrypi-rustdesk-signing`; Linux; ARM64 label; runner version `2.337.0`; online and busy during the job |
+| Same-run artifact provenance/checksum/package/ABI validation | PASS |
+| `SECRET_CONTEXT_PROBE` context | PASS |
+| Step mapping | PASS |
+| Process environment | PASS |
+| Production workflow structure | PASS |
+| Android signing-validation run | SUCCESS |
+| Hardware signing step | SKIPPED (`validation_enable_signing` default false) |
+| Production verify/upload steps | SKIPPED |
+| Workspace cleanup | PASS |
+| `YUBIKEY_PIV_PIN` value or derived data observed | NO |
+
+The build job produced the workflow's test-signed validation input artifact; no production signature operation ran and no production-signed APK was created. The real Environment Secret was neither queried nor modified. The Bridge was not started; PKCS#11 was not initialized; `C_Login`, `C_SignInit`, and `C_Sign` were not called; YubiKey was not accessed or modified.
+
+```text
+PHASE: 5.2B-2.6
+PREVIOUS ROOT CAUSE BOUNDARY: Environment Secret × reusable-job visibility
+CURRENT WORKFLOW: android-signing-validation.yml → direct Environment-bound android-sign job → step-scoped dummy probe; gated hardware step
+STRUCTURAL FIX: make android-sign a direct job so its own job-level Environment supplies the secret context
+PR: #13
+MERGE COMMIT: f1dd3bda06216a8de904e4f395f6e73c47da1226
+PROBE: 37139262585
+ENVIRONMENT: PASS
+SECRET_CONTEXT_PROBE: PASS
+SECRET CONTEXT: PASS
+STEP_MAPPING: PASS
+PROCESS_ENVIRONMENT: PASS
+REAL PIN OBSERVED: NO
+YUBIKEY: NOT MODIFIED
+BRIDGE: NOT STARTED
+PKCS11: NOT INITIALIZED
+C_LOGIN: NOT CALLED
+C_SIGNINIT: NOT CALLED
+C_SIGN: NOT CALLED
+APK: NO PRODUCTION-SIGNED APK CREATED
+SIGNING GATE: CLOSED
+APK PRODUCTION SIGNING: NOT VALIDATED
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+READY FOR HARDWARE ATTEMPT #2: YES (direct validation path only; hardware attempt not performed)
+```
