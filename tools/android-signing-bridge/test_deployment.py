@@ -79,7 +79,9 @@ else:
         self.assertIn("github.event_name == 'workflow_dispatch'", production)
         self.assertIn("inputs.channel == 'signing-validation'", production)
         self.assertIn('YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}', production)
-        self.assertEqual(production.count('YUBIKEY_PIV_PIN'), 2)
+        self.assertIn('[[ -z "${YUBIKEY_PIV_PIN:-}" ]]', production)
+        self.assertLess(production.index('ENVIRONMENT PIN AVAILABLE: FAIL'),
+                        production.index('/usr/local/bin/rustdesk-sign'))
         validation = (REPO / '.github/workflows/android-signing-validation.yml').read_text()
         self.assertTrue(any(line.strip() in ('validation_enable_signing: true', 'validation_enable_signing: false')
                             for line in validation.splitlines()))
