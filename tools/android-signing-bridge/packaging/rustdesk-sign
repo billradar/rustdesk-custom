@@ -1,0 +1,111 @@
+#!/bin/sh
+set -eu
+
+ROOT=/opt/rustdesk-signing-bridge
+JAVA=/usr/bin/java
+MODULE=/usr/lib/aarch64-linux-gnu/opensc-pkcs11.so
+CLASSPATH="$ROOT/lib/rustdesk-android-signing-bridge.jar:$ROOT/lib/ipkcs11wrapper-1.0.9.jar:$ROOT/lib/apksig-0.9.jar"
+DISCOVERY=com.billradar.rustdesk.signing.bridge.discovery.XiPkiPkcs11Discovery
+SIGNER=com.billradar.rustdesk.signing.bridge.RealYubikeyApksigOneShot
+MOCK_SIGNER=com.billradar.rustdesk.signing.bridge.DryRunSigningCli
+
+fail() {
+  printf 'rustdesk-sign: %s\n' "$1" >&2
+  exit 1
+}
+
+verify_install() {
+  [ -d "$ROOT" ] || fail 'installed root is missing'
+  [ "$(stat -c %u "$ROOT")" = 0 ] || fail 'installed root is not root-owned'
+  [ "$(stat -c %a "$ROOT")" = 755 ] || fail 'installed root permissions are unexpected'
+  [ "$(stat -c %u /usr/local/bin)" = 0 ] || fail '/usr/local/bin is not root-owned'
+  [ "$(stat -c %a /usr/local/bin)" = 755 ] || fail '/usr/local/bin permissions are unexpected'
+  for path in "$ROOT/bin" "$ROOT/lib" "$ROOT/VERSION" "$ROOT/bin/rustdesk-sign" \
+              "$ROOT/lib/rustdesk-android-signing-bridge.jar" \
+              "$ROOT/lib/ipkcs11wrapper-1.0.9.jar" "$ROOT/lib/apksig-0.9.jar"; do
+    [ -e "$path" ] || fail "installed component missing: ${path#"$ROOT"/}"
+    [ "$(stat -c %u "$path")" = 0 ] || fail "installed component is not root-owned: ${path#"$ROOT"/}"
+    mode=$(stat -c %a "$path")
+    case "$mode" in *[2367][0-7]|*[0-7][2367]) fail "installed component is group/world writable: ${path#"$ROOT"/}" ;; esac
+  done
+  [ -r "$ROOT/MANIFEST.sha256" ] || fail 'installed manifest is missing'
+  [ "$(stat -c %u "$ROOT/MANIFEST.sha256")" = 0 ] || fail 'installed manifest is not root-owned'
+  [ "$(stat -c %a "$ROOT/MANIFEST.sha256")" = 644 ] || fail 'installed manifest permissions are unexpected'
+  (cd "$ROOT" && /usr/bin/sha256sum --check --status MANIFEST.sha256) \
+    || fail 'installed manifest verification failed'
+  [ -L /usr/local/bin/rustdesk-sign ] || fail 'stable launcher symlink is missing'
+  [ "$(stat -c %u /usr/local/bin/rustdesk-sign)" = 0 ] || fail 'stable launcher symlink is not root-owned'
+  [ "$(readlink -f /usr/local/bin/rustdesk-sign)" = "$ROOT/bin/rustdesk-sign" ] \
+    || fail 'stable launcher resolves outside the frozen installation'
+}
+
+run_java() {
+  runtime=$(/usr/bin/mktemp -d /tmp/rustdesk-signing-bridge.XXXXXX) \
+    || fail 'cannot create private runtime directory'
+  /usr/bin/chmod 700 "$runtime"
+  status=0
+  /usr/bin/env -i HOME=/home/github-runner PATH=/usr/bin:/bin \
+    "$JAVA" -Djava.io.tmpdir="$runtime" -DPKCS11_TEMP_DIR="$runtime" \
+    --add-exports=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED \
+    -cp "$CLASSPATH" "$@" || status=$?
+  /usr/bin/find "$runtime" -depth -delete || status=1
+  return "$status"
+}
+
+run_signer() {
+  runtime=$(/usr/bin/mktemp -d /tmp/rustdesk-signing-bridge.XXXXXX) \
+    || fail 'cannot create private runtime directory'
+  /usr/bin/chmod 700 "$runtime"
+  status=0
+  "$JAVA" -Djava.io.tmpdir="$runtime" -DPKCS11_TEMP_DIR="$runtime" \
+    --add-exports=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED \
+    -cp "$CLASSPATH" "$@" || status=$?
+  /usr/bin/find "$runtime" -depth -delete || status=1
+  return "$status"
+}
+
+verify_install
+
+case "${1:-}" in
+  --verify-install)
+    printf 'INSTALLED BRIDGE INTEGRITY: PASS\n'
+    ;;
+  --version)
+    cat "$ROOT/VERSION"
+    ;;
+  --self-test)
+    [ "$(id -un)" = github-runner ] || fail 'self-test must run as github-runner'
+    "$JAVA" -version 2>&1 | /usr/bin/grep -Eq 'version "21\.' || fail 'OpenJDK 21 is required'
+    "$JAVA" --add-exports=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED -version \
+      >/dev/null 2>&1 || fail 'Java module access failed'
+    [ -r "$MODULE" ] || fail 'OpenSC PKCS#11 module is unavailable'
+    [ -r "$ROOT/lib/apksig-0.9.jar" ] || fail 'apksig runtime is unavailable'
+    /usr/bin/jar tf "$ROOT/lib/apksig-0.9.jar" \
+      | /usr/bin/grep -Fxq 'com/android/apksig/ApkSigner.class' || fail 'ApkSigner class is unavailable'
+    /usr/bin/apksigner --version >/dev/null 2>&1 || fail 'apksigner is unavailable'
+    /usr/bin/aapt version >/dev/null 2>&1 || fail 'aapt is unavailable'
+    slots=$(/usr/bin/opensc-tool -l 2>&1) || fail 'OpenSC reader/token discovery failed'
+    printf '%s\n' "$slots" | /usr/bin/grep -Fq 'Yubico YubiKey' \
+      || fail 'expected OpenSC reader was not discovered'
+    printf 'JAVA RUNTIME / MODULE ACCESS: PASS\nOPENSC READER / TOKEN DISCOVERY: PASS\nAPKSIG / PACKAGE TOOLS: PASS\n'
+    discovery=$(run_java "$DISCOVERY" "$MODULE" 2>&1) \
+      || { printf '%s\n' "$discovery" | /usr/bin/grep -E 'READ-ONLY DISCOVERY: FAIL|FAILURE CLASS:|FAILURE:' >&2 || true; fail 'read-only certificate discovery failed'; }
+    printf '%s\n' "$discovery" | /usr/bin/grep -E '^(MODULE LOAD|SLOT DISCOVERY|CERTIFICATE IDENTITY MATCH|READ-ONLY HARDWARE DISCOVERY): PASS$'
+    printf '%s\n' "$discovery" | /usr/bin/grep -Eq '^PRIVATE KEY OPERATION: NO$' || fail 'discovery did not confirm read-only behavior'
+    printf '%s\n' "$discovery" | /usr/bin/grep -Eq '^PIN REQUESTED: NO$' || fail 'discovery unexpectedly requested PIN'
+    printf 'INSTALLED BRIDGE SELF-TEST: PASS\nPIN REQUESTED: NO\nPRIVATE KEY OPERATION: NO\n'
+    ;;
+  --dry-run)
+    [ "$(id -un)" = github-runner ] || fail 'signing must run as github-runner'
+    if [ "$#" -eq 1 ]; then exec "$0" --self-test; fi
+    shift
+    run_signer "$MOCK_SIGNER" "$@"
+    ;;
+  --input)
+    [ "$(id -un)" = github-runner ] || fail 'signing must run as github-runner'
+    run_signer "$SIGNER" "$@"
+    ;;
+  *)
+    fail 'supported modes: --version, --verify-install, --self-test, --dry-run, --input'
+    ;;
+esac

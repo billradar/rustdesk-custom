@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+ARTIFACT=/home/bill/.m2/repository/org/xipki/ipkcs11wrapper/1.0.9/ipkcs11wrapper-1.0.9.jar
+MODE=${1:---run}
+MAIN_CLASS=com.billradar.rustdesk.signing.bridge.RealYubikeyEcdsaOneShot
+JAVA_MODE=$MODE
+RESULT_NAME=REAL-YUBIKEY-ECDSA-RESULTS.md
+if [[ "$MODE" == --jca-preflight || "$MODE" == --jca-run ]]; then
+  MAIN_CLASS=com.billradar.rustdesk.signing.bridge.RealYubikeyJcaOneShot
+  JAVA_MODE=${MODE/--jca/--}
+  RESULT_NAME=REAL-YUBIKEY-JCA-RESULTS.md
+fi
+
+if [[ "$MODE" != --run && "$MODE" != --preflight && "$MODE" != --jca-run && "$MODE" != --jca-preflight ]]; then
+  printf 'Usage: %s [--preflight|--run|--jca-preflight|--jca-run]\n' "$0" >&2
+  exit 2
+fi
+
+if [[ ! -r "$ARTIFACT" || ! -r "$SCRIPT_DIR/target/classes/com/billradar/rustdesk/signing/bridge/RealYubikeyEcdsaOneShot.class" ]]; then
+  printf 'Required fixed XiPKI artifact or compiled utility is missing. No hardware was accessed.\n' >&2
+  exit 2
+fi
+
+ORIGIN=$(git -C "$REPO_ROOT" remote get-url origin)
+if [[ "$ORIGIN" != https://github.com/billradar/rustdesk-custom.git ]]; then
+  printf 'Repository remote mismatch; no hardware was accessed.\n' >&2
+  exit 2
+fi
+
+if [[ "$MODE" != --preflight && "$MODE" != --jca-preflight ]]; then
+  /usr/bin/sudo -v
+fi
+STAGE=$(mktemp -d /tmp/rustdesk-yubikey-one-shot.XXXXXX)
+chmod 711 "$STAGE"
+cleanup() {
+  /usr/bin/sudo find "$STAGE" -depth -delete
+}
+trap cleanup EXIT
+
+CLASS_DIR="$STAGE/classes/com/billradar/rustdesk/signing/bridge"
+mkdir -p "$CLASS_DIR" "$STAGE/runtime"
+cp -R "$SCRIPT_DIR/target/classes/." "$STAGE/classes/"
+cp "$ARTIFACT" "$STAGE/ipkcs11wrapper-1.0.9.jar"
+chmod -R a+rX "$STAGE/classes" "$STAGE/ipkcs11wrapper-1.0.9.jar"
+/usr/bin/sudo chown github-runner:github-runner "$STAGE/runtime"
+/usr/bin/sudo chmod 700 "$STAGE/runtime"
+
+if [[ "$MODE" == --preflight || "$MODE" == --jca-preflight ]]; then
+  /usr/bin/sudo -u github-runner -- /usr/bin/env -i \
+    HOME=/home/github-runner PATH=/usr/bin:/bin \
+    /usr/bin/java -Djava.io.tmpdir="$STAGE/runtime" \
+    -DPKCS11_TEMP_DIR="$STAGE/runtime" \
+    -cp "$STAGE/classes:$STAGE/ipkcs11wrapper-1.0.9.jar" \
+    "$MAIN_CLASS" --preflight
+  exit $?
+fi
+
+RESULT="$STAGE/$RESULT_NAME"
+: > "$RESULT"
+/usr/bin/sudo chown github-runner:github-runner "$RESULT"
+/usr/bin/sudo chmod 600 "$RESULT"
+set +e
+/usr/bin/sudo -u github-runner -- /usr/bin/env -i \
+  HOME=/home/github-runner PATH=/usr/bin:/bin \
+  /usr/bin/java -Djava.io.tmpdir="$STAGE/runtime" \
+  -DPKCS11_TEMP_DIR="$STAGE/runtime" \
+  -cp "$STAGE/classes:$STAGE/ipkcs11wrapper-1.0.9.jar" \
+  "$MAIN_CLASS" --run "$RESULT"
+RUN_STATUS=$?
+set -e
+if [[ -s "$RESULT" ]]; then
+  /usr/bin/sudo install -o bill -g bill -m 644 "$RESULT" "$SCRIPT_DIR/$RESULT_NAME"
+fi
+exit "$RUN_STATUS"

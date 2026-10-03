@@ -1,0 +1,158 @@
+name: Android Signing Bridge Dry Run (Mock Only)
+'on':
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: android-signing-dry-run
+  cancel-in-progress: false
+jobs:
+  build-mock-artifact:
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-signing-dry-run.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Test provenance and package gates
+        run: python3 tools/android-signing-bridge/test_phase52_dry_run.py
+      - name: Run frozen Bridge software tests (hosted runner; no signing hardware)
+        run: mvn --batch-mode --file tools/android-signing-bridge/pom.xml clean verify
+      - name: Build synthetic Android artifact fixture
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 tools/android-signing-bridge/phase52_dry_run.py build \
+            --root .work/mock-input \
+            --repository "$REPOSITORY" --ref "$REF" --commit "$COMMIT" --run-id "$RUN_ID"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-signing-mock-input-${{ github.run_id }}
+          path: .work/mock-input/
+          if-no-files-found: error
+          retention-days: 1
+
+  mock-signing-runner:
+    needs: build-mock-artifact
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-signing-dry-run.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    name: Mock bridge on dedicated signing runner (no token operations)
+    runs-on:
+      - self-hosted
+      - Linux
+      - ARM64
+      - rustdesk-signing
+      - android-signing
+      - yubikey
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: android-signing-mock-input-${{ github.run_id }}
+          path: .work/mock-input
+      - name: Gate same-run artifact provenance, package, ABI, and checksum
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          COMMIT: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('.work/mock-input')
+          expected = {
+              'artifact_class': 'MOCK_FIXTURE_NOT_APK',
+              'repository': os.environ['REPOSITORY'], 'ref': os.environ['REF'],
+              'commit': os.environ['COMMIT'], 'run_id': os.environ['RUN_ID'],
+              'platform': 'android', 'variant': 'standard',
+              'architecture': 'aarch64', 'package_name': 'com.carriez.flutter_hbb',
+              'input_name': 'input.apk.fixture',
+          }
+          info = json.loads((root / 'build-info.json').read_text())
+          for key, value in expected.items():
+              if info.get(key) != value:
+                  raise SystemExit('DRY RUN: provenance/metadata gate failed: ' + key)
+          payload = root / 'input.apk.fixture'
+          if payload.is_symlink() or not payload.is_file():
+              raise SystemExit('DRY RUN: fixture is not a regular file')
+          if hashlib.sha256(payload.read_bytes()).hexdigest() != info.get('input_sha256'):
+              raise SystemExit('DRY RUN: fixture checksum mismatch')
+          if {entry.name for entry in root.iterdir()} != {'build-info.json', 'input.apk.fixture'}:
+              raise SystemExit('DRY RUN: unexpected artifact contents')
+          print('Same-run provenance, package, ABI and checksum gates: PASS')
+          print('Mock fixture only; not an installable APK.')
+          PY
+      - name: Verify root-owned installed Bridge and perform no-sign self-test
+        run: /usr/local/bin/rustdesk-sign --dry-run
+      - name: Simulate mock bridge operations and isolated output verification
+        run: |
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          source = Path('.work/mock-input/input.apk.fixture')
+          output_dir = Path('.work/mock-output')
+          output_dir.mkdir(parents=True, exist_ok=False)
+          before = hashlib.sha256(source.read_bytes()).hexdigest()
+          output = output_dir / 'output.apk.fixture'
+          output.write_bytes(source.read_bytes())
+          after = hashlib.sha256(source.read_bytes()).hexdigest()
+          receipt = {
+              'mode': 'MOCK_ONLY', 'real_pkcs11_module_loaded': False,
+              'pin_used': False, 'private_key_operation': False,
+              'release_created': False, 'input_sha256': before,
+              'input_unchanged': before == after,
+              'expected_mock_signature_operations': 2,
+              'actual_mock_signature_operations': 2,
+              'output_verification_simulation': 'PASS',
+              'output_sha256': hashlib.sha256(output.read_bytes()).hexdigest(),
+          }
+          if not receipt['input_unchanged'] or receipt['output_sha256'] != before:
+              raise SystemExit('DRY RUN: mock output verification failed')
+          (output_dir / 'dry-run-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          print('Mock operation count (2), input immutability and output verification: PASS')
+          PY
+      - name: Validate simulated output and operation count
+        run: |
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('.work/mock-output')
+          receipt = json.loads((root / 'dry-run-receipt.json').read_text())
+          required = {
+              'mode': 'MOCK_ONLY', 'real_pkcs11_module_loaded': False,
+              'pin_used': False, 'private_key_operation': False,
+              'release_created': False, 'input_unchanged': True,
+              'expected_mock_signature_operations': 2,
+              'actual_mock_signature_operations': 2,
+              'output_verification_simulation': 'PASS',
+          }
+          if any(receipt.get(key) != value for key, value in required.items()):
+              raise SystemExit('DRY RUN: operation count or no-hardware gate failed')
+          output_hash = hashlib.sha256((root / 'output.apk.fixture').read_bytes()).hexdigest()
+          if output_hash != receipt.get('output_sha256') or output_hash != receipt.get('input_sha256'):
+              raise SystemExit('DRY RUN: output checksum verification failed')
+          if {entry.name for entry in root.iterdir()} != {'dry-run-receipt.json', 'output.apk.fixture'}:
+              raise SystemExit('DRY RUN: unexpected output files')
+          print('Mock output receipt and operation count: PASS')
+          print('REAL YUBIKEY OPERATION: NO; PIN USED: NO')
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-signing-mock-output-${{ github.run_id }}
+          path: .work/mock-output/
+          if-no-files-found: error
+          retention-days: 1

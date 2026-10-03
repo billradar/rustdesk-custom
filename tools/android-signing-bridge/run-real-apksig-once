@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+INPUT=/tmp/rustdesk-phase5-1-validation-36902005326/input.apk
+OUTPUT=/tmp/rustdesk-phase5-1-validation-36902005326/signed-production-test.apk
+XIPKI_JAR=/home/bill/.m2/repository/org/xipki/ipkcs11wrapper/1.0.9/ipkcs11wrapper-1.0.9.jar
+APKSIG_JAR=/usr/share/java/apksig-0.9.jar
+APKSIGNER=/usr/bin/apksigner
+MAIN_CLASS=com.billradar.rustdesk.signing.bridge.RealYubikeyApksigOneShot
+
+if [[ ! -r "$INPUT" || ! -r "$XIPKI_JAR" || ! -r "$APKSIG_JAR" || ! -x "$APKSIGNER" ]]; then
+  printf 'Required candidate APK or fixed signing dependencies are missing; no PIN requested.\n' >&2
+  exit 2
+fi
+if [[ -e "$OUTPUT" ]]; then
+  printf 'Output already exists; refusing to overwrite it. No PIN requested.\n' >&2
+  exit 2
+fi
+if [[ "$(git -C "$REPO_ROOT" remote get-url origin)" != https://github.com/billradar/rustdesk-custom.git ]]; then
+  printf 'Repository remote mismatch; no PIN requested.\n' >&2
+  exit 2
+fi
+
+"$APKSIGNER" --version
+/usr/bin/sudo -v
+(cd "$SCRIPT_DIR" && mvn -q -DskipTests package)
+
+STAGE=$(mktemp -d /tmp/rustdesk-apksig-sign-once.XXXXXX)
+chmod 711 "$STAGE"
+cleanup() { /usr/bin/sudo find "$STAGE" -depth -delete; }
+trap cleanup EXIT
+
+WORK="$STAGE/work"
+mkdir "$WORK" "$STAGE/classes"
+/usr/bin/sudo chown github-runner:github-runner "$WORK"
+/usr/bin/sudo chmod 700 "$WORK"
+/usr/bin/sudo -u github-runner -- cp "$INPUT" "$WORK/input.apk"
+/usr/bin/sudo chmod 444 "$WORK/input.apk"
+cp -R "$SCRIPT_DIR/target/classes/." "$STAGE/classes"
+cp "$XIPKI_JAR" "$STAGE/ipkcs11wrapper-1.0.9.jar"
+cp "$APKSIG_JAR" "$STAGE/apksig-0.9.jar"
+chmod -R a+rX "$STAGE/classes" "$STAGE/ipkcs11wrapper-1.0.9.jar" "$STAGE/apksig-0.9.jar"
+mkdir "$STAGE/runtime"
+/usr/bin/sudo chown github-runner:github-runner "$STAGE/runtime"
+/usr/bin/sudo chmod 700 "$STAGE/runtime"
+
+/usr/bin/sudo -u github-runner -- /usr/bin/env -i \
+  HOME=/home/github-runner PATH=/usr/bin:/bin \
+  /usr/bin/java -Djava.io.tmpdir="$STAGE/runtime" \
+  -DPKCS11_TEMP_DIR="$STAGE/runtime" \
+  -cp "$STAGE/classes:$STAGE/ipkcs11wrapper-1.0.9.jar:$STAGE/apksig-0.9.jar" \
+  "$MAIN_CLASS" --run "$WORK/input.apk" "$WORK/signed-production-test.apk"
+
+/usr/bin/sudo chmod 755 "$WORK"
+VERIFY_LOG="$STAGE/apksigner-verify.log"
+"$APKSIGNER" verify --verbose --print-certs "$WORK/signed-production-test.apk" | tee "$VERIFY_LOG"
+grep -E '^Verified using v(1|2|3|3\.1|4) scheme' "$VERIFY_LOG" || true
+grep -qi '559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5' "$VERIFY_LOG"
+grep -Eq '^Verified using v1 scheme.*true$' "$VERIFY_LOG"
+grep -Eq '^Verified using v2 scheme.*true$' "$VERIFY_LOG"
+grep -Eq '^Verified using v3 scheme.*false$' "$VERIFY_LOG"
+grep -Eq '^Verified using v3\.1 scheme.*false$' "$VERIFY_LOG"
+grep -Eq '^Verified using v4 scheme.*false$' "$VERIFY_LOG"
+
+/usr/bin/sudo install -o bill -g bill -m 644 "$WORK/signed-production-test.apk" "$OUTPUT"
+printf 'VERIFIED OUTPUT APK: %s\n' "$OUTPUT"
+printf 'TEST ONLY: NOT RELEASED\n'
