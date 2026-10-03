@@ -51,6 +51,9 @@ SIGNED APK ARTIFACT UPLOAD: SKIPPED
 ONE-SHOT VALIDATION GATE: CLOSED
 APK PRODUCTION SIGNING: NOT VALIDATED
 LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+WORKFLOW MODIFIED: YES, TEMPORARY GATE ENABLED AND THEN CLOSED
+YUBIKEY MODIFIED: NO
+```
 
 ## Phase 5.2B-2.5: GitHub Environment Secret Visibility Matrix
 
@@ -123,9 +126,6 @@ LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
 ```
 
 The PR CI also ran the repository's ordinary RustDesk Flutter/FFI bridge compatibility build; it did not start the YubiKey signing bridge or initialize PKCS#11.
-WORKFLOW MODIFIED: YES, TEMPORARY GATE ENABLED AND THEN CLOSED
-YUBIKEY MODIFIED: NO
-```
 
 The next investigation should determine, without exposing its value, why the environment-level secret was not visible as a nonempty process environment variable in the called workflow's signing process. Do not repeat this signing workflow until that wiring is understood and separately authorized.
 
