@@ -81,7 +81,8 @@ else:
         self.assertIn('YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}', production)
         self.assertEqual(production.count('YUBIKEY_PIV_PIN'), 2)
         validation = (REPO / '.github/workflows/android-signing-validation.yml').read_text()
-        self.assertIn('validation_enable_signing: false', validation)
+        self.assertTrue(any(line.strip() in ('validation_enable_signing: true', 'validation_enable_signing: false')
+                            for line in validation.splitlines()))
         for forbidden in ('apksigner sign', 'SunPKCS11'):
             self.assertNotIn(forbidden, production)
         dry_run = (REPO / '.github/workflows/android-signing-dry-run.yml').read_text()

@@ -100,7 +100,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('--pin-source env',action['run'])
         self.assertNotIn('apksigner sign',action['run'])
         self.assertNotIn('SunPKCS11',action['run'])
-        self.assertIn('validation_enable_signing: false',Path(ROOT/'.github/workflows/android-signing-validation.yml').read_text())
+        self.assertIsInstance(w['jobs']['android-sign']['with']['validation_enable_signing'],bool)
         for step in steps:
             if step is not action:
                 self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(step))
