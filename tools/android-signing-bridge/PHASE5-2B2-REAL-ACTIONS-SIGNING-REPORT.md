@@ -492,3 +492,65 @@ HARDWARE ATTEMPT #2: NOT EXECUTED
 ```
 
 **Phase 5.2B closeout:** 2.5 Secret Context Investigation PASS; 2.6 Workflow Structural Fix PASS; 2.7 Closeout / Archival PASS. **Stop here.** Hardware Attempt #2 was not executed.
+
+## Phase 6: Hardware Attempt #2 — Production APK Signing Validation
+
+**Result: PASS for the single Android Standard aarch64 validation artifact.** This was one `workflow_dispatch` run with `validation_enable_signing=true`; it produced and verified an isolated signed artifact. No Release, tag, deployment, or publication was created.
+
+### Run evidence
+
+| Item | Result |
+|---|---|
+| Workflow run | [37145437232](https://github.com/billradar/rustdesk-custom/actions/runs/37145437232) |
+| Ref / source commit | `main` / `0bb669530f2cb7882ffec92f76a485a279adbb10` |
+| Trigger / signing input | `workflow_dispatch` / `validation_enable_signing=true` |
+| Environment deployment | PASS; deployment `6832033518`, `android-production-signing`, `main`, matching source commit |
+| Runner | `raspberrypi-rustdesk-signing`; Linux ARM64; runner version `2.337.0` |
+| Unsigned-input artifact | Same-run Android Standard aarch64 input; provenance, checksum, package and ABI gates PASS |
+| Hardware signing step | PASS; executed once |
+| Signer output | `APKSIG APK SIGNING: PASS (isolated test candidate; not a release)` |
+| Certificate identity / fingerprint gate | PASS; expected production identity matched (fingerprint value omitted from this report) |
+| APK signature, package, ABI and provenance verification | PASS |
+| Independent `verify-all` and visible-log credential scan | PASS |
+| Signed artifact | `rustdesk-signing-validation-1.4.9-6c578292e8ebbbec708b76986ba8c4bc7c509747-standard-android-aarch64`; uploaded as this run's Actions artifact (41,752,649 bytes) |
+| Workspace cleanup | PASS |
+| Release / tag / external publication | NONE |
+
+The signer used the Environment Secret only in the actual signing step. No PIN value or derived value was printed or included in this report. The bridge reported mutable PIN-buffer zeroization PASS and session/module close PASS. The Java environment lookup uses an immutable `String` internally, which is JVM-managed; this report does not claim that immutable object was explicitly zeroized. The independent log scan passed.
+
+No YubiKey key, certificate, PIN, PUK, or management key was changed. No private key material was exported. Two hardware signature operations were required by the configured apksig v1/v2 signing flow within this one authorized attempt; no retry or additional run was made.
+
+```text
+PHASE: 6
+HARDWARE ATTEMPT #2: EXECUTED ONCE
+RUN: 37145437232
+WORKFLOW REF: main @ 0bb669530f2cb7882ffec92f76a485a279adbb10
+SIGNING INPUT: validation_enable_signing=true
+ENVIRONMENT: android-production-signing
+RUNNER: raspberrypi-rustdesk-signing / Linux ARM64 / 2.337.0
+ARTIFACT INPUT PROVENANCE: PASS
+PRODUCTION SIGNING STEP: PASS
+APKSIG APK SIGNING: PASS
+CERTIFICATE IDENTITY GATE: PASS
+APK VERIFY / PACKAGE / ABI / PROVENANCE: PASS
+VERIFY-ALL / VISIBLE-LOG CREDENTIAL SCAN: PASS
+PIN VALUE OBSERVED: NO
+PIN MUTABLE BUFFER ZEROIZATION: PASS
+SESSION / MODULE CLOSE: PASS
+PRIVATE KEY EXPORTED: NO
+YUBIKEY MODIFIED: NO
+RELEASE / TAG / EXTERNAL PUBLICATION: NONE
+APK PRODUCTION SIGNING: VALIDATED (single Standard aarch64 validation artifact)
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+HARDWARE ATTEMPT #3: NOT AUTHORIZED / NOT EXECUTED
+```
+
+### Current validation status
+
+```text
+APK PRODUCTION SIGNING:
+VALIDATED — one Android Standard aarch64 validation artifact only; no Release created.
+
+LEGACY ANDROID SIGNING IDENTITY:
+NOT RECOVERED / NOT VALIDATED
+```
