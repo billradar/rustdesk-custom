@@ -219,3 +219,95 @@ LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
 ```
 
 Per the FAIL stop condition, there was no second probe and no signing attempt. Environment/workflow metadata and the reusable-workflow boundary were checked read-only; these all match the intended path. The runtime still resolves the step value as unset or empty. No further Secret edits or runs were made.
+
+## Phase 5.2B-2.4: GitHub reusable-workflow Secret Context Diagnosis
+
+**Result: FAIL.** One diagnostic probe ran after PR #9 merged. No further probe, signing, or Secret modification was performed.
+
+### Current workflow chain audit
+
+```text
+android-signing-validation.yml (workflow_dispatch on main)
+  └─ job android-sign
+       uses: ./.github/workflows/sign-android.yml
+       caller `secrets:` mapping: ABSENT
+       └─ reusable workflow `on.workflow_call`
+            `secrets:` contract: ABSENT
+            └─ job sign
+                 environment.name: android-production-signing
+                 └─ step hardware-sign
+                      env.YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+```
+
+The diagnostic probe follows the same reusable-workflow shape:
+
+```text
+android-signing-secret-probe.yml (workflow_dispatch on main)
+  └─ job probe
+       uses: ./.github/workflows/android-signing-secret-probe-job.yml
+       caller `secrets:` mapping: ABSENT
+       └─ reusable workflow `on.workflow_call`
+            `secrets:` contract: ABSENT
+            └─ job environment-pin-probe
+                 environment.name: android-production-signing
+                 └─ sole step
+                      env.YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+                      env.PIN_SECRET_CONTEXT_AVAILABLE: ${{ secrets.YUBIKEY_PIV_PIN != '' }}
+```
+
+The Environment is bound to the job inside the reusable workflow, not the caller or step. This is the intended place for an Environment secret in a reusable workflow: GitHub documents that Environment secrets cannot be passed by the caller through `workflow_call`, and that an Environment attached to a called-workflow job supplies its Environment secret there. Therefore the missing `workflow_call.secrets` declaration and absent caller `secrets:` mapping are confirmed facts, but are **not by themselves evidence of a defect** for this Environment-scoped secret. [GitHub reusable workflows documentation](https://docs.github.com/en/actions/sharing-automations/reusing-workflows#using-inputs-and-secrets-in-a-reusable-workflow)
+
+The repository-level secret metadata list remains `RUSTDESK_KEY` and `RUSTDESK_PASSWORD`; it does not contain `YUBIKEY_PIV_PIN`. Environment metadata lists `YUBIKEY_PIV_PIN` as present (`updated_at: 2026-10-03T15:12:02Z`). No Secret value was queried.
+
+### Diagnostic probe evidence
+
+| Item | Result |
+|---|---|
+| Workflow | `Android Environment Secret Delivery Probe` |
+| Run | [37134585246](https://github.com/billradar/rustdesk-custom/actions/runs/37134585246) |
+| Commit | `e67cc9fda87b2bf574947b1225bbf20c248fef4b` |
+| Event / ref | `workflow_dispatch` / `main` |
+| Runner | `raspberrypi-rustdesk-signing`; dedicated labels matched |
+| Environment deployment | PASS; deployment `6829691189`, matching commit and `main` |
+| Job Environment binding | PASS |
+| `secrets` context non-empty test | **FAIL** |
+| Step environment mapping | **FAIL** |
+| Child process environment | **FAIL** |
+| `ENVIRONMENT PIN AVAILABLE` | **FAIL** |
+
+The first failed layer observable in this matrix is the `secrets` context expression in the Environment-bound reusable job. The step mapping and child process then also received an unset/empty value. This identifies the loss point as **Environment secret → `secrets` context inside the reusable job**, before step environment mapping. It rules out the `bash` child process as the point where a nonempty mapped value was lost.
+
+**ROOT CAUSE:** `NOT DETERMINED WITH AVAILABLE NON-SECRET OBSERVABILITY` beyond the identified loss point. The metadata API confirms secret-name existence and update time only; it cannot establish whether the stored value is nonempty or why the GitHub `secrets` context evaluated false. No conclusion is drawn about the Secret value. The production signing path was not run.
+
+### Final status
+
+```text
+PREVIOUS PROBE: 37132595356
+PREVIOUS RESULT: ENVIRONMENT PIN AVAILABLE: FAIL
+WORKFLOW_CALL SECRET CONTRACT: ABSENT (probe and production signing reusable workflows)
+CALLER SECRET PASSING: ABSENT (probe and production android-sign reusable job)
+JOB ENVIRONMENT: PASS (reusable job)
+STEP SECRET MAPPING: YAML PASS; runtime value empty
+SECRETS CONTEXT: FAIL
+PROCESS ENVIRONMENT: FAIL
+NEW PROBE: 37134585246
+ENVIRONMENT PIN AVAILABLE: FAIL
+SECRET VALUE OBSERVED: NO
+SECRET DERIVED DATA: NO
+BRIDGE STARTED: NO
+PKCS11: NO
+C_LOGIN: NO
+C_SIGNINIT: NO
+C_SIGN: NO
+APK SIGNED: NO
+YUBIKEY MODIFIED: NO
+VALIDATION SIGNING GATE: CLOSED
+PHASE 5.2B-2.4: FAIL
+GITHUB REUSABLE-WORKFLOW SECRET CONTEXT: NOT VALIDATED
+ENVIRONMENT SECRET DELIVERY: NOT VALIDATED
+READY FOR HARDWARE ATTEMPT #2: NO
+APK PRODUCTION SIGNING: NOT VALIDATED
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+```
+
+The context diagnostic was added through PR #9 and merged at `e67cc9fda87b2bf574947b1225bbf20c248fef4b`. Local actionlint v1.7.12, the Android workflow tests (11), and `git diff --check` passed before merge. The production signing gate remains `false`. Per the failure stop condition, no additional probe or signing action was taken.
