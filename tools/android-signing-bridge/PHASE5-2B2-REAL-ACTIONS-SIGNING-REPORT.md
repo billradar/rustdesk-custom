@@ -117,3 +117,50 @@ LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
 ```
 
 The implementation adds earlier, value-free detection but does not claim that it resolves the unknown cause of GitHub's empty runtime value. No real signing run was triggered.
+
+## Phase 5.2B-2.2: Environment Secret Delivery Runtime Probe
+
+**Result: FAIL.** This was a secret-availability probe only, not a hardware signing attempt.
+
+| Item | Result |
+|---|---|
+| Probe workflow | `Android Environment Secret Delivery Probe` |
+| Probe run | [37130243147](https://github.com/billradar/rustdesk-custom/actions/runs/37130243147) |
+| Probe commit | `4f5c0195b5952ae8db804a46503bff16852ecdca` |
+| Event / ref | `workflow_dispatch` / `main` |
+| Runner | `raspberrypi-rustdesk-signing`; labels matched the dedicated self-hosted signing runner |
+| Environment | `android-production-signing` |
+| Secret metadata | `YUBIKEY_PIV_PIN` present; value was not read |
+| Signing job Environment binding | PASS |
+| Step-scoped Secret mapping | PASS |
+| Environment PIN availability | **FAIL** |
+
+The target job ran on the dedicated runner with the expected labels and Environment. Its only step emitted `ENVIRONMENT PIN AVAILABLE: FAIL` and failed closed. The job definition has no steps before or after the probe, and its only Secret mapping is on that step. The one-shot production signing gate remained `false`.
+
+The probe log contained no invocation of `/usr/local/bin/rustdesk-sign`, no Bridge or PKCS#11 initialization markers, no `C_Login`, `C_SignInit`, `C_Sign`, `apksigner sign`, or private-key operation. The Secret value and all derived data were neither observed by a human nor logged. No APK was signed and the YubiKey was not modified.
+
+The result means GitHub did not provide a nonempty value to this probe step. Metadata confirms the secret name exists, but cannot distinguish an empty/unusable configured value from another GitHub Environment/runtime delivery issue. **`YUBIKEY_PIV_PIN MAY REQUIRE USER RECONFIGURATION`** in the GitHub Environment UI. No secret was changed, overwritten, or deleted by this investigation.
+
+```text
+PHASE 5.2B-2.2: FAIL
+GITHUB ENVIRONMENT SECRET DELIVERY: NOT VALIDATED
+ENVIRONMENT PIN AVAILABLE: FAIL
+SECRET VALUE OBSERVED BY HUMAN: NO
+SECRET VALUE LOGGED: NO
+SECRET LENGTH / HASH / DERIVED DATA LOGGED: NO
+BRIDGE STARTED: NO
+PKCS11 INITIALIZED: NO
+C_LOGIN: NO
+C_SIGNINIT: NO
+C_SIGN: NO
+PRIVATE KEY OPERATION: NO
+APK SIGNED: NO
+YUBIKEY MODIFIED: NO
+HARDWARE SIGNING ATTEMPTS THIS PHASE: 0
+VALIDATION SIGNING GATE: CLOSED
+READY FOR SECOND AUTHORIZED PHASE 5.2B-2 HARDWARE ATTEMPT: NO
+APK PRODUCTION SIGNING: NOT VALIDATED
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+```
+
+Per the probe stop condition, no redispatch or hardware signing was attempted. After the Environment Secret owner has reviewed/reconfigured the existing secret if needed, a new probe requires a separate explicit authorization; hardware signing remains a separate authorization.
