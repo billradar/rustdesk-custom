@@ -447,3 +447,48 @@ APK PRODUCTION SIGNING: NOT VALIDATED
 LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
 READY FOR HARDWARE ATTEMPT #2: YES (direct validation path only; hardware attempt not performed)
 ```
+
+## Phase 5.2B-2.7: Closeout and Evidence Archival
+
+**Result: PASS.** This was a read-only closeout plus this report update. No new workflow run was dispatched and no hardware attempt was made.
+
+### Final state checks
+
+| Check | Observed result |
+|---|---|
+| PR #13 workflow structural fix | MERGED at `f1dd3bda06216a8de904e4f395f6e73c47da1226` |
+| PR #14 Phase 5.2B-2.6 report | MERGED at `780dd715600a8b392b48b9d70bc5ff38633d09bd` |
+| `android-production-signing` Environment | PRESENT; metadata endpoint returned this Environment and branch protection metadata |
+| Environment `YUBIKEY_PIV_PIN` Secret | PRESENT by name in Environment Secret metadata; value NOT READ |
+| Repository-scoped `YUBIKEY_PIV_PIN` | ABSENT by name in repository Secret metadata |
+| `validation_enable_signing` | Defaults to `false`; the Phase 5.2B-2.6 dispatch omitted the input and the hardware-sign step was observed SKIPPED |
+| Ordinary CI hardware signing | NOT TRIGGERED; compatibility CI runs had no signing job, and the hardware step requires the explicit validation input and exact manual validation workflow ref |
+| PIN disclosure | NONE OBSERVED; no PIN value was queried, emitted, or placed in this report. The validation run emitted only fixed PASS/FAIL markers for the dummy probe |
+| YubiKey / PKCS#11 operation | NONE; the hardware-sign step was skipped in run `37139262585`; no PKCS#11 initialization or signing call was made in this phase |
+| Phase 5.2B-2.6 probe | PASS in run `37139262585`; Environment, Secret Context, step mapping, and process environment all PASS |
+| APK production signing | NOT VALIDATED; no production signing step executed |
+
+### Workflow trigger boundary
+
+The compatibility CI workflows do not invoke the Android signer. The nightly reusable build caller leaves `production_android_signing` at its default `false`. The dedicated validation workflow defaults `validation_enable_signing` to `false` and requires an explicit `workflow_dispatch` with that input set to `true` before its hardware-sign step can run. The separate tag workflow is a manual release path, not ordinary CI; its reusable signing job and inner hardware-step conditions differ, so this closeout does not claim that the tag signing path is validated.
+
+The Environment Secret metadata confirms scope and presence only; it does not reveal or verify the value. Repository Secret metadata does not list `YUBIKEY_PIV_PIN`. The dedicated dummy Secret remains separate from the production PIN. No Secret was changed.
+
+```text
+PHASE: 5.2B-2.7
+RESULT: PASS
+PR #13: MERGED (f1dd3bda06216a8de904e4f395f6e73c47da1226)
+PR #14: MERGED (780dd715600a8b392b48b9d70bc5ff38633d09bd)
+ENVIRONMENT android-production-signing: PRESENT
+YUBIKEY_PIV_PIN ENVIRONMENT SECRET: PRESENT BY METADATA; VALUE NOT READ
+YUBIKEY_PIV_PIN REPOSITORY SECRET: ABSENT BY METADATA
+validation_enable_signing: DEFAULT FALSE; HARDWARE STEP SKIPPED IN RUN 37139262585
+ORDINARY CI HARDWARE SIGNING: NOT TRIGGERED
+REAL PIN LEAK: NONE OBSERVED; VALUE NEVER READ
+YUBIKEY / PKCS11 OPERATIONS: NONE
+APK PRODUCTION SIGNING: NOT VALIDATED
+READY FOR HARDWARE ATTEMPT #2: YES
+HARDWARE ATTEMPT #2: NOT EXECUTED
+```
+
+**Phase 5.2B closeout:** 2.5 Secret Context Investigation PASS; 2.6 Workflow Structural Fix PASS; 2.7 Closeout / Archival PASS. **Stop here.** Hardware Attempt #2 was not executed.
