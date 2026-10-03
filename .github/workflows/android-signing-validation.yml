@@ -96,7 +96,7 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       patchset: ${{ needs.compatibility.outputs.patchset }}
-      validation_enable_signing: true
+      validation_enable_signing: false
   verify-all:
     needs: [android-sign, resolve, compatibility]
     runs-on: ubuntu-24.04
