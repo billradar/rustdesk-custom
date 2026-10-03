@@ -231,9 +231,12 @@ class WorkflowTests(unittest.TestCase):
     def test_stable_draft_requires_signing_while_dry_run_can_test(self):
         w=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         expr=w['jobs']['build']['with']['production_android_signing']
-        self.assertIn('inputs.dry_run != true',expr)
-        self.assertIn('inputs.include_experimental != true',expr)
-        self.assertIn('inputs.dry_run != true',w['jobs']['draft']['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'",expr)
+        self.assertIn('inputs.dry_run == false',expr)
+        self.assertIn('inputs.include_experimental == false',expr)
+        self.assertIn("github.event_name == 'workflow_dispatch'",w['jobs']['draft']['if'])
+        self.assertIn('inputs.dry_run == false',w['jobs']['draft']['if'])
+        self.assertIn('inputs.include_experimental == false',w['jobs']['draft']['if'])
         self.assertIn("os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true'",(ROOT/'scripts/phase5.py').read_text())
 
 

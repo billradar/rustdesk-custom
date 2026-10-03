@@ -119,7 +119,7 @@ jobs:
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
-      production_android_signing: ${{ inputs.dry_run != true && inputs.include_experimental != true }}
+      production_android_signing: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == false && inputs.include_experimental == false }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -130,7 +130,7 @@ jobs:
     - compatibility
     - prepare
     - build
-    if: needs.draft-preflight.outputs.draft_needed == 'true' && inputs.dry_run != true && inputs.include_experimental != true
+    if: github.event_name == 'workflow_dispatch' && needs.draft-preflight.outputs.draft_needed == 'true' && inputs.dry_run == false && inputs.include_experimental == false
     runs-on: ubuntu-22.04
     permissions:
       contents: write

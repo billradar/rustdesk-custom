@@ -31,7 +31,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(set(j['aggregate']['needs']),{'plan','build','platforms','validate','android-sign'})
         self.assertNotIn('concurrency',j['platforms']);self.assertNotIn('continue-on-error',j['platforms'])
         t=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        self.assertIn('inputs.include_experimental != true',t['jobs']['draft']['if'])
+        self.assertIn('inputs.include_experimental == false',t['jobs']['draft']['if'])
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['schedule'],[{'cron':'0 2 * * *'}]);self.assertNotIn('draft',n['jobs'])
     def test_platforms_consume_source_not_resolver(self):
