@@ -63,3 +63,57 @@ The next investigation should determine, without exposing its value, why the env
 - [Single workflow dispatch and failed signing job](https://github.com/billradar/rustdesk-custom/actions/runs/37121654783)
 - [One-shot gate closure PR](https://github.com/billradar/rustdesk-custom/pull/3)
 - [GitHub documentation: reusable workflows and environment secrets](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
+
+## Phase 5.2B-2.1: Environment PIN delivery preflight
+
+**Implementation status:** fail-closed preflight and safe diagnostics implemented; no hardware validation was performed.
+
+### Audit of the failed run
+
+The actual run commit (`f0093b842a8828ad2c2093c67a368a5eda8ce381`) was audited, not inferred from the current checkout:
+
+- Caller `android-sign` invokes `.github/workflows/sign-android.yml` and does not pass a PIN through `workflow_call`.
+- The called workflow's actual `sign` job binds `environment.name: android-production-signing`.
+- Only the `Production YubiKey signing` step maps `YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}`. The job and workflow have no PIN environment mapping.
+- GitHub deployment metadata records an `android-production-signing` deployment for the failed run commit. Environment secret metadata listed the exact name `YUBIKEY_PIV_PIN`; the secret value was not queried. Repository-level secret names did not include this PIN secret.
+- The existing bridge resolves the environment source before JCA provider creation and before the apksig invocation. Its source rejects a null or empty environment lookup. The run's safe error class and missing `PIN SOURCE` marker are consistent with that early failure; there is no evidence of login or a private-key operation.
+
+**Root cause established to the available evidence boundary:** Java's `YUBIKEY_PIV_PIN` environment lookup resolved as missing or empty during that run, so the bridge stopped at PIN-source acquisition. The caller/reusable-workflow wiring, signing-job Environment binding, and step-level secret expression were correctly placed. Metadata proves the named Environment secret existed, but does not prove its stored value was nonempty or what GitHub injected into that process. Its value and runtime content were intentionally not inspected, so the underlying reason that resolution was empty cannot be distinguished further from this run alone.
+
+### Fix and dummy-only regression
+
+The signing step now checks `${YUBIKEY_PIV_PIN:-}` before creating the signing output directory or invoking `/usr/local/bin/rustdesk-sign`. It emits only `ENVIRONMENT PIN AVAILABLE: PASS` or `ENVIRONMENT PIN AVAILABLE: FAIL`, failing closed on the latter. Secret injection remains scoped to this single signing step. The validation workflow's `validation_enable_signing` input remains `false`.
+
+The bridge now reports absent/empty environment input with only:
+
+```text
+PIN SOURCE: ENVIRONMENT
+ENVIRONMENT PIN AVAILABLE: FAIL
+FAILURE STAGE: PIN SOURCE
+```
+
+Local dummy tests cover nonempty source resolution, null/empty fail-closed behavior, safe diagnostic output, and mutable-buffer zeroization. No real `YUBIKEY_PIV_PIN` was used. This implementation cannot establish live GitHub runtime delivery without a future separately authorized hardware workflow invocation; the new preflight will report only a boolean before starting the bridge.
+
+### Phase status
+
+```text
+FAILED RUN: 37121654783
+FAILURE STAGE: PIN SOURCE (consistent with bridge source and observed safe error; underlying empty cause not independently observable)
+ROOT CAUSE: process environment lookup was null/empty; workflow wiring is correctly scoped; reason for the empty runtime value remains unproven
+ENVIRONMENT: android-production-signing
+ENVIRONMENT SECRET METADATA: YUBIKEY_PIV_PIN PRESENT
+SECRET VALUE ACCESSED BY INVESTIGATION: NO
+SIGNING JOB ENVIRONMENT BINDING: PASS
+SIGNING STEP SECRET MAPPING: PASS
+EMPTY-SECRET PREFLIGHT: IMPLEMENTED
+BRIDGE SAFE PIN-SOURCE DIAGNOSTIC: PASS (dummy tests)
+REAL PIN USED: NO
+PRIVATE KEY OPERATION: NO
+YUBIKEY MODIFIED: NO
+APK SIGNED: NO
+ONE-SHOT GATE: CLOSED
+APK PRODUCTION SIGNING: NOT VALIDATED
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+```
+
+The implementation adds earlier, value-free detection but does not claim that it resolves the unknown cause of GitHub's empty runtime value. No real signing run was triggered.

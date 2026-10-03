@@ -140,6 +140,11 @@ jobs:
           set -euo pipefail
           umask 077
           ulimit -c 0
+          if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
+            printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
+            exit 1
+          fi
+          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
           signed_dir="$RUNNER_TEMP/rustdesk-yubikey-signing"
           install -d -m 0700 "$signed_dir"
           /usr/local/bin/rustdesk-sign \

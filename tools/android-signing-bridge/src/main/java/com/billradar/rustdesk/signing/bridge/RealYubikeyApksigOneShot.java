@@ -103,7 +103,11 @@ public final class RealYubikeyApksigOneShot {
             System.out.println("PRIVATE KEY EXPORTED: NO");
             exit = 0;
         } catch (Throwable e) {
-            System.err.println("APKSIG SIGNING: FAIL (" + safeFailure(e) + ")");
+            if (e instanceof EnvironmentPinUnavailableException) {
+                reportPinSourceUnavailable();
+            } else {
+                System.err.println("APKSIG SIGNING: FAIL (" + safeFailure(e) + ")");
+            }
         } finally {
             if (pinBuffer != null) {
                 pinBuffer.close();
@@ -129,6 +133,12 @@ public final class RealYubikeyApksigOneShot {
         }
         if (exit == 0) System.out.println("APKSIG APK SIGNING: PASS (isolated test candidate; not a release)");
         System.exit(exit);
+    }
+
+    static void reportPinSourceUnavailable() {
+        System.err.println("PIN SOURCE: ENVIRONMENT");
+        System.err.println("ENVIRONMENT PIN AVAILABLE: FAIL");
+        System.err.println("FAILURE STAGE: PIN SOURCE");
     }
 
     private static Options parse(String[] args) {

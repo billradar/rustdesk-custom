@@ -20,12 +20,12 @@ public final class EnvironmentPinSource implements PinSource {
     public char[] readPin() {
         String value = environmentLookup.get();
         if (value == null || value.isEmpty()) {
-            throw new IllegalStateException("Environment PIN source is unavailable or empty");
+            throw new EnvironmentPinUnavailableException();
         }
         char[] mutable = value.toCharArray();
         if (mutable.length == 0) {
             Arrays.fill(mutable, '\0');
-            throw new IllegalStateException("Environment PIN source is unavailable or empty");
+            throw new EnvironmentPinUnavailableException();
         }
         return mutable;
     }

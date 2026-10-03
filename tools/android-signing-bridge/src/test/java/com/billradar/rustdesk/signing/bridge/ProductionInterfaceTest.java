@@ -71,8 +71,21 @@ class ProductionInterfaceTest {
         }
         assertFalse(bytes.toString(StandardCharsets.UTF_8).contains("dummy-test-pin"));
         assertArrayEquals(new char[dummy.length], dummy);
-        assertThrows(IllegalStateException.class, () -> new EnvironmentPinSource(() -> null).readPin());
-        assertThrows(IllegalStateException.class, () -> new EnvironmentPinSource(() -> "").readPin());
+        assertInstanceOf(EnvironmentPinUnavailableException.class,
+                assertThrows(IllegalStateException.class, () -> new EnvironmentPinSource(() -> null).readPin()));
+        assertInstanceOf(EnvironmentPinUnavailableException.class,
+                assertThrows(IllegalStateException.class, () -> new EnvironmentPinSource(() -> "").readPin()));
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        PrintStream originalError = System.err;
+        try {
+            System.setErr(new PrintStream(errors, true, StandardCharsets.UTF_8));
+            RealYubikeyApksigOneShot.reportPinSourceUnavailable();
+        } finally {
+            System.setErr(originalError);
+        }
+        String diagnostic = errors.toString(StandardCharsets.UTF_8);
+        assertEquals("PIN SOURCE: ENVIRONMENT\nENVIRONMENT PIN AVAILABLE: FAIL\nFAILURE STAGE: PIN SOURCE\n", diagnostic);
+        assertFalse(diagnostic.contains("dummy-test-pin"));
         assertThrows(IllegalArgumentException.class, () -> PinSources.select("automatic-fallback"));
     }
 

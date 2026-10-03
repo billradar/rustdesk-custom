@@ -98,6 +98,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("inputs.channel == 'signing-validation'",action['if'])
         self.assertIn('/usr/local/bin/rustdesk-sign',action['run'])
         self.assertIn('--pin-source env',action['run'])
+        self.assertLess(action['run'].index('ENVIRONMENT PIN AVAILABLE: FAIL'),
+                        action['run'].index('/usr/local/bin/rustdesk-sign'))
+        self.assertIn('[[ -z "${YUBIKEY_PIV_PIN:-}" ]]',action['run'])
+        self.assertIn("ENVIRONMENT PIN AVAILABLE: PASS",action['run'])
         self.assertNotIn('apksigner sign',action['run'])
         self.assertNotIn('SunPKCS11',action['run'])
         self.assertIsInstance(w['jobs']['android-sign']['with']['validation_enable_signing'],bool)
