@@ -65,6 +65,66 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual((root/'private/signingKey.jks').stat().st_mode&0o777,0o600)
 
 class WorkflowTests(unittest.TestCase):
+    def test_phase_5_2b_2_5_secret_visibility_probes_are_dummy_only_and_step_scoped(self):
+        root=ROOT/'.github/workflows'
+        direct=yaml.safe_load((root/'secret-context-direct-probe.yml').read_text())
+        self.assertEqual(set(direct['on']),{'workflow_dispatch'})
+        direct_job=direct['jobs']['direct-probe']
+        self.assertEqual(direct_job['environment']['name'],'android-production-signing')
+        self.assertEqual(direct_job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
+        self.assertIn("github.repository == 'billradar/rustdesk-custom'",direct_job['if'])
+        self.assertIn("github.ref == 'refs/heads/main'",direct_job['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'",direct_job['if'])
+        self.assertIn('secret-context-direct-probe.yml@refs/heads/main',direct_job['if'])
+        self.assertNotIn('env',direct_job)
+        self.assertEqual(len(direct_job['steps']),1)
+        direct_step=direct_job['steps'][0]
+        self.assertEqual(set(direct_step['env']),{'PROBE_CONTEXT_AVAILABLE','SECRET_CONTEXT_PROBE'})
+        self.assertIn("secrets.SECRET_CONTEXT_PROBE != ''",direct_step['env']['PROBE_CONTEXT_AVAILABLE'])
+        self.assertEqual(direct_step['env']['SECRET_CONTEXT_PROBE'],'${{ secrets.SECRET_CONTEXT_PROBE }}')
+
+        caller=yaml.safe_load((root/'secret-context-reusable-probe.yml').read_text())
+        self.assertEqual(set(caller['on']),{'workflow_dispatch'})
+        caller_job=caller['jobs']['reusable-probe']
+        self.assertEqual(caller_job['uses'],'./.github/workflows/secret-context-reusable-probe-job.yml')
+        self.assertEqual(caller_job['secrets'],{'SECRET_CONTEXT_PROBE_2':'${{ secrets.SECRET_CONTEXT_PROBE_2 }}'})
+        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(caller))
+
+        reusable=yaml.safe_load((root/'secret-context-reusable-probe-job.yml').read_text())
+        self.assertEqual(set(reusable['on']),{'workflow_call'})
+        self.assertEqual(reusable['on']['workflow_call']['secrets'],{
+            'SECRET_CONTEXT_PROBE':{'required':False},'SECRET_CONTEXT_PROBE_2':{'required':True}})
+        job=reusable['jobs']['reusable-probe']
+        self.assertEqual(job['environment']['name'],'android-production-signing')
+        self.assertEqual(job['runs-on'],direct_job['runs-on'])
+        self.assertIn('secret-context-reusable-probe.yml@refs/heads/main',job['if'])
+        self.assertNotIn('env',job)
+        self.assertEqual(len(job['steps']),1)
+        probe=job['steps'][0]
+        self.assertEqual(set(probe['env']),{
+            'ENVIRONMENT_PROBE_CONTEXT_AVAILABLE','SECRET_CONTEXT_PROBE',
+            'CALLER_PROBE_CONTEXT_AVAILABLE','SECRET_CONTEXT_PROBE_2'})
+        self.assertIn("secrets.SECRET_CONTEXT_PROBE != ''",probe['env']['ENVIRONMENT_PROBE_CONTEXT_AVAILABLE'])
+        self.assertEqual(probe['env']['SECRET_CONTEXT_PROBE'],'${{ secrets.SECRET_CONTEXT_PROBE }}')
+        self.assertIn("secrets.SECRET_CONTEXT_PROBE_2 != ''",probe['env']['CALLER_PROBE_CONTEXT_AVAILABLE'])
+        self.assertEqual(probe['env']['SECRET_CONTEXT_PROBE_2'],'${{ secrets.SECRET_CONTEXT_PROBE_2 }}')
+        for workflow in (direct,caller,reusable):
+            serialized=json.dumps(workflow)
+            self.assertNotIn('YUBIKEY_PIV_PIN',serialized)
+            self.assertNotIn('/usr/local/bin/rustdesk-sign',serialized)
+            for forbidden in ('C_Initialize','C_Login','C_SignInit','C_Sign','apksigner','printenv','set -x'):
+                self.assertNotIn(forbidden,serialized)
+        for marker in ('DIRECT SECRET CONTEXT: PASS','DIRECT SECRET CONTEXT: FAIL',
+                       'DIRECT STEP MAPPING: PASS','DIRECT PROCESS ENVIRONMENT: PASS',
+                       'DIRECT WORKFLOW: PASS','DIRECT WORKFLOW: FAIL'):
+            self.assertIn(marker,direct_step['run'])
+        for marker in ('REUSABLE ENV SECRET CONTEXT: PASS','REUSABLE ENV SECRET CONTEXT: FAIL',
+                       'REUSABLE ENV STEP MAPPING: PASS','REUSABLE ENV PROCESS ENVIRONMENT: PASS',
+                       'WORKFLOW_CALL SECRET CONTEXT: PASS','WORKFLOW_CALL STEP MAPPING: PASS',
+                       'WORKFLOW_CALL PROCESS ENVIRONMENT: PASS','REUSABLE ENVIRONMENT SECRET PATH: PASS',
+                       'WORKFLOW_CALL SECRET PATH: PASS','REUSABLE WORKFLOW: PASS','REUSABLE WORKFLOW: FAIL'):
+            self.assertIn(marker,probe['run'])
+
     def test_environment_pin_probe_is_dispatch_only_and_never_starts_signer(self):
         root=ROOT/'.github/workflows'
         caller=yaml.safe_load((root/'android-signing-secret-probe.yml').read_text())
