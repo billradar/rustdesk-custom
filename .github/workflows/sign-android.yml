@@ -18,7 +18,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' ||
        github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-signing-validation.yml@refs/heads/main') &&
-      (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'push') &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'push') &&
       (inputs.channel == 'stable' || inputs.channel == 'signing-validation')
     name: Sign Android ${{ inputs.arch }} with YubiKey PIV 9C
     runs-on:
@@ -155,6 +155,7 @@ jobs:
           printf '%s\n' 'Installed Bridge signing command completed.'
       - name: Verify signer fingerprint and assemble verified artifact
         id: verify
+        if: steps.hardware-sign.outcome == 'success'
         env:
           SIGNED_APK: ${{ runner.temp }}/rustdesk-yubikey-signing/signed.apk
           INPUT_BUNDLE: ${{ steps.input.outputs.bundle }}
@@ -246,6 +247,7 @@ jobs:
           print('APK signature, fingerprint, package, ABI and provenance gates: PASS')
           PY
       - name: Upload verified signed APK bundle
+        if: steps.verify.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-${{ inputs.arch }}
