@@ -164,3 +164,58 @@ LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
 ```
 
 Per the probe stop condition, no redispatch or hardware signing was attempted. After the Environment Secret owner has reviewed/reconfigured the existing secret if needed, a new probe requires a separate explicit authorization; hardware signing remains a separate authorization.
+
+## Phase 5.2B-2.3: Environment Secret Reconfiguration Verification
+
+**Result: FAIL.** The user re-saved the existing Environment Secret before this probe. The Secret value was not observed or accessed by the agent.
+
+| Item | Result |
+|---|---|
+| Previous probe | [37130243147](https://github.com/billradar/rustdesk-custom/actions/runs/37130243147), `ENVIRONMENT PIN AVAILABLE: FAIL` |
+| User reconfigured Secret | YES, as reported by the user; agent did not modify it |
+| Secret metadata | `YUBIKEY_PIV_PIN` present; `updated_at: 2026-10-03T15:12:02Z` |
+| New probe workflow | `Android Environment Secret Delivery Probe` |
+| New probe run | [37132595356](https://github.com/billradar/rustdesk-custom/actions/runs/37132595356) |
+| Probe commit | `3867fbf882da766b1fa428adcc469a2cf6eb866a` |
+| Event / ref / attempt | `workflow_dispatch` / `main` / 1 |
+| Runner | `raspberrypi-rustdesk-signing`, expected dedicated runner labels |
+| Environment deployment | PASS; deployment `6829329951`, `android-production-signing`, ref `main`, matching probe commit |
+| Job Environment binding | PASS |
+| Step-scoped Secret mapping | PASS |
+| Environment PIN availability | **FAIL** |
+
+The target probe step emitted `ENVIRONMENT PIN AVAILABLE: FAIL` and the job failed closed. Read-only run metadata confirms the repository, workflow path, ref, event, attempt, runner labels, and matching Environment deployment. The reusable job binds the Environment and maps the Secret only into its single probe step, as designed. The `validation_enable_signing` gate remains `false`.
+
+The job log contained no signer invocation, Bridge startup, PKCS#11 initialization, `C_Login`, `C_SignInit`, `C_Sign`, `apksigner sign`, or private-key operation. No APK was signed; the YubiKey was not modified. No value, length, hash, or other Secret-derived data was inspected or logged.
+
+```text
+PREVIOUS PROBE RUN: 37130243147
+PREVIOUS RESULT: ENVIRONMENT PIN AVAILABLE: FAIL
+SECRET RECONFIGURED BY USER: YES
+SECRET VALUE OBSERVED BY AGENT: NO
+SECRET METADATA: PRESENT
+SECRET UPDATED METADATA: 2026-10-03T15:12:02Z
+NEW PROBE RUN: 37132595356
+NEW PROBE COMMIT: 3867fbf882da766b1fa428adcc469a2cf6eb866a
+RUNNER: raspberrypi-rustdesk-signing
+ENVIRONMENT: android-production-signing
+ENVIRONMENT PIN AVAILABLE: FAIL
+BRIDGE STARTED: NO
+PKCS11 INITIALIZED: NO
+C_LOGIN: NO
+C_SIGNINIT: NO
+C_SIGN: NO
+PRIVATE KEY OPERATION: NO
+APK SIGNED: NO
+YUBIKEY MODIFIED: NO
+HARDWARE SIGNING ATTEMPTS THIS PHASE: 0
+VALIDATION SIGNING GATE: CLOSED
+PHASE 5.2B-2.3: FAIL
+GITHUB ENVIRONMENT SECRET DELIVERY: NOT VALIDATED
+SECRET RECONFIGURATION: DID NOT RESOLVE RUNTIME DELIVERY
+READY FOR PHASE 5.2B-2 HARDWARE ATTEMPT #2: NO
+APK PRODUCTION SIGNING: NOT VALIDATED
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+```
+
+Per the FAIL stop condition, there was no second probe and no signing attempt. Environment/workflow metadata and the reusable-workflow boundary were checked read-only; these all match the intended path. The runtime still resolves the step value as unset or empty. No further Secret edits or runs were made.
