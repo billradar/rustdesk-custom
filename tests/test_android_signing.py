@@ -65,6 +65,33 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual((root/'private/signingKey.jks').stat().st_mode&0o777,0o600)
 
 class WorkflowTests(unittest.TestCase):
+    def test_environment_pin_probe_is_dispatch_only_and_never_starts_signer(self):
+        root=ROOT/'.github/workflows'
+        caller=yaml.safe_load((root/'android-signing-secret-probe.yml').read_text())
+        self.assertEqual(set(caller['on']),{'workflow_dispatch'})
+        self.assertEqual(caller['permissions'],{'contents':'read'})
+        self.assertEqual(caller['jobs']['probe']['uses'],'./.github/workflows/android-signing-secret-probe-job.yml')
+
+        reusable=yaml.safe_load((root/'android-signing-secret-probe-job.yml').read_text())
+        self.assertEqual(set(reusable['on']),{'workflow_call'})
+        job=reusable['jobs']['environment-pin-probe']
+        self.assertEqual(job['environment']['name'],'android-production-signing')
+        self.assertEqual(job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
+        for gate in ["github.repository == 'billradar/rustdesk-custom'",
+                     "github.ref == 'refs/heads/main'",
+                     "github.event_name == 'workflow_dispatch'",
+                     "android-signing-secret-probe.yml@refs/heads/main"]:
+            self.assertIn(gate,job['if'])
+        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(job.get('env',{})))
+        self.assertEqual(len(job['steps']),1)
+        probe=job['steps'][0]
+        self.assertEqual(set(probe['env']),{'YUBIKEY_PIV_PIN'})
+        self.assertIn('secrets.YUBIKEY_PIV_PIN',probe['env']['YUBIKEY_PIV_PIN'])
+        self.assertIn('ENVIRONMENT PIN AVAILABLE: PASS',probe['run'])
+        self.assertIn('ENVIRONMENT PIN AVAILABLE: FAIL',probe['run'])
+        for forbidden in ('rustdesk-sign','C_Login','C_SignInit','C_Sign','apksigner','opensc-pkcs11.so','printenv','set -x'):
+            self.assertNotIn(forbidden,probe['run'])
+
     def test_yubikey_secret_and_hardware_signing_are_scoped(self):
         def load(name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
         for name in ['prepare-source.yml','compat-check.yml','build-platform.yml','ci.yml','nightly.yml']:
