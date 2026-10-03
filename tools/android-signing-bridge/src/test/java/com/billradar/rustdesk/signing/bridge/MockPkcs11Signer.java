@@ -3,13 +3,14 @@ package com.billradar.rustdesk.signing.bridge;
 import java.security.GeneralSecurityException;
 import java.security.PrivateKey;
 import java.security.Signature;
+import java.security.interfaces.ECPrivateKey;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 /** Software-only PKCS#11 simulation. It never loads a native module. */
 final class MockPkcs11Signer implements Pkcs11Signer {
-    enum FailurePoint { NONE, OPEN, LOGIN, RUNTIME_LOGIN, SIGN, CLOSE }
+    enum FailurePoint { NONE, OPEN, USER_LOGIN, LOGIN, RUNTIME_LOGIN, SIGN, CLOSE }
 
     final List<String> calls = new ArrayList<>();
     final SigningIdentity actualIdentity;
@@ -17,6 +18,8 @@ final class MockPkcs11Signer implements Pkcs11Signer {
     FailurePoint failurePoint = FailurePoint.NONE;
     int contextLoginCount;
     int signCount;
+    int lastRawLength;
+    final List<Integer> digestLengths = new ArrayList<>();
     boolean signCalled;
     byte[] lastDigest;
     String lastMechanism;
@@ -38,11 +41,35 @@ final class MockPkcs11Signer implements Pkcs11Signer {
     private final class Session implements Pkcs11Session {
         private boolean initialized;
         private boolean loggedIn;
+        private boolean contextLoggedIn;
         private boolean closed;
 
         @Override
+        public int certificateComponentBytes() {
+            return ((((ECPrivateKey) softwareKey).getParams().getOrder().bitLength()) + 7) / 8;
+        }
+
+        @Override
+        public void loginUser(char[] pin) throws Pkcs11Exception {
+            require(!closed && !loggedIn, "CKR_USER_ALREADY_LOGGED_IN");
+            calls.add("USER_LOGIN");
+            if (failurePoint == FailurePoint.USER_LOGIN) throw new Pkcs11Exception("CKR_PIN_INCORRECT");
+            loggedIn = true;
+        }
+
+        @Override
+        public KeyInfo findPrivateKey(byte[] expectedId) throws Pkcs11Exception {
+            require(loggedIn && !initialized && !closed, "CKR_USER_NOT_LOGGED_IN");
+            calls.add("KEY_DISCOVERY");
+            byte[] actualId = java.util.HexFormat.of().parseHex(actualIdentity.objectId());
+            if (!Arrays.equals(actualId, expectedId)) return null;
+            return new KeyInfo(actualId, org.xipki.pkcs11.wrapper.PKCS11Constants.CKK_EC,
+                    true, true);
+        }
+
+        @Override
         public void signInit(String mechanism) throws Pkcs11Exception {
-            require(!closed && !initialized, "CKR_OPERATION_ACTIVE");
+            require(!closed && loggedIn && !initialized, "CKR_OPERATION_ACTIVE");
             calls.add("SIGN_INIT");
             lastMechanism = mechanism;
             if (!RustDeskPiv9cSignatureSpi.MECHANISM.equals(mechanism)) {
@@ -53,7 +80,7 @@ final class MockPkcs11Signer implements Pkcs11Signer {
 
         @Override
         public void contextSpecificLogin(char[] pin) throws Pkcs11Exception {
-            require(initialized && !loggedIn, "CKR_OPERATION_NOT_INITIALIZED");
+            require(initialized && loggedIn && !contextLoggedIn, "CKR_OPERATION_NOT_INITIALIZED");
             calls.add("CONTEXT_LOGIN");
             contextLoginCount++;
             if (failurePoint == FailurePoint.LOGIN) {
@@ -62,28 +89,32 @@ final class MockPkcs11Signer implements Pkcs11Signer {
             if (failurePoint == FailurePoint.RUNTIME_LOGIN) {
                 throw new IllegalStateException("mock runtime failure");
             }
-            loggedIn = true;
+            contextLoggedIn = true;
         }
 
         @Override
         public byte[] sign(byte[] digest) throws Pkcs11Exception {
-            require(initialized && loggedIn && !closed, "CKR_USER_NOT_LOGGED_IN");
+            require(initialized && loggedIn && contextLoggedIn && !closed, "CKR_USER_NOT_LOGGED_IN");
             calls.add("SIGN");
             signCount++;
             signCalled = true;
             if (failurePoint == FailurePoint.SIGN) {
                 throw new Pkcs11Exception("CKR_GENERAL_ERROR");
             }
-            if (digest.length != 32) {
+            if (digest.length != 32 && digest.length != 48 && digest.length != 64) {
                 throw new Pkcs11Exception("CKR_DATA_LEN_RANGE");
             }
+            digestLengths.add(digest.length);
             lastDigest = digest.clone();
             try {
                 Signature softwareSignature = Signature.getInstance("NONEwithECDSA");
                 softwareSignature.initSign(softwareKey);
                 softwareSignature.update(digest);
                 byte[] der = softwareSignature.sign();
-                return RawEcdsaToDer.decode(der, 32);
+                int componentBytes = ((((ECPrivateKey) softwareKey).getParams().getOrder().bitLength()) + 7) / 8;
+                byte[] raw = RawEcdsaToDer.decode(der, componentBytes);
+                lastRawLength = raw.length;
+                return raw;
             } catch (GeneralSecurityException | IllegalArgumentException e) {
                 throw new Pkcs11Exception("CKR_GENERAL_ERROR", e);
             }

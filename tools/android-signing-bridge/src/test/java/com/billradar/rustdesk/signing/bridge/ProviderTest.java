@@ -20,9 +20,10 @@ class ProviderTest {
                 Security.removeProvider(previous.getName());
             }
             assertTrue(Security.addProvider(provider) > 0);
-            assertEquals(1, provider.getServices().size());
-            assertEquals("Signature", provider.getServices().iterator().next().getType());
-            assertEquals("SHA256withECDSA", provider.getServices().iterator().next().getAlgorithm());
+            assertEquals(2, provider.getServices().size());
+            assertTrue(provider.getServices().stream().allMatch(s -> s.getType().equals("Signature")));
+            assertTrue(provider.getServices().stream().anyMatch(s -> s.getAlgorithm().equals("SHA256withECDSA")));
+            assertTrue(provider.getServices().stream().anyMatch(s -> s.getAlgorithm().equals("SHA512withECDSA")));
             assertEquals(RustDeskPiv9cSignatureSpi.class.getName(),
                     provider.getService("Signature", "SHA256withECDSA").getClassName());
             assertEquals(provider, java.security.Signature

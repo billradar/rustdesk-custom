@@ -16,6 +16,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
+import javax.security.auth.x500.X500Principal;
 import java.security.SignatureException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchProviderException;
@@ -56,6 +57,8 @@ final class TestFixtures {
         @Override public BigInteger getSerialNumber() { return BigInteger.ONE; }
         @Override public Principal getIssuerDN() { return () -> "CN=Mock"; }
         @Override public Principal getSubjectDN() { return () -> "CN=Mock"; }
+        @Override public X500Principal getIssuerX500Principal() { return new X500Principal("CN=Mock"); }
+        @Override public X500Principal getSubjectX500Principal() { return new X500Principal("CN=Mock"); }
         @Override public Date getNotBefore() { return new Date(0); }
         @Override public Date getNotAfter() { return new Date(Long.MAX_VALUE); }
         @Override public byte[] getTBSCertificate() { return encoded.clone(); }

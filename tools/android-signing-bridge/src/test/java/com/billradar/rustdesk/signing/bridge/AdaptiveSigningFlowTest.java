@@ -36,12 +36,15 @@ class AdaptiveSigningFlowTest {
 
     @Test
     void p256P384AndP521ComponentLengthsComeFromCertificatePublicKey() throws Exception {
-        assertEquals(32, AdaptiveSigningRules.ecComponentBytes(
-                TestFixtures.ecKeyPair("secp256r1").getPublic()));
-        assertEquals(48, AdaptiveSigningRules.ecComponentBytes(
-                TestFixtures.ecKeyPair("secp384r1").getPublic()));
-        assertEquals(66, AdaptiveSigningRules.ecComponentBytes(
-                TestFixtures.ecKeyPair("secp521r1").getPublic()));
+        var p256 = (java.security.interfaces.ECPublicKey) TestFixtures.ecKeyPair("secp256r1").getPublic();
+        var p384 = (java.security.interfaces.ECPublicKey) TestFixtures.ecKeyPair("secp384r1").getPublic();
+        var p521 = (java.security.interfaces.ECPublicKey) TestFixtures.ecKeyPair("secp521r1").getPublic();
+        assertEquals(32, AdaptiveSigningRules.ecComponentBytes(p256));
+        assertEquals(48, AdaptiveSigningRules.ecComponentBytes(p384));
+        assertEquals(66, AdaptiveSigningRules.ecComponentBytes(p521));
+        assertEquals(32, new RustDeskPivPrivateKey(TestFixtures.IDENTITY, p256).componentBytes());
+        assertEquals(48, new RustDeskPivPrivateKey(TestFixtures.IDENTITY, p384).componentBytes());
+        assertEquals(66, new RustDeskPivPrivateKey(TestFixtures.IDENTITY, p521).componentBytes());
     }
 
     @Test

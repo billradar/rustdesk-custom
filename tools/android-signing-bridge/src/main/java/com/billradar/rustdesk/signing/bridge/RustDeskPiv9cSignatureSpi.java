@@ -10,6 +10,7 @@ import java.security.SignatureSpi;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.Arrays;
+import java.util.HexFormat;
 
 /** SHA256withECDSA bridge that requires context-specific PKCS#11 authentication per sign. */
 public final class RustDeskPiv9cSignatureSpi extends SignatureSpi {
@@ -17,25 +18,36 @@ public final class RustDeskPiv9cSignatureSpi extends SignatureSpi {
     private final Pkcs11Signer signer;
     private final PinSupplier pinSupplier;
     private final SigningIdentity expectedIdentity;
+    private final String digestAlgorithm;
     private MessageDigest digest;
     private boolean initialized;
+    private RustDeskPivPrivateKey currentKey;
 
     RustDeskPiv9cSignatureSpi(
             Pkcs11Signer signer, PinSupplier pinSupplier, SigningIdentity expectedIdentity) {
+        this(signer, pinSupplier, expectedIdentity, "SHA-256");
+    }
+
+    RustDeskPiv9cSignatureSpi(
+            Pkcs11Signer signer, PinSupplier pinSupplier, SigningIdentity expectedIdentity,
+            String digestAlgorithm) {
         this.signer = signer;
         this.pinSupplier = pinSupplier;
         this.expectedIdentity = expectedIdentity;
+        this.digestAlgorithm = digestAlgorithm;
     }
 
     @Override
     protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
         initialized = false;
+        currentKey = null;
         throw new InvalidKeyException("This provider exposes signing only");
     }
 
     @Override
     protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
         initialized = false;
+        currentKey = null;
         if (!(privateKey instanceof RustDeskPivPrivateKey pivKey)) {
             throw new InvalidKeyException("Expected the configured non-exportable PIV key handle");
         }
@@ -45,11 +57,12 @@ public final class RustDeskPiv9cSignatureSpi extends SignatureSpi {
             throw new InvalidKeyException("PIV signing key identity does not match policy");
         }
         try {
-            digest = MessageDigest.getInstance("SHA-256");
+            digest = MessageDigest.getInstance(digestAlgorithm);
         } catch (NoSuchAlgorithmException e) {
             throw new InvalidKeyException("SHA-256 is unavailable", e);
         }
         initialized = true;
+        currentKey = pivKey;
     }
 
     @Override
@@ -76,16 +89,31 @@ public final class RustDeskPiv9cSignatureSpi extends SignatureSpi {
         byte[] raw = null;
         byte[] der = null;
         SignatureException failure = null;
+        boolean operationSucceeded = false;
         try {
             session = signer.openSession(expectedIdentity);
-            session.signInit(MECHANISM);
+            if (session.certificateComponentBytes() != currentKey.componentBytes()) {
+                throw new IllegalStateException("PIV key handle curve does not match the pinned certificate");
+            }
             pin = pinSupplier.getPin();
             if (pin == null || pin.length == 0) {
                 throw new IllegalStateException("PIN supplier returned no credential");
             }
+            session.loginUser(pin);
+            byte[] expectedId = HexFormat.of().parseHex(expectedIdentity.objectId());
+            Pkcs11Session.KeyInfo keyInfo = session.findPrivateKey(expectedId);
+            if (keyInfo == null || !Arrays.equals(expectedId, keyInfo.id())
+                    || !Long.valueOf(org.xipki.pkcs11.wrapper.PKCS11Constants.CKK_EC)
+                            .equals(keyInfo.keyType())
+                    || !Boolean.TRUE.equals(keyInfo.canSign())
+                    || !Boolean.TRUE.equals(keyInfo.alwaysAuthenticate())) {
+                throw new IllegalStateException("Matching sign-capable EC private key is unavailable");
+            }
+            session.signInit(MECHANISM);
             session.contextSpecificLogin(pin);
             raw = session.sign(hash);
-            der = RawEcdsaToDer.encode(raw, 32);
+            der = RawEcdsaToDer.encode(raw, currentKey.componentBytes());
+            operationSucceeded = true;
         } catch (Pkcs11Exception e) {
             failure = new SignatureException("Fail-closed PKCS#11 operation failed: " + e.returnCode());
         } catch (IllegalArgumentException | IllegalStateException e) {
@@ -102,9 +130,10 @@ public final class RustDeskPiv9cSignatureSpi extends SignatureSpi {
             Arrays.fill(hash, (byte) 0);
             digest.reset();
             initialized = false;
+            currentKey = null;
             if (session != null) {
                 try {
-                    session.close();
+                    session.finishOperation(operationSucceeded);
                 } catch (Pkcs11Exception closeFailure) {
                     if (failure == null) {
                         failure = new SignatureException(
