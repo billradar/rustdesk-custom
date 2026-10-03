@@ -74,6 +74,7 @@ class WorkflowTests(unittest.TestCase):
 
         reusable=yaml.safe_load((root/'android-signing-secret-probe-job.yml').read_text())
         self.assertEqual(set(reusable['on']),{'workflow_call'})
+        self.assertIsNone(reusable['on']['workflow_call'])
         job=reusable['jobs']['environment-pin-probe']
         self.assertEqual(job['environment']['name'],'android-production-signing')
         self.assertEqual(job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
@@ -85,12 +86,28 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(job.get('env',{})))
         self.assertEqual(len(job['steps']),1)
         probe=job['steps'][0]
-        self.assertEqual(set(probe['env']),{'YUBIKEY_PIV_PIN'})
+        self.assertEqual(set(probe['env']),{'PIN_SECRET_CONTEXT_AVAILABLE','YUBIKEY_PIV_PIN'})
         self.assertIn('secrets.YUBIKEY_PIV_PIN',probe['env']['YUBIKEY_PIV_PIN'])
+        self.assertIn("secrets.YUBIKEY_PIV_PIN != ''",probe['env']['PIN_SECRET_CONTEXT_AVAILABLE'])
+        for result in ('SECRETS CONTEXT: PASS','SECRETS CONTEXT: FAIL',
+                       'STEP ENV MAPPING: PASS','STEP ENV MAPPING: FAIL',
+                       'PROCESS ENVIRONMENT: PASS','PROCESS ENVIRONMENT: FAIL'):
+            self.assertIn(result,probe['run'])
         self.assertIn('ENVIRONMENT PIN AVAILABLE: PASS',probe['run'])
         self.assertIn('ENVIRONMENT PIN AVAILABLE: FAIL',probe['run'])
+        caller=yaml.safe_load((root/'android-signing-secret-probe.yml').read_text())
+        self.assertNotIn('secrets',caller['jobs']['probe'])
         for forbidden in ('rustdesk-sign','C_Login','C_SignInit','C_Sign','apksigner','opensc-pkcs11.so','printenv','set -x'):
             self.assertNotIn(forbidden,probe['run'])
+
+        production_caller=yaml.safe_load((root/'android-signing-validation.yml').read_text())
+        production_reusable=yaml.safe_load((root/'sign-android.yml').read_text())
+        self.assertEqual(production_caller['jobs']['android-sign']['uses'],'./.github/workflows/sign-android.yml')
+        self.assertNotIn('secrets',production_caller['jobs']['android-sign'])
+        self.assertNotIn('secrets',production_reusable['on']['workflow_call'])
+        self.assertEqual(production_reusable['jobs']['sign']['environment']['name'],'android-production-signing')
+        signing=next(step for step in production_reusable['jobs']['sign']['steps'] if step.get('id')=='hardware-sign')
+        self.assertEqual(signing['env']['YUBIKEY_PIV_PIN'],'${{ secrets.YUBIKEY_PIV_PIN }}')
 
     def test_yubikey_secret_and_hardware_signing_are_scoped(self):
         def load(name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
