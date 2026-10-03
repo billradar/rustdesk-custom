@@ -51,6 +51,78 @@ SIGNED APK ARTIFACT UPLOAD: SKIPPED
 ONE-SHOT VALIDATION GATE: CLOSED
 APK PRODUCTION SIGNING: NOT VALIDATED
 LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+
+## Phase 5.2B-2.5: GitHub Environment Secret Visibility Matrix
+
+**PHASE:** 5.2B-2.5
+
+**RESULT:** FAIL (the matrix completed and isolated the failing boundary)
+
+**PROBE SECRET:** `SECRET_CONTEXT_PROBE` (dummy Environment Secret)
+
+**SECOND PROBE:** `SECRET_CONTEXT_PROBE_2` (dummy repository Secret, used only for explicit `workflow_call` passing)
+
+**SECRET VALUE OBSERVED:** NO
+
+### Documented behavior
+
+GitHub documents that Environment secrets cannot be passed by the caller through `workflow_call`. When the called workflow binds an Environment to its job, that job's Environment secret is used; an identically named secret passed by the caller does not replace it. The probe therefore tested the Environment-bound called job and, separately, an explicitly passed dummy caller secret. [GitHub documentation: reusing workflows and using inputs and secrets](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-inputs-and-secrets-in-a-reusable-workflow)
+
+### Observed behavior
+
+| Path / layer | Result | Evidence |
+|---|---|---|
+| Direct workflow → Environment `secrets` context | PASS | Direct run emitted context PASS. |
+| Direct workflow → step environment mapping | PASS | Direct run emitted mapping PASS. |
+| Direct workflow → child process environment | PASS | Direct run emitted process PASS. |
+| Reusable job Environment → `secrets` context | FAIL | Reusable run emitted Environment context FAIL. |
+| Reusable job Environment → step mapping | FAIL | Reusable run emitted mapping FAIL. |
+| Reusable job Environment → child process | FAIL | Reusable run emitted process FAIL. |
+| Caller dummy secret → declared `workflow_call` secret → `secrets` context | PASS | Reusable run emitted context PASS. |
+| Explicit `workflow_call` secret → step mapping | PASS | Reusable run emitted mapping PASS. |
+| Explicit `workflow_call` secret → child process | PASS | Reusable run emitted process PASS. |
+
+The Environment `android-production-signing` exists, has a custom deployment branch policy permitting `main`, and has no required reviewers. Both runs recorded an Environment deployment for `main` at commit `7ae5e80da617754f16357c7391c2a86049bc5bae`. The `SECRET_CONTEXT_PROBE` Environment Secret and `SECRET_CONTEXT_PROBE_2` repository Secret were confirmed present by name metadata only. `YUBIKEY_PIV_PIN` was confirmed present by metadata only; its value and all derived information were not read. Its reported `updated_at` remained `2026-10-03T15:12:02Z`.
+
+Both jobs ran on `raspberrypi-rustdesk-signing`, Linux, runner version `2.337.0`; the runner API architecture field was null, and its labels include `ARM64`. Direct run `37137026747` succeeded. Reusable run `37137083721` failed closed because the Environment-secret path was empty, while the separately passed dummy `workflow_call` path passed.
+
+### Root cause boundary and production impact
+
+**ROOT CAUSE BOUNDARY:** The dummy Environment Secret is available to a direct Environment-bound job, but is not available in the `secrets` context of this Environment-bound reusable-workflow job. The general reusable-workflow `workflow_call` secret route works. This isolates the failure to the Environment Secret × reusable-job path, before step mapping. The underlying reason for the mismatch with the documented behavior is **NOT DETERMINED** by these safe observations.
+
+**FIX:** NONE. No production workflow was changed. The dummy `workflow_call` result does not prove that an Environment Secret can be read by the caller and forwarded: GitHub documents that Environment secrets are not passable from a reusable-workflow caller, and the caller job that invokes a reusable workflow cannot itself bind the job Environment. A production change to restructure the signing workflow or use a different documented Environment-secret path is therefore required before another production-secret attempt. Do not move `YUBIKEY_PIV_PIN` to repository scope. **PRODUCTION WORKFLOW CHANGE REQUIRED: YES; not implemented in this phase.**
+
+`validation_enable_signing` remains `false`. The direct and reusable probes are dispatch-only, restricted to the exact repository/ref/workflow, use the dedicated runner and Environment, and inspect only non-empty booleans for the two dummy probe secrets. No probe printed or compared a Secret value.
+
+### Final status
+
+```text
+PHASE: 5.2B-2.5
+PROBE SECRET: SECRET_CONTEXT_PROBE
+SECRET VALUE OBSERVED: NO
+DIRECT WORKFLOW: PASS (run 37137026747)
+DIRECT ENV SECRET CONTEXT / STEP MAPPING / PROCESS: PASS / PASS / PASS
+REUSABLE WORKFLOW: FAIL (run 37137083721)
+REUSABLE ENV SECRET CONTEXT / STEP MAPPING / PROCESS: FAIL / FAIL / FAIL
+WORKFLOW_CALL SECRET PATH: PASS
+WORKFLOW_CALL SECRET CONTEXT / STEP MAPPING / PROCESS: PASS / PASS / PASS
+ENVIRONMENT SECRET PATH: FAIL in reusable job; PASS in direct job
+ROOT CAUSE: Environment Secret × reusable-job visibility boundary; underlying reason NOT DETERMINED
+FIX: NONE
+PRODUCTION WORKFLOW CHANGE REQUIRED: YES (not implemented)
+BRIDGE: NOT STARTED (YubiKey signing bridge)
+PKCS11: NOT INITIALIZED
+PRIVATE KEY: NOT USED
+APK SIGNING: NOT RUN
+YUBIKEY: NOT MODIFIED
+YUBIKEY_PIV_PIN: PRESENT (metadata only; value not read or modified)
+SIGNING GATE: CLOSED (`validation_enable_signing: false`)
+READY FOR HARDWARE ATTEMPT #2: NO
+APK PRODUCTION SIGNING: NOT VALIDATED
+LEGACY ANDROID SIGNING IDENTITY: NOT RECOVERED / NOT VALIDATED
+```
+
+The PR CI also ran the repository's ordinary RustDesk Flutter/FFI bridge compatibility build; it did not start the YubiKey signing bridge or initialize PKCS#11.
 WORKFLOW MODIFIED: YES, TEMPORARY GATE ENABLED AND THEN CLOSED
 YUBIKEY MODIFIED: NO
 ```
