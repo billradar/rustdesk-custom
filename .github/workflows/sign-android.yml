@@ -123,34 +123,25 @@ jobs:
           print('Unsigned APK SHA-256: ' + digest)
           print('Same-run artifact, source, package, ABI and checksum gates: PASS')
           PY
-      - name: Sign with YubiKey PIV 9C
+      - name: Production YubiKey signing (disabled in Phase 5.2B-1.1)
         id: hardware-sign
+        if: ${{ false }}
         env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
           APK_TO_SIGN: ${{ steps.input.outputs.apk }}
         shell: bash
         run: |
-          set +x
-          set -eu
-          if [ -z "${YUBIKEY_PIV_PIN:-}" ]; then
-            echo 'SIGNING: YUBIKEY_PIV_PIN environment secret is unavailable.' >&2
-            exit 1
-          fi
+          set -euo pipefail
           umask 077
           ulimit -c 0
           signed_dir="$RUNNER_TEMP/rustdesk-yubikey-signing"
           install -d -m 0700 "$signed_dir"
-          apksigner sign \
-            --ks NONE \
-            --ks-type PKCS11 \
-            --ks-provider-class sun.security.pkcs11.SunPKCS11 \
-            --ks-provider-arg /etc/rustdesk-signing/yubikey-piv.cfg \
-            --ks-key-alias 'Certificate for Digital Signature' \
-            --ks-pass env:YUBIKEY_PIV_PIN \
-            --in "$APK_TO_SIGN" \
-            --out "$signed_dir/signed.apk"
+          /usr/local/bin/rustdesk-sign \
+            --input "$APK_TO_SIGN" \
+            --output "$signed_dir/signed.apk" \
+            --pin-source env
           chmod 0600 "$signed_dir/signed.apk"
-          printf '%s\n' 'YubiKey PKCS#11 signing command completed.'
+          printf '%s\n' 'Installed Bridge signing command completed.'
       - name: Verify signer fingerprint and assemble verified artifact
         id: verify
         env:

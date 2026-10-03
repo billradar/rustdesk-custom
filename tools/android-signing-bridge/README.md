@@ -1,25 +1,25 @@
 # RustDesk Android Signing Bridge Prototype
 
-This isolated prototype contains the JCA signing bridge and an adaptive, certificate-pinned XiPKI/OpenSC YubiKey path. It does not modify RustDesk workflows.
+This Bridge contains the JCA signing provider and adaptive, certificate-pinned XiPKI/OpenSC YubiKey path, plus a generic production CLI. The real production workflow invocation remains hard-disabled pending the next authorized hardware phase.
 
 ## Adaptive hardware flow
 
 `SigningPolicy` pins the expected production certificate SHA-256 and the caller-selected signature algorithm (`SHA256withECDSA`). The XiPKI backend discovers token slots dynamically, matches exactly one certificate by fingerprint, and derives its CKA_ID, public-key type, EC order size, and verification key from that certificate. It does not choose a slot, key ID, or curve as a fallback.
 
-The pre-PIN path reads public certificate objects only. After hidden terminal input, the one-shot flow calls `C_Login(CKU_USER)`, searches private objects using the matched certificate CKA_ID, and requires exactly one match. It reads key type, sign capability, and `CKA_ALWAYS_AUTHENTICATE`; unavailable capability metadata fails closed. `C_SignInit(CKM_ECDSA)` is followed by `CKU_CONTEXT_SPECIFIC` only when the target key reports `CKA_ALWAYS_AUTHENTICATE=true`, then one `C_Sign`. The raw ECDSA signature is converted using the certificate-derived component size and verified against that same certificate.
+The pre-PIN path reads public certificate objects only. After PIN delivery, the unchanged one-shot flow calls `C_Login(CKU_USER)`, searches private objects using the matched certificate CKA_ID, and requires exactly one match. It reads key type, sign capability, and `CKA_ALWAYS_AUTHENTICATE`; unavailable capability metadata fails closed. `C_SignInit(CKM_ECDSA)` is followed by `CKU_CONTEXT_SPECIFIC` only when the target key reports `CKA_ALWAYS_AUTHENTICATE=true`, then one `C_Sign`. The raw ECDSA signature is converted using the certificate-derived component size and verified against that same certificate.
 
 The XiPKI `Session.login(long, char[])` bytecode forwards the mutable `char[]` directly to IAIK's `C_Login(long, long, char[], boolean)` API without making a Java-side `String` or another Java `char[]`. The JCA runtime owns one mutable PIN buffer for one process, supplies disposable copies for operation logins, and clears each copy and the owner buffer. Native-wrapper internal memory behavior is outside the Java bytecode and is not claimed as verified.
 
-## PIN and hardware boundary
+## Production CLI and PIN boundary
 
-- `--preflight` and `--jca-preflight` load the module, discover and verify the certificate, and never query private-key objects or prompt for a PIN.
-- `--jca-run` requires a real terminal and calls `Console.readPassword()` once, only after the fingerprint match.
-- PIN is not passed in an argument, environment variable, file, or report.
-- There is no retry, fallback key, object mutation, release, or workflow integration in this validation utility.
-- To run mock tests: `mvn clean test`.
-- To run the read-only hardware preflight: `./run-real-yubikey-once --preflight` as a user who can invoke `sudo -u github-runner`.
-- Both one-shot runners are reserved for a human at a real terminal after reviewing the pre-PIN report.
+- Installed signing form: `/usr/local/bin/rustdesk-sign --input <input.apk> --output <new-output.apk> [--pin-source console|env]`.
+- PIN source defaults to `console`, which uses `Console.readPassword()`. `--pin-source env` is explicit and reads `YUBIKEY_PIV_PIN`; there is no implicit fallback. The Environment variable's Java `String` cannot be reliably zeroized. Bridge-owned mutable `char[]` buffers are cleared.
+- Input must be a parseable APK for `com.carriez.flutter_hbb` with exactly one supported RustDesk ABI (`arm64-v8a`, `armeabi-v7a`, or `x86_64`). Symlink paths and output overwrite are rejected. The CLI hashes the input before signing and checks it again before publishing output. The trusted workflow separately gates same-run provenance and the Standard build variant.
+- Mock-only form: `/usr/local/bin/rustdesk-sign --dry-run --input <input.apk> --output <mock-output.apk> --pin-source env`. It copies an approved test APK and reports that the output is **not signed**. It does not initialize PKCS#11.
+- Production signing workflow contains the intended CLI command but is disabled with an unconditional workflow guard for this phase. Do not remove that guard until separately authorized.
+- To run unit/regression tests: `mvn --batch-mode clean test`.
+- To run no-PIN installed self-test as `github-runner`: `/usr/local/bin/rustdesk-sign --self-test`.
 
 ## Current status
 
-Mock tests pass. The user supplied real-terminal results for a JCA signature and Run `36902005326` APK hardware signing with independent `apksigner` verification. Under the revised key10.md policy, the same trusted APK validates both layer A (Bridge integration) and layer B (production signing identity); no second signing run was needed. Phase 5.1 is **PASS**, and APK production signing is **LOCALLY VALIDATED** for that APK. Git tag and Android release asset are unavailable; release publishing, GitHub Actions automated hardware signing, and upgrade installation compatibility remain **NOT VALIDATED**. See [the Phase 5.1 report](PHASE5-1-LOCAL-VALIDATION-REPORT.md). The real signing command is not to be rerun for this validation.
+Phase 5.1 remains **PASS / FROZEN** based on the historical user-supplied hardware result. The Phase 5.2B-1.1 generic interface passed 34 Maven tests and installed mock validation against the historical 1.4.9 Standard APK and a separate 1.5.0 Standard APK. Those installed runs used a dummy test PIN, made no PKCS#11 calls, and produced mock copies only. No real PIN, private-key operation, APK signing, Release, commit, or push occurred. The `main` ruleset is active with PR, no-force-push, no-deletion, and review-thread-resolution protections. The authorization model is intentionally single-maintainer: the signing Environment is main-only and has no required reviewer. Production signing still depends on the workflow trust gates, dedicated self-hosted runner, protected installed Bridge, PC/SC access policy, YubiKey hardware key, and post-sign certificate verification. The hardware signing step remains disabled. See the [Phase 5.2B-1.2 GitHub authorization report](PHASE5-2B1-2-GITHUB-AUTHORIZATION-REPORT.md), [Phase 5.2B-1.1 report](PHASE5-2B1-1-PRODUCTION-INTERFACE-REPORT.md), and [Phase 5.1 report](PHASE5-1-LOCAL-VALIDATION-REPORT.md).

@@ -1,12 +1,12 @@
 package com.billradar.rustdesk.signing.bridge;
 
-import java.io.Console;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.Provider;
 import java.security.Security;
@@ -15,42 +15,43 @@ import java.security.interfaces.ECPublicKey;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 
 /** One isolated real apksig signing process; this class never exports private key material. */
 public final class RealYubikeyApksigOneShot {
     private static final int EXPECTED_HARDWARE_SIGNATURE_COUNT = 2;
-    private static final String EXPECTED_INPUT_SHA256 =
-            "596591B25C4910D7E17FBD2EC499DC2592B06256965F6C50A885B538F6E81325";
+    private record Options(Path input, Path output, String pinSource) { }
 
     private RealYubikeyApksigOneShot() { }
 
     public static void main(String[] args) {
-        if (args.length != 3 || !"--run".equals(args[0])) {
-            System.err.println("Usage: --run <read-only input APK> <new output APK>");
-            System.exit(2);
-        }
+        Options options;
+        try { options = parse(args); }
+        catch (IllegalArgumentException e) { System.err.println("rustdesk-sign: " + e.getMessage()); System.exit(2); return; }
         if (!"github-runner".equals(System.getProperty("user.name"))) {
             System.err.println("RUN AS: FAIL (must be github-runner)");
             System.exit(2);
         }
 
-        Path input = Path.of(args[1]).toAbsolutePath().normalize();
-        Path output = Path.of(args[2]).toAbsolutePath().normalize();
+        Path input = options.input();
+        Path output = options.output();
         XiPkiAdaptiveBackend backend = new XiPkiAdaptiveBackend();
         MutablePinBuffer pinBuffer = null;
+        PinSource pinSource = PinSources.select(options.pinSource());
         Provider provider = null;
         String beforeHash = null;
-        boolean outputMayBeOurs = false;
+        Path stagedOutput = null;
+        boolean outputPublished = false;
         int exit = 1;
         try {
-            if (!Files.isRegularFile(input) || !Files.isReadable(input)
-                    || input.equals(output) || Files.exists(output)) {
-                throw new IllegalStateException("Input/output path preflight failed");
-            }
+            ApkInputPolicy inputPolicy = new ApkInputPolicy();
+            ApkInputPolicy.CheckedPaths checkedPaths = inputPolicy.validatePaths(input, output);
+            input = checkedPaths.input();
+            output = checkedPaths.output();
             beforeHash = sha256(input);
-            if (!EXPECTED_INPUT_SHA256.equals(beforeHash)) {
-                throw new IllegalStateException("Candidate APK SHA-256 does not match the reviewed artifact");
-            }
+            ApkInputPolicy.ApkIdentity apkIdentity = inputPolicy.validateApk(input);
+            System.out.println("APK PACKAGE POLICY: PASS (" + apkIdentity.packageName() + ")");
+            System.out.println("APK STANDARD ABI POLICY: PASS (" + apkIdentity.abi() + ")");
             SigningPolicy policy = SigningPolicy.production();
             AdaptiveSigningFlow.CertificateCandidate cert = AdaptiveSigningFlow.selectCertificate(
                     backend.discoverCertificates(), policy);
@@ -61,8 +62,6 @@ public final class RealYubikeyApksigOneShot {
             }
             X509Certificate certificate = cert.certificate();
             backend.setExpectedSignCount(EXPECTED_HARDWARE_SIGNATURE_COUNT);
-            Console console = System.console();
-            if (console == null) throw new IllegalStateException("Real terminal unavailable; PIN not requested");
 
             System.out.println("ISOLATED APKSIG APK SIGNING");
             System.out.println("RUN AS: github-runner");
@@ -70,9 +69,12 @@ public final class RealYubikeyApksigOneShot {
             System.out.println("PRODUCTION CERTIFICATE IDENTITY: PASS");
             System.out.println("SIGNING SCHEMES: v1=YES, v2=YES, v3=NO, v3.1=NO, v4=NO");
             System.out.println("EXPECTED HARDWARE SIGNATURE COUNT: " + EXPECTED_HARDWARE_SIGNATURE_COUNT);
-            char[] entered = console.readPassword("YubiKey PIV PIN: ");
+            stagedOutput = Files.createTempFile(output.getParent(), ".rustdesk-signing-", ".apk");
+            Files.setPosixFilePermissions(stagedOutput,
+                    Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            char[] entered = pinSource.readPin();
             pinBuffer = new MutablePinBuffer(entered);
-            System.out.println("PIN INPUT COUNT: 1");
+            System.out.println("PIN SOURCE: " + options.pinSource().toUpperCase(java.util.Locale.ROOT));
 
             provider = RustDeskSigningProvider.forProduction(backend, pinBuffer::copyForOperation);
             if (Security.insertProviderAt(provider, 1) != 1) {
@@ -80,14 +82,20 @@ public final class RealYubikeyApksigOneShot {
             }
             RustDeskPivPrivateKey privateKey = new RustDeskPivPrivateKey(
                     identity, (ECPublicKey) certificate.getPublicKey());
-            outputMayBeOurs = true;
-            invokeApksig(input, output, privateKey, certificate);
+            invokeApksig(input, stagedOutput, privateKey, certificate);
 
             if (backend.actualSignCount() != EXPECTED_HARDWARE_SIGNATURE_COUNT) {
                 throw new IllegalStateException("Actual hardware signature count did not match the preflight");
             }
             String afterHash = sha256(input);
             if (!beforeHash.equals(afterHash)) throw new IllegalStateException("Input APK changed during signing");
+            if (!Files.isRegularFile(stagedOutput) || Files.size(stagedOutput) == 0) {
+                throw new IllegalStateException("apksig did not produce a signed APK");
+            }
+            Files.createLink(output, stagedOutput);
+            outputPublished = true;
+            Files.delete(stagedOutput);
+            stagedOutput = null;
             System.out.println("ACTUAL HARDWARE SIGNATURE COUNT: " + backend.actualSignCount());
             System.out.println("INPUT SHA256 AFTER: " + afterHash);
             System.out.println("INPUT UNCHANGED: PASS");
@@ -110,13 +118,47 @@ public final class RealYubikeyApksigOneShot {
                 System.err.println("SESSION CLOSE / MODULE FINALIZE: FAIL");
                 exit = 1;
             }
-            if (exit != 0 && outputMayBeOurs) {
+            if (stagedOutput != null) {
+                try { Files.deleteIfExists(stagedOutput); }
+                catch (Exception e) { System.err.println("STAGING OUTPUT CLEANUP: FAIL"); }
+            }
+            if (exit != 0 && outputPublished) {
                 try { Files.deleteIfExists(output); }
                 catch (Exception e) { System.err.println("FAILED OUTPUT CLEANUP: FAIL"); }
             }
         }
         if (exit == 0) System.out.println("APKSIG APK SIGNING: PASS (isolated test candidate; not a release)");
         System.exit(exit);
+    }
+
+    private static Options parse(String[] args) {
+        if (args.length == 3 && "--run".equals(args[0])) {
+            return new Options(Path.of(args[1]), Path.of(args[2]), "console");
+        }
+        Path input = null;
+        Path output = null;
+        String pinSource = "console";
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "--input" -> {
+                    if (++i >= args.length || input != null) throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env]");
+                    input = Path.of(args[i]);
+                }
+                case "--output" -> {
+                    if (++i >= args.length || output != null) throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env]");
+                    output = Path.of(args[i]);
+                }
+                case "--pin-source" -> {
+                    if (++i >= args.length) throw new IllegalArgumentException("PIN source must be console or env");
+                    pinSource = args[i];
+                }
+                default -> throw new IllegalArgumentException("unsupported argument");
+            }
+        }
+        if (input == null || output == null || !(pinSource.equals("console") || pinSource.equals("env"))) {
+            throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env]");
+        }
+        return new Options(input, output, pinSource);
     }
 
     private static void invokeApksig(Path input, Path output,
@@ -168,8 +210,6 @@ public final class RealYubikeyApksigOneShot {
         if (e instanceof Pkcs11Exception p) return p.returnCode();
         if (e instanceof org.xipki.pkcs11.wrapper.PKCS11Exception p) return p.getErrorName();
         Throwable cause = e instanceof InvocationTargetException i && i.getCause() != null ? i.getCause() : e;
-        String message = cause.getMessage();
-        if (message == null || message.isBlank()) return cause.getClass().getSimpleName();
-        return message.replaceAll("[\\r\\n\\t]", " ");
+        return cause.getClass().getSimpleName();
     }
 }
