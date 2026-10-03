@@ -32,6 +32,7 @@ jobs:
     concurrency:
       group: rustdesk-android-yubikey-signing
       cancel-in-progress: false
+      queue: max
     timeout-minutes: 30
     env:
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
