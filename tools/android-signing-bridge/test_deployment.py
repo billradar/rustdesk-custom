@@ -75,9 +75,13 @@ else:
     def test_future_workflows_use_only_installed_signer_path(self):
         production = (REPO / '.github/workflows/sign-android.yml').read_text()
         self.assertIn('/usr/local/bin/rustdesk-sign \\\n            --input', production)
-        self.assertIn('if: ${{ false }}', production)
+        self.assertIn("inputs.validation_enable_signing == true", production)
+        self.assertIn("github.event_name == 'workflow_dispatch'", production)
+        self.assertIn("inputs.channel == 'signing-validation'", production)
         self.assertIn('YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}', production)
         self.assertEqual(production.count('YUBIKEY_PIV_PIN'), 2)
+        validation = (REPO / '.github/workflows/android-signing-validation.yml').read_text()
+        self.assertIn('validation_enable_signing: false', validation)
         for forbidden in ('apksigner sign', 'SunPKCS11'):
             self.assertNotIn(forbidden, production)
         dry_run = (REPO / '.github/workflows/android-signing-dry-run.yml').read_text()

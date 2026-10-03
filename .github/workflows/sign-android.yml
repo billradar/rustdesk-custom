@@ -7,6 +7,7 @@ name: Reusable Android YubiKey Production Signing
       upstream_sha: {type: string, required: true}
       upstream_version: {type: string, required: true}
       patchset: {type: string, required: true}
+      validation_enable_signing: {type: boolean, required: false, default: false}
 permissions:
   contents: read
   actions: read
@@ -124,9 +125,13 @@ jobs:
           print('Unsigned APK SHA-256: ' + digest)
           print('Same-run artifact, source, package, ABI and checksum gates: PASS')
           PY
-      - name: Production YubiKey signing (disabled in Phase 5.2B-1.1)
+      - name: Production YubiKey signing (explicit one-shot validation gate)
         id: hardware-sign
-        if: ${{ false }}
+        if: >-
+          inputs.validation_enable_signing == true &&
+          github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-signing-validation.yml@refs/heads/main' &&
+          github.event_name == 'workflow_dispatch' &&
+          inputs.channel == 'signing-validation'
         env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
           APK_TO_SIGN: ${{ steps.input.outputs.apk }}

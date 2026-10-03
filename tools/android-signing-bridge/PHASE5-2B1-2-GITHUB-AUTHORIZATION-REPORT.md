@@ -61,7 +61,7 @@ These controls do not supply independent second-person review. The owner has acc
 
 ## Workflow and operation status
 
-- Production hardware-signing step: **DISABLED** (`if: ${{ false }}`).
+- Production hardware-signing step: **DISABLED BY DEFAULT** (`validation_enable_signing: false` on the manual validation caller; the step is additionally gated by exact caller workflow ref, `workflow_dispatch`, and `signing-validation` channel).
 - Workflow triggered: **NO**.
 - PIN used: **NO**.
 - Private-key operation: **NO**.

@@ -16,7 +16,7 @@ The XiPKI `Session.login(long, char[])` bytecode forwards the mutable `char[]` d
 - PIN source defaults to `console`, which uses `Console.readPassword()`. `--pin-source env` is explicit and reads `YUBIKEY_PIV_PIN`; there is no implicit fallback. The Environment variable's Java `String` cannot be reliably zeroized. Bridge-owned mutable `char[]` buffers are cleared.
 - Input must be a parseable APK for `com.carriez.flutter_hbb` with exactly one supported RustDesk ABI (`arm64-v8a`, `armeabi-v7a`, or `x86_64`). Symlink paths and output overwrite are rejected. The CLI hashes the input before signing and checks it again before publishing output. The trusted workflow separately gates same-run provenance and the Standard build variant.
 - Mock-only form: `/usr/local/bin/rustdesk-sign --dry-run --input <input.apk> --output <mock-output.apk> --pin-source env`. It copies an approved test APK and reports that the output is **not signed**. It does not initialize PKCS#11.
-- Production signing workflow contains the intended CLI command but is disabled with an unconditional workflow guard for this phase. Do not remove that guard until separately authorized.
+- Production signing workflow contains the installed CLI command and scopes the Environment Secret to that step. Signing is disabled by default; the one-shot validation caller passes `validation_enable_signing: false`. The step also requires the exact validation caller workflow, `workflow_dispatch`, and `signing-validation` channel.
 - To run unit/regression tests: `mvn --batch-mode clean test`.
 - To run no-PIN installed self-test as `github-runner`: `/usr/local/bin/rustdesk-sign --self-test`.
 
