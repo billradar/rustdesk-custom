@@ -142,13 +142,24 @@ def stage(folder, destination):
     key.touch(mode=0o600)
     key.chmod(0o600)
 
-def validate_yubikey_input(folder, arch):
-    folder = Path(folder)
-    if folder.is_symlink():
+def locate_yubikey_bundle(folder):
+    root = Path(folder)
+    if root.is_symlink():
         raise ValueError('SIGNING: artifact root is a symlink')
-    folder = folder.resolve()
-    if any(path.is_symlink() for path in folder.rglob('*')):
+    root = root.resolve()
+    paths = list(root.rglob('*'))
+    if any(path.is_symlink() for path in paths):
         raise ValueError('SIGNING: symlink in downloaded artifact')
+    manifests = [path for path in paths if path.name == 'build-info.json' and path.is_file()]
+    if len(manifests) != 1:
+        raise ValueError('SIGNING: expected exactly one build manifest')
+    bundle = manifests[0].parent.resolve()
+    if not bundle.is_relative_to(root):
+        raise ValueError('SIGNING: build manifest escaped artifact root')
+    return bundle
+
+def validate_yubikey_input(folder, arch):
+    folder = locate_yubikey_bundle(folder)
     info = validate(folder)
     expected_arches = ABIS
     if arch not in expected_arches:

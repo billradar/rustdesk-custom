@@ -20,6 +20,15 @@ import platform_package
 from patchsets import patch_hash
 
 class IdentityTests(unittest.TestCase):
+    def test_yubikey_artifact_root_must_contain_exactly_one_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'download';bundle=root/'rustdesk-stable-artifact'
+            bundle.mkdir(parents=True);(bundle/'build-info.json').write_text('{}')
+            self.assertEqual(signing.locate_yubikey_bundle(root),bundle.resolve())
+            (root/'second').mkdir();(root/'second/build-info.json').write_text('{}')
+            with self.assertRaisesRegex(ValueError,'exactly one build manifest'):
+                signing.locate_yubikey_bundle(root)
+
     def test_certificate_package_and_abi_fail_closed(self):
         expected={'certificate_sha256':'a'*64,'package_name':'com.example.app'}
         actual=dict(expected,abis=['arm64-v8a'])
