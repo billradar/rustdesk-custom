@@ -70,7 +70,7 @@ jobs:
 
         python3 scripts/phase5.py plan --channel "$CHANNEL" "${args[@]}"'
     - id: split
-      name: Split Android and non-Android target matrices
+      name: Split Android and other platform target matrices
       run: |
         android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
         android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
