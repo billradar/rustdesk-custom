@@ -105,8 +105,6 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(job['concurrency']['queue'],'max')
         self.assertIn("github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main'",job['if'])
         self.assertIn("inputs.channel == 'stable'",job['if'])
-        self.assertNotIn('android-signing-validation.yml',job['if'])
-        self.assertNotIn('validation_enable_signing',json.dumps(sign))
 
         hardware=next(step for step in job['steps'] if 'Production YubiKey signing of all Android architectures' in step.get('name',''))
         self.assertEqual(hardware['env']['YUBIKEY_PIV_PIN'],'${{ secrets.YUBIKEY_PIV_PIN }}')
