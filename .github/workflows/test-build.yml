@@ -33,10 +33,7 @@ permissions:
 
 concurrency:
   group: production-build-${{ github.workflow }}-${{ github.ref }}-${{ inputs.upstream_ref }}
-  cancel-in-progress: false
-
-env:
-  AUTOMATION_MODE: '1'
+  cancel-in-progress: true
 
 jobs:
   resolve:
