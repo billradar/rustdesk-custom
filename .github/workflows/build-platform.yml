@@ -46,8 +46,13 @@ jobs:
     - name: Isolated reviewed parser environment
       run: |
         python3 -m venv .work/python
-        .work/python/bin/python -m pip install -r requirements-build.txt
-        echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          .work/python/Scripts/python.exe -m pip install -r requirements-build.txt
+          echo "$PWD/.work/python/Scripts" >> "$GITHUB_PATH"
+        else
+          .work/python/bin/python -m pip install -r requirements-build.txt
+          echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
+        fi
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.source_artifact }}
