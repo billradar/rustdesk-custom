@@ -124,8 +124,12 @@ jobs:
                       raise SystemExit(f"SIGNING[{arch}]: prepared source provenance mismatch: {key}")
               if hashlib.sha256((bundle / "source-manifest.json").read_bytes()).hexdigest() != info.get("prepared_source_identity"):
                   raise SystemExit(f"SIGNING[{arch}]: prepared source identity checksum mismatch")
-              if str(source.get("prepare_workflow_run")) != str(source.get("build_run")):
+              if str(source.get("prepare_workflow_run")) != str(info.get("prepare_run")):
+                  raise SystemExit(f"SIGNING[{arch}]: prepare/source-build run mismatch")
+              if str(info.get("prepare_run")) != str(info.get("build_run")):
                   raise SystemExit(f"SIGNING[{arch}]: prepare/build run mismatch")
+              if str(info.get("build_run")) != os.environ["GITHUB_RUN_ID"]:
+                  raise SystemExit(f"SIGNING[{arch}]: build/current workflow run mismatch")
               packages = list((bundle / "packages").glob("*.apk"))
               if len(packages) != 1:
                   raise SystemExit(f"SIGNING[{arch}]: expected exactly one input APK")
