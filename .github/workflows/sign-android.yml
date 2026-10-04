@@ -213,6 +213,7 @@ jobs:
           PY
 
       - name: Verify all production signatures and assemble verified artifacts
+        if: inputs.validation_enable_signing != false || inputs.channel == 'stable'
         shell: bash
         run: |
           set -euo pipefail
@@ -310,7 +311,7 @@ jobs:
           PY
 
       - name: Upload verified aarch64 production artifact
-        if: contains(inputs.arches, 'aarch64')
+        if: (inputs.validation_enable_signing != false || inputs.channel == 'stable') && contains(inputs.arches, 'aarch64')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-aarch64
@@ -318,7 +319,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload verified armv7 production artifact
-        if: contains(inputs.arches, 'armv7')
+        if: (inputs.validation_enable_signing != false || inputs.channel == 'stable') && contains(inputs.arches, 'armv7')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-armv7
@@ -326,7 +327,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload verified x86_64 production artifact
-        if: contains(inputs.arches, 'x86_64')
+        if: (inputs.validation_enable_signing != false || inputs.channel == 'stable') && contains(inputs.arches, 'x86_64')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-x86_64
