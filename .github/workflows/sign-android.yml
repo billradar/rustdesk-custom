@@ -7,7 +7,6 @@ name: Reusable Android YubiKey Production Signing
       upstream_sha: {type: string, required: true}
       upstream_version: {type: string, required: true}
       patchset: {type: string, required: true}
-      validation_enable_signing: {type: boolean, required: false, default: false}
 permissions:
   contents: read
   actions: read
@@ -16,10 +15,9 @@ jobs:
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
-      (github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' ||
-       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-signing-validation.yml@refs/heads/main') &&
-      (github.event_name == 'workflow_dispatch' || github.event_name == 'push') &&
-      (inputs.channel == 'stable' || inputs.channel == 'signing-validation')
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') &&
+      inputs.channel == 'stable'
     name: Sign Android production artifacts with YubiKey PIV 9C
     runs-on:
       - self-hosted
@@ -162,8 +160,7 @@ jobs:
           PY
 
       - name: Production YubiKey signing of all Android architectures
-        if: inputs.validation_enable_signing != false || inputs.channel == 'stable'
-        env:
+                env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
         shell: bash
         run: |
@@ -217,8 +214,7 @@ jobs:
           PY
 
       - name: Verify all production signatures and assemble verified artifacts
-        if: inputs.validation_enable_signing != false || inputs.channel == 'stable'
-        shell: bash
+                shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -315,7 +311,7 @@ jobs:
           PY
 
       - name: Upload verified aarch64 production artifact
-        if: (inputs.validation_enable_signing != false || inputs.channel == 'stable') && contains(inputs.arches, 'aarch64')
+        if: contains(inputs.arches, 'aarch64')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-aarch64
@@ -323,7 +319,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload verified armv7 production artifact
-        if: (inputs.validation_enable_signing != false || inputs.channel == 'stable') && contains(inputs.arches, 'armv7')
+        if: contains(inputs.arches, 'armv7')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-armv7
@@ -331,7 +327,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Upload verified x86_64 production artifact
-        if: (inputs.validation_enable_signing != false || inputs.channel == 'stable') && contains(inputs.arches, 'x86_64')
+        if: contains(inputs.arches, 'x86_64')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-x86_64
