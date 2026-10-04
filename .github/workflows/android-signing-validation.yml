@@ -17,7 +17,8 @@ permissions:
   actions: read
 concurrency:
   group: android-signing-validation-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
+
 jobs:
   yubikey-identity-preflight:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[validate-android-signing]')
