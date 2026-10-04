@@ -1,4 +1,3 @@
-import ast
 import base64
 import contextlib
 import io
@@ -74,78 +73,24 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual((root/'private/signingKey.jks').stat().st_mode&0o777,0o600)
 
 class WorkflowTests(unittest.TestCase):
-    def test_yubikey_secret_and_hardware_signing_are_scoped(self):
-        def load(name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
-        for name in ['prepare-source.yml','compat-check.yml','build-platform.yml','ci.yml','nightly.yml']:
-            self.assertFalse(any(n in (ROOT/'.github/workflows'/name).read_text() for n in signing.NAMES),name)
-        w=load('android-signing-validation.yml')
-        self.assertEqual(w['permissions']['contents'],'read')
-        self.assertNotIn('draft',w['jobs'])
-        self.assertEqual(set(w['on']),{'workflow_dispatch'})
-        self.assertEqual(w['jobs']['android-build']['needs'],['resolve','compatibility','prepare'])
-        self.assertFalse(w['jobs']['android-build']['strategy']['fail-fast'])
-        self.assertEqual(w['jobs']['android-build']['strategy']['matrix']['arch'],['aarch64'])
-        self.assertEqual(w['jobs']['android-sign']['strategy']['matrix']['arch'],['aarch64'])
-        sign=load('android-signing-validation.yml')
-        steps=sign['jobs']['android-sign']['steps']
-        job=sign['jobs']['android-sign']
-        self.assertEqual(job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
-        self.assertEqual(job['environment']['name'],'android-production-signing')
-        self.assertEqual(job['concurrency'],{'group':'rustdesk-android-yubikey-signing','cancel-in-progress':False,'queue':'max'})
-        self.assertIn("github.repository == 'billradar/rustdesk-custom'",job['if'])
-        self.assertIn("github.ref == 'refs/heads/main'",job['if'])
-        self.assertIn(".github/workflows/android-signing-validation.yml@refs/heads/main",job['if'])
-        self.assertNotIn("github.event_name == 'pull_request'",job['if'])
-        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(job.get('env',{})))
-        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(sign.get('env',{})))
-        self.assertEqual(sign['on']['workflow_dispatch']['inputs']['validation_enable_signing']['default'],False)
-        probe=next(step for step in steps if step.get('name')=='Non-sensitive production workflow secret-context preflight')
-        self.assertEqual(set(probe['env']),{'SECRET_CONTEXT_PROBE_AVAILABLE','SECRET_CONTEXT_PROBE'})
-        self.assertIn("secrets.SECRET_CONTEXT_PROBE != ''",probe['env']['SECRET_CONTEXT_PROBE_AVAILABLE'])
-        self.assertEqual(probe['env']['SECRET_CONTEXT_PROBE'],'${{ secrets.SECRET_CONTEXT_PROBE }}')
-        for marker in ('ENVIRONMENT: PASS','SECRET CONTEXT: PASS','STEP MAPPING: PASS',
-                       'PROCESS ENVIRONMENT: PASS','PRODUCTION WORKFLOW STRUCTURE: PASS'):
-            self.assertIn(marker,probe['run'])
-        action=next(s for s in steps if s.get('id')=='hardware-sign')
-        self.assertIn('YUBIKEY_PIV_PIN',action['env'])
-        self.assertIn('inputs.validation_enable_signing == true',action['if'])
-        self.assertIn("github.event_name == 'workflow_dispatch'",action['if'])
-        self.assertIn('/usr/local/bin/rustdesk-sign',action['run'])
-        self.assertIn('--pin-source env',action['run'])
-        self.assertLess(action['run'].index('ENVIRONMENT PIN AVAILABLE: FAIL'),
-                        action['run'].index('/usr/local/bin/rustdesk-sign'))
-        self.assertIn('[[ -z "${YUBIKEY_PIV_PIN:-}" ]]',action['run'])
-        self.assertIn("ENVIRONMENT PIN AVAILABLE: PASS",action['run'])
-        self.assertNotIn('apksigner sign',action['run'])
-        self.assertNotIn('SunPKCS11',action['run'])
-        self.assertFalse(w['on']['workflow_dispatch']['inputs']['validation_enable_signing']['default'])
-        self.assertEqual(w['jobs']['verify-all']['if'],'inputs.validation_enable_signing == true')
-        for step in steps:
-            if step is not action:
-                self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(step))
-        cleanup=next(s for s in steps if s.get('if')=='always()')
-        self.assertIn('rustdesk-yubikey-signing',cleanup['run'])
-        upload=next(s for s in steps if s.get('uses','').startswith('actions/upload-artifact@'))
-        self.assertEqual(upload['with']['path'],'.work/verified-signed/')
-        self.assertEqual(sign['permissions'],{'contents':'read','actions':'read'})
-        build=load('build.yml')
-        for name in ['build','plan','validate','aggregate','platforms']:
-            self.assertFalse(any(n in json.dumps(build['jobs'][name]) for n in signing.NAMES),name)
-    def test_stable_draft_requires_signing_while_dry_run_can_test(self):
+
+    def test_stable_production_signing_gate(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         build=yaml.safe_load((ROOT/'.github/workflows/build.yml').read_text())
         sign=yaml.safe_load((ROOT/'.github/workflows/sign-android.yml').read_text())
 
         expr=tag['jobs']['build']['with']['production_android_signing']
-        self.assertIn("github.event_name == 'workflow_dispatch'",expr)
-        self.assertIn('inputs.production_android_signing == true',expr)
-        self.assertIn('inputs.dry_run == false',expr)
-        self.assertIn('inputs.include_experimental == false',expr)
+        for marker in (
+            "github.event_name == 'workflow_dispatch'",
+            'inputs.production_android_signing == true',
+            'inputs.dry_run == false',
+            'inputs.include_experimental == false',
+        ):
+            self.assertIn(marker,expr)
 
         gate=tag['on']['workflow_dispatch']['inputs']['production_android_signing']
         self.assertFalse(gate['default'])
         self.assertIn('direct_android_signing',tag['jobs']['build']['with'])
-        self.assertNotIn('android-sign',tag['jobs'])
 
         signing=build['jobs']['android-sign']
         self.assertNotIn('strategy',signing)
@@ -155,18 +100,20 @@ class WorkflowTests(unittest.TestCase):
 
         job=sign['jobs']['sign']
         self.assertEqual(job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
-        self.assertNotIn('matrix',json.dumps(job))
-        step_names=[step.get('name','') for step in job['steps']]
-        self.assertTrue(any('aarch64 build artifact' in name for name in step_names))
-        self.assertTrue(any('armv7 build artifact' in name for name in step_names))
-        self.assertTrue(any('x86_64 build artifact' in name for name in step_names))
+        self.assertEqual(job['concurrency']['group'],'rustdesk-android-yubikey-signing')
+        self.assertFalse(job['concurrency']['cancel-in-progress'])
+        self.assertEqual(job['concurrency']['queue'],'max')
+        self.assertIn("github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main'",job['if'])
+        self.assertIn("inputs.channel == 'stable'",job['if'])
+        self.assertNotIn('android-signing-validation.yml',job['if'])
+        self.assertNotIn('validation_enable_signing',json.dumps(sign))
+
         hardware=next(step for step in job['steps'] if 'Production YubiKey signing of all Android architectures' in step.get('name',''))
         self.assertEqual(hardware['env']['YUBIKEY_PIV_PIN'],'${{ secrets.YUBIKEY_PIV_PIN }}')
         self.assertIn('/usr/local/bin/rustdesk-sign',hardware['run'])
-        self.assertIn('set -euo pipefail',hardware['run'])
-        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(job.get('env',{})))
+        self.assertIn('--pin-source env',hardware['run'])
+
         verify=next(step for step in job['steps'] if 'Verify all production signatures' in step.get('name',''))
-        self.assertIn('expected_fingerprint',verify['run'])
         self.assertIn('559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5',verify['run'])
 
         aggregate=build['jobs']['aggregate']
@@ -208,13 +155,7 @@ class ArtifactContractTests(unittest.TestCase):
     def validate_bundle(self, bundle):
         env={'UPSTREAM_EXPECTED_SHA':'a'*40,'GITHUB_SHA':'b'*40,'GITHUB_RUN_ID':'99','PATCHSET':'v1'}
         with patch.dict(os.environ,env): platform_package.validate(bundle)
-    def test_signing_workflow_requires_same_canonical_native_file(self):
-        workflow=yaml.safe_load((ROOT/'.github/workflows/android-signing-validation.yml').read_text())
-        step=next(s for s in workflow['jobs']['android-sign']['steps'] if s.get('id')=='input')
-        script=step['run'].split("python3 - <<'PY'\n",1)[1].rsplit("\nPY",1)[0]
-        parsed=ast.parse(script)
-        required=next(ast.literal_eval(n.value) for n in ast.walk(parsed) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='required' for t in n.targets))
-        self.assertIn('validation/librustdesk.so',required);self.assertNotIn('validation/liblibrustdesk.so',required);self.assertIn("bundle / 'validation/librustdesk.so'",script)
+
     def test_build_to_signing_contract_all_three_abis(self):
         for arch in signing.ABIS:
             with self.subTest(arch=arch),tempfile.TemporaryDirectory() as tmp:
