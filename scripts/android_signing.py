@@ -142,6 +142,135 @@ def stage(folder, destination):
     key.touch(mode=0o600)
     key.chmod(0o600)
 
+def validate_yubikey_input(folder, arch):
+    folder = Path(folder)
+    if folder.is_symlink():
+        raise ValueError('SIGNING: artifact root is a symlink')
+    folder = folder.resolve()
+    if any(path.is_symlink() for path in folder.rglob('*')):
+        raise ValueError('SIGNING: symlink in downloaded artifact')
+    info = validate(folder)
+    expected_arches = ABIS
+    if arch not in expected_arches:
+        raise ValueError('SIGNING: unsupported Android architecture')
+    if (info.get('platform'), info.get('variant'), info.get('architecture')) != ('android', 'standard', arch):
+        raise ValueError('SIGNING: unexpected Android build target')
+    if info.get('package_type') != 'debug-signed-apk' or info.get('signed_status') != 'TEST SIGNED / NOT PRODUCTION SIGNED':
+        raise ValueError('SIGNING: expected the original test-signed Android input')
+    expected = {
+        'channel': os.environ.get('SIGNING_CHANNEL', 'stable'),
+        'custom_repository': os.environ['GITHUB_REPOSITORY'],
+        'custom_repository_sha': os.environ['GITHUB_SHA'],
+        'upstream_sha': os.environ['UPSTREAM_EXPECTED_SHA'],
+        'upstream_version': os.environ['UPSTREAM_VERSION'],
+        'patchset': os.environ['PATCHSET'],
+        'build_run': os.environ['GITHUB_RUN_ID'],
+        'workflow_run': os.environ['GITHUB_RUN_ID'],
+    }
+    for key, value in expected.items():
+        if str(info.get(key)) != str(value):
+            raise ValueError('SIGNING: build artifact provenance mismatch: ' + key)
+    manifest = json.loads((folder / 'source-manifest.json').read_text())
+    for key in ('upstream_sha', 'upstream_version', 'patchset', 'custom_repository_sha', 'variant'):
+        if manifest.get(key) != info.get(key):
+            raise ValueError('SIGNING: prepared source provenance mismatch: ' + key)
+    if sha(folder / 'source-manifest.json') != info.get('prepared_source_identity'):
+        raise ValueError('SIGNING: prepared source identity checksum mismatch')
+    if str(manifest.get('prepare_workflow_run')) != str(info.get('prepare_run')) or str(info.get('prepare_run')) != str(info.get('build_run')):
+        raise ValueError('SIGNING: build and prepare run mismatch')
+    packages = list((folder / 'packages').glob('*.apk'))
+    if len(packages) != 1 or packages[0].is_symlink() or not packages[0].resolve().is_relative_to(folder):
+        raise ValueError('SIGNING: expected exactly one safe input APK')
+    apk = packages[0].resolve()
+    verify = subprocess.run([tool('apksigner'), 'verify', '--verbose', str(apk)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if verify.returncode:
+        raise ValueError('SIGNING: input APK signature verification failed')
+    badging = subprocess.run([tool('aapt'), 'dump', 'badging', str(apk)],
+                             check=True, capture_output=True, text=True).stdout
+    match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", badging, re.M)
+    if not match or match.group(1) != yubikey_expected()['package_name']:
+        raise ValueError('SIGNING: unexpected Android package identity')
+    with zipfile.ZipFile(apk) as archive:
+        native = 'lib/' + expected_arches[arch] + '/librustdesk.so'
+        validation = folder / 'validation' / 'librustdesk.so'
+        if native not in archive.namelist() or archive.read(native) != validation.read_bytes():
+            raise ValueError('SIGNING: APK ABI does not match validated build output')
+    digest = sha(apk)
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('bundle=' + str(folder) + '\n')
+            output.write('apk=' + str(apk) + '\n')
+            output.write('unsigned_apk_sha256=' + digest + '\n')
+    print('Same-run artifact, source, package, ABI and checksum gates: PASS')
+    return folder, apk, digest
+
+def finalize_yubikey(folder, signed, output, arch):
+    folder = Path(folder).resolve()
+    signed = Path(signed)
+    output = Path(output)
+    if signed.is_symlink() or output.is_symlink():
+        raise ValueError('SIGNING: symlink in signing path')
+    signed = signed.resolve()
+    output = output.resolve()
+    info = validate(folder)
+    reference = yubikey_expected()
+    if (info.get('platform'), info.get('variant'), info.get('architecture')) != ('android', 'standard', arch):
+        raise ValueError('SIGNING: unexpected Android build target')
+    if signed.is_symlink() or not signed.is_file():
+        raise ValueError('SIGNING: signed APK missing or unsafe')
+    packages = list((folder / 'packages').glob('*.apk'))
+    if len(packages) != 1 or packages[0].is_symlink():
+        raise ValueError('SIGNING: invalid unsigned APK inventory')
+    original = public_identity(packages[0])
+    actual = public_identity(signed)
+    identity_gate(actual, reference, arch)
+    for key in ('package_name', 'version_code', 'version_name', 'abis'):
+        if actual[key] != original[key]:
+            raise ValueError('SIGNING: APK identity changed during signing: ' + key)
+    if not any(scheme in (2, 3) for scheme in actual['signing_schemes']):
+        raise ValueError('SIGNING: APK lacks a verified v2 or v3 signature')
+    with zipfile.ZipFile(signed) as archive:
+        native = 'lib/' + ABIS[arch] + '/librustdesk.so'
+        validation = folder / 'validation' / 'librustdesk.so'
+        if native not in archive.namelist() or archive.read(native) != validation.read_bytes():
+            raise ValueError('SIGNING: signed APK ABI differs from validated build output')
+    if output.exists() or signed == output or output.is_relative_to(folder):
+        raise ValueError('SIGNING: unsafe or pre-existing output path')
+    unsigned_digest = sha(packages[0])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(folder, output)
+    shutil.rmtree(output / 'packages')
+    (output / 'packages').mkdir()
+    shutil.copy2(signed, output / 'packages' / ('standard-android-' + arch + '-signed.apk'))
+    receipt = dict(actual,
+        expected_certificate_sha256=reference['certificate_sha256'],
+        certificate_match='PASS',
+        signing_method='yubikey-piv-9c-pkcs11',
+        piv_slot=reference['piv_slot'],
+        pkcs11_id=reference['pkcs11_id'],
+        key_algorithm=reference['key_algorithm'],
+        curve=reference['curve'],
+        unsigned_apk_sha256=unsigned_digest,
+        workflow_run=os.environ['GITHUB_RUN_ID'],
+        custom_repository_sha=os.environ['GITHUB_SHA'],
+        legacy_android_signing_identity='NOT RECOVERED / NOT VALIDATED')
+    (output / 'android-signing-verification.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    info.update(signed=True, signing_identity_verified=True,
+        certificate_sha256=actual['certificate_sha256'],
+        package_name=actual['package_name'], version_code=actual['version_code'],
+        version_name=actual['version_name'], signing_schemes=actual['signing_schemes'],
+        signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',
+        package_type='production-signed-apk', signing_method='yubikey-piv-9c-pkcs11',
+        signing_run=os.environ['GITHUB_RUN_ID'],
+        legacy_android_signing_identity='NOT RECOVERED / NOT VALIDATED')
+    (output / 'build-info.json').write_text(json.dumps(info, indent=2) + '\n')
+    checksums(output)
+    leakage_scan(output)
+    validate(output)
+    print('Signer certificate SHA-256: ' + actual['certificate_sha256'])
+    print('APK signature, fingerprint, package, ABI and provenance gates: PASS')
+
 def finalize(folder, signed, output):
     info = validate(folder)
     reference = expected()
@@ -219,6 +348,8 @@ def verify_yubikey_signed(folder, info):
         raise ValueError('SIGNING: invalid production APK inventory')
     actual = public_identity(packages[0])
     identity_gate(actual, reference, info['architecture'])
+    if not any(scheme in (2, 3) for scheme in actual['signing_schemes']):
+        raise ValueError('SIGNING: APK lacks a verified v2 or v3 signature')
     for key in ('certificate_sha256', 'package_name', 'version_code', 'version_name', 'signing_schemes'):
         if info.get(key) != actual[key]:
             raise ValueError('SIGNING: APK/build-info mismatch: ' + key)
@@ -246,6 +377,8 @@ def main():
     a = s.add_parser('inspect'); a.add_argument('apk', type=Path)
     a = s.add_parser('stage'); a.add_argument('folder', type=Path); a.add_argument('destination', type=Path)
     a = s.add_parser('finalize'); a.add_argument('folder', type=Path); a.add_argument('signed', type=Path); a.add_argument('output', type=Path)
+    a = s.add_parser('validate-yubikey-input'); a.add_argument('folder', type=Path); a.add_argument('--arch', required=True)
+    a = s.add_parser('finalize-yubikey'); a.add_argument('folder', type=Path); a.add_argument('signed', type=Path); a.add_argument('output', type=Path); a.add_argument('--arch', required=True)
     a = s.add_parser('scan'); a.add_argument('folder', type=Path); a.add_argument('--secrets', action='store_true')
     args = p.parse_args()
     if args.mode == 'preflight': preflight()
@@ -253,6 +386,8 @@ def main():
     elif args.mode == 'inspect': print(json.dumps(public_identity(args.apk), indent=2))
     elif args.mode == 'stage': stage(args.folder, args.destination)
     elif args.mode == 'finalize': finalize(args.folder, args.signed, args.output)
+    elif args.mode == 'validate-yubikey-input': validate_yubikey_input(args.folder, args.arch)
+    elif args.mode == 'finalize-yubikey': finalize_yubikey(args.folder, args.signed, args.output, args.arch)
     else: leakage_scan(args.folder, args.secrets)
 
 if __name__ == '__main__':

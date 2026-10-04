@@ -35,6 +35,9 @@ name: Reusable Cross-Platform Build Core
       production_android_signing:
         type: boolean
         default: false
+      direct_android_signing:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -271,7 +274,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
     needs: platforms
-    if: inputs.production_android_signing
+    if: inputs.production_android_signing && inputs.direct_android_signing != true
     strategy:
       fail-fast: false
       matrix:
@@ -323,7 +326,7 @@ jobs:
     - validate
     - platforms
     - android-sign
-    if: always() && needs.plan.result == 'success'
+    if: always() && needs.plan.result == 'success' && inputs.direct_android_signing != true
     runs-on: ubuntu-22.04
     env:
       PATCHSET: ${{ inputs.patchset }}
