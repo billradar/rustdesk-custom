@@ -40,7 +40,7 @@ jobs:
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       revision: ${{ steps.resolve.outputs.revision }}
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
     - id: resolve
@@ -68,7 +68,7 @@ jobs:
       build_needed: ${{ steps.gate.outputs.build_needed }}
       draft_needed: ${{ steps.gate.outputs.draft_needed }}
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -149,7 +149,7 @@ jobs:
       EXPERIMENTAL: 'false'
       REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
     - run: python3 -m pip install -r requirements-build.txt
@@ -196,7 +196,7 @@ jobs:
       UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
