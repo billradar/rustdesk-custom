@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Explicit targets and cross-platform fan-in; support requires reviewed Actions evidence."""
-import argparse, hashlib, json, os, re, shutil, zipfile
+import argparse, hashlib, json, os, re, shutil, time, zipfile
 from pathlib import Path
 from patchsets import patch_hash
 ROOT=Path(__file__).resolve().parents[1]
@@ -143,8 +143,16 @@ def draft(root):
         'Embedded client configuration/password can be extracted by client owners.','Release policy: DRAFT ONLY; publication is a manual user decision.'])+'\n'
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
-    uploaded=api(f'repos/{repo}/releases/{result["id"]}/assets')
-    if {a['name']:a['size'] for a in uploaded if a['state']=='uploaded'}!={p.name:p.stat().st_size for p in directory.iterdir()}:raise ValueError('Incomplete draft upload; remains unpublished')
+    expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
+    uploaded={}
+    for attempt in range(12):
+        assets=api(f'repos/{repo}/releases/{result["id"]}/assets') or []
+        uploaded={a['name']:a['size'] for a in assets if a.get('state')=='uploaded'}
+        if uploaded==expected_assets:
+            break
+        if attempt<11:time.sleep(5)
+    if uploaded!=expected_assets:
+        raise ValueError('Incomplete draft upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
     final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':True,'body':notes+'Automation-State: complete\n'})
     if not final['draft']:raise ValueError('Draft protection failed')
 
