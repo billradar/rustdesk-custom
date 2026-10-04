@@ -74,7 +74,7 @@ jobs:
       run: |
         android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
         android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
-        non_android_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android")]}' .work/target-plan.json)
+        non_android_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
         non_android_count=$(jq '[.selected[] | select(.platform != "android")] | length' .work/target-plan.json)
         echo "android_matrix=$android_matrix" >> "$GITHUB_OUTPUT"
         echo "android_count=$android_count" >> "$GITHUB_OUTPUT"
@@ -86,6 +86,7 @@ jobs:
         path: .work/target-plan.json
         if-no-files-found: error
   build:
+    name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
