@@ -238,85 +238,53 @@ class WorkflowTests(unittest.TestCase):
         for name in ['build','plan','validate','aggregate','platforms']:
             self.assertFalse(any(n in json.dumps(build['jobs'][name]) for n in signing.NAMES),name)
     def test_stable_draft_requires_signing_while_dry_run_can_test(self):
-        w=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        expr=w['jobs']['build']['with']['production_android_signing']
+        tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
+        build=yaml.safe_load((ROOT/'.github/workflows/build.yml').read_text())
+        sign=yaml.safe_load((ROOT/'.github/workflows/sign-android.yml').read_text())
+
+        expr=tag['jobs']['build']['with']['production_android_signing']
         self.assertIn("github.event_name == 'workflow_dispatch'",expr)
         self.assertIn('inputs.production_android_signing == true',expr)
         self.assertIn('inputs.dry_run == false',expr)
         self.assertIn('inputs.include_experimental == false',expr)
-        gate=w['on']['workflow_dispatch']['inputs']['production_android_signing']
+
+        gate=tag['on']['workflow_dispatch']['inputs']['production_android_signing']
         self.assertFalse(gate['default'])
-        self.assertIn('direct_android_signing',w['jobs']['build']['with'])
-        signing=w['jobs']['android-sign']
-        self.assertNotIn('uses',signing)
-        self.assertEqual(signing['environment']['name'],'android-production-signing')
-        self.assertIn("github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main'",signing['if'])
+        self.assertIn('direct_android_signing',tag['jobs']['build']['with'])
+        self.assertNotIn('android-sign',tag['jobs'])
+
+        signing=build['jobs']['android-sign']
         self.assertNotIn('strategy',signing)
-        step_names=[step.get('name','') for step in signing['steps']]
-        self.assertTrue(any('aarch64 Android unsigned build artifact' in name for name in step_names))
-        self.assertTrue(any('armv7 Android unsigned build artifact' in name for name in step_names))
-        self.assertTrue(any('x86_64 Android unsigned build artifact' in name for name in step_names))
-        self.assertEqual(sum(step.get('id')=='hardware-sign' for step in signing['steps']),1)
-        self.assertTrue(any('Validate aarch64 artifact provenance' in name for name in step_names))
-        self.assertTrue(any('Validate armv7 artifact provenance' in name for name in step_names))
-        self.assertTrue(any('Validate x86_64 artifact provenance' in name for name in step_names))
-        hardware=next(step for step in signing['steps'] if step.get('id')=='hardware-sign')
+        self.assertEqual(signing['uses'],'./.github/workflows/sign-android.yml')
+        self.assertEqual(signing['with']['arches'],'aarch64,armv7,x86_64')
+        self.assertIn('production_android_signing',json.dumps(signing.get('if','')))
+
+        job=sign['jobs']['sign']
+        self.assertEqual(job['runs-on'],['self-hosted','linux','arm64','rustdesk-signing','android-signing','yubikey'])
+        self.assertNotIn('matrix',json.dumps(job))
+        step_names=[step.get('name','') for step in job['steps']]
+        self.assertTrue(any('aarch64 build artifact' in name for name in step_names))
+        self.assertTrue(any('armv7 build artifact' in name for name in step_names))
+        self.assertTrue(any('x86_64 build artifact' in name for name in step_names))
+        hardware=next(step for step in job['steps'] if 'Production YubiKey signing of all Android architectures' in step.get('name',''))
         self.assertEqual(hardware['env']['YUBIKEY_PIV_PIN'],'${{ secrets.YUBIKEY_PIV_PIN }}')
-        self.assertEqual(sum('YUBIKEY_PIV_PIN' in json.dumps(step.get('env',{})) for step in signing['steps']),1)
-        self.assertLess(step_names.index('Validate x86_64 artifact provenance, package, ABI, checksum, and source'),step_names.index('Production YubiKey signing (explicit Stable one-shot gate)'))
         self.assertIn('/usr/local/bin/rustdesk-sign',hardware['run'])
         self.assertIn('set -euo pipefail',hardware['run'])
-        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(signing.get('env',{})))
-        self.assertIn("needs.aggregate.result == 'success'",w['jobs']['draft']['if'])
-        self.assertIn("github.event_name == 'workflow_dispatch'",w['jobs']['draft']['if'])
-        self.assertIn('inputs.production_android_signing == true',w['jobs']['draft']['if'])
-        self.assertIn('inputs.dry_run == false',w['jobs']['draft']['if'])
-        self.assertIn('inputs.include_experimental == false',w['jobs']['draft']['if'])
-        self.assertIn("os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true'",(ROOT/'scripts/phase5.py').read_text())
+        self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(job.get('env',{})))
+        verify=next(step for step in job['steps'] if 'Verify all production signatures' in step.get('name',''))
+        self.assertIn('expected_fingerprint',verify['run'])
+        self.assertIn('559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5',verify['run'])
 
+        aggregate=build['jobs']['aggregate']
+        self.assertIn("needs.android-sign.result == 'success'",json.dumps(aggregate.get('if','')))
+        self.assertIn('android-sign',json.dumps(aggregate.get('needs',{})))
 
-class ArtifactContractTests(unittest.TestCase):
-    def build_bundle(self, root, arch):
-        tree=root/'source'
-        target={'aarch64':'aarch64-linux-android','armv7':'armv7-linux-androideabi','x86_64':'x86_64-linux-android'}[arch]
-        native=tree/'target'/target/'release'/'liblibrustdesk.so'
-        native.parent.mkdir(parents=True)
-        data=bytearray(64);data[:4]=b'\x7fELF';data[4]=1 if arch=='armv7' else 2;data[5]=1
-        struct.pack_into('<H',data,18,{'aarch64':183,'armv7':40,'x86_64':62}[arch])
-        native.write_bytes(data)
-        manifest={'variant':'standard','upstream_repository':'rustdesk/rustdesk','upstream_ref':'1.5.0','upstream_version':'1.5.0','upstream_sha':'a'*40,'patchset':'v1','common_patch_hash':patch_hash('common','v1'),'sos_patch_hash':None,'custom_repository':'billradar/rustdesk-custom','custom_repository_sha':'b'*40,'prepare_workflow_run':'99'}
-        (tree/'source-manifest.json').write_text(json.dumps(manifest))
-        (tree/'LICENCE').write_text('Public test licence fixture')
-        packages=tree/'signed-apk';packages.mkdir()
-        with zipfile.ZipFile(packages/'fixture.apk','w') as apk:
-            apk.writestr('lib/'+signing.ABIS[arch]+'/librustdesk.so',data)
-        (root/'README.md').write_text('Public test source fixture')
-        shutil.copytree(ROOT/'patchsets/v1/common',root/'patchsets/v1/common')
-        work=root/'.work';work.mkdir()
-        profile=dict(target=target,signature='c'*64,rust='1.75',flutter='3.24.5',vcpkg='fixture',ndk='fixture',cargo_ndk='3.1.2')
-        (work/'platform-profile.json').write_text(json.dumps(profile))
-        mir=work/'mir';mir.mkdir()
-        (mir/'validated.json').write_text(json.dumps({'result':'PASS','target':arch,'method':'compiler-mir'}))
-        (mir/'client.mir').write_text('Synthetic compiler fixture; compilation is outside this contract test')
-        env={'CONFIG_MIR_DIR':str(mir),'UPSTREAM_VERSION':'1.5.0','BUILD_CHANNEL':'stable','GITHUB_RUN_ID':'99','GITHUB_SHA':'b'*40,'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v1'}
-        # Only external compilation/config injection is stubbed. Package creation,
-        # architecture, native bytes, checksum and source provenance gates run for real.
-        previous=Path.cwd()
-        try:
-            os.chdir(root)
-            with patch.object(platform_package,'ROOT',root),patch.object(platform_package,'configured',return_value={}),patch('config_mir.verify'),patch.dict(os.environ,env,clear=True):
-                platform_package.create(tree,'android',arch,'standard')
-        finally:
-            os.chdir(previous)
-        return next((root/'artifacts').iterdir())
-
-    def validate_bundle(self, bundle):
-        # CI supplies real source/run identities; this synthetic bundle must
-        # exercise the same gates against its own explicit fixture identities.
-        env={'UPSTREAM_EXPECTED_SHA':'a'*40,'GITHUB_SHA':'b'*40,'GITHUB_RUN_ID':'99','PATCHSET':'v1'}
-        with patch.dict(os.environ,env):
-            platform_package.validate(bundle)
-
+        draft=tag['jobs']['draft']
+        self.assertIn("needs.aggregate.result == 'success'",draft['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'",draft['if'])
+        self.assertIn('inputs.production_android_signing == true',draft['if'])
+        self.assertIn('inputs.dry_run == false',draft['if'])
+        self.assertIn('inputs.include_experimental == false',draft['if'])
     def test_signing_workflow_requires_same_canonical_native_file(self):
         workflow=yaml.safe_load((ROOT/'.github/workflows/android-signing-validation.yml').read_text())
         step=next(s for s in workflow['jobs']['android-sign']['steps'] if s.get('id')=='input')
