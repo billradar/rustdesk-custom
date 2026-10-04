@@ -30,7 +30,8 @@ permissions:
   actions: read
 concurrency:
   group: phase4-stable-${{ github.ref }}
-  cancel-in-progress: false
+  # Ordinary CI may be superseded; production Android signing must finish because it owns the physical YubiKey signing session.
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || inputs.production_android_signing != true || inputs.dry_run != false || inputs.include_experimental != false }}
 jobs:
   resolve:
     runs-on: ubuntu-22.04
