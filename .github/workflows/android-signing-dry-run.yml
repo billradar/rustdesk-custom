@@ -6,7 +6,8 @@ permissions:
   actions: read
 concurrency:
   group: android-signing-dry-run
-  cancel-in-progress: false
+  cancel-in-progress: true
+
 jobs:
   build-mock-artifact:
     if: >-

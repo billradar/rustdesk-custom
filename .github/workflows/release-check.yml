@@ -3,7 +3,8 @@ permissions:
   contents: read
 concurrency:
   group: production-stable-release
-  cancel-in-progress: false
+  cancel-in-progress: true
+
 jobs:
   discover:
     runs-on: ubuntu-22.04

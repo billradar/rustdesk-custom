@@ -25,7 +25,8 @@ permissions:
   actions: read
 concurrency:
   group: phase4-ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
+
 jobs:
   resolve:
     runs-on: ubuntu-22.04

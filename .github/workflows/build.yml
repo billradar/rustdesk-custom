@@ -56,8 +56,8 @@ jobs:
       count: ${{ steps.plan.outputs.count }}
       android_matrix: ${{ steps.split.outputs.android_matrix }}
       android_count: ${{ steps.split.outputs.android_count }}
-      non_android_matrix: ${{ steps.split.outputs.non_android_matrix }}
-      non_android_count: ${{ steps.split.outputs.non_android_count }}
+      other_platform_matrix: ${{ steps.split.outputs.other_platform_matrix }}
+      other_platform_count: ${{ steps.split.outputs.other_platform_count }}
     steps:
     - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       with:
@@ -70,22 +70,23 @@ jobs:
 
         python3 scripts/phase5.py plan --channel "$CHANNEL" "${args[@]}"'
     - id: split
-      name: Split Android and non-Android target matrices
+      name: Split Android and other platform target matrices
       run: |
         android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
         android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
-        non_android_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android")]}' .work/target-plan.json)
-        non_android_count=$(jq '[.selected[] | select(.platform != "android")] | length' .work/target-plan.json)
+        other_platform_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
+        other_platform_count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
         echo "android_matrix=$android_matrix" >> "$GITHUB_OUTPUT"
         echo "android_count=$android_count" >> "$GITHUB_OUTPUT"
-        echo "non_android_matrix=$non_android_matrix" >> "$GITHUB_OUTPUT"
-        echo "non_android_count=$non_android_count" >> "$GITHUB_OUTPUT"
+        echo "other_platform_matrix=$other_platform_matrix" >> "$GITHUB_OUTPUT"
+        echo "other_platform_count=$other_platform_count" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: target-plan-${{ github.run_id }}
         path: .work/target-plan.json
         if-no-files-found: error
   build:
+    name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
@@ -267,10 +268,10 @@ jobs:
         PY
   platforms:
     needs: [plan, android-signing-preflight]
-    if: needs.plan.outputs.non_android_count != '0'
+    if: needs.plan.outputs.other_platform_count != '0'
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.non_android_matrix) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
     uses: ./.github/workflows/build-platform.yml
     with:
       platform: ${{ matrix.platform }}
