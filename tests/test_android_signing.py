@@ -109,7 +109,7 @@ class WorkflowTests(unittest.TestCase):
         hardware=next(step for step in job['steps'] if 'Production YubiKey signing of all Android architectures' in step.get('name',''))
         self.assertEqual(hardware['env']['YUBIKEY_PIV_PIN'],'${{ secrets.YUBIKEY_PIV_PIN }}')
         self.assertIn('/usr/local/bin/rustdesk-sign',hardware['run'])
-        self.assertIn('--pin-source env',hardware['run'])
+        self.assertIn('"--pin-source", "env"',hardware['run'])
 
         verify=next(step for step in job['steps'] if 'Verify all production signatures' in step.get('name',''))
         self.assertIn('559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5',verify['run'])
