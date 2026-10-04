@@ -28,7 +28,7 @@ class MatrixTests(unittest.TestCase):
         w=yaml.safe_load((ROOT/'.github/workflows/build.yml').read_text());j=w['jobs']
         self.assertEqual(j['build']['needs'],'plan');self.assertEqual(j['platforms']['needs'],['plan','android-signing-preflight'])
         self.assertFalse(j['build']['strategy']['fail-fast']);self.assertFalse(j['platforms']['strategy']['fail-fast'])
-        self.assertEqual(set(j['aggregate']['needs']),{'plan','build','platforms','validate','android-sign'})
+        self.assertEqual(set(j['aggregate']['needs']),{'plan','build','platforms','android-platforms','android-sign','validate'})
         self.assertNotIn('concurrency',j['platforms']);self.assertNotIn('continue-on-error',j['platforms'])
         t=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         self.assertIn('inputs.include_experimental == false',t['jobs']['draft']['if'])
