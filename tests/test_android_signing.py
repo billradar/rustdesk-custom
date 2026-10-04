@@ -298,6 +298,7 @@ class ArtifactContractTests(unittest.TestCase):
         (tree/'source-manifest.json').write_text(json.dumps(manifest));(tree/'LICENCE').write_text('Public test licence fixture')
         packages=tree/'signed-apk';packages.mkdir()
         with zipfile.ZipFile(packages/'fixture.apk','w') as apk: apk.writestr('lib/'+signing.ABIS[arch]+'/librustdesk.so',data)
+        native.write_bytes(data)
         (root/'README.md').write_text('Public test source fixture')
         shutil.copytree(ROOT/'patchsets/v1/common',root/'patchsets/v1/common')
         work=root/'.work';work.mkdir()
