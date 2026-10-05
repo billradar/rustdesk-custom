@@ -126,7 +126,8 @@ jobs:
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
-      production_android_signing: ${{ github.event_name == 'workflow_dispatch' && inputs.production_android_signing == true && inputs.dry_run == false && inputs.include_experimental == false }}
+      production_android_signing: false
+      android_only: false
       direct_android_signing: false
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
