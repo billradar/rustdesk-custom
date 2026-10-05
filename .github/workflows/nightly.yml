@@ -16,6 +16,13 @@ name: Nightly - Development artifacts
         type: boolean
         default: true
         description: Include experimental Linux/macOS/Android targets; never promote automatically
+      release_mode:
+        type: choice
+        description: Nightly publication mode; release is forbidden
+        options:
+          - build
+          - draft
+        default: build
 permissions:
   contents: read
   actions: read
@@ -91,3 +98,79 @@ jobs:
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+
+  aggregate:
+    name: Aggregate Nightly artifacts
+    needs: [resolve, compatibility, prepare, build]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release_mode == 'draft' &&
+      needs.build.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      BUILD_CONFIGURATION: NIGHTLY
+      CHANNEL: nightly
+      EXPERIMENTAL: 'true'
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'false'
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements-build.txt
+    - name: Package inspectors
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-nightly-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        path: .work/collected
+        merge-multiple: false
+    - name: Fail-closed expected target and cross-platform provenance gate
+      run: python3 scripts/phase5.py aggregate --channel nightly --experimental
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: nightly-aggregate-${{ github.run_id }}
+        path: .work/phase5-aggregate/
+        if-no-files-found: warn
+
+  draft:
+    name: Create Nightly Draft Release
+    needs: [resolve, compatibility, prepare, build, aggregate]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release_mode == 'draft' &&
+      needs.build.result == 'success' &&
+      needs.aggregate.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
+      BUILD_CONFIGURATION: NIGHTLY
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements-build.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47d13c3
+      with:
+        pattern: rustdesk-nightly-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        path: .work/collected
+        merge-multiple: false
+    - name: Package inspectors
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Create Nightly Draft Release
+      run: python3 scripts/phase5.py draft --channel nightly --root .work/collected
