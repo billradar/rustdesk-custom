@@ -92,7 +92,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      production_android_signing: true
       include_experimental: ${{ github.event_name == 'schedule' || inputs.include_experimental }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
