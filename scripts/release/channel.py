@@ -79,7 +79,7 @@ def resolve(channel,ref='',force=False,discovery_only=False):
         repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
         chosen=ref or branch
         data={'upstream_sha':resolve_ref(chosen),'upstream_branch':chosen,'upstream_ref':chosen,
-              'upstream_tag':'','build_needed':True,'draft_needed':False,'revision':(ROOT/'patch-revision.txt').read_text().strip()}
+              'upstream_tag':'','build_needed':True,'draft_needed':False,'revision':json.loads(RELEASE_IDENTITY.read_text())['revision']}
     data['channel']=channel;outputs(data)
 
 def validate_prepared(infos,folders):
