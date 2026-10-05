@@ -87,6 +87,8 @@ jobs:
         python3 - <<'PY'
         import json, os
         from pathlib import Path
+        import sys
+        sys.path.insert(0, 'scripts')
         from patchsets import patch_hash
         patchset=os.environ['PATCHSET']
         record={
