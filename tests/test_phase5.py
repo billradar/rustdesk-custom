@@ -82,11 +82,13 @@ class MatrixTests(unittest.TestCase):
         self.assertIn("def release(root, channel='stable'): _release(root, True, channel)",(ROOT/'scripts/phase5.py').read_text())
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['schedule'],[{'cron':'0 16 * * *'}])
-        nightly_resolve=str(n['jobs']['resolve'])
-        self.assertIn("TEST_BRANCH: ${{ vars.UPSTREAM_TEST_BRANCH || 'test' }}",nightly_resolve)
-        self.assertIn('GITHUB_EVENT_NAME',nightly_resolve)
-        self.assertIn('REQUESTED_REF=\"$TEST_BRANCH\"',nightly_resolve)
-        self.assertIn('REQUESTED_REF=\"${{ inputs.upstream_ref }}\"',nightly_resolve)
+        nightly_resolve=n['jobs']['resolve']
+        nightly_env=nightly_resolve['steps'][1]['env']
+        nightly_run=nightly_resolve['steps'][1]['run']
+        self.assertEqual(nightly_env['TEST_BRANCH'], "${" + "{ vars.UPSTREAM_TEST_BRANCH || 'test' }}")
+        self.assertIn('GITHUB_EVENT_NAME',nightly_run)
+        self.assertIn('REQUESTED_REF=\"$TEST_BRANCH\"',nightly_run)
+        self.assertIn('REQUESTED_REF=\"${' + '{ inputs.upstream_ref }}\"',nightly_run)
         self.assertIn('draft', n['jobs'])
         router=yaml.safe_load((ROOT/'.github/workflows/upstream-event-router.yml').read_text())
         self.assertIn('schedule', router['on'])
