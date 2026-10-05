@@ -68,7 +68,7 @@ def release_preflight(data,force=False):
 def resolve(channel,ref='',force=False,discovery_only=False):
     if channel=='stable':
         data=choose_stable(ref)
-        revision=json.loads(RELEASE_IDENTITY.read_text())['revision']
+        revision=str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
         if not re.fullmatch('[1-9][0-9]{0,5}',revision):raise ValueError('Invalid revision')
         data['revision']=revision;data['release_tag']=f'v{data["version"]}-custom.{revision}'
         data['upstream_ref']=data['upstream_tag']
@@ -79,7 +79,7 @@ def resolve(channel,ref='',force=False,discovery_only=False):
         repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
         chosen=ref or branch
         data={'upstream_sha':resolve_ref(chosen),'upstream_branch':chosen,'upstream_ref':chosen,
-              'upstream_tag':'','build_needed':True,'draft_needed':False,'revision':json.loads(RELEASE_IDENTITY.read_text())['revision']}
+              'upstream_tag':'','build_needed':True,'draft_needed':False,'revision':str(json.loads(RELEASE_IDENTITY.read_text())['revision'])}
     data['channel']=channel;outputs(data)
 
 def validate_prepared(infos,folders):
