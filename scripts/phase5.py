@@ -89,7 +89,7 @@ def aggregate(root,channel,experimental):
         for file in sorted(folder.rglob('*')):
             if file.is_file():rows.append(hashlib.sha256(file.read_bytes()).hexdigest()+'  '+name+'/'+file.relative_to(folder).as_posix())
     (out/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
-    if required_pass and channel=='stable':
+    if required_pass and channel in ('stable','nightly'):
         assets=out/'assets';assets.mkdir(exist_ok=True)
         for name,e in expected.items():
             if not e['required']:continue
@@ -116,18 +116,23 @@ def aggregate(root,channel,experimental):
     if errors:raise ValueError('Aggregate required gate FAIL')
     return report
 
-def _release(root, publish):
+def _release(root, publish, channel='stable'):
+    if channel == 'nightly' and publish:
+        raise ValueError('Nightly release is forbidden; only draft publication is allowed')
+    if channel not in ('stable','nightly'):
+        raise ValueError('Unsupported release channel')
     from upstream import api
     from release import request,gh
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong release repository')
-    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true'
-    report=aggregate(root,'stable',False)
+    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel=='stable' else 'false'
+    report=aggregate(root,channel,channel=='nightly')
     if report['result']!='PASS':raise ValueError('No complete supported aggregate')
     infos=[json.loads(p.read_text()) for p in root.rglob('build-info.json')]
     standard=next(i for i in infos if i['variant']=='standard' and i['platform']=='windows-x86_64')
     sos=next(i for i in infos if i['variant']=='sos' and i['platform']=='windows-x86_64')
-    tag=f'v{standard["upstream_tag"].lstrip("v")}-custom.{standard["patch_revision"]}'
+    suffix='' if channel=='stable' else '-nightly'
+    tag=f'v{standard["upstream_tag"].lstrip("v")}-custom.{standard["patch_revision"]}{suffix}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
     if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
@@ -158,8 +163,8 @@ def _release(root, publish):
     final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\\n' if publish else 'Automation-State: complete\\n')})
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
-def draft(root): _release(root, False)
-def release(root): _release(root, True)
+def draft(root, channel='stable'): _release(root, False, channel)
+def release(root, channel='stable'): _release(root, True, channel)
 
 if __name__=='__main__':
     a=argparse.ArgumentParser();a.add_argument('mode',choices=['check','plan','aggregate','draft','release']);a.add_argument('--channel',default='nightly');a.add_argument('--experimental',action='store_true');a.add_argument('--root',type=Path,default=Path('.work/all-targets'));a=a.parse_args()
@@ -170,6 +175,6 @@ if __name__=='__main__':
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
-    elif a.mode=='draft':draft(a.root)
-    elif a.mode=='release':release(a.root)
+    elif a.mode=='draft':draft(a.root,a.channel)
+    elif a.mode=='release':release(a.root,a.channel)
     else:aggregate(a.root,a.channel,a.experimental)
