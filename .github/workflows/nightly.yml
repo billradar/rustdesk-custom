@@ -1,5 +1,7 @@
 name: Nightly - Development artifacts
 'on':
+  schedule:
+    - cron: '0 16 * * *'
   workflow_dispatch:
     inputs:
       upstream_ref:
