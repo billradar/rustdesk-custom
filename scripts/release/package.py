@@ -157,7 +157,7 @@ elif command == 'package':
         if file.is_file():
             entries.append(hashlib.sha256(file.read_bytes()).hexdigest() + '  ' + file.relative_to(folder).as_posix())
     (folder / 'SHA256SUMS').write_text('\n'.join(entries) + '\n')
-    subprocess.run([sys.executable, str(root / 'scripts/release.py'), 'validate', str(folder)], check=True)
+    subprocess.run([sys.executable, str(root / 'scripts/release/github.py'), 'validate', str(folder)], check=True)
     print(f'Test artifact ready: {folder.name}')
 else:
     raise SystemExit('Unknown command')

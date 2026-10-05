@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 def metadata(name):
     if not re.fullmatch(r'v[1-9][0-9]*', name):
@@ -49,8 +49,8 @@ def probe(source, sha, name, base):
             commands=[['git','clone','--quiet','--shared','--no-checkout',str(source),str(tree)],
                       ['git','-C',str(tree),'checkout','--quiet','--detach',sha],
                       ['git','-C',str(tree),'submodule','update','--init','--recursive'],
-                      ['bash',str(ROOT/'scripts/apply-patches.sh'),str(tree),variant],
-                      ['python3',str(ROOT/'scripts/verify-source.py'),str(tree),variant,'--automation','--static-only']]
+                      ['bash',str(ROOT/'scripts/source/apply-patches.sh'),str(tree),variant],
+                      ['python3',str(ROOT/'scripts/source/verify_source.py'),str(tree),variant,'--automation','--static-only']]
             for command in commands:
                 run=subprocess.run(command,env=env,text=True,capture_output=True)
                 if run.returncode:
@@ -72,7 +72,7 @@ def select(sha, source=None, report=None):
         tmp=Path(tmp)
         if source is None:
             source=tmp/'upstream'
-            subprocess.run(['bash',str(ROOT/'scripts/prepare.sh'),sha,str(source)],check=True,stdout=subprocess.DEVNULL)
+            subprocess.run(['bash',str(ROOT/'scripts/source/prepare.sh'),sha,str(source)],check=True,stdout=subprocess.DEVNULL)
         rows=[probe(Path(source).resolve(),sha,name,tmp/name) for name in names]
         selected=next((r['patchset'] for r in rows if r['status']=='PREFLIGHT_COMPATIBLE'),None)
         data={'upstream_sha':sha,'known_validated_mapping':bool(fixed),'patchsets':rows,'selected':selected,

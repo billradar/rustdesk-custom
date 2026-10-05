@@ -58,7 +58,7 @@ def validate(folder):
  if i['runtime_ui_validation']!='SKIPPED BY USER' or i['real_remote_session_validation']!='NOT TESTED':raise ValueError('Incorrect runtime status')
  if i['signed_status']=='PRODUCTION SIGNED / IDENTITY VERIFIED':
   if i['platform']!='android' or i['variant']!='standard':raise ValueError('Signing policy mismatch')
-  from legacy.android_signing import verify_signed
+  from scripts.signing.android_identity import verify_signed
   verify_signed(folder,i)
  elif i['signed_status'] not in ('NOT ENABLED','TEST SIGNED / NOT PRODUCTION SIGNED'):raise ValueError('Signing policy mismatch')
  for p in folder.rglob('*'):

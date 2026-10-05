@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 FILES = ['src/common.rs', 'src/flutter.rs', 'src/flutter_ffi.rs', 'libs/hbb_common/src/config.rs'] + [
     'flutter/lib/desktop/pages/' + f + '.dart' for f in
     ('connection_page', 'desktop_home_page', 'desktop_setting_page', 'desktop_tab_page')]
@@ -86,7 +86,7 @@ def contracts(tree, variant, patchset=None):
             'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
 
 def build_system(tree):
-    baseline = json.loads((ROOT / 'scripts/build-baseline.json').read_text())
+    baseline = json.loads((ROOT / 'metadata/baselines/build.json').read_text())
     changed = []
     for file, digest in baseline.items():
         path = tree / file
@@ -146,7 +146,7 @@ def main():
             if args.mode == 'prepare':
                 if not re.fullmatch('[0-9a-f]{40}', args.sha):
                     raise RuntimeError('Preflight requires frozen 40-character SHA')
-                run(['bash', str(ROOT / 'scripts/prepare.sh'), args.sha, str(tree)], log)
+                run(['bash', str(ROOT / 'scripts/source/prepare.sh'), args.sha, str(tree)], log)
                 if args.simulate_failure:
                     # A synthetic nonexistent target, piped to git; tracked patches stay unchanged.
                     bad = 'diff --git a/nonexistent-simulation b/nonexistent-simulation\n--- a/nonexistent-simulation\n+++ b/nonexistent-simulation\n@@ -1 +1 @@\n-old\n+new\n'
@@ -156,10 +156,10 @@ def main():
                         raise RuntimeError('Failure simulation unexpectedly applied')
                     status['Patch Apply'] = 'FAIL (SIMULATED)'
                     raise RuntimeError('Simulated patch conflict: nonexistent-simulation; expensive builds blocked')
-                run(['bash', str(ROOT / 'scripts/apply-patches.sh'), str(tree), variant], log)
+                run(['bash', str(ROOT / 'scripts/source/apply-patches.sh'), str(tree), variant], log)
                 status['Patch Apply'] = 'PASS'
                 status['hbb_common Patch'] = 'PASS'
-                run([sys.executable, str(ROOT / 'scripts/verify-source.py'), str(tree), variant, '--automation'], log)
+                run([sys.executable, str(ROOT / 'scripts/source/verify_source.py'), str(tree), variant, '--automation'], log)
                 status['Native helper mock compilation/assertions'] = 'PASS'
                 status.update(contracts(tree, variant))
                 changed = build_system(tree)
