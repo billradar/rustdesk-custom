@@ -126,7 +126,7 @@ def create(tree,platform,arch,variant):
   from scripts.validation.native_config_probe import verify as probe
   probe(library,check_api=True)
  if platform=='android':
-  from config_mir import verify as verify_mir
+  from scripts.build.config_mir import verify as verify_mir
   folder=Path(os.environ['CONFIG_MIR_DIR'])
   receipt=json.loads((folder/'validated.json').read_text())
   if receipt!={'result':'PASS','target':arch,'method':'compiler-mir'}:raise ValueError('PLATFORM_API: compiler receipt mismatch')
