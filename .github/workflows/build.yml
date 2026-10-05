@@ -38,6 +38,9 @@ name: Reusable Cross-Platform Build Core
       direct_android_signing:
         type: boolean
         default: false
+      android_only:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -86,6 +89,7 @@ jobs:
         path: .work/target-plan.json
         if-no-files-found: error
   build:
+    if: inputs.android_only != true
     name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
@@ -267,7 +271,7 @@ jobs:
         PY
   platforms:
     needs: [plan, android-signing-preflight]
-    if: needs.plan.outputs.other_platform_count != '0'
+    if: inputs.android_only != true && needs.plan.outputs.other_platform_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
@@ -310,6 +314,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
+    if: inputs.android_only != true
     needs: build
     runs-on: ubuntu-22.04
     permissions:
@@ -343,6 +348,7 @@ jobs:
           .work/production-release-assets/'
         if-no-files-found: error
   aggregate:
+    if: inputs.android_only != true
     needs:
     - plan
     - build
