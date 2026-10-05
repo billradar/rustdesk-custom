@@ -170,5 +170,6 @@ if __name__=='__main__':
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
-    elif a.mode=='draft':draft(a.root)\n    elif a.mode=='release':release(a.root)
+    elif a.mode=='draft':draft(a.root)
+    elif a.mode=='release':release(a.root)
     else:aggregate(a.root,a.channel,a.experimental)
