@@ -297,7 +297,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-platforms:
-    needs: [plan, android-signing-preflight]
+    needs: plan
     if: inputs.desktop_only != true && needs.plan.outputs.android_count != '0'
     strategy:
       fail-fast: false

@@ -21,9 +21,13 @@ class ParallelGateTests(unittest.TestCase):
     def test_clients_and_draft_remain_downstream_of_complete_compatibility(self):
         tag=self.workflow('tag.yml')['jobs']
         self.assertIn('compatibility',tag['prepare']['needs'])
-        self.assertIn('compatibility',tag['build']['needs'])
-        self.assertIn('prepare',tag['build']['needs'])
-        self.assertIn('build',tag['draft']['needs'])
+        self.assertIn('compatibility',tag['desktop-build']['needs'])
+        self.assertIn('prepare',tag['desktop-build']['needs'])
+        self.assertIn('compatibility',tag['android-build']['needs'])
+        self.assertIn('prepare',tag['android-build']['needs'])
+        self.assertIn('android-build',tag['android-sign']['needs'])
+        self.assertIn('desktop-build',tag['draft']['needs'])
+        self.assertIn('android-build',tag['draft']['needs'])
         core=self.workflow('build.yml')['jobs']
         self.assertEqual(core['validate']['needs'],'build')
         self.assertTrue(any(s.get('name')=='Verify shared helper provenance and digest' for s in core['build']['steps']))
