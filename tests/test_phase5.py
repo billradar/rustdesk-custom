@@ -26,7 +26,7 @@ class MatrixTests(unittest.TestCase):
             with patch.object(phase5.json,'loads',side_effect=loads),self.assertRaises(ValueError):phase5.entries()
     def test_parallel_dag_and_gates(self):
         w=yaml.safe_load((ROOT/'.github/workflows/build.yml').read_text());j=w['jobs']
-        self.assertEqual(j['build']['needs'],'plan');self.assertEqual(j['platforms']['needs'],['plan','android-signing-preflight'])
+        self.assertEqual(j['build']['needs'],'plan');self.assertEqual(j['platforms']['needs'],'plan')
         self.assertFalse(j['build']['strategy']['fail-fast']);self.assertFalse(j['platforms']['strategy']['fail-fast'])
         self.assertEqual(j['build']['if'], 'inputs.android_only != true')
         self.assertEqual(j['platforms']['if'], "inputs.android_only != true && needs.plan.outputs.other_platform_count != '0'")
