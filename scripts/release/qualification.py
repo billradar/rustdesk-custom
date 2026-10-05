@@ -227,7 +227,7 @@ if __name__=='__main__':
     elif a.mode=='release':release(a.root,a.channel)
     elif a.mode=='verify-ci':
         if not all((a.custom_sha,a.upstream_sha,a.upstream_ref)):
-            a.error('verify-ci requires --custom-sha, --upstream-sha and --upstream-ref')
+            raise SystemExit('verify-ci requires --custom-sha, --upstream-sha and --upstream-ref')
         record=verify_ci(a.repository,a.custom_sha,a.upstream_sha,a.upstream_ref)
         a.output.parent.mkdir(parents=True,exist_ok=True)
         a.output.write_text(json.dumps(record,indent=2)+'\\n')
