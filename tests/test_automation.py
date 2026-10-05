@@ -11,9 +11,8 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-import upstream
-import release
+import scripts.upstream.resolve as upstream
+import scripts.release.github as release
 
 class DiscoveryTests(unittest.TestCase):
     def test_official_release_metadata_controls_stability(self):

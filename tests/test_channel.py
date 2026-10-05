@@ -1,8 +1,9 @@
 import copy, contextlib, io, json, os, sys, tarfile, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-import build_adapter, prepared_source, channel
+import scripts.build.build_adapter as build_adapter
+import scripts.source.prepared_source as prepared_source
+import scripts.release.channel as channel
 ROOT=Path(__file__).resolve().parents[1]
 import yaml
 
