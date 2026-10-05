@@ -1,4 +1,4 @@
-name: Stable - Draft only
+name: Stable Release Pipeline
 'on':
   workflow_dispatch:
     inputs:
