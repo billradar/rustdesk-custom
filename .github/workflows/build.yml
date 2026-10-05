@@ -263,7 +263,7 @@ jobs:
     needs: plan
   android-signing-preflight:
     needs: plan
-    if: inputs.desktop_only != true && inputs.android_only != true && inputs.production_android_signing
+    if: inputs.windows_only != true && inputs.other_platforms_only != true && inputs.android_only != true && inputs.production_android_signing
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -297,7 +297,7 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      production_signing: false
+      production_signing: ${{ inputs.production_android_signing }}
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
@@ -319,7 +319,7 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      production_signing: false
+      production_signing: ${{ inputs.production_android_signing || false }}
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}

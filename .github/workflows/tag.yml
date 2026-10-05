@@ -171,7 +171,7 @@ jobs:
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
-      production_android_signing: false
+      production_android_signing: ${{ inputs.production_android_signing || false }}
       direct_android_signing: false
       android_only: true
     secrets:
