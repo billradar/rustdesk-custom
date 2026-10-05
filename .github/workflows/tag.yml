@@ -23,8 +23,6 @@ name: Stable Release Pipeline
         required: false
         default: false
         description: Authorize Android production signing for this run
-  schedule:
-  - cron: 41 5,17 * * *
 permissions:
   contents: read
   actions: read
