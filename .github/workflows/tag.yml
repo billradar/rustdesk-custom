@@ -1,4 +1,6 @@
 name: Stable Release Pipeline
+env:
+  PYTHONPATH: .
 'on':
   workflow_dispatch:
     inputs:

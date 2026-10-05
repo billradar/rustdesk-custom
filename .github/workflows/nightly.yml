@@ -1,4 +1,6 @@
 name: Nightly - Development artifacts
+env:
+  PYTHONPATH: .
 'on':
   schedule:
     - cron: '0 16 * * *'

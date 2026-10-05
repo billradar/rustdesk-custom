@@ -1,4 +1,6 @@
 name: Reusable Cross-Platform Build Core
+env:
+  PYTHONPATH: .
 'on':
   workflow_call:
     inputs:

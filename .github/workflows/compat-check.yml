@@ -1,4 +1,6 @@
 name: Reusable Patch and Build Compatibility
+env:
+  PYTHONPATH: .
 'on':
   workflow_call:
     inputs:

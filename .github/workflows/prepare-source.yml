@@ -1,4 +1,6 @@
 name: Reusable Prepared Source
+env:
+  PYTHONPATH: .
 'on':
   workflow_call:
     inputs:

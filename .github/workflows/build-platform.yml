@@ -1,4 +1,6 @@
 name: Reusable Experimental Platform Build
+env:
+  PYTHONPATH: .
 'on':
   workflow_call:
     inputs:

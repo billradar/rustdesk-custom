@@ -1,4 +1,6 @@
 name: CI - Patch and Build compatibility
+env:
+  PYTHONPATH: .
 'on':
   workflow_dispatch:
     inputs:
