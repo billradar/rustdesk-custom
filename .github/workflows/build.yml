@@ -349,7 +349,6 @@ jobs:
     - validate
     - platforms
     - android-platforms
-    - android-sign
     if: >-
       always() &&
       needs.plan.result == 'success' &&
