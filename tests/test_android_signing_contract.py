@@ -32,6 +32,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(hardware["env"]["YUBIKEY_PIV_PIN"], expected)
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.action))
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.build))
+        self.assertEqual(self.build["jobs"]["android-signing-preflight"].get("if"), "inputs.desktop_only != true && inputs.android_only != true && inputs.production_android_signing")
 
     def test_signing_action_and_script_keep_hardware_gates(self):
         self.assertIn("actions/download-artifact@", self.action)
@@ -51,10 +52,20 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(android["needs"], "plan")
         self.assertEqual(android["with"]["production_signing"], False)
 
-    def test_stable_aggregate_waits_for_direct_signer(self):
+    def test_stable_build_split_and_sign_dependency(self):
+        desktop = self.tag["jobs"]["desktop-build"]
+        android = self.tag["jobs"]["android-build"]
+        self.assertTrue(desktop["with"].get("desktop_only", False))
+        self.assertFalse(desktop["with"]["production_android_signing"])
+        self.assertTrue(android["with"]["android_only"])
+        self.assertFalse(android["with"]["production_android_signing"])
+        self.assertEqual(self.tag["jobs"]["android-sign"]["needs"][-1], "android-build")
         aggregate = self.tag["jobs"]["aggregate"]
-        self.assertIn("android-sign", json.dumps(aggregate["needs"]))
+        for name in ("desktop-build", "android-build", "android-sign"):
+            self.assertIn(name, json.dumps(aggregate["needs"]))
         draft = self.tag["jobs"]["draft"]
+        self.assertIn("desktop-build", json.dumps(draft["needs"]))
+        self.assertIn("android-build", json.dumps(draft["needs"]))
         self.assertIn("needs.aggregate.result == 'success'", draft["if"])
         self.assertIn("inputs.production_android_signing == true", draft["if"])
 
