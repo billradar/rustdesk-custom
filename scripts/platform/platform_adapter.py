@@ -3,7 +3,7 @@
 import argparse,hashlib,json,os,re
 from pathlib import Path
 import yaml
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 JOBS={'linux':'build-rustdesk-linux','macos':'build-for-macOS','android':'build-rustdesk-android','ios':'build-rustdesk-ios','windows':'build-for-windows-flutter','web':'build-rustdesk-web'}
 FILES=['build.py','build.rs','Cargo.toml','flutter/pubspec.yaml','.github/workflows/bridge.yml']
 def digest(x):return hashlib.sha256(json.dumps(x,sort_keys=True,separators=(',',':')).encode()).hexdigest()
