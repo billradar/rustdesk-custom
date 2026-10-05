@@ -56,7 +56,7 @@ jobs:
 
         [[ "$FORCE" != true ]] || args+=(--force)
 
-        python3 scripts/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+        python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -95,7 +95,7 @@ jobs:
         from pathlib import Path
         import sys
         sys.path.insert(0, 'scripts')
-        from patchsets import patch_hash
+        from scripts.upstream.patchsets import patch_hash
         patchset=os.environ['PATCHSET']
         record={
           'schema':'ci-qualification-v1',
@@ -145,5 +145,4 @@ jobs:
           --ref main \
           -f upstream_ref="${{ needs.resolve.outputs.upstream_ref }}" \
           -f force_rebuild=false \
-          -f release_mode=dry-run \
-         
+          -f release_mode=dry-run
