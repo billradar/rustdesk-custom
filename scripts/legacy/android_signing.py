@@ -14,7 +14,7 @@ from pathlib import Path
 from platform_package import sha, checksums, validate, architecture
 from production_config import scan_bytes
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 NAMES = ('ANDROID_SIGNING_KEY', 'ANDROID_KEY_STORE_PASSWORD',
          'ANDROID_KEY_PASSWORD', 'ANDROID_ALIAS')
 ABIS = {'aarch64': 'arm64-v8a', 'armv7': 'armeabi-v7a', 'x86_64': 'x86_64'}
