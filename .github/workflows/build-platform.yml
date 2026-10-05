@@ -12,7 +12,6 @@ name: Reusable Experimental Platform Build
       patchset: {type: string, required: true}
       channel: {type: string, required: true}
       source_artifact: {type: string, required: true}
-      production_signing: {type: boolean, default: false}
     secrets:
       RUSTDESK_KEY: {required: true}
       RUSTDESK_PASSWORD: {required: true}
@@ -120,7 +119,7 @@ jobs:
       id: upload
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: ${{ inputs.platform == 'android' && inputs.production_signing && 'android-build-input' || 'rustdesk' }}-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ inputs.variant }}-${{ inputs.platform }}-${{ inputs.arch }}
+        name: ${{ inputs.platform == 'android' && 'android-build-input' || 'rustdesk' }}-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ inputs.variant }}-${{ inputs.platform }}-${{ inputs.arch }}
         path: artifacts/rustdesk-*/
         if-no-files-found: error
         retention-days: 14
