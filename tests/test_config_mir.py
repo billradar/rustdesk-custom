@@ -1,8 +1,7 @@
 import os,sys,tempfile,unittest,shutil,subprocess
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-import config_mir
+import scripts.build.config_mir as config_mir
 
 VALUES={'RUSTDESK_PASSWORD':'aaaa','RUSTDESK_RELAY_SERVER':'relay.example.com','RUSTDESK_API_SERVER':'https://api.example.com',
         'RUSTDESK_ID_SERVER':'id.example.com','RUSTDESK_KEY':'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='}
@@ -20,7 +19,7 @@ fn common::get_api_server_(_1: String, _2: String) -> String {
 '''
 class CompilerConfigTests(unittest.TestCase):
     def test_compiler_fixture_is_complete_without_repository_secrets(self):
-        from production_config import configured
+        from scripts.signing.production_config import configured
         with patch.dict(os.environ,VALUES,clear=True):self.assertEqual(configured(),VALUES)
     def test_short_password_checked_in_compiled_function(self):config_mir.verify(MIR,VALUES)
     def test_rustc_trimmed_module_paths(self):config_mir.verify(MIR.replace('common::',''),VALUES)
@@ -37,7 +36,7 @@ class CompilerConfigTests(unittest.TestCase):
         self.assertEqual(config_mir.literals('const "\\u{4e2d}文";'),{'中文'})
         self.assertEqual(config_mir.literals('const Option::<&str>::Some("relay.example.com");'),{'relay.example.com'})
     def test_wrapper_augments_actual_link_invocation(self):
-        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,CONFIG_MIR_DIR=tmp,PLATFORM_ARCH='armv7'),patch('production_config.configured',return_value=VALUES):
+        with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,CONFIG_MIR_DIR=tmp,PLATFORM_ARCH='armv7'),patch('scripts.signing.production_config.configured',return_value=VALUES):
             def compile(command):
                 self.assertIn('--emit=dep-info,link,mir='+str(Path(tmp)/'client.mir'),command)
                 (Path(tmp)/'client.mir').write_text(MIR);return 0
