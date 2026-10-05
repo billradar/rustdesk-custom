@@ -348,7 +348,6 @@ jobs:
           .work/production-release-assets/'
         if-no-files-found: error
   aggregate:
-    if: inputs.android_only != true
     needs:
     - plan
     - build
