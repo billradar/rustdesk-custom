@@ -85,6 +85,7 @@ jobs:
       include_experimental: false
       production_android_signing: false
       direct_android_signing: false
+      android_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
