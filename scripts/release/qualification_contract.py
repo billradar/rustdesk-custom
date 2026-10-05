@@ -56,7 +56,7 @@ class MatrixTests(unittest.TestCase):
         self.assertNotIn('compatibility',t['jobs'])
         self.assertIn('qualification',t['jobs'])
         self.assertEqual(t['jobs']['qualification']['outputs']['patchset'], "${{ steps.verify.outputs.patchset }}")
-        self.assertIn('scripts/release/ci_qualification.py',t['jobs']['qualification']['steps'][1]['run'])
+        self.assertIn('scripts/release/qualification.py',t['jobs']['qualification']['steps'][1]['run'])
         for name in ('prepare','windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('compatibility',str(t['jobs'][name].get('needs',[])))
         c=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
