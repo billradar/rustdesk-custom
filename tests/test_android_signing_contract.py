@@ -11,7 +11,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.tag = yaml.safe_load((ROOT / ".github/workflows/tag.yml").read_text())
         self.build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         self.action = (ROOT / ".github/actions/android-yubikey-sign/action.yml").read_text()
-        self.script = (ROOT / "scripts/android_yubikey_sign.py").read_text()
+        self.script = (ROOT / "scripts/signing/android_yubikey_sign.py").read_text()
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]
@@ -97,7 +97,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
             self.assertIn(expected, self.action)
         self.assertNotIn("pattern: *.apk", self.action)
     def test_legacy_signer_resolves_repository_root_for_yubikey_metadata(self):
-        source = (ROOT / "scripts/legacy/android_signing.py").read_text()
+        source = (ROOT / "scripts/signing/android_identity.py").read_text()
         self.assertIn("ROOT = Path(__file__).resolve().parents[2]", source)
         self.assertNotIn("ROOT = Path(__file__).resolve().parents[1]", source)
         self.assertTrue((ROOT / "metadata/yubikey-android-signing-identity.json").is_file())
