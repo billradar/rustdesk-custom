@@ -277,7 +277,6 @@ jobs:
     - prepare
     - desktop-build
     - android-build
-    - android-sign
     - aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
