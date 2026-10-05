@@ -291,7 +291,7 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - run: python3 -m pip install -r requirements-build.txt
+    - run: python3 -m pip install -r requirements.txt
     - name: Package inspectors
       run: |
         sudo apt-get update -y
@@ -340,7 +340,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
@@ -386,7 +386,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
