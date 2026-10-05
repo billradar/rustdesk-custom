@@ -130,7 +130,7 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements-build.txt
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
         path: .work/source-bundle
@@ -146,7 +146,7 @@ jobs:
       env:
         RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
       run: python3 scripts/production_config.py inputs
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: test-bridge-${{ github.run_id }}
         path: .work/bridge-files
@@ -211,7 +211,7 @@ jobs:
       env:
         VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
       run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: windows-helper-${{ github.run_id }}
         path: .work/topmost
@@ -339,7 +339,7 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements-build.txt
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         pattern: rustdesk-*-windows-x86_64
         path: .work/collected
@@ -383,12 +383,12 @@ jobs:
       run: 'sudo apt-get update -y
 
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt'
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         pattern: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-*
         path: .work/all-targets
         merge-multiple: false
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       if: inputs.include_experimental
       with:
         pattern: diagnostic-*

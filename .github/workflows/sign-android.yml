@@ -58,19 +58,19 @@ jobs:
 
       - name: Download Android aarch64 build artifact
         if: contains(inputs.arches, 'aarch64')
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-aarch64
           path: .work/android-input/aarch64
       - name: Download Android armv7 build artifact
         if: contains(inputs.arches, 'armv7')
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-armv7
           path: .work/android-input/armv7
       - name: Download Android x86_64 build artifact
         if: contains(inputs.arches, 'x86_64')
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
           name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-x86_64
           path: .work/android-input/x86_64
