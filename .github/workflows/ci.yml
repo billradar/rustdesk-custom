@@ -10,6 +10,10 @@ name: CI - Patch and Build compatibility
         type: boolean
         description: Rebuild even if this upstream revision was already validated
         default: false
+      promote_stable:
+        type: boolean
+        description: Dispatch Stable CD dry-run after a qualified official Stable Tag
+        default: false
   pull_request:
     paths-ignore:
     - docs/**
@@ -22,7 +26,7 @@ name: CI - Patch and Build compatibility
     - README.md
 permissions:
   contents: read
-  actions: read
+  actions: write
 concurrency:
   group: phase4-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -117,3 +121,27 @@ jobs:
         path: .work/ci-qualification.json
         if-no-files-found: error
         retention-days: 90
+    - name: Preserve bridge artifact for Stable CD
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: test-bridge-${{ github.run_id }}
+        path: .work/ci-bridge
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ci-bridge-${{ github.sha }}
+        path: .work/ci-bridge
+        if-no-files-found: error
+        retention-days: 90
+    - name: Trigger Stable CD dry-run for a qualified Stable Tag
+      if: inputs.promote_stable == true && startsWith(needs.resolve.outputs.upstream_ref, 'v')
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        gh workflow run tag.yml \
+          --repo "${{ github.repository }}" \
+          --ref main \
+          -f upstream_ref="${{ needs.resolve.outputs.upstream_ref }}" \
+          -f force_rebuild=false \
+          -f release_mode=dry-run \
+          -f production_android_signing=false
