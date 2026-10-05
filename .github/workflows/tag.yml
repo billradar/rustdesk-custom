@@ -211,7 +211,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.needs.android-build.result == 'success' &&
+      needs.android-build.result == 'success' &&
       needs.qualification.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
@@ -278,7 +278,6 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.inputs.release_mode != 'dry-run' &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
