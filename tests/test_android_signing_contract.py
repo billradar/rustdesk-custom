@@ -20,7 +20,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(signing["concurrency"]["group"], "rustdesk-android-yubikey-signing")
         self.assertFalse(signing["concurrency"]["cancel-in-progress"])
         self.assertEqual(signing["concurrency"]["queue"], "max")
-        for marker in ("github.event_name == 'workflow_dispatch'", "inputs.production_android_signing == true", "inputs.dry_run == false", "inputs.include_experimental == false"):
+        for marker in ("github.event_name == 'workflow_dispatch'", "inputs.production_android_signing == true", "inputs.release_mode != 'dry-run'"):
             self.assertIn(marker, signing["if"])
 
     def test_secret_is_bound_only_at_direct_job_steps(self):
