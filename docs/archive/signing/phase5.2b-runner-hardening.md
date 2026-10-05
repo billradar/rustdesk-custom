@@ -3,7 +3,7 @@
 **Phase 5.1:** PASS / FROZEN (historical user-provided real-hardware evidence)
 **Phase 5.2A:** PASS (LOCAL MOCK + STATIC; GitHub workflow not dispatched)
 **Phase 5.2B-1:** FAIL-CLOSED / HARDENING COMPLETED
-**Phase 5.2B-1.1:** PASS — generic production interface is implemented and deployed; remote authorization blockers remain. See [the Phase 5.2B-1.1 report](PHASE5-2B1-1-PRODUCTION-INTERFACE-REPORT.md).
+**Phase 5.2B-1.1:** PASS — generic production interface is implemented and deployed; remote authorization blockers remain. See [the Phase 5.2B-1.1 report](../phase5.2b1-production-interface.md).
 
 No Phase 5.2B-2 operation was attempted.
 
