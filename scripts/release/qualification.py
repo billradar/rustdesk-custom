@@ -37,7 +37,7 @@ def identity(i):
 def aggregate(root,channel,experimental):
     from scripts.platform.platform_package import validate
     from scripts.release.github import validate as windows_validate
-    from channel import validate_prepared
+    from scripts.release.channel import validate_prepared
     p=plan(channel,experimental);expected={e['id']:e for e in p['selected']};found={};folders={};errors=[]
     diagnostics={}
     for path in root.rglob('diagnostic.json'):
