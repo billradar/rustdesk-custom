@@ -139,7 +139,7 @@ jobs:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
@@ -154,14 +154,14 @@ jobs:
     name: Build Stable Linux and macOS targets
     needs:
     - resolve
-    - compatibility
+    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
@@ -175,14 +175,14 @@ jobs:
     name: Build Stable Android artifacts for production signing
     needs:
     - resolve
-    - compatibility
+    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
@@ -263,10 +263,10 @@ jobs:
         channel: stable
         upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
         upstream_version: ${{ needs.prepare.outputs.upstream_version }}
-        patchset: ${{ needs.compatibility.outputs.patchset }}
+        patchset: ${{ needs.qualification.outputs.patchset }}
   aggregate:
     name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, compatibility, prepare, windows-build, platforms-build, android-build, android-sign]
+    needs: [resolve, draft-preflight, qualification, prepare, windows-build, platforms-build, android-build, android-sign]
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
@@ -278,7 +278,7 @@ jobs:
       needs.android-sign.result == 'success'
     runs-on: ubuntu-22.04
     env:
-      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      PATCHSET: ${{ needs.qualification.outputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
@@ -311,7 +311,7 @@ jobs:
     needs:
     - resolve
     - draft-preflight
-    - compatibility
+    - qualification
     - prepare
     - windows-build
     - platforms-build
@@ -354,7 +354,7 @@ jobs:
     needs:
     - resolve
     - draft-preflight
-    - compatibility
+    - qualification
     - prepare
     - windows-build
     - platforms-build
@@ -376,7 +376,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      PATCHSET: ${{ needs.qualification.outputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
