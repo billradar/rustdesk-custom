@@ -74,7 +74,7 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertFalse(phase4.release_preflight(self.discovery())['build_needed'])
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
-        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft'})
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release'})
         self.assertIn('draft-preflight',jobs['compatibility']['needs'])
         self.assertIn('needs.draft-preflight.outputs.build_needed',jobs['compatibility']['if'])
         self.assertIn('needs.draft-preflight.outputs.draft_needed',jobs['draft']['if'])
