@@ -103,6 +103,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(job['concurrency']['group'],'rustdesk-android-yubikey-signing')
         self.assertFalse(job['concurrency']['cancel-in-progress'])
         self.assertEqual(job['concurrency']['queue'],'max')
+        identity_preflight=next(step for step in job['steps'] if 'Validate public YubiKey identity metadata' in step.get('name',''))
+        self.assertIn('559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5',identity_preflight['run'])
+        self.assertNotIn('legacy_android_signing_identity',identity_preflight['run'])
         self.assertIn("github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main'",job['if'])
         self.assertIn("inputs.channel == 'stable'",job['if'])
 

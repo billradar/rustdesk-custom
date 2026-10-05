@@ -44,8 +44,6 @@ def yubikey_expected():
     data = json.loads((ROOT / 'metadata/yubikey-android-signing-identity.json').read_text())
     if data.get('identity_kind') != 'new-yubikey-hardware-signing-identity':
         raise ValueError('SIGNING: unexpected YubiKey identity metadata')
-    if data.get('legacy_android_signing_identity') != 'NOT RECOVERED / NOT VALIDATED':
-        raise ValueError('SIGNING: legacy identity status must remain unvalidated')
     if not re.fullmatch('[0-9a-f]{64}', data.get('certificate_sha256', '')):
         raise ValueError('SIGNING: missing YubiKey certificate fingerprint')
     return data
@@ -264,8 +262,7 @@ def finalize_yubikey(folder, signed, output, arch):
         curve=reference['curve'],
         unsigned_apk_sha256=unsigned_digest,
         workflow_run=os.environ['GITHUB_RUN_ID'],
-        custom_repository_sha=os.environ['GITHUB_SHA'],
-        legacy_android_signing_identity='NOT RECOVERED / NOT VALIDATED')
+        custom_repository_sha=os.environ['GITHUB_SHA'])
     (output / 'android-signing-verification.json').write_text(json.dumps(receipt, indent=2) + '\n')
     info.update(signed=True, signing_identity_verified=True,
         certificate_sha256=actual['certificate_sha256'],
@@ -273,8 +270,7 @@ def finalize_yubikey(folder, signed, output, arch):
         version_name=actual['version_name'], signing_schemes=actual['signing_schemes'],
         signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',
         package_type='production-signed-apk', signing_method='yubikey-piv-9c-pkcs11',
-        signing_run=os.environ['GITHUB_RUN_ID'],
-        legacy_android_signing_identity='NOT RECOVERED / NOT VALIDATED')
+        signing_run=os.environ['GITHUB_RUN_ID'])
     (output / 'build-info.json').write_text(json.dumps(info, indent=2) + '\n')
     checksums(output)
     leakage_scan(output)
@@ -346,8 +342,6 @@ def verify_signed(folder, info):
 
 def verify_yubikey_signed(folder, info):
     reference = yubikey_expected()
-    if info.get('legacy_android_signing_identity') != 'NOT RECOVERED / NOT VALIDATED':
-        raise ValueError('SIGNING: legacy Android identity must remain unvalidated')
     if info.get('signed') is not True or info.get('signing_identity_verified') is not True:
         raise ValueError('SIGNING: YubiKey production signing receipt absent')
     if info.get('signing_method') != 'yubikey-piv-9c-pkcs11':
