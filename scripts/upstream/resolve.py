@@ -70,7 +70,7 @@ def main():
         data = {'upstream_branch': ref, 'upstream_ref': ref, 'upstream_sha': resolve_ref(ref)}
     else:
         data = choose_stable(args.ref)
-        revision = (ROOT / 'patch-revision.txt').read_text().strip()
+        revision = json.loads(RELEASE_IDENTITY.read_text())['revision']
         if not re.fullmatch(r'[1-9][0-9]{0,5}', revision):
             raise ValueError('Invalid patch revision')
         name=mapped(data['upstream_sha']) or select(data['upstream_sha'])
