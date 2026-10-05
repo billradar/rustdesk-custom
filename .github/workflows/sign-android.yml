@@ -42,6 +42,14 @@ jobs:
       PATCHSET: ${{ inputs.patchset }}
       ARCHES: ${{ inputs.arches }}
     steps:
+      - name: Checkout signing identity metadata from current commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: metadata/yubikey-android-signing-identity.json
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
       - name: Validate public YubiKey identity metadata
         shell: bash
         run: |
