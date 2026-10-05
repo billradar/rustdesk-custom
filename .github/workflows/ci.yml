@@ -144,4 +144,4 @@ jobs:
           -f upstream_ref="${{ needs.resolve.outputs.upstream_ref }}" \
           -f force_rebuild=false \
           -f release_mode=dry-run \
-          -f production_android_signing=false
+         
