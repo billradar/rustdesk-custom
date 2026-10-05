@@ -42,7 +42,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn("559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5", self.script)
         self.assertIn('EXPECTED_PACKAGE = "com.carriez.flutter_hbb"', self.script)
         self.assertIn('if not os.environ.get("YUBIKEY_PIV_PIN")', self.script)
-        self.assertIn(r'r"^Signer #\\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
+        self.assertIn(r'r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
         self.assertNotIn(r'r"^Signer #d+ certificate SHA-256 digest:', self.script)
 
     def test_build_does_not_own_production_signer(self):
