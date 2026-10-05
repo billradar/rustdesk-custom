@@ -59,7 +59,7 @@ runs:
         retention-days: 14
     - name: Upload verified x86_64 production artifact
       if: contains(inputs.arches, 'x86_64')
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a7b6c09
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-x86_64
         path: .work/signed/x86_64/
