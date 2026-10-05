@@ -43,7 +43,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
         CHANNEL: stable
-      run: python3 scripts/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
+      run: python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -78,7 +78,7 @@ jobs:
       run: |
         args=()
         [[ "$FORCE" != true ]] || args+=(--force)
-        python3 scripts/channel.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
+        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -302,7 +302,7 @@ jobs:
         path: .work/all-targets
         merge-multiple: false
     - name: Fail-closed expected target and cross-platform provenance gate
-      run: python3 scripts/qualification.py aggregate --channel stable
+      run: python3 scripts/release/qualification.py aggregate --channel stable
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -351,7 +351,7 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Create and publish complete supported Release
-      run: python3 scripts/qualification.py release --root .work/collected
+      run: python3 scripts/release/qualification.py release --root .work/collected
   draft:
     needs:
     - resolve
@@ -397,4 +397,4 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Create complete supported Draft release
-      run: python3 scripts/qualification.py draft --root .work/collected
+      run: python3 scripts/release/qualification.py draft --root .work/collected

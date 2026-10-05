@@ -11,9 +11,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-import native_config_probe as probe
-import production_config as config
+import scripts.validation.native_config_probe as probe
+import scripts.signing.production_config as config
 
 FIXTURE = r'''
 #include <stdint.h>

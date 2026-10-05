@@ -1,6 +1,7 @@
 name: Reusable Patch and Build Compatibility
 env:
   PYTHONPATH: .
+  AUTOMATION_MODE: '1'
 'on':
   workflow_call:
     inputs:
@@ -45,8 +46,6 @@ env:
         value: ${{ jobs.resolve.outputs.source_sbom_requested }}
 permissions:
   contents: read
-env:
-  AUTOMATION_MODE: '1'
 jobs:
   resolve:
     runs-on: ubuntu-22.04
@@ -73,7 +72,7 @@ jobs:
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements-build.txt
     - name: Validate explicit platform policies
-      run: python3 scripts/qualification.py check
+      run: python3 scripts/release/qualification.py check
     - name: Scan tracked maintenance files for known CI credentials
       run: python3 scripts/validation/scan_repository.py
     - name: Require exact official source identity

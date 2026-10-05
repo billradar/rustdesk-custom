@@ -63,7 +63,7 @@ jobs:
         fi
 
         echo "Nightly upstream ref: $REQUESTED_REF"
-        python3 scripts/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+        python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -125,7 +125,6 @@ jobs:
     concurrency:
       group: rustdesk-android-yubikey-signing
       cancel-in-progress: false
-      queue: max
     timeout-minutes: 45
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -196,7 +195,7 @@ jobs:
         path: .work/collected
         merge-multiple: false
     - name: Fail-closed expected target and cross-platform provenance gate
-      run: python3 scripts/qualification.py aggregate --channel nightly --experimental
+      run: python3 scripts/release/qualification.py aggregate --channel nightly --experimental
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -237,4 +236,4 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Create Nightly Draft Release
-      run: python3 scripts/qualification.py draft --channel nightly --root .work/collected
+      run: python3 scripts/release/qualification.py draft --channel nightly --root .work/collected

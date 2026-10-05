@@ -85,7 +85,7 @@ class ReleaseGateTests(unittest.TestCase):
 
 class GenerationTests(unittest.TestCase):
     def test_v1_hashes_frozen_and_exact_mapping(self):
-        from patchsets import mapped, verify
+        from scripts.upstream.patchsets import mapped, verify
         m=verify('v1')
         self.assertEqual(m['hashes']['common'],'87b7fb949b3bbc55c6d1e166909e167ebb8e0b6586630c0269f6440ba0542531')
         self.assertEqual(m['hashes']['sos'],'d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34')
@@ -93,7 +93,7 @@ class GenerationTests(unittest.TestCase):
         self.assertIsNone(mapped('fada664df7a294d1d1a9ca3e7cd3637069122f17'))
 
     def test_unknown_incompatible_source_fails_closed(self):
-        from patchsets import select
+        from scripts.upstream.patchsets import select
         import subprocess
         with tempfile.TemporaryDirectory() as tmp:
             source=Path(tmp)/'source';source.mkdir()
