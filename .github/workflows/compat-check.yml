@@ -342,7 +342,7 @@ jobs:
       with:
         flutter-version: ${{ needs.resolve.outputs.flutter }}
         channel: stable
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: test-bridge-${{ github.run_id }}
         path: .work/bridge
@@ -377,11 +377,11 @@ jobs:
     if: always()
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         pattern: '*report-${{ github.run_id }}'
         path: diagnostics
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: patchset-selection-${{ github.run_id }}
         path: diagnostics/selection
