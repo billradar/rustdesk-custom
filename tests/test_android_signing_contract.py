@@ -10,6 +10,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
     def setUp(self):
         self.tag = yaml.safe_load((ROOT / ".github/workflows/tag.yml").read_text())
         self.build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        self.platform = (ROOT / ".github/workflows/build-platform.yml").read_text()
         self.action = (ROOT / ".github/actions/android-yubikey-sign/action.yml").read_text()
         self.script = (ROOT / "scripts/android_yubikey_sign.py").read_text()
 
@@ -32,7 +33,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(hardware["env"]["YUBIKEY_PIV_PIN"], expected)
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.action))
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.build))
-        self.assertEqual(self.build["jobs"]["android-signing-preflight"].get("if"), "inputs.desktop_only != true && inputs.android_only != true && inputs.production_android_signing")
+        self.assertEqual(self.build["jobs"]["android-signing-preflight"].get("if"), "inputs.windows_only != true && inputs.other_platforms_only != true && inputs.production_android_signing")
 
     def test_signing_action_and_script_keep_hardware_gates(self):
         self.assertIn("actions/download-artifact@", self.action)
@@ -50,7 +51,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("production_android_signing", aggregate.get("if", ""))
         android = self.build["jobs"]["android-platforms"]
         self.assertEqual(android["needs"], "plan")
-        self.assertEqual(android["with"]["production_signing"], False)
+        self.assertEqual(android["with"]["production_signing"], "${{ inputs.production_android_signing }}")
 
     def test_stable_build_split_and_sign_dependency(self):
         windows = self.tag["jobs"]["windows-build"]
@@ -62,7 +63,12 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertTrue(platforms["with"].get("other_platforms_only", False))
         self.assertFalse(platforms["with"]["production_android_signing"])
         self.assertTrue(android["with"]["android_only"])
-        self.assertFalse(android["with"]["production_android_signing"])
+        self.assertEqual(android["with"]["production_android_signing"], "${{ inputs.production_android_signing == true }}")
+
+        expected_prefix = "name: ${{ inputs.platform == 'android' && inputs.production_signing && 'android-build-input' || 'rustdesk' }}-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ inputs.variant }}-${{ inputs.platform }}-${{ inputs.arch }}"
+        self.assertIn(expected_prefix, self.platform)
+        for arch in ("aarch64", "armv7", "x86_64"):
+            self.assertIn(f"standard-android-{arch}", self.action)
 
         self.assertEqual(self.tag["jobs"]["android-sign"]["needs"][-1], "android-build")
 
