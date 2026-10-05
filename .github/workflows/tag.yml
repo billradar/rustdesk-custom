@@ -323,7 +323,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'release' &&
-      inputs.needs.windows-build.result == 'success' &&
+      needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
@@ -365,7 +365,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'draft' &&
-      inputs.needs.windows-build.result == 'success' &&
+      needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
