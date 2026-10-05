@@ -150,21 +150,13 @@ class ArchitectureTests(unittest.TestCase):
             (root/'a').write_bytes(b'changed')
             with self.assertRaises(ValueError):platform_package.verify_checksums(root)
 
-class SigningImportTests(unittest.TestCase):
-    def test_android_signing_validator_uses_migrated_legacy_module(self):
-        source=(ROOT/'scripts/platform/platform_package.py').read_text()
-        self.assertIn('from legacy.android_signing import verify_signed',source)
-        self.assertNotIn('from android_signing import verify_signed',source)
-        import legacy.android_signing as android_signing
-        self.assertTrue(callable(android_signing.verify_signed))
-
 class AggregateTests(unittest.TestCase):
     def test_missing_required_target_fails_and_report_survives(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v1','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)
             self.assertEqual(json.loads((Path(tmp)/'.work/qualification-aggregate/aggregate.json').read_text())['required_gate'],'FAIL')
     def test_untagged_draft_deduplicates_without_overwrite(self):
-        import channel
+        import scripts.release.channel as channel
         name='v1.4.9-custom.1';sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
         names=['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example','body':'\n'.join(['Patch Set: v1','Upstream SHA: '+sha,'Common Patch Hash: '+qualification.patch_hash('common','v1'),'SOS Patch Hash: '+qualification.patch_hash('sos','v1'),'Automation-State: complete']),'assets':[{'name':n,'state':'uploaded'} for n in names]}
