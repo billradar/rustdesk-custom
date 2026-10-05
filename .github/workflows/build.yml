@@ -35,9 +35,6 @@ name: Reusable Cross-Platform Build Core
       production_android_signing:
         type: boolean
         default: false
-      direct_android_signing:
-        type: boolean
-        default: false
       android_only:
         type: boolean
         default: false
@@ -252,25 +249,8 @@ jobs:
         if-no-files-found: error
         retention-days: 14
     needs: plan
-  android-signing-preflight:
-    needs: plan
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with: {persist-credentials: false}
-    - name: Android-only production signing availability before expensive builds
-      if: inputs.production_android_signing
-      run: |
-        python3 - <<'PY'
-        import json
-        from pathlib import Path
-        info = json.loads(Path('metadata/yubikey-android-signing-identity.json').read_text())
-        assert info['certificate_sha256'] == '559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5'
-        assert info['piv_slot'] == '9C' and info['pkcs11_id'] == '02'
-        print('YubiKey identity metadata: PASS')
-        PY
   platforms:
-    needs: [plan, android-signing-preflight]
+    needs: plan
     if: inputs.android_only != true && needs.plan.outputs.other_platform_count != '0'
     strategy:
       fail-fast: false
@@ -292,7 +272,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-platforms:
-    needs: [plan, android-signing-preflight]
+    needs: plan
     if: needs.plan.outputs.android_count != '0'
     strategy:
       fail-fast: false
@@ -308,7 +288,7 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      production_signing: ${{ inputs.production_android_signing }}
+      production_signing: false
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
