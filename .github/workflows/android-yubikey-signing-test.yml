@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_REF: ${{ inputs.upstream_ref }}
-        run: python3 scripts/phase4.py resolve --channel stable --ref "$REQUESTED_REF" --discovery-only
+        run: python3 scripts/release/channel.py resolve --channel stable --ref "$REQUESTED_REF" --discovery-only
 
   compatibility:
     name: Validate patch compatibility
@@ -110,7 +110,6 @@ jobs:
     concurrency:
       group: rustdesk-android-yubikey-signing
       cancel-in-progress: false
-      queue: max
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -119,7 +118,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             metadata/yubikey-android-signing-identity.json
-            scripts/android_yubikey_sign.py
+            scripts/signing/android_yubikey_sign.py
             .github/actions/android-yubikey-sign/action.yml
           sparse-checkout-cone-mode: false
           fetch-depth: 1
