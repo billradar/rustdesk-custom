@@ -63,7 +63,7 @@ class MatrixTests(unittest.TestCase):
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['workflow_dispatch']['inputs']['release_mode']['options'], ['build','draft'])
         self.assertNotIn('release', n['on']['workflow_dispatch']['inputs']['release_mode']['options'])
-        self.assertIn("inputs.release_mode == 'draft'", n['jobs']['aggregate']['if'])
+        self.assertNotIn("inputs.release_mode == 'draft'", n['jobs']['aggregate']['if'])
         self.assertIn("inputs.release_mode == 'draft'", n['jobs']['draft']['if'])
         p=(ROOT/'scripts/phase5.py').read_text()
         self.assertIn("Nightly release is forbidden", p)
