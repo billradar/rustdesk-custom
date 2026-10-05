@@ -8,10 +8,11 @@ from pathlib import Path
 import re
 import urllib.parse
 import zipfile
-from upstream import api, choose_stable, patch_hash, VERSION
-from patchsets import mapped, select
-from release import collect, gh, request
-from production_config import payload, scan_bytes
+from scripts.upstream.resolve import api, choose_stable, VERSION
+from scripts.upstream.patchsets import patch_hash
+from scripts.upstream.patchsets import mapped, select
+from scripts.release.github import collect, gh, request
+from scripts.signing.production_config import payload, scan_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = 'billradar/rustdesk-custom'

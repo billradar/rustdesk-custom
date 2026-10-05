@@ -3,8 +3,8 @@ set -euo pipefail
 : "${PLATFORM_ARCH:?}" "${VARIANT:?}" "${PREPARED_SOURCE_DIR:?}"
 root=$PWD
 source=$PREPARED_SOURCE_DIR
-python3 scripts/production_config.py inputs
-python3 scripts/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --output .work/platform-profile.json --linux-scripts .work/linux-recipe
+python3 scripts/signing/production_config.py inputs
+python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --output .work/platform-profile.json --linux-scripts .work/linux-recipe
 triplet=$(python3 -c 'import json;print(json.load(open(".work/platform-profile.json"))["triplet"])')
 # Same small crate-type adjustment as the official Linux job, after input verification.
 python3 - "$source/Cargo.toml" <<'PY'
@@ -32,4 +32,4 @@ docker run --rm "${args[@]}" -v "$source:/workspace" -v "$root:/custom:ro" -v "$
 sudo chown -R "$(id -u):$(id -g)" "$source"
 # Run the native ABI gate on the reviewed native runner with explicit runtime dependencies.
 # The Ubuntu 18.04 container remains the official compiler/package environment.
-python3 scripts/platform_package.py create --tree "$source" --platform linux --arch "$PLATFORM_ARCH" --variant "$VARIANT"
+python3 scripts/platform/platform_package.py create --tree "$source" --platform linux --arch "$PLATFORM_ARCH" --variant "$VARIANT"

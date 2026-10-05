@@ -2,9 +2,9 @@
 """Run-bound source artifacts, no credentials/configuration injection during prepare."""
 import argparse, datetime, hashlib, json, os, re, shutil, subprocess, tarfile
 from pathlib import Path, PurePosixPath
-from patchsets import patch_hash, verify
-from compatibility import contracts
-from build_adapter import check
+from scripts.upstream.patchsets import patch_hash, verify
+from scripts.validation.compatibility import contracts
+from scripts.build.build_adapter import check
 ROOT=Path(__file__).resolve().parents[1]
 
 def git(tree,*args):return subprocess.check_output(['git','-C',str(tree),*args],text=True).strip()
@@ -50,7 +50,7 @@ def prepare(base,output,ref,sha,name,bridge):
                 run('git','-C',tree,'apply','--check',p);run('git','-C',tree,'apply',p)
         contracts(tree,variant,name)
         run('python3',ROOT/'scripts/package.py','restore-bridge',tree,bridge)
-        from production_config import scan_bytes
+        from scripts.signing.production_config import scan_bytes
         for p in tree.rglob('*'):
             if p.is_file() and '.git' not in p.relative_to(tree).parts:scan_bytes(p.read_bytes())
         if profile['source_sbom_requested']:

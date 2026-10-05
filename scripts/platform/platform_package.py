@@ -2,8 +2,8 @@
 """Per-target packages, architecture, configuration, credential and provenance checks."""
 import argparse,datetime,hashlib,json,os,shutil,struct,subprocess,tempfile,zipfile
 from pathlib import Path
-from production_config import configured,server_fingerprint,scan_bytes,FORBIDDEN
-from patchsets import patch_hash,verify
+from scripts.signing.production_config import configured,server_fingerprint,scan_bytes,FORBIDDEN
+from scripts.upstream.patchsets import patch_hash,verify
 ROOT=Path(__file__).resolve().parents[1]
 ELF={'x86_64':62,'aarch64':183,'armv7':40}
 MACH={'x86_64':0x1000007,'aarch64':0x100000c}
@@ -123,7 +123,7 @@ def create(tree,platform,arch,variant):
   if not value or name=='RUSTDESK_PASSWORD' or (platform=='macos' and name=='RUSTDESK_API_SERVER'):continue
   if value.encode() not in data:raise ValueError('PLATFORM_API: compiled input missing: '+name+' (withheld)')
  if platform in ('macos','linux'):
-  from native_config_probe import verify as probe
+  from scripts.validation.native_config_probe import verify as probe
   probe(library,check_api=True)
  if platform=='android':
   from config_mir import verify as verify_mir

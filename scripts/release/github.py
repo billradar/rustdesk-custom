@@ -11,13 +11,13 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from upstream import patch_hash, TEST_REPO, VERSION
+from scripts.upstream.resolve import patch_hash, TEST_REPO, VERSION
 
 ROOT = Path(__file__).resolve().parent.parent
 
 def validate(folder):
     info = json.loads((folder / 'build-info.json').read_text())
-    from patchsets import verify
+    from scripts.upstream.patchsets import verify
     verify(info['patchset'])
     if info['patchset'] != os.environ.get('PATCHSET', 'v1'):
         raise ValueError('Artifact selected patchset mismatch')
@@ -42,7 +42,7 @@ def validate(folder):
     if os.environ.get('BUILD_CONFIGURATION') == 'PRODUCTION':
         if info.get('custom_repository') != 'billradar/rustdesk-custom' or info.get('architecture') != 'x86_64':
             raise ValueError('Production repository/architecture provenance missing')
-        from production_config import payload
+        from scripts.signing.production_config import payload
         payload(folder)
     entries = set()
     for line in (folder / 'SHA256SUMS').read_text().splitlines():

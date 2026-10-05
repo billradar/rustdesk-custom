@@ -3,7 +3,7 @@
 from pathlib import Path
 import re
 import subprocess
-from production_config import TOKEN
+from scripts.signing.production_config import TOKEN
 ROOT=Path(__file__).resolve().parents[1]
 BLOCK=re.compile(rb'-----BEGIN ([A-Z ]*PRIVATE KEY)-----[\s\S]+?-----END \1-----')
 

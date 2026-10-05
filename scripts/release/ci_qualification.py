@@ -2,7 +2,7 @@
 """Verify that Stable CD consumes an exact, successful CI qualification."""
 import argparse, json, os, shutil, subprocess
 from pathlib import Path
-from patchsets import patch_hash
+from scripts.upstream.patchsets import patch_hash
 
 def gh_json(path):
     p=subprocess.run(["gh","api",path],check=True,capture_output=True,text=True,env=os.environ)

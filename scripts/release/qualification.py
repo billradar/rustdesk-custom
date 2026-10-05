@@ -2,7 +2,7 @@
 """Explicit targets and cross-platform fan-in; support requires reviewed Actions evidence."""
 import argparse, hashlib, json, os, re, shutil, time, zipfile
 from pathlib import Path
-from patchsets import patch_hash
+from scripts.upstream.patchsets import patch_hash
 ROOT=Path(__file__).resolve().parents[1]
 FORBIDDEN={'android','ios','web'}
 def target(e):return '-'.join((e['platform'],e['arch'],e['variant']))
@@ -35,8 +35,8 @@ def identity(i):
     return (i['upstream_sha'],i['patchset'],i['common_patch_hash'],i['custom_repository_sha'],str(i['build_run']))
 
 def aggregate(root,channel,experimental):
-    from platform_package import validate
-    from release import validate as windows_validate
+    from scripts.platform.platform_package import validate
+    from scripts.release.github import validate as windows_validate
     from channel import validate_prepared
     p=plan(channel,experimental);expected={e['id']:e for e in p['selected']};found={};folders={};errors=[]
     diagnostics={}
@@ -110,7 +110,7 @@ def aggregate(root,channel,experimental):
                     for f in [folder/'LICENCE',folder/'SOURCE-README.md',folder/'source-manifest.json']+list((folder/'patches').rglob('*.patch')):
                         z.write(f,f.relative_to(folder).as_posix())
             shutil.copy2(folder/'build-info.json',assets/metadata_name)
-        from platform_package import checksums
+        from scripts.platform.platform_package import checksums
         checksums(assets)
     print(json.dumps(report,indent=2))
     if errors:raise ValueError('Aggregate required gate FAIL')
@@ -121,8 +121,8 @@ def _release(root, publish, channel='stable'):
         raise ValueError('Nightly release is forbidden; only draft publication is allowed')
     if channel not in ('stable','nightly'):
         raise ValueError('Unsupported release channel')
-    from upstream import api
-    from release import request,gh
+    from scripts.upstream.resolve import api
+    from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong release repository')
     os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel in ('stable','nightly') else 'false'
@@ -137,7 +137,7 @@ def _release(root, publish, channel='stable'):
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
     if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
     if any(not r.get('draft') for r in existing):raise ValueError('Existing revision release')
-    from production import scan_job_log
+    from scripts.release.production import scan_job_log
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'

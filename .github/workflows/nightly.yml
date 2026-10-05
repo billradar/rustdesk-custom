@@ -132,7 +132,7 @@ jobs:
         persist-credentials: false
         sparse-checkout: |
           metadata/yubikey-android-signing-identity.json
-          scripts/android_yubikey_sign.py
+          scripts/signing/android_yubikey_sign.py
           .github/actions/android-yubikey-sign/action.yml
         sparse-checkout-cone-mode: false
         fetch-depth: 1

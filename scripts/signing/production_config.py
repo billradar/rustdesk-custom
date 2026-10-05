@@ -85,7 +85,7 @@ def compiled(library):
             continue
         if value.encode() not in data:
             raise ValueError(name + ': compiled injection not verified (value withheld)')
-    from native_config_probe import verify
+    from scripts.validation.native_config_probe import verify
     verify(library)
     print('Compiled production configuration: PASS (values withheld)')
 

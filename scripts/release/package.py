@@ -19,7 +19,7 @@ def git(path, *args):
     return subprocess.check_output(['git', '-C', str(path), *args], text=True).strip()
 
 def patch_hash(root, folder):
-    from patchsets import patch_hash as digest
+    from scripts.upstream.patchsets import patch_hash as digest
     return digest(folder)
 
 command, tree, *args = sys.argv[1:]
@@ -70,10 +70,10 @@ elif command == 'package':
         raise SystemExit('Packaged DLL differs from the freshly built Rust DLL')
     configuration = os.environ.get('BUILD_CONFIGURATION', 'TEST ONLY')
     if configuration == 'PRODUCTION':
-        from production_config import compiled
+        from scripts.signing.production_config import compiled
         compiled(release / 'librustdesk.dll')
     else:
-        from native_config_probe import verify
+        from scripts.validation.native_config_probe import verify
         verify(release / 'librustdesk.dll')
     print('Compiled configuration presence: PASS (values withheld)')
     topmost = Path(os.environ['RUSTDESK_TOPMOST_DLL'])
@@ -126,7 +126,7 @@ elif command == 'package':
         info.update(prepare_run=manifest['prepare_workflow_run'], build_run=os.environ.get('GITHUB_RUN_ID'),
                     prepared_source_manifest_hash=hashlib.sha256((tree / 'source-manifest.json').read_bytes()).hexdigest(),
                     build_adapter_signature=manifest['build_adapter_signature'])
-        from build_adapter import check
+        from scripts.build.build_adapter import check
         profile = check(tree)
         engine = os.environ.get('ENGINE_ARCHIVE_SHA256', '')
         if not re.fullmatch('[0-9a-f]{64}', engine):
@@ -135,7 +135,7 @@ elif command == 'package':
         info['build_toolchain'] = {k: profile[k] for k in ('rust', 'flutter', 'llvm', 'vcpkg', 'helper_commit', 'bridge_rust', 'bridge_flutter', 'frb', 'cargo_expand')}
         shutil.copy2(tree / 'source-manifest.json', folder / 'source-manifest.json')
     if configuration == 'PRODUCTION':
-        from production_config import server_fingerprint
+        from scripts.signing.production_config import server_fingerprint
         info['server_config_fingerprint'] = server_fingerprint()
     info.update(prepared_source_identity=info.get('prepared_source_manifest_hash'),
                 platform_patch_hash=None, runner=os.environ.get('RUNNER_OS'),

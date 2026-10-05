@@ -2,7 +2,7 @@
 """Redacted diagnostics and explicit failure categories, never ignore build failures."""
 import json,os,subprocess,sys
 from pathlib import Path
-from production_config import NAMES,scan_bytes
+from scripts.signing.production_config import NAMES,scan_bytes
 platform=os.environ['PLATFORM'];arch=os.environ['PLATFORM_ARCH'];variant=os.environ['VARIANT']
 values=sorted([os.environ[n] for n in NAMES if os.environ.get(n)],key=len,reverse=True)
 def redact(text):

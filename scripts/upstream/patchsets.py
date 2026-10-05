@@ -38,7 +38,7 @@ def mapped(sha):
     return name
 
 def probe(source, sha, name, base):
-    from compatibility import contracts
+    from scripts.validation.compatibility import contracts
     env=dict(os.environ,PATCHSET=name,UPSTREAM_EXPECTED_SHA=sha)
     result={'patchset':name,'status':'INCOMPATIBLE','checks':{}}
     verify(name)

@@ -60,13 +60,13 @@ jobs:
       name: Verify immutable prepared input before native dependencies
       run: |
         [[ "$VARIANT" != sos || "$PLATFORM" == linux || "$PLATFORM" == macos ]] || exit 1
-        python3 scripts/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET"
+        python3 scripts/source/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET"
     - id: profile
       name: Verify reviewed official target before native dependencies
       env:
         EXPECTED_RUNNER: ${{ inputs.runner }}
       run: |
-        python3 scripts/platform_adapter.py "$PREPARED_SOURCE_DIR" --platform "$PLATFORM" --arch "$PLATFORM_ARCH" --output .work/platform-profile.json
+        python3 scripts/platform/platform_adapter.py "$PREPARED_SOURCE_DIR" --platform "$PLATFORM" --arch "$PLATFORM_ARCH" --output .work/platform-profile.json
         python3 - <<'PY'
         import json,os
         p=json.load(open('.work/platform-profile.json'))
@@ -114,7 +114,7 @@ jobs:
         RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
         ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
-      run: python3 scripts/run_platform.py
+      run: python3 scripts/platform/run_platform.py
     - name: Upload validated target only
       id: upload
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

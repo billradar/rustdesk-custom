@@ -74,7 +74,7 @@ jobs:
         EXPERIMENTAL: ${{ inputs.include_experimental }}
       run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
 
-        python3 scripts/phase5.py plan --channel "$CHANNEL" "${args[@]}"'
+        python3 scripts/qualification.py plan --channel "$CHANNEL" "${args[@]}"'
     - id: split
       name: Split Android and other platform target matrices
       run: |
@@ -145,14 +145,14 @@ jobs:
       name: Verify immutable prepared source before any dependency build
       env:
         VARIANT: ${{ matrix.variant }}
-      run: 'python3 scripts/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input --variant
+      run: 'python3 scripts/source/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input --variant
         "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET"
 
-        python3 scripts/build_adapter.py .work/prepared-input/source --output .work/build-profile.json'
+        python3 scripts/build/build_adapter.py .work/prepared-input/source --output .work/build-profile.json'
     - name: Validate production inputs without printing values
       env:
         RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
-      run: python3 scripts/production_config.py inputs
+      run: python3 scripts/signing/production_config.py inputs
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: test-bridge-${{ github.run_id }}
@@ -243,7 +243,7 @@ jobs:
 
         export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
 
-        bash "scripts/build-$VARIANT.sh" "$UPSTREAM_REF"
+        bash "scripts/build/build-$VARIANT.sh" "$UPSTREAM_REF"
 
         '
     - name: Upload verified production bundle
@@ -323,7 +323,7 @@ jobs:
         path: .work/collected
         merge-multiple: false
     - name: Verify paired prepared-source provenance, production config, checksum and architecture
-      run: python3 scripts/phase4.py validate --channel "$CHANNEL"
+      run: python3 scripts/channel.py validate --channel "$CHANNEL"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: channel-validation-${{ github.run_id }}
@@ -374,7 +374,7 @@ jobs:
     - name: Fail-closed expected target and cross-platform provenance gate
       run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
 
-        python3 scripts/phase5.py aggregate --channel "$CHANNEL" "${args[@]}"'
+        python3 scripts/qualification.py aggregate --channel "$CHANNEL" "${args[@]}"'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:

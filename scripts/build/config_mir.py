@@ -44,7 +44,7 @@ def wrapper(args):
     code=subprocess.call([compiler,*flags])
     if code:return code
     mir.chmod(0o600)
-    from production_config import configured
+    from scripts.signing.production_config import configured
     verify(mir.read_text(),configured())
     (folder/'validated.json').write_text(json.dumps({'result':'PASS','target':os.environ['PLATFORM_ARCH'],'method':'compiler-mir'})+'\n')
     return 0

@@ -2,7 +2,7 @@
 """Execute named commands only after reviewing the exact upstream job signature."""
 import subprocess,sys
 from pathlib import Path
-from platform_adapter import check,render
+from scripts.platform.platform_adapter import check,render
 root,platform,arch,phase=sys.argv[1:];root=Path(root).resolve();profile,job=check(root,platform,arch)
 names={('macos','setup'):['Install build runtime','Install NASM','Patch flutter','Workaround for flutter issue'],('macos','build'):['Build rustdesk'],('android','deps'):['Install vcpkg dependencies'],('android','native'):['Build rustdesk lib'],('android','package'):['Build rustdesk']}
 for name in names[(platform,phase)]:

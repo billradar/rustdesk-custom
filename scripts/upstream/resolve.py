@@ -28,7 +28,7 @@ def api(path, missing=False):
             return None
         raise
 
-from patchsets import patch_hash, mapped, select
+from scripts.upstream.patchsets import patch_hash, mapped, select
 
 def resolve_ref(ref):
     value = api(f'repos/{OFFICIAL}/commits/{urllib.parse.quote(ref, safe="")}')['sha']
