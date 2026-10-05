@@ -53,23 +53,28 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(android["with"]["production_signing"], False)
 
     def test_stable_build_split_and_sign_dependency(self):
-        desktop = self.tag["jobs"]["desktop-build"]
+        windows = self.tag["jobs"]["windows-build"]
+        platforms = self.tag["jobs"]["platforms-build"]
         android = self.tag["jobs"]["android-build"]
-        self.assertTrue(desktop["with"].get("desktop_only", False))
-        self.assertFalse(desktop["with"]["production_android_signing"])
+
+        self.assertTrue(windows["with"].get("windows_only", False))
+        self.assertFalse(windows["with"]["production_android_signing"])
+        self.assertTrue(platforms["with"].get("other_platforms_only", False))
+        self.assertFalse(platforms["with"]["production_android_signing"])
         self.assertTrue(android["with"]["android_only"])
         self.assertFalse(android["with"]["production_android_signing"])
+
         self.assertEqual(self.tag["jobs"]["android-sign"]["needs"][-1], "android-build")
+
         aggregate = self.tag["jobs"]["aggregate"]
-        for name in ("desktop-build", "android-build", "android-sign"):
+        for name in ("windows-build", "platforms-build", "android-build", "android-sign"):
             self.assertIn(name, json.dumps(aggregate["needs"]))
+
         draft = self.tag["jobs"]["draft"]
-        self.assertIn("desktop-build", json.dumps(draft["needs"]))
-        self.assertIn("android-build", json.dumps(draft["needs"]))
+        for name in ("windows-build", "platforms-build", "android-build"):
+            self.assertIn(name, json.dumps(draft["needs"]))
         self.assertIn("needs.aggregate.result == 'success'", draft["if"])
         self.assertIn("inputs.production_android_signing == true", draft["if"])
-        self.assertIn("desktop-build", json.dumps(draft["needs"]))
-        self.assertIn("android-build", json.dumps(draft["needs"]))
 
     def test_old_reusable_signer_is_gone(self):
         self.assertFalse((ROOT / ".github/workflows/sign-android.yml").exists())

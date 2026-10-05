@@ -109,8 +109,8 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
       patchset: ${{ needs.compatibility.outputs.patchset }}
-  desktop-build:
-    name: Build Stable desktop and non-Android targets
+  windows-build:
+    name: Build Stable Windows targets
     needs:
     - resolve
     - compatibility
@@ -127,8 +127,30 @@ jobs:
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: false
-      desktop_only: true
+      windows_only: true
       direct_android_signing: false
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  platforms-build:
+    name: Build Stable Linux and macOS targets
+    needs:
+    - resolve
+    - compatibility
+    - prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: stable
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+      revision: ${{ needs.resolve.outputs.revision }}
+      include_experimental: ${{ inputs.include_experimental || false }}
+      production_android_signing: false
+      other_platforms_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -229,14 +251,15 @@ jobs:
         patchset: ${{ needs.compatibility.outputs.patchset }}
   aggregate:
     name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, compatibility, prepare, desktop-build, android-build, android-sign]
+    needs: [resolve, draft-preflight, compatibility, prepare, windows-build, platforms-build, android-build, android-sign]
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
-      needs.desktop-build.result == 'success' &&
+      needs.windows-build.result == 'success' &&
+      needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.android-sign.result == 'success'
     runs-on: ubuntu-22.04
@@ -275,7 +298,8 @@ jobs:
     - draft-preflight
     - compatibility
     - prepare
-    - desktop-build
+    - windows-build
+    - platforms-build
     - android-build
     - android-sign
     - aggregate
@@ -285,7 +309,8 @@ jobs:
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
       inputs.production_android_signing == true &&
-      needs.desktop-build.result == 'success' &&
+      needs.windows-build.result == 'success' &&
+      needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
