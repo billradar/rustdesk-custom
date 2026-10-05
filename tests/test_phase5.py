@@ -58,6 +58,7 @@ class MatrixTests(unittest.TestCase):
         self.assertIn('qualification',c['jobs'])
         self.assertIn('ci-qualification-${{ github.sha }}',str(c['jobs']['qualification']))
         self.assertIn('ci-qualification-v1',str((ROOT/'scripts/ci_qualification.py').read_text()))
+        self.assertNotIn('schedule',t['on'])
         self.assertEqual(t['jobs']['draft']['steps'][-1]['run'],'python3 scripts/phase5.py draft --root .work/collected')
         self.assertEqual(t['jobs']['release']['steps'][-1]['run'],'python3 scripts/phase5.py release --root .work/collected')
         self.assertIn('def release(root): _release(root, True)',(ROOT/'scripts/phase5.py').read_text())
