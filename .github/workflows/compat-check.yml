@@ -70,7 +70,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - name: Validate explicit platform policies
       run: python3 scripts/release/qualification.py check
     - name: Scan tracked maintenance files for known CI credentials
@@ -119,7 +119,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - name: Run release and repository contracts
       run: |
         set -euo pipefail
@@ -145,7 +145,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: ${{ needs.resolve.outputs.rust }}
@@ -204,7 +204,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - name: Load fictional bridge fixtures
       shell: bash
       run: "source scripts/validation/test-config.sh\npython3 - <<'PYCODE'\nimport os\nwith open(os.environ['GITHUB_ENV'],'a') as f:\n\
@@ -351,7 +351,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Install reviewed workflow parser
-      run: python3 -m pip install -r requirements-build.txt
+      run: python3 -m pip install -r requirements.txt
     - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: ${{ needs.resolve.outputs.rust }}
