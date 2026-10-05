@@ -228,7 +228,7 @@ jobs:
         patchset: ${{ needs.compatibility.outputs.patchset }}
   aggregate:
     name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, compatibility, prepare, build, android-sign]
+    needs: [resolve, draft-preflight, compatibility, prepare, desktop-build, android-build, android-sign]
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
@@ -276,6 +276,7 @@ jobs:
     - prepare
     - desktop-build
     - android-build
+    - android-sign
     - aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
@@ -283,6 +284,8 @@ jobs:
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
       inputs.production_android_signing == true &&
+      needs.desktop-build.result == 'success' &&
+      needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
