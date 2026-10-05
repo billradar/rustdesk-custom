@@ -93,7 +93,7 @@ class GenerationTests(unittest.TestCase):
         self.assertIsNone(mapped('fada664df7a294d1d1a9ca3e7cd3637069122f17'))
 
     def test_unknown_incompatible_source_fails_closed(self):
-        from patchsets import select
+        from scripts.upstream.patchsets import select
         import subprocess
         with tempfile.TemporaryDirectory() as tmp:
             source=Path(tmp)/'source';source.mkdir()
