@@ -41,6 +41,9 @@ name: Reusable Cross-Platform Build Core
       android_only:
         type: boolean
         default: false
+      desktop_only:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -254,7 +257,7 @@ jobs:
     needs: plan
   platforms:
     needs: plan
-    if: inputs.android_only != true && needs.plan.outputs.other_platform_count != '0'
+    if: inputs.android_only != true && needs.desktop_only != true && needs.plan.outputs.other_platform_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
@@ -276,7 +279,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-platforms:
     needs: plan
-    if: inputs.android_only != true && needs.plan.outputs.android_count != '0'
+    if: inputs.desktop_only != true && needs.plan.outputs.android_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.android_matrix) }}
@@ -297,7 +300,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
-    if: inputs.android_only != true
+    if: inputs.android_only != true && inputs.desktop_only != true
     needs: build
     runs-on: ubuntu-22.04
     permissions:
@@ -339,6 +342,7 @@ jobs:
     - android-platforms
     if: >-
       inputs.android_only != true &&
+      inputs.desktop_only != true &&
       always() &&
       needs.plan.result == 'success'
     runs-on: ubuntu-22.04
