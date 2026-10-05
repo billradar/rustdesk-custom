@@ -3,7 +3,7 @@
 import argparse, hashlib, json, os, re
 from pathlib import Path
 import yaml
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CRITICAL_FILES = ['build.py', 'build.rs', '.github/workflows/bridge.yml',
                   '.github/workflows/third-party-RustDeskTempTopMostWindow.yml',
                   '.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff']
