@@ -129,7 +129,7 @@ jobs:
         TAG: ${{ needs.detect.outputs.stable_tag }}
       run: |
         set -euo pipefail
-        sha="$(gh api "repos/rustdesk/rustdesk/git/ref/tags/$TAG" --jq '.object.sha')"
+        sha="$(gh api "repos/rustdesk/rustdesk/commits/$TAG" --jq '.sha')"
         runs="$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&event=workflow_dispatch&status=success&per_page=100" --jq '.workflow_runs[].id')"
         qualified=false
         for run in $runs; do
