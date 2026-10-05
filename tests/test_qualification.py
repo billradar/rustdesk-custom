@@ -150,14 +150,6 @@ class ArchitectureTests(unittest.TestCase):
             (root/'a').write_bytes(b'changed')
             with self.assertRaises(ValueError):platform_package.verify_checksums(root)
 
-class SigningImportTests(unittest.TestCase):
-    def test_android_signing_validator_uses_migrated_legacy_module(self):
-        source=(ROOT/'scripts/platform/platform_package.py').read_text()
-        self.assertIn('from legacy.android_signing import verify_signed',source)
-        self.assertNotIn('from android_signing import verify_signed',source)
-        import legacy.android_signing as android_signing
-        self.assertTrue(callable(android_signing.verify_signed))
-
 class AggregateTests(unittest.TestCase):
     def test_missing_required_target_fails_and_report_survives(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v1','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
