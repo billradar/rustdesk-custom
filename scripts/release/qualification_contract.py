@@ -62,7 +62,7 @@ class MatrixTests(unittest.TestCase):
         c=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         self.assertIn('qualification',c['jobs'])
         self.assertIn('ci-qualification-${{ github.sha }}',str(c['jobs']['qualification']))
-        self.assertIn('ci-qualification-v1',str((ROOT/'scripts/release/ci_qualification.py').read_text()))
+        self.assertIn('ci-qualification-v1',str((ROOT/'scripts/release/qualification.py').read_text()))
         self.assertNotIn('schedule',t['on'])
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['workflow_dispatch']['inputs']['release_mode']['options'], ['build','draft'])
@@ -184,7 +184,7 @@ class ParallelGateTests(unittest.TestCase):
         for name in ['preflight','flutter-analyze']:
             self.assertEqual(set(jobs[name]['strategy']['matrix']['variant']),{'standard','sos'})
             self.assertFalse(jobs[name]['strategy']['fail-fast'])
-        self.assertEqual(set(jobs['validation-report']['needs']),{'resolve','preflight','bridge','flutter-analyze','windows-helper'})
+        self.assertEqual(set(jobs['validation-report']['needs']),{'resolve','contracts','preflight','bridge','flutter-analyze','windows-helper'})
         for name in ['preflight','bridge','flutter-analyze','windows-helper']:
             self.assertNotIn('continue-on-error',jobs[name])
     def test_clients_and_draft_remain_downstream_of_complete_compatibility(self):
