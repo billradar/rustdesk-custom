@@ -39,7 +39,6 @@ runs:
         UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
         UPSTREAM_VERSION: ${{ inputs.upstream_version }}
         PATCHSET: ${{ inputs.patchset }}
-        YUBIKEY_PIV_PIN: ${{ env.YUBIKEY_PIV_PIN }}
       run: python3 scripts/android_yubikey_sign.py
     - name: Upload verified aarch64 production artifact
       if: contains(inputs.arches, 'aarch64')
