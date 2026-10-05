@@ -8,6 +8,7 @@ from scripts.upstream.patchsets import verify, patch_hash
 from scripts.release.production import assets, REPOSITORY
 ROOT=Path(__file__).resolve().parents[2]
 RELEASE_IDENTITY=ROOT/'metadata'/'release-identity.json'
+# Canonical release revision lives under metadata; root patch-revision.txt is retired.
 
 def outputs(data):
     Path('.work').mkdir(exist_ok=True)
