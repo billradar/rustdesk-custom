@@ -65,3 +65,53 @@ jobs:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: ci
+  qualification:
+    name: Publish CI qualification record
+    needs: [resolve, compatibility]
+    if: needs.compatibility.result == 'success'
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Create exact CI qualification record
+      env:
+        CUSTOM_REPOSITORY_SHA: ${{ github.sha }}
+        UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+        UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
+        PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+        UPSTREAM_VERSION: ${{ needs.compatibility.outputs.upstream_version }}
+        CI_RUN_ID: ${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        from patchsets import patch_hash
+        patchset=os.environ['PATCHSET']
+        record={
+          'schema':'ci-qualification-v1',
+          'qualified':True,
+          'workflow':'CI - Patch and Build compatibility',
+          'workflow_run_id':int(os.environ['CI_RUN_ID']),
+          'event':'${{ github.event_name }}',
+          'custom_repository_sha':os.environ['CUSTOM_REPOSITORY_SHA'],
+          'upstream_repository':'rustdesk/rustdesk',
+          'upstream_ref':os.environ['UPSTREAM_REF'],
+          'upstream_sha':os.environ['UPSTREAM_SHA'],
+          'upstream_version':os.environ['UPSTREAM_VERSION'],
+          'patchset':patchset,
+          'common_patch_hash':patch_hash('common',patchset),
+          'sos_patch_hash':patch_hash('sos',patchset),
+        }
+        if len(record['custom_repository_sha']) != 40 or len(record['upstream_sha']) != 40:
+          raise SystemExit('Invalid qualification SHA')
+        Path('.work').mkdir(exist_ok=True)
+        Path('.work/ci-qualification.json').write_text(json.dumps(record,indent=2)+'\n')
+        print(json.dumps(record,indent=2))
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ci-qualification-${{ github.sha }}
+        path: .work/ci-qualification.json
+        if-no-files-found: error
+        retention-days: 90
