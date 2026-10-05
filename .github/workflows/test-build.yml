@@ -45,7 +45,7 @@ jobs:
       artifact_version: ${{ steps.revision.outputs.artifact_version }}
       patchset: ${{ steps.patchset.outputs.patchset }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
       - id: resolve
@@ -101,7 +101,7 @@ jobs:
       SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
       SELECTED_VARIANT: ${{ inputs.variant }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
@@ -145,7 +145,7 @@ jobs:
     outputs:
       matrix: ${{ steps.selection.outputs.matrix }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
       - name: Validate selection and load fictional fixtures
@@ -257,7 +257,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
       - name: Validate production inputs without printing values
