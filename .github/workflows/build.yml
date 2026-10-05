@@ -365,7 +365,7 @@ jobs:
       always() &&
       needs.plan.result == 'success' &&
       inputs.direct_android_signing != true &&
-      (inputs.production_android_signing != true || needs.android-sign.result == 'success')
+      inputs.production_android_signing != true
     runs-on: ubuntu-22.04
     env:
       PATCHSET: ${{ inputs.patchset }}
