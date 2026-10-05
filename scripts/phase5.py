@@ -50,7 +50,7 @@ def aggregate(root,channel,experimental):
             windows_validate(path.parent)
         else:validate(path.parent)
         if i['channel']!=channel:raise ValueError('PROVENANCE: channel mismatch')
-        if platform=='android' and channel=='stable' and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Stable Android requires verified production identity')
+        if platform=='android' and channel in ('stable','nightly') and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Stable Android requires verified production identity')
         found[name]=i;folders[name]=path.parent
     windows={i['variant']:i for n,i in found.items() if n.startswith('windows-x86_64-')}
     if len(windows)==2:
@@ -125,7 +125,7 @@ def _release(root, publish, channel='stable'):
     from release import request,gh
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong release repository')
-    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel=='stable' else 'false'
+    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel in ('stable','nightly') else 'false'
     report=aggregate(root,channel,channel=='nightly')
     if report['result']!='PASS':raise ValueError('No complete supported aggregate')
     infos=[json.loads(p.read_text()) for p in root.rglob('build-info.json')]
