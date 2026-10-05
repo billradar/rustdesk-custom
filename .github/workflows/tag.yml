@@ -127,7 +127,7 @@ jobs:
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: false
-      android_only: false
+      desktop_only: true
       direct_android_signing: false
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
