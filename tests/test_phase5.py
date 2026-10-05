@@ -69,7 +69,7 @@ class MatrixTests(unittest.TestCase):
         self.assertIn("channel in ('stable','nightly')", p)
         self.assertEqual(t['jobs']['draft']['steps'][-1]['run'],'python3 scripts/phase5.py draft --root .work/collected')
         self.assertEqual(t['jobs']['release']['steps'][-1]['run'],'python3 scripts/phase5.py release --root .work/collected')
-        self.assertIn('def release(root): _release(root, True)',(ROOT/'scripts/phase5.py').read_text())
+        self.assertIn("def release(root, channel='stable'): _release(root, True, channel)",(ROOT/'scripts/phase5.py').read_text())
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['schedule'],[{'cron':'0 2 * * *'}]);self.assertNotIn('draft',n['jobs'])
     def test_platforms_consume_source_not_resolver(self):
