@@ -132,7 +132,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
     name: Sign Stable Android production artifacts with YubiKey PIV 9C
-    needs: [build]
+    needs: [resolve, draft-preflight, compatibility, prepare, build]
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
@@ -161,6 +161,7 @@ jobs:
         sparse-checkout: |
           metadata/yubikey-android-signing-identity.json
           scripts/android_yubikey_sign.py
+          .github/actions/android-yubikey-sign/action.yml
         sparse-checkout-cone-mode: false
         fetch-depth: 1
     - name: Validate public YubiKey identity metadata
