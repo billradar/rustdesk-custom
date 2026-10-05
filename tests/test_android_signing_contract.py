@@ -46,7 +46,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("android-sign:", self.build["jobs"])
         aggregate = self.build["jobs"]["aggregate"]
         self.assertNotIn("android-sign", json.dumps(aggregate.get("needs", {})))
-        self.assertIn("inputs.production_android_signing != true", aggregate["if"])
+        self.assertNotIn("production_android_signing", aggregate.get("if", ""))
 
     def test_stable_aggregate_waits_for_direct_signer(self):
         aggregate = self.tag["jobs"]["aggregate"]
