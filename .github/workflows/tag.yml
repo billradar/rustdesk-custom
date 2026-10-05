@@ -1,4 +1,4 @@
-name: Stable - Draft only
+name: Stable Release Pipeline
 'on':
   workflow_dispatch:
     inputs:
@@ -8,21 +8,21 @@ name: Stable - Draft only
         default: ''
       force_rebuild:
         type: boolean
-        description: Artifacts only for existing revision; never overwrite
+        description: Rebuild an existing revision
         default: false
-      dry_run:
-        type: boolean
-        description: Skip draft creation, keep artifacts only
-        default: true
-      include_experimental:
-        type: boolean
-        default: false
-        description: Experimental target validation; forces artifacts-only, no Draft
+      release_mode:
+        type: choice
+        description: Release mode
+        options:
+          - dry-run
+          - draft
+          - release
+        default: dry-run
       production_android_signing:
         type: boolean
         required: false
         default: false
-        description: Explicitly authorize Stable Android production signing for this manual run
+        description: Authorize Android production signing for this run
   schedule:
   - cron: 41 5,17 * * *
 permissions:
@@ -125,7 +125,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: false
       windows_only: true
       direct_android_signing: false
@@ -148,7 +147,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: false
       other_platforms_only: true
     secrets:
@@ -170,7 +168,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: ${{ inputs.production_android_signing || false }}
       direct_android_signing: false
       android_only: true
@@ -186,8 +183,7 @@ jobs:
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
-      inputs.dry_run == false &&
-      inputs.include_experimental == false &&
+      inputs.release_mode != 'dry-run' &&
       needs.android-build.result == 'success' &&
       needs.compatibility.result == 'success' &&
       needs.prepare.result == 'success'
@@ -256,8 +252,7 @@ jobs:
       always() &&
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
-      inputs.dry_run == false &&
-      inputs.include_experimental == false &&
+      inputs.release_mode != 'dry-run' &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
@@ -292,6 +287,50 @@ jobs:
         name: platform-aggregate-${{ github.run_id }}
         path: .work/phase5-aggregate/
         if-no-files-found: warn
+  release:
+    name: Publish Stable Release
+    needs:
+    - resolve
+    - draft-preflight
+    - compatibility
+    - prepare
+    - windows-build
+    - platforms-build
+    - android-build
+    - android-sign
+    - aggregate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.draft-preflight.outputs.draft_needed == 'true' &&
+      inputs.release_mode == 'release' &&
+      inputs.production_android_signing == true &&
+      needs.windows-build.result == 'success' &&
+      needs.platforms-build.result == 'success' &&
+      needs.android-build.result == 'success' &&
+      needs.aggregate.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements-build.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        path: .work/collected
+        merge-multiple: false
+    - name: Package inspectors for supported aggregate
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Create and publish complete supported Release
+      run: python3 scripts/phase5.py release --root .work/collected
   draft:
     needs:
     - resolve
@@ -306,8 +345,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
-      inputs.dry_run == false &&
-      inputs.include_experimental == false &&
+      inputs.release_mode == 'draft' &&
       inputs.production_android_signing == true &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
@@ -338,5 +376,5 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
-    - name: Create complete supported Draft only; no publish path
+    - name: Create complete supported Draft release
       run: python3 scripts/phase5.py draft --root .work/collected
