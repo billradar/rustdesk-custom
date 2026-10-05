@@ -116,11 +116,11 @@ def aggregate(root,channel,experimental):
     if errors:raise ValueError('Aggregate required gate FAIL')
     return report
 
-def draft(root):
+def _release(root, publish):
     from upstream import api
     from release import request,gh
     repo='billradar/rustdesk-custom'
-    if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong draft repository')
+    if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong release repository')
     os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true'
     report=aggregate(root,'stable',False)
     if report['result']!='PASS':raise ValueError('No complete supported aggregate')
@@ -129,18 +129,21 @@ def draft(root):
     sos=next(i for i in infos if i['variant']=='sos' and i['platform']=='windows-x86_64')
     tag=f'v{standard["upstream_tag"].lstrip("v")}-custom.{standard["patch_revision"]}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
-    if any(r.get('draft') and r.get('name')==tag for r in (api(f'repos/{repo}/releases?per_page=100') or [])):raise ValueError('Existing revision draft')
+    existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
+    if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
+    if any(not r.get('draft') for r in existing):raise ValueError('Existing revision release')
     from production import scan_job_log
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/phase5-aggregate/assets'
-    notes='\n'.join(['Upstream: rustdesk/rustdesk',f'Upstream Tag: {standard["upstream_tag"]}',f'Upstream SHA: {standard["upstream_sha"]}',f'Patch Set: {standard["patchset"]}',f'Common Patch Hash: {standard["common_patch_hash"]}',f'SOS Patch Hash: {sos["sos_patch_hash"]}',f'Custom Repository SHA: {standard["custom_repository_sha"]}',f'Prepared Source Run: {standard["prepare_run"]}',f'Build Run: {standard["build_run"]}',
+    notes='\\n'.join(['Upstream: rustdesk/rustdesk',f'Upstream Tag: {standard["upstream_tag"]}',f'Upstream SHA: {standard["upstream_sha"]}',f'Patch Set: {standard["patchset"]}',f'Common Patch Hash: {standard["common_patch_hash"]}',f'SOS Patch Hash: {sos["sos_patch_hash"]}',f'Custom Repository SHA: {standard["custom_repository_sha"]}',f'Prepared Source Run: {standard["prepare_run"]}',f'Build Run: {standard["build_run"]}',
         'Required Targets: '+','.join(sorted(report['targets'])),
         'Asset Inventory: '+json.dumps(sorted(p.name for p in directory.iterdir())),
         'Build / Package / Checksum / Architecture / Provenance: PASS',
         'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Desktop Code Signing: NOT ENABLED',
         'Android artifacts: PRODUCTION SIGNED / IDENTITY VERIFIED','Password Security V2: DEFERRED',
-        'Embedded client configuration/password can be extracted by client owners.','Release policy: DRAFT ONLY; publication is a manual user decision.'])+'\n'
+        'Embedded client configuration/password can be extracted by client owners.',
+        'Release policy: '+('PUBLISHED RELEASE.' if publish else 'DRAFT ONLY; publication is a manual user decision.')])+'\\n'
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
@@ -148,16 +151,18 @@ def draft(root):
     for attempt in range(12):
         assets=api(f'repos/{repo}/releases/{result["id"]}/assets') or []
         uploaded={a['name']:a['size'] for a in assets if a.get('state')=='uploaded'}
-        if uploaded==expected_assets:
-            break
+        if uploaded==expected_assets: break
         if attempt<11:time.sleep(5)
     if uploaded!=expected_assets:
-        raise ValueError('Incomplete draft upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
-    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':True,'body':notes+'Automation-State: complete\n'})
-    if not final['draft']:raise ValueError('Draft protection failed')
+        raise ValueError('Incomplete release upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
+    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\\n' if publish else 'Automation-State: complete\\n')})
+    if final['draft']!= (not publish): raise ValueError('Release state transition failed')
+
+def draft(root): _release(root, False)
+def release(root): _release(root, True)
 
 if __name__=='__main__':
-    a=argparse.ArgumentParser();a.add_argument('mode',choices=['check','plan','aggregate','draft']);a.add_argument('--channel',default='nightly');a.add_argument('--experimental',action='store_true');a.add_argument('--root',type=Path,default=Path('.work/all-targets'));a=a.parse_args()
+    a=argparse.ArgumentParser();a.add_argument('mode',choices=['check','plan','aggregate','draft','release']);a.add_argument('--channel',default='nightly');a.add_argument('--experimental',action='store_true');a.add_argument('--root',type=Path,default=Path('.work/all-targets'));a=a.parse_args()
     if a.mode=='check':entries();print('Explicit platform metadata: PASS')
     elif a.mode=='plan':
         p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);Path('.work/target-plan.json').write_text(json.dumps(p,indent=2)+'\n')
@@ -165,5 +170,5 @@ if __name__=='__main__':
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
-    elif a.mode=='draft':draft(a.root)
+    elif a.mode=='draft':draft(a.root)\n    elif a.mode=='release':release(a.root)
     else:aggregate(a.root,a.channel,a.experimental)
