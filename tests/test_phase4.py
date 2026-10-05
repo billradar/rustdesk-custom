@@ -75,8 +75,8 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release'})
-        self.assertIn('draft-preflight',jobs['compatibility']['needs'])
-        self.assertIn('needs.draft-preflight.outputs.build_needed',jobs['compatibility']['if'])
+        self.assertIn('draft-preflight',jobs['qualification']['needs'])
+        self.assertIn('qualification',jobs['prepare']['needs'])
         self.assertIn('needs.draft-preflight.outputs.draft_needed',jobs['draft']['if'])
         self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
     def test_nightly_uses_default_branch_not_stable(self):
@@ -91,10 +91,9 @@ class ChannelPolicyTests(unittest.TestCase):
             phase4.resolve('stable',force=True);data=out.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
     def test_entry_and_release_permissions(self):
         docs={p.name:yaml.safe_load(p.read_text()) for p in (ROOT/'.github/workflows').glob('*.yml')}
-        self.assertEqual(docs['nightly.yml']['on']['schedule'],[{'cron':'0 2 * * *'}])
-        for name in ('ci.yml','nightly.yml'):
-            self.assertTrue(all(j.get('permissions',{}).get('contents')!='write' for j in docs[name]['jobs'].values()))
-            self.assertNotIn('draft',docs[name]['jobs'])
+        self.assertEqual(docs['nightly.yml']['on']['schedule'],[{'cron':'0 16 * * *'}])
+        self.assertTrue(all(j.get('permissions',{}).get('contents')!='write' for j in docs['ci.yml']['jobs'].values()))
+        self.assertEqual(docs['nightly.yml']['jobs']['draft']['permissions']['contents'],'write')
         matrix=docs['build.yml']['jobs']['build']['strategy']['matrix']['include']
         self.assertEqual({(r['platform'],r['arch'],r['variant']) for r in matrix},{('windows','x86_64','standard'),('windows','x86_64','sos')})
         planned=json.loads((ROOT/'metadata/platform-matrix.json').read_text())['entries']
