@@ -57,28 +57,28 @@ jobs:
       id: state
       with:
         path: .upstream-state
-        key: upstream-router-master-\${{ needs.detect.outputs.production_sha }}
+        key: upstream-router-master-${{ needs.detect.outputs.production_sha }}
     - name: Route master change to Nightly
       if: steps.state.outputs.cache-hit != 'true'
       env:
-        GH_TOKEN: \${{ github.token }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
         gh workflow run nightly.yml \
-          --repo '\${{ github.repository }}' \
+          --repo '${{ github.repository }}' \
           --ref main \
-          -f upstream_ref='\${{ needs.detect.outputs.production_ref }}' \
+          -f upstream_ref='${{ needs.detect.outputs.production_ref }}' \
           -f force_rebuild=false \
           -f include_experimental=true \
           -f release_mode=build
         mkdir -p .upstream-state
-        echo '\${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
+        echo '${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
     - name: Remember routed master revision
       if: steps.state.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: .upstream-state
-        key: upstream-router-master-\${{ needs.detect.outputs.production_sha }}
+        key: upstream-router-master-${{ needs.detect.outputs.production_sha }}
   stable-tag:
     needs: detect
     if: needs.detect.outputs.stable_tag != ''
