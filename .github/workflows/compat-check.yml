@@ -71,7 +71,7 @@ jobs:
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements-build.txt
     - name: Validate explicit platform policies
-      run: python3 scripts/phase5.py check
+      run: python3 scripts/qualification.py check
     - name: Scan tracked maintenance files for known CI credentials
       run: python3 scripts/scan_repository.py
     - name: Require exact official source identity
