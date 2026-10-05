@@ -42,16 +42,25 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn('EXPECTED_PACKAGE = "com.carriez.flutter_hbb"', self.script)
         self.assertIn('if not os.environ.get("YUBIKEY_PIV_PIN")', self.script)
 
-    def test_build_does_not_own_production_signer(self):
+    def test_build_core_does_not_own_production_signer(self):
         self.assertNotIn("android-sign:", self.build["jobs"])
-        aggregate = self.build["jobs"]["aggregate"]
-        self.assertNotIn("android-sign", json.dumps(aggregate.get("needs", {})))
-        self.assertNotIn("production_android_signing", aggregate.get("if", ""))
+        self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.build))
+        self.assertNotIn("production_android_signing", json.dumps(self.build["jobs"].get("aggregate", {})))
 
-    def test_stable_aggregate_waits_for_direct_signer(self):
+    def test_stable_dag_has_explicit_android_build_to_sign_path(self):
+        self.assertIn("build-desktop", self.tag["jobs"])
+        self.assertIn("build-android", self.tag["jobs"])
+        signing = self.tag["jobs"]["android-sign"]
+        self.assertIn("build-android", json.dumps(signing["needs"]))
+        self.assertNotIn("build-desktop", json.dumps(signing["needs"]))
         aggregate = self.tag["jobs"]["aggregate"]
-        self.assertIn("android-sign", json.dumps(aggregate["needs"]))
+        aggregate_needs = set(aggregate["needs"])
+        self.assertTrue({"build-desktop", "build-android", "android-sign"}.issubset(aggregate_needs))
         draft = self.tag["jobs"]["draft"]
+        draft_needs = set(draft["needs"])
+        self.assertIn("build-desktop", draft_needs)
+        self.assertIn("build-android", draft_needs)
+        self.assertIn("aggregate", draft_needs)
         self.assertIn("needs.aggregate.result == 'success'", draft["if"])
         self.assertIn("inputs.production_android_signing == true", draft["if"])
 
