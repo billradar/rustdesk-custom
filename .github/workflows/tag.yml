@@ -18,11 +18,6 @@ name: Stable Release Pipeline
           - draft
           - release
         default: dry-run
-      production_android_signing:
-        type: boolean
-        required: false
-        default: false
-        description: Authorize Android production signing for this run
 permissions:
   contents: read
   actions: read
@@ -202,7 +197,7 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      production_android_signing: ${{ inputs.production_android_signing || false }}
+      production_android_signing: true
       direct_android_signing: false
       android_only: true
     secrets:
@@ -216,9 +211,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.production_android_signing == true &&
-      inputs.release_mode != 'dry-run' &&
-      needs.android-build.result == 'success' &&
+      inputs.needs.android-build.result == 'success' &&
       needs.qualification.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
@@ -285,8 +278,7 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.production_android_signing == true &&
-      inputs.release_mode != 'dry-run' &&
+      inputs.inputs.release_mode != 'dry-run' &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
@@ -337,8 +329,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'release' &&
-      inputs.production_android_signing == true &&
-      needs.windows-build.result == 'success' &&
+      inputs.needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
@@ -380,8 +371,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'draft' &&
-      inputs.production_android_signing == true &&
-      needs.windows-build.result == 'success' &&
+      inputs.needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
