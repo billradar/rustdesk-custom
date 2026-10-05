@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Explicit targets and cross-platform fan-in; support requires reviewed Actions evidence."""
-import argparse, hashlib, json, os, re, shutil, time, zipfile
+import argparse, hashlib, json, os, re, shutil, subprocess, time, zipfile
 from pathlib import Path
 from scripts.upstream.patchsets import patch_hash
 ROOT=Path(__file__).resolve().parents[2]
@@ -116,6 +116,43 @@ def aggregate(root,channel,experimental):
     if errors:raise ValueError('Aggregate required gate FAIL')
     return report
 
+def gh_json(path):
+    p=subprocess.run(["gh","api",path],check=True,capture_output=True,text=True,env=os.environ)
+    return json.loads(p.stdout)
+
+def verify_ci(repo,custom_sha,upstream_sha,upstream_ref):
+    if len(custom_sha)!=40 or len(upstream_sha)!=40:
+        raise ValueError("Invalid release SHA")
+    runs=gh_json(f"repos/{repo}/actions/workflows/ci.yml/runs?head_sha={custom_sha}&event=workflow_dispatch&status=success&per_page=100").get("workflow_runs",[])
+    candidates=[r for r in runs if r.get("head_sha")==custom_sha and r.get("head_branch")=="main"]
+    if not candidates:
+        raise ValueError("No successful CI qualification run for this custom revision; run CI workflow_dispatch on main with the exact Stable upstream ref first")
+    for run in candidates:
+        run_id=run["id"]
+        artifacts=gh_json(f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100").get("artifacts",[])
+        wanted=f"ci-qualification-{custom_sha}"
+        if not [a for a in artifacts if a.get("name")==wanted and not a.get("expired")]:
+            continue
+        target=Path(".work/qualification")
+        if target.exists(): shutil.rmtree(target)
+        target.mkdir(parents=True)
+        subprocess.run(["gh","run","download",str(run_id),"-R",repo,"-n",wanted,"-D",str(target)],check=True,env=os.environ)
+        files=list(target.rglob("ci-qualification.json"))
+        if len(files)!=1: raise ValueError("Qualification artifact must contain exactly one record")
+        record=json.loads(files[0].read_text())
+        expected={"schema":"ci-qualification-v1","qualified":True,"custom_repository_sha":custom_sha,
+                  "upstream_repository":"rustdesk/rustdesk","upstream_sha":upstream_sha,
+                  "upstream_ref":upstream_ref,"event":"workflow_dispatch"}
+        for key,value in expected.items():
+            if record.get(key)!=value: raise ValueError(f"Qualification identity mismatch: {key}")
+        if record.get("workflow_run_id")!=run_id: raise ValueError("Qualification workflow run mismatch")
+        patchset=record.get("patchset")
+        if not isinstance(patchset,str) or not patchset: raise ValueError("Qualification missing patchset")
+        if record.get("common_patch_hash")!=patch_hash("common",patchset): raise ValueError("Qualification common patch hash mismatch")
+        if record.get("sos_patch_hash")!=patch_hash("sos",patchset): raise ValueError("Qualification SOS patch hash mismatch")
+        return record
+    raise ValueError("Successful CI workflow exists, but no exact qualification artifact was found")
+
 def _release(root, publish, channel='stable'):
     if channel == 'nightly' and publish:
         raise ValueError('Nightly release is forbidden; only draft publication is allowed')
@@ -167,14 +204,36 @@ def draft(root, channel='stable'): _release(root, False, channel)
 def release(root, channel='stable'): _release(root, True, channel)
 
 if __name__=='__main__':
-    a=argparse.ArgumentParser();a.add_argument('mode',choices=['check','plan','aggregate','draft','release']);a.add_argument('--channel',default='nightly');a.add_argument('--experimental',action='store_true');a.add_argument('--root',type=Path,default=Path('.work/all-targets'));a=a.parse_args()
-    if a.mode=='check':entries();print('Explicit platform metadata: PASS')
+    a=argparse.ArgumentParser()
+    a.add_argument('mode',choices=['check','plan','aggregate','draft','release','verify-ci'])
+    a.add_argument('--channel',default='nightly')
+    a.add_argument('--experimental',action='store_true')
+    a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
+    a.add_argument('--repository',default=os.environ.get('GITHUB_REPOSITORY',''))
+    a.add_argument('--custom-sha')
+    a.add_argument('--upstream-sha')
+    a.add_argument('--upstream-ref')
+    a.add_argument('--output',type=Path,default=Path('.work/ci-qualification.json'))
+    a=a.parse_args()
+    if a.mode=='check':
+        entries();print('Explicit platform metadata: PASS')
     elif a.mode=='plan':
-        p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);Path('.work/target-plan.json').write_text(json.dumps(p,indent=2)+'\n')
+        p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);Path('.work/target-plan.json').write_text(json.dumps(p,indent=2)+'\\n')
         extra=[e for e in p['selected'] if e['platform']!='windows']
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-                f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
+                f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='+str(len(extra))+'\\n')
     elif a.mode=='draft':draft(a.root,a.channel)
     elif a.mode=='release':release(a.root,a.channel)
-    else:aggregate(a.root,a.channel,a.experimental)
+    elif a.mode=='verify-ci':
+        if not all((a.custom_sha,a.upstream_sha,a.upstream_ref)):
+            a.error('verify-ci requires --custom-sha, --upstream-sha and --upstream-ref')
+        record=verify_ci(a.repository,a.custom_sha,a.upstream_sha,a.upstream_ref)
+        a.output.parent.mkdir(parents=True,exist_ok=True)
+        a.output.write_text(json.dumps(record,indent=2)+'\\n')
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+                out.write(f"patchset={record['patchset']}\\n")
+                out.write(f"upstream_version={record['upstream_version']}\\n")
+    else:
+        aggregate(a.root,a.channel,a.experimental)
