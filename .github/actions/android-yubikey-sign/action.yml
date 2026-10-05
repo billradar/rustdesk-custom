@@ -1,0 +1,81 @@
+name: Android YubiKey production signing
+description: Validate, sign and verify Stable Android artifacts with the Environment-bound YubiKey job
+inputs:
+  arches:
+    required: true
+  channel:
+    required: true
+  upstream_sha:
+    required: true
+  upstream_version:
+    required: true
+  patchset:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download Android aarch64 build artifact
+      if: contains(inputs.arches, 'aarch64')
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-aarch64
+        path: .work/android-input/aarch64
+    - name: Download Android armv7 build artifact
+      if: contains(inputs.arches, 'armv7')
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-armv7
+        path: .work/android-input/armv7
+    - name: Download Android x86_64 build artifact
+      if: contains(inputs.arches, 'x86_64')
+      uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-x86_64
+        path: .work/android-input/x86_64
+    - name: Validate, sign and verify all Android artifacts
+      shell: bash
+      env:
+        ARCHES: ${{ inputs.arches }}
+        UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+        UPSTREAM_VERSION: ${{ inputs.upstream_version }}
+        PATCHSET: ${{ inputs.patchset }}
+      run: python3 scripts/android_yubikey_sign.py
+    - name: Upload verified aarch64 production artifact
+      if: contains(inputs.arches, 'aarch64')
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-aarch64
+        path: .work/signed/aarch64/
+        if-no-files-found: error
+        retention-days: 14
+    - name: Upload verified armv7 production artifact
+      if: contains(inputs.arches, 'armv7')
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-armv7
+        path: .work/signed/armv7/
+        if-no-files-found: error
+        retention-days: 14
+    - name: Upload verified x86_64 production artifact
+      if: contains(inputs.arches, 'x86_64')
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-standard-android-x86_64
+        path: .work/signed/x86_64/
+        if-no-files-found: error
+        retention-days: 14
+    - name: Remove downloaded and signed workspace artifacts
+      if: always()
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import os, shutil
+        from pathlib import Path
+        root = Path(".work")
+        for path in (root / "android-input", root / "signed"):
+            if path.exists():
+                shutil.rmtree(path)
+        for path in Path(os.environ["RUNNER_TEMP"]).glob("rustdesk-yubikey-signing-*"):
+            if path.exists():
+                shutil.rmtree(path)
+        PY
