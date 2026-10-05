@@ -147,7 +147,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: false
       other_platforms_only: true
     secrets:
@@ -169,7 +168,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      include_experimental: ${{ inputs.include_experimental || false }}
       production_android_signing: ${{ inputs.production_android_signing || false }}
       direct_android_signing: false
       android_only: true
@@ -254,8 +252,7 @@ jobs:
       always() &&
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
-      inputs.dry_run == false &&
-      inputs.include_experimental == false &&
+      inputs.release_mode != 'dry-run' &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
