@@ -67,7 +67,7 @@ def main():
     if args.mode == 'default':
         branch = api(f'repos/{OFFICIAL}')['default_branch']
         ref = args.ref or branch
-        data = {'upstream_branch': branch, 'upstream_ref': ref, 'upstream_sha': resolve_ref(ref)}
+        data = {'upstream_branch': ref, 'upstream_ref': ref, 'upstream_sha': resolve_ref(ref)}
     else:
         data = choose_stable(args.ref)
         revision = (ROOT / 'patch-revision.txt').read_text().strip()
