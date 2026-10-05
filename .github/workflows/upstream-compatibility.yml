@@ -18,18 +18,23 @@ jobs:
     - id: upstream
       env:
         GH_TOKEN: ${{ github.token }}
-      run: python3 scripts/upstream.py default
+      run: python3 scripts/upstream.py default --ref "${{ inputs.upstream_ref }}"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: compatibility-upstream-${{ github.run_id }}
         path: .work/discovery.json
   compatibility:
     needs: discover
-    uses: ./.github/workflows/test-build.yml
+    uses: ./.github/workflows/compat-check.yml
     with:
-      upstream_ref: ${{ needs.discover.outputs.sha }}
-      upstream_branch: ${{ needs.discover.outputs.branch }}
-      variant: both
-      validation_only: true
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: ${{ needs.discover.outputs.branch }}
+      upstream_sha: ${{ needs.discover.outputs.sha }}
+      channel: ci
 'on':
-  workflow_dispatch: null
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        type: string
+        description: Upstream production/test branch or ref
+        required: true
