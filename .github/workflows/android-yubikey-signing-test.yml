@@ -1,0 +1,163 @@
+name: Android - YubiKey Signing Smoke Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        type: string
+        description: Official stable tag to build for the signing test
+        required: true
+        default: "1.5.0"
+      authorize_yubikey_test:
+        type: boolean
+        description: Explicitly authorize one real YubiKey PIV 9C signing test
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rustdesk-android-yubikey-smoke-test
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve test source
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-yubikey-signing-test.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.authorize_yubikey_test == true
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - id: resolve
+        name: Resolve requested stable tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.upstream_ref }}
+        run: python3 scripts/phase4.py resolve --channel stable --ref "$REQUESTED_REF" --discovery-only
+
+  compatibility:
+    name: Validate patch compatibility
+    needs: resolve
+    if: needs.resolve.result == 'success'
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: stable
+
+  prepare:
+    name: Prepare source
+    needs: [resolve, compatibility]
+    if: needs.compatibility.result == 'success'
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: stable
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+
+  build:
+    name: Build Android test inputs
+    needs: [resolve, compatibility, prepare]
+    if: needs.prepare.result == 'success'
+    uses: ./.github/workflows/build.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: stable
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+      revision: "signing-test"
+      include_experimental: false
+      production_android_signing: false
+      direct_android_signing: false
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+
+  android-sign:
+    name: Real YubiKey PIV 9C signing smoke test
+    needs: [resolve, compatibility, prepare, build]
+    if: >-
+      needs.build.result == 'success' &&
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/android-yubikey-signing-test.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.authorize_yubikey_test == true
+    runs-on:
+      - self-hosted
+      - linux
+      - arm64
+      - rustdesk-signing
+      - android-signing
+      - yubikey
+    environment:
+      name: android-production-signing
+    concurrency:
+      group: rustdesk-android-yubikey-signing
+      cancel-in-progress: false
+      queue: max
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            metadata/yubikey-android-signing-identity.json
+            scripts/android_yubikey_sign.py
+            .github/actions/android-yubikey-sign/action.yml
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Validate public YubiKey identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          info = json.loads(Path("metadata/yubikey-android-signing-identity.json").read_text())
+          assert info["certificate_sha256"] == "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5"
+          assert info["piv_slot"] == "9C"
+          assert info["pkcs11_id"] == "02"
+          print("YubiKey identity metadata: PASS")
+          PY
+
+      - name: Environment Secret Binding Preflight
+        shell: bash
+        env:
+          YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
+            printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
+            exit 1
+          fi
+          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
+
+      - name: Sign and verify all Android architectures
+        uses: ./.github/actions/android-yubikey-sign
+        env:
+          YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+        with:
+          arches: aarch64,armv7,x86_64
+          channel: stable
+          upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+          upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+          patchset: ${{ needs.compatibility.outputs.patchset }}
