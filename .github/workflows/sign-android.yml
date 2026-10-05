@@ -7,6 +7,9 @@ name: Reusable Android YubiKey Production Signing
       upstream_sha: {type: string, required: true}
       upstream_version: {type: string, required: true}
       patchset: {type: string, required: true}
+    secrets:
+      YUBIKEY_PIV_PIN:
+        required: false
 permissions:
   contents: read
   actions: read
@@ -165,6 +168,22 @@ jobs:
               print(f"{arch}: artifact, source, package, ABI and checksum gates: PASS")
           PY
 
+      - name: Validate environment Secret Context before touching the YubiKey
+        env:
+          YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
+            printf '%s\n' 'SECRETS CONTEXT: FAIL'
+            printf '%s\n' 'ENVIRONMENT SECRET DELIVERY: FAIL'
+            exit 1
+          fi
+          printf '%s\n' 'SECRETS CONTEXT: PASS'
+          printf '%s\n' 'STEP ENV MAPPING: PASS'
+          printf '%s\n' 'PROCESS ENVIRONMENT: PASS'
+          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
+          unset YUBIKEY_PIV_PIN
       - name: Production YubiKey signing of all Android architectures
         env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
