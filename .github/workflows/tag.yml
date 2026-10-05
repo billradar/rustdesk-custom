@@ -134,11 +134,16 @@ jobs:
     name: Sign Stable Android production artifacts with YubiKey PIV 9C
     needs: [resolve, draft-preflight, compatibility, prepare, build]
     if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
-      needs.build.result == 'success'
+      needs.build.result == 'success' &&
+      needs.compatibility.result == 'success' &&
+      needs.prepare.result == 'success'
     runs-on:
       - self-hosted
       - linux
@@ -206,7 +211,8 @@ jobs:
       inputs.production_android_signing == true &&
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
-      needs.build.result == 'success'
+      needs.build.result == 'success' &&
+      needs.android-sign.result == 'success'
     runs-on: ubuntu-22.04
     env:
       PATCHSET: ${{ needs.compatibility.outputs.patchset }}
