@@ -46,13 +46,21 @@ jobs:
     - id: resolve
       env:
         GH_TOKEN: ${{ github.token }}
-        REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
+        TEST_BRANCH: ${{ vars.UPSTREAM_TEST_BRANCH || 'test' }}
         CHANNEL: nightly
         FORCE: ${{ inputs.force_rebuild || false }}
       run: 'args=()
 
         [[ "$FORCE" != true ]] || args+=(--force)
 
+        if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+          REQUESTED_REF="$TEST_BRANCH"
+        else
+          REQUESTED_REF="${{ inputs.upstream_ref }}"
+          REQUESTED_REF="${REQUESTED_REF:-$TEST_BRANCH}"
+        fi
+
+        echo "Nightly upstream ref: $REQUESTED_REF"
         python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
