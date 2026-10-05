@@ -2,8 +2,10 @@ import hashlib,json,os,struct,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import yaml
-ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'scripts'))
-import qualification,platform_adapter,platform_package
+ROOT=Path(__file__).resolve().parents[1]
+import scripts.release.qualification as qualification
+import scripts.platform.platform_adapter as platform_adapter
+import scripts.platform.platform_package as platform_package
 
 class MatrixTests(unittest.TestCase):
     def test_explicit_policy_and_stable_excludes_experiments(self):
@@ -52,20 +54,20 @@ class MatrixTests(unittest.TestCase):
         self.assertNotIn('compatibility',t['jobs'])
         self.assertIn('qualification',t['jobs'])
         self.assertEqual(t['jobs']['qualification']['outputs']['patchset'], "${{ steps.verify.outputs.patchset }}")
-        self.assertIn('scripts/ci_qualification.py',t['jobs']['qualification']['steps'][1]['run'])
+        self.assertIn('scripts/release/ci_qualification.py',t['jobs']['qualification']['steps'][1]['run'])
         for name in ('prepare','windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('compatibility',str(t['jobs'][name].get('needs',[])))
         c=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         self.assertIn('qualification',c['jobs'])
         self.assertIn('ci-qualification-${{ github.sha }}',str(c['jobs']['qualification']))
-        self.assertIn('ci-qualification-v1',str((ROOT/'scripts/ci_qualification.py').read_text()))
+        self.assertIn('ci-qualification-v1',str((ROOT/'scripts/release/ci_qualification.py').read_text()))
         self.assertNotIn('schedule',t['on'])
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['workflow_dispatch']['inputs']['release_mode']['options'], ['build','draft'])
         self.assertNotIn('release', n['on']['workflow_dispatch']['inputs']['release_mode']['options'])
         self.assertNotIn("inputs.release_mode == 'draft'", n['jobs']['aggregate']['if'])
         self.assertIn("inputs.release_mode == 'draft'", n['jobs']['draft']['if'])
-        p=(ROOT/'scripts/qualification.py').read_text()
+        p=(ROOT/'scripts/release/qualification.py').read_text()
         self.assertIn("Nightly release is forbidden", p)
         self.assertIn("channel in ('stable','nightly')", p)
         stable=(ROOT/".github/workflows/tag.yml").read_text()
@@ -79,7 +81,7 @@ class MatrixTests(unittest.TestCase):
         self.assertIn("channel in ('stable','nightly')", p)
         self.assertEqual(t['jobs']['draft']['steps'][-1]['run'],'python3 scripts/qualification.py draft --root .work/collected')
         self.assertEqual(t['jobs']['release']['steps'][-1]['run'],'python3 scripts/qualification.py release --root .work/collected')
-        self.assertIn("def release(root, channel='stable'): _release(root, True, channel)",(ROOT/'scripts/qualification.py').read_text())
+        self.assertIn("def release(root, channel='stable'): _release(root, True, channel)",(ROOT/'scripts/release/qualification.py').read_text())
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['schedule'],[{'cron':'0 16 * * *'}])
         nightly_resolve=n['jobs']['resolve']
@@ -99,7 +101,7 @@ class MatrixTests(unittest.TestCase):
         self.assertNotIn('upstream-compatibility.yml', str(router['jobs']['master-debounce']))
         self.assertIn('ci.yml', str(router['jobs']['stable-tag']))
         self.assertIn("promote_stable=true", str(router['jobs']['stable-tag']))
-        channel=(ROOT/'scripts/channel.py').read_text()
+        channel=(ROOT/'scripts/release/channel.py').read_text()
         self.assertNotIn("Nightly must use official default branch", channel)
         ci_text=(ROOT/'.github/workflows/ci.yml').read_text()
         self.assertIn('promote_stable', ci_text)
@@ -150,7 +152,7 @@ class ArchitectureTests(unittest.TestCase):
 
 class SigningImportTests(unittest.TestCase):
     def test_android_signing_validator_uses_migrated_legacy_module(self):
-        source=(ROOT/'scripts/platform_package.py').read_text()
+        source=(ROOT/'scripts/platform/platform_package.py').read_text()
         self.assertIn('from legacy.android_signing import verify_signed',source)
         self.assertNotIn('from android_signing import verify_signed',source)
         import legacy.android_signing as android_signing
