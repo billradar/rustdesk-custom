@@ -68,6 +68,8 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn("android-build", json.dumps(draft["needs"]))
         self.assertIn("needs.aggregate.result == 'success'", draft["if"])
         self.assertIn("inputs.production_android_signing == true", draft["if"])
+        self.assertIn("desktop-build", json.dumps(draft["needs"]))
+        self.assertIn("android-build", json.dumps(draft["needs"]))
 
     def test_old_reusable_signer_is_gone(self):
         self.assertFalse((ROOT / ".github/workflows/sign-android.yml").exists())
