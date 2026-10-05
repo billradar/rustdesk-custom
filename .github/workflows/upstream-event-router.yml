@@ -133,35 +133,21 @@ jobs:
         all_runs="$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&event=workflow_dispatch&per_page=100" --jq '.workflow_runs[] | [.id,.status,.conclusion] | @tsv')"
         qualified=false
         active=false
-        while IFS=
+        while IFS=$'\t' read -r run status conclusion; do
+          [[ -n "${run:-}" ]] || continue
+          if [[ "$status" != "completed" ]]; then active=true; continue; fi
+          if [[ "$conclusion" != "success" ]]; then continue; fi
+          rm -rf .qualification
           if gh run download "$run" --repo '${{ github.repository }}' --name 'ci-qualification-${{ github.sha }}' --dir .qualification >/dev/null 2>&1; then
             if jq -e --arg tag "$TAG" --arg sha "$sha" '.upstream_ref == $tag and .upstream_sha == $sha and .qualified == true' .qualification/ci-qualification.json >/dev/null; then
               qualified=true; break
             fi
-            rm -rf .qualification
           fi
         done <<< "$all_runs"
         echo "qualified=$qualified" >> "$GITHUB_OUTPUT"
         echo "active=$active" >> "$GITHUB_OUTPUT"
     - name: Start CI qualification for new Stable Tag
       if: steps.check.outputs.qualified != 'true' && steps.check.outputs.active != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        gh workflow run ci.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' -f force_rebuild=false -f promote_stable=true\t' read -r run status conclusion; do
-          [[ -n "${run:-}" ]] || continue
-          if [[ "$status" != "completed" ]]; then active=true; fi
-          if [[ "$conclusion" != "success" ]]; then continue; fi
-          if gh run download "$run" --repo '${{ github.repository }}' --name 'ci-qualification-${{ github.sha }}' --dir .qualification >/dev/null 2>&1; then
-            if jq -e --arg tag "$TAG" --arg sha "$sha" '.upstream_ref == $tag and .upstream_sha == $sha and .qualified == true' .qualification/ci-qualification.json >/dev/null; then
-              qualified=true; break
-            fi
-            rm -rf .qualification
-          fi
-        done
-        echo "qualified=$qualified" >> "$GITHUB_OUTPUT"
-    - name: Start CI qualification for new Stable Tag
-      if: steps.check.outputs.qualified != 'true'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
