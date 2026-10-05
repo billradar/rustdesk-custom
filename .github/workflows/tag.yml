@@ -102,7 +102,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        python3 scripts/release/ci_qualification.py \
+        python3 scripts/release/qualification.py verify-ci \
           --repository "${{ github.repository }}" \
           --custom-sha "${{ github.sha }}" \
           --upstream-sha "${{ needs.resolve.outputs.upstream_sha }}" \
