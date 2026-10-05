@@ -44,6 +44,12 @@ name: Reusable Cross-Platform Build Core
       desktop_only:
         type: boolean
         default: false
+      windows_only:
+        type: boolean
+        default: false
+      other_platforms_only:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -92,7 +98,7 @@ jobs:
         path: .work/target-plan.json
         if-no-files-found: error
   build:
-    if: inputs.android_only != true
+    if: inputs.android_only != true && inputs.other_platforms_only != true
     name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
@@ -276,7 +282,7 @@ jobs:
 
   platforms:
     needs: [plan, android-signing-preflight]
-    if: inputs.android_only != true && inputs.desktop_only != true && needs.plan.outputs.other_platform_count != '0'
+    if: inputs.android_only != true && inputs.windows_only != true && needs.plan.outputs.other_platform_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
@@ -298,7 +304,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-platforms:
     needs: plan
-    if: inputs.desktop_only != true && needs.plan.outputs.android_count != '0'
+    if: inputs.windows_only != true && inputs.other_platforms_only != true && needs.plan.outputs.android_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.android_matrix) }}
@@ -319,7 +325,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
-    if: inputs.android_only != true && inputs.desktop_only != true
+    if: inputs.android_only != true && inputs.windows_only != true && inputs.other_platforms_only != true
     needs: build
     runs-on: ubuntu-22.04
     permissions:
@@ -361,7 +367,8 @@ jobs:
     - android-platforms
     if: >-
       inputs.android_only != true &&
-      inputs.desktop_only != true &&
+      inputs.windows_only != true &&
+      inputs.other_platforms_only != true &&
       always() &&
       needs.plan.result == 'success'
     runs-on: ubuntu-22.04
