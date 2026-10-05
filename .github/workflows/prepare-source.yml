@@ -1,4 +1,6 @@
 name: Reusable Prepared Source
+env:
+  PYTHONPATH: .
 'on':
   workflow_call:
     inputs:
@@ -51,9 +53,9 @@ jobs:
     - name: Install pinned Syft for exact-source upstream SBOM profile
       uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610
     - name: Prepare Common once and fork independent variant sources
-      run: 'bash scripts/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
+      run: 'bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
 
-        python3 scripts/prepared_source.py prepare --base .work/official --output .work/prepared --ref "$UPSTREAM_REF" --sha
+        python3 scripts/source/prepared_source.py prepare --base .work/official --output .work/prepared --ref "$UPSTREAM_REF" --sha
         "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --bridge .work/bridge-files'
     - id: identity
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\na=json.loads(Path('.work/prepared/standard/source-manifest.json').read_text());\

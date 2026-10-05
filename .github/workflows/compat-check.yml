@@ -1,4 +1,6 @@
 name: Reusable Patch and Build Compatibility
+env:
+  PYTHONPATH: .
 'on':
   workflow_call:
     inputs:
@@ -71,9 +73,9 @@ jobs:
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements-build.txt
     - name: Validate explicit platform policies
-      run: python3 scripts/phase5.py check
+      run: python3 scripts/qualification.py check
     - name: Scan tracked maintenance files for known CI credentials
-      run: python3 scripts/scan_repository.py
+      run: python3 scripts/validation/scan_repository.py
     - name: Require exact official source identity
       env:
         UP_SHA: ${{ inputs.upstream_sha }}
@@ -91,15 +93,15 @@ jobs:
 
         PYCODE
 
-        bash scripts/prepare.sh "$UP_SHA" .work/official'
+        bash scripts/source/prepare.sh "$UP_SHA" .work/official'
     - id: adapter
       name: Fail-closed official build adapter
-      run: python3 scripts/build_adapter.py .work/official --output .work/build-profile.json
+      run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
     - id: selection
       name: Select compatible frozen patch generation
-      run: 'source scripts/test-config.sh
+      run: 'source scripts/validation/test-config.sh
 
-        python3 scripts/patchsets.py "$UP_SHA" --source .work/official'
+        python3 scripts/upstream/patchsets.py "$UP_SHA" --source .work/official'
       env:
         UP_SHA: ${{ inputs.upstream_sha }}
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -133,13 +135,13 @@ jobs:
     - name: Automation gate regression tests
       run: python3 -m unittest discover -s tests -v
     - name: Patch/API/config gate before expensive Windows dependencies
-      run: 'source scripts/test-config.sh
+      run: 'source scripts/validation/test-config.sh
 
         args=()
 
         if [[ "$SIMULATE_FAILURE" == true ]]; then args+=(--simulate-failure); fi
 
-        python3 scripts/compatibility.py prepare --sha "$UPSTREAM_EXPECTED_SHA" --variant "$SELECTED_VARIANT" "${args[@]}"
+        python3 scripts/validation/compatibility.py prepare --sha "$UPSTREAM_EXPECTED_SHA" --variant "$SELECTED_VARIANT" "${args[@]}"
 
         '
     - name: Real hbb_common configuration API compilation
@@ -147,9 +149,9 @@ jobs:
 
         sudo apt-get install -y libssl-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev pkg-config protobuf-compiler
 
-        source scripts/test-config.sh
+        source scripts/validation/test-config.sh
 
-        python3 scripts/compatibility.py rust --variant "$SELECTED_VARIANT"
+        python3 scripts/validation/compatibility.py rust --variant "$SELECTED_VARIANT"
 
         '
     - name: Preserve diagnostics even on conflict
@@ -190,13 +192,13 @@ jobs:
       run: python3 -m pip install -r requirements-build.txt
     - name: Load fictional bridge fixtures
       shell: bash
-      run: "source scripts/test-config.sh\npython3 - <<'PYCODE'\nimport os\nwith open(os.environ['GITHUB_ENV'],'a') as f:\n\
+      run: "source scripts/validation/test-config.sh\npython3 - <<'PYCODE'\nimport os\nwith open(os.environ['GITHUB_ENV'],'a') as f:\n\
         \ for key in ('RUSTDESK_ID_SERVER','RUSTDESK_RELAY_SERVER','RUSTDESK_API_SERVER','RUSTDESK_KEY','RUSTDESK_PASSWORD'):\n\
         \  f.write(key+'='+os.environ[key]+'\\n')\nPYCODE"
     - name: Prepare exact official source
       env:
         UPSTREAM_REF: ${{ needs.resolve.outputs.sha }}
-      run: bash scripts/prepare.sh "$UPSTREAM_REF" .work/bridge
+      run: bash scripts/source/prepare.sh "$UPSTREAM_REF" .work/bridge
     - name: Install official bridge prerequisites
       run: 'sudo apt-get update
 
@@ -226,7 +228,7 @@ jobs:
 
         cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
 
-        python3 ../../scripts/package.py bridge-info .
+        python3 ../../scripts/release/package.py bridge-info .
 
         '
       env:
@@ -349,10 +351,10 @@ jobs:
     - name: Analyze patched Flutter interfaces against generated bridge
       env:
         SELECTED_VARIANT: ${{ matrix.variant }}
-      run: "source scripts/test-config.sh\npython3 scripts/compatibility.py prepare --sha \"$UPSTREAM_EXPECTED_SHA\" --variant\
+      run: "source scripts/validation/test-config.sh\npython3 scripts/validation/compatibility.py prepare --sha \"$UPSTREAM_EXPECTED_SHA\" --variant\
         \ \"$SELECTED_VARIANT\"\nfor variant in standard sos; do\n  [[ \"$SELECTED_VARIANT\" == both || \"$SELECTED_VARIANT\"\
-        \ == \"$variant\" ]] || continue\n  python3 scripts/package.py restore-bridge \".work/validation/$variant\" .work/bridge\n\
-        done\npython3 scripts/compatibility.py analyze --variant \"$SELECTED_VARIANT\"\n"
+        \ == \"$variant\" ]] || continue\n  python3 scripts/release/package.py restore-bridge \".work/validation/$variant\" .work/bridge\n\
+        done\npython3 scripts/validation/compatibility.py analyze --variant \"$SELECTED_VARIANT\"\n"
     - name: Preserve Flutter compatibility diagnostics
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

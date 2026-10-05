@@ -7,12 +7,11 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-import production
-import production_config as config
-import upstream
+import scripts.release.production as production
+import scripts.signing.production_config as config
+import scripts.upstream.resolve as upstream
 import test_automation as automation
-import release
+import scripts.release.github as release
 
 class ProductionInputTests(unittest.TestCase):
     def values(self):

@@ -1,4 +1,6 @@
 name: Stable Release Pipeline
+env:
+  PYTHONPATH: .
 'on':
   workflow_dispatch:
     inputs:
@@ -18,18 +20,11 @@ name: Stable Release Pipeline
           - draft
           - release
         default: dry-run
-      production_android_signing:
-        type: boolean
-        required: false
-        default: false
-        description: Authorize Android production signing for this run
-  schedule:
-  - cron: 41 5,17 * * *
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: phase4-stable-${{ github.ref }}
+  group: stable-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -48,7 +43,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
         CHANNEL: stable
-      run: python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
+      run: python3 scripts/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -83,51 +78,85 @@ jobs:
       run: |
         args=()
         [[ "$FORCE" != true ]] || args+=(--force)
-        python3 scripts/phase4.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
+        python3 scripts/channel.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
         name: release-preflight-${{ github.run_id }}
         path: .work/channel.json
         if-no-files-found: warn
-  compatibility:
+  qualification:
+    name: Verify CI qualification for Stable
     needs: [resolve, draft-preflight]
-    uses: ./.github/workflows/compat-check.yml
-    with:
-      upstream_repository: rustdesk/rustdesk
-      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
-      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-      channel: stable
     if: needs.draft-preflight.outputs.build_needed == 'true'
+    runs-on: ubuntu-22.04
+    outputs:
+      patchset: ${{ steps.verify.outputs.patchset }}
+      upstream_version: ${{ steps.verify.outputs.upstream_version }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: verify
+      name: Verify exact CI qualification
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        python3 scripts/release/ci_qualification.py \
+          --repository "${{ github.repository }}" \
+          --custom-sha "${{ github.sha }}" \
+          --upstream-sha "${{ needs.resolve.outputs.upstream_sha }}" \
+          --upstream-ref "${{ needs.resolve.outputs.upstream_ref }}"
+    - name: Rehydrate CI bridge artifact for this Stable run
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        CI_RUN_ID="$(python3 - <<'PY'
+        import json
+        print(json.load(open('.work/ci-qualification.json'))['workflow_run_id'])
+        PY
+        )"
+        rm -rf .work/bridge-rehydrated .work/bridge-files
+        mkdir -p .work/bridge-rehydrated .work/bridge-files
+        gh run download "$CI_RUN_ID" \
+          --repo "${{ github.repository }}" \
+          --name "ci-bridge-${{ github.sha }}" \
+          --dir .work/bridge-rehydrated
+        cp -a .work/bridge-rehydrated/. .work/bridge-files/
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: ci-qualification-consumed-${{ github.run_id }}
+        path: .work/ci-qualification.json
+        if-no-files-found: warn
   prepare:
     needs:
     - resolve
-    - compatibility
+    - qualification
     uses: ./.github/workflows/prepare-source.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
   windows-build:
     name: Build Stable Windows targets
     needs:
     - resolve
-    - compatibility
+    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      production_android_signing: false
       windows_only: true
-      direct_android_signing: false
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -135,19 +164,18 @@ jobs:
     name: Build Stable Linux and macOS targets
     needs:
     - resolve
-    - compatibility
+    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      production_android_signing: false
       other_platforms_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
@@ -156,36 +184,32 @@ jobs:
     name: Build Stable Android artifacts for production signing
     needs:
     - resolve
-    - compatibility
+    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
       upstream_version: ${{ needs.prepare.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      production_android_signing: ${{ inputs.production_android_signing || false }}
-      direct_android_signing: false
       android_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
     name: Sign Stable Android production artifacts with YubiKey PIV 9C
-    needs: [resolve, draft-preflight, compatibility, prepare, android-build]
+    needs: [resolve, draft-preflight, qualification, prepare, android-build]
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.production_android_signing == true &&
-      inputs.release_mode != 'dry-run' &&
       needs.android-build.result == 'success' &&
-      needs.compatibility.result == 'success' &&
+      needs.qualification.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
       - self-hosted
@@ -208,7 +232,7 @@ jobs:
         persist-credentials: false
         sparse-checkout: |
           metadata/yubikey-android-signing-identity.json
-          scripts/android_yubikey_sign.py
+          scripts/signing/android_yubikey_sign.py
           .github/actions/android-yubikey-sign/action.yml
         sparse-checkout-cone-mode: false
         fetch-depth: 1
@@ -244,22 +268,20 @@ jobs:
         channel: stable
         upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
         upstream_version: ${{ needs.prepare.outputs.upstream_version }}
-        patchset: ${{ needs.compatibility.outputs.patchset }}
+        patchset: ${{ needs.qualification.outputs.patchset }}
   aggregate:
     name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, compatibility, prepare, windows-build, platforms-build, android-build, android-sign]
+    needs: [resolve, draft-preflight, qualification, prepare, windows-build, platforms-build, android-build, android-sign]
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.production_android_signing == true &&
-      inputs.release_mode != 'dry-run' &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       needs.android-sign.result == 'success'
     runs-on: ubuntu-22.04
     env:
-      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      PATCHSET: ${{ needs.qualification.outputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
@@ -280,19 +302,19 @@ jobs:
         path: .work/all-targets
         merge-multiple: false
     - name: Fail-closed expected target and cross-platform provenance gate
-      run: python3 scripts/phase5.py aggregate --channel stable
+      run: python3 scripts/qualification.py aggregate --channel stable
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
         name: platform-aggregate-${{ github.run_id }}
-        path: .work/phase5-aggregate/
+        path: .work/aggregate/
         if-no-files-found: warn
   release:
     name: Publish Stable Release
     needs:
     - resolve
     - draft-preflight
-    - compatibility
+    - qualification
     - prepare
     - windows-build
     - platforms-build
@@ -303,7 +325,6 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'release' &&
-      inputs.production_android_signing == true &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
@@ -330,12 +351,12 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Create and publish complete supported Release
-      run: python3 scripts/phase5.py release --root .work/collected
+      run: python3 scripts/qualification.py release --root .work/collected
   draft:
     needs:
     - resolve
     - draft-preflight
-    - compatibility
+    - qualification
     - prepare
     - windows-build
     - platforms-build
@@ -346,7 +367,6 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'draft' &&
-      inputs.production_android_signing == true &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
@@ -357,7 +377,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      PATCHSET: ${{ needs.qualification.outputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
@@ -377,4 +397,4 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Create complete supported Draft release
-      run: python3 scripts/phase5.py draft --root .work/collected
+      run: python3 scripts/qualification.py draft --root .work/collected

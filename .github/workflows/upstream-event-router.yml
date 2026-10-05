@@ -1,0 +1,116 @@
+name: Upstream Event Router
+'on':
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: upstream-event-router
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-22.04
+    outputs:
+      production_sha: ${{ steps.detect.outputs.production_sha }}
+      production_ref: ${{ steps.detect.outputs.production_ref }}
+      stable_tag: ${{ steps.detect.outputs.stable_tag }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: detect
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, urllib.parse, urllib.request, urllib.error
+        def api(path, missing=False):
+            h={'Accept':'application/vnd.github+json','User-Agent':'rustdesk-custom-upstream-router'}
+            if os.environ.get('GH_TOKEN'): h['Authorization']='Bearer '+os.environ['GH_TOKEN']
+            try:
+                with urllib.request.urlopen(urllib.request.Request('https://api.github.com/'+path,headers=h),timeout=30) as r:
+                    return json.load(r)
+            except urllib.error.HTTPError as e:
+                if missing and e.code==404: return None
+                raise
+        repo='rustdesk/rustdesk'
+        production=api(f'repos/{repo}')['default_branch']
+        prod_sha=api(f'repos/{repo}/commits/{urllib.parse.quote(production,safe="")}')['sha']
+        releases=api(f'repos/{repo}/releases?per_page=20')
+        stable=next((x for x in releases if not x['draft'] and not x['prerelease']),None)
+        with open(os.environ['GITHUB_OUTPUT'],'a') as o:
+            o.write(f'production_sha={prod_sha}\nproduction_ref={production}\n')
+            o.write(f'stable_tag={stable["tag_name"] if stable else ""}\n')
+        print(f'production={production} {prod_sha}')
+        if stable: print(f'stable_tag={stable["tag_name"]}')
+        PY
+
+  master-debounce:
+    needs: detect
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/cache/restore@v4
+      id: state
+      with:
+        path: .upstream-state
+        key: upstream-router-master-${{ needs.detect.outputs.production_sha }}
+    - name: Route master change to Nightly
+      if: steps.state.outputs.cache-hit != 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        gh workflow run nightly.yml \
+          --repo '${{ github.repository }}' \
+          --ref main \
+          -f upstream_ref='${{ needs.detect.outputs.production_ref }}' \
+          -f force_rebuild=false \
+          -f include_experimental=true \
+          -f release_mode=build
+        mkdir -p .upstream-state
+        echo '${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
+    - name: Remember routed master revision
+      if: steps.state.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: .upstream-state
+        key: upstream-router-master-${{ needs.detect.outputs.production_sha }}
+  stable-tag:
+    needs: detect
+    if: needs.detect.outputs.stable_tag != ''
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Check whether this Stable Tag already has a qualified CI run
+      id: check
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ needs.detect.outputs.stable_tag }}
+      run: |
+        set -euo pipefail
+        sha="$(gh api "repos/rustdesk/rustdesk/commits/$TAG" --jq '.sha')"
+        all_runs="$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&event=workflow_dispatch&per_page=100" --jq '.workflow_runs[] | [.id,.status,.conclusion] | @tsv')"
+        qualified=false
+        active=false
+        while IFS=$'\t' read -r run status conclusion; do
+          [[ -n "${run:-}" ]] || continue
+          if [[ "$status" != "completed" ]]; then active=true; continue; fi
+          if [[ "$conclusion" != "success" ]]; then continue; fi
+          rm -rf .qualification
+          if gh run download "$run" --repo '${{ github.repository }}' --name 'ci-qualification-${{ github.sha }}' --dir .qualification >/dev/null 2>&1; then
+            if jq -e --arg tag "$TAG" --arg sha "$sha" '.upstream_ref == $tag and .upstream_sha == $sha and .qualified == true' .qualification/ci-qualification.json >/dev/null; then
+              qualified=true; break
+            fi
+          fi
+        done <<< "$all_runs"
+        echo "qualified=$qualified" >> "$GITHUB_OUTPUT"
+        echo "active=$active" >> "$GITHUB_OUTPUT"
+    - name: Start CI qualification for new Stable Tag
+      if: steps.check.outputs.qualified != 'true' && steps.check.outputs.active != 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh workflow run ci.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' -f force_rebuild=false -f promote_stable=true

@@ -11,7 +11,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.tag = yaml.safe_load((ROOT / ".github/workflows/tag.yml").read_text())
         self.build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         self.action = (ROOT / ".github/actions/android-yubikey-sign/action.yml").read_text()
-        self.script = (ROOT / "scripts/android_yubikey_sign.py").read_text()
+        self.script = (ROOT / "scripts/signing/android_yubikey_sign.py").read_text()
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]
@@ -20,8 +20,13 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(signing["concurrency"]["group"], "rustdesk-android-yubikey-signing")
         self.assertFalse(signing["concurrency"]["cancel-in-progress"])
         self.assertEqual(signing["concurrency"]["queue"], "max")
-        for marker in ("github.event_name == 'workflow_dispatch'", "inputs.production_android_signing == true", "inputs.release_mode != 'dry-run'"):
+        for marker in ("github.event_name == 'workflow_dispatch'",
+                       "needs.android-build.result == 'success'",
+                       "needs.qualification.result == 'success'",
+                       "needs.prepare.result == 'success'"):
             self.assertIn(marker, signing["if"])
+        self.assertNotIn("production_android_signing", signing["if"])
+        self.assertNotIn("release_mode != 'dry-run'", signing["if"])
 
     def test_secret_is_bound_only_at_direct_job_steps(self):
         signing = self.tag["jobs"]["android-sign"]
@@ -32,7 +37,9 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(hardware["env"]["YUBIKEY_PIV_PIN"], expected)
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.action))
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.build))
-        self.assertEqual(self.build["jobs"]["android-signing-preflight"].get("if"), "inputs.windows_only != true && inputs.other_platforms_only != true && inputs.android_only != true && inputs.production_android_signing")
+        self.assertNotIn("android-signing-preflight", self.build["jobs"])
+        self.assertNotIn("production_android_signing", json.dumps(self.build))
+        self.assertNotIn("direct_android_signing", json.dumps(self.build))
 
     def test_signing_action_and_script_keep_hardware_gates(self):
         self.assertIn("actions/download-artifact@", self.action)
@@ -52,7 +59,8 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("production_android_signing", aggregate.get("if", ""))
         android = self.build["jobs"]["android-platforms"]
         self.assertEqual(android["needs"], "plan")
-        self.assertEqual(android["with"]["production_signing"], "${{ inputs.production_android_signing || false }}")
+        self.assertNotIn("production_android_signing", json.dumps(android))
+        self.assertNotIn("direct_android_signing", json.dumps(self.build))
 
     def test_stable_build_split_and_sign_dependency(self):
         windows = self.tag["jobs"]["windows-build"]
@@ -60,11 +68,12 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         android = self.tag["jobs"]["android-build"]
 
         self.assertTrue(windows["with"].get("windows_only", False))
-        self.assertFalse(windows["with"]["production_android_signing"])
+        self.assertNotIn("production_android_signing", json.dumps(windows))
         self.assertTrue(platforms["with"].get("other_platforms_only", False))
-        self.assertFalse(platforms["with"]["production_android_signing"])
+        self.assertNotIn("production_android_signing", json.dumps(platforms))
         self.assertTrue(android["with"]["android_only"])
-        self.assertEqual(android["with"]["production_android_signing"], "${{ inputs.production_android_signing || false }}")
+        self.assertNotIn("production_android_signing", json.dumps(android))
+        self.assertNotIn("direct_android_signing", json.dumps(self.tag))
 
         self.assertEqual(self.tag["jobs"]["android-sign"]["needs"][-1], "android-build")
 
@@ -76,11 +85,10 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         for name in ("windows-build", "platforms-build", "android-build"):
             self.assertIn(name, json.dumps(draft["needs"]))
         self.assertIn("needs.aggregate.result == 'success'", draft["if"])
-        self.assertIn("inputs.production_android_signing == true", draft["if"])
 
     def test_android_artifact_name_contract_matches_build_and_sign_downloads(self):
         build_platform = (ROOT / ".github/workflows/build-platform.yml").read_text()
-        self.assertIn("inputs.platform == 'android' && inputs.production_signing && 'android-build-input'", build_platform)
+        self.assertIn("inputs.platform == 'android' && 'android-build-input'", build_platform)
         for arch in ("aarch64", "armv7", "x86_64"):
             expected = (
                 "android-build-input-${{ inputs.channel }}-${{ inputs.upstream_version }}"
@@ -89,7 +97,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
             self.assertIn(expected, self.action)
         self.assertNotIn("pattern: *.apk", self.action)
     def test_legacy_signer_resolves_repository_root_for_yubikey_metadata(self):
-        source = (ROOT / "scripts/legacy/android_signing.py").read_text()
+        source = (ROOT / "scripts/signing/android_identity.py").read_text()
         self.assertIn("ROOT = Path(__file__).resolve().parents[2]", source)
         self.assertNotIn("ROOT = Path(__file__).resolve().parents[1]", source)
         self.assertTrue((ROOT / "metadata/yubikey-android-signing-identity.json").is_file())

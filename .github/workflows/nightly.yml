@@ -1,12 +1,14 @@
 name: Nightly - Development artifacts
+env:
+  PYTHONPATH: .
 'on':
   schedule:
-  - cron: 0 2 * * *
+    - cron: '0 16 * * *'
   workflow_dispatch:
     inputs:
       upstream_ref:
         type: string
-        description: Upstream ref; empty = official default branch
+        description: Upstream ref; empty = configured test branch
         default: ''
       force_rebuild:
         type: boolean
@@ -16,11 +18,18 @@ name: Nightly - Development artifacts
         type: boolean
         default: true
         description: Include experimental Linux/macOS/Android targets; never promote automatically
+      release_mode:
+        type: choice
+        description: Nightly publication mode; release is forbidden
+        options:
+          - build
+          - draft
+        default: build
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: phase4-nightly-${{ github.ref }}
+  group: nightly-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,14 +48,22 @@ jobs:
     - id: resolve
       env:
         GH_TOKEN: ${{ github.token }}
-        REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
+        TEST_BRANCH: ${{ vars.UPSTREAM_TEST_BRANCH || 'test' }}
         CHANNEL: nightly
         FORCE: ${{ inputs.force_rebuild || false }}
       run: 'args=()
 
         [[ "$FORCE" != true ]] || args+=(--force)
 
-        python3 scripts/phase4.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+        if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+          REQUESTED_REF="$TEST_BRANCH"
+        else
+          REQUESTED_REF="${{ inputs.upstream_ref }}"
+          REQUESTED_REF="${REQUESTED_REF:-$TEST_BRANCH}"
+        fi
+
+        echo "Nightly upstream ref: $REQUESTED_REF"
+        python3 scripts/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -91,3 +108,133 @@ jobs:
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+
+  android-sign:
+    name: Sign Nightly Android artifacts with YubiKey PIV 9C
+    needs: [resolve, compatibility, prepare, build]
+    if: needs.build.result == 'success'
+    runs-on:
+      - self-hosted
+      - linux
+      - arm64
+      - rustdesk-signing
+      - android-signing
+      - yubikey
+    environment:
+      name: android-production-signing
+    concurrency:
+      group: rustdesk-android-yubikey-signing
+      cancel-in-progress: false
+      queue: max
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        sparse-checkout: |
+          metadata/yubikey-android-signing-identity.json
+          scripts/signing/android_yubikey_sign.py
+          .github/actions/android-yubikey-sign/action.yml
+        sparse-checkout-cone-mode: false
+        fetch-depth: 1
+    - name: Validate public YubiKey identity metadata
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        info=json.loads(Path("metadata/yubikey-android-signing-identity.json").read_text())
+        assert info["certificate_sha256"] == "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5"
+        assert info["piv_slot"] == "9C" and info["pkcs11_id"] == "02"
+        print("YubiKey identity metadata: PASS")
+        PY
+    - name: Environment Secret Binding Preflight
+      env:
+        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+      run: |
+        set -euo pipefail
+        test -n "${YUBIKEY_PIV_PIN:-}"
+        echo "ENVIRONMENT PIN AVAILABLE: PASS"
+    - name: Nightly Android production signing
+      uses: ./.github/actions/android-yubikey-sign
+      env:
+        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+      with:
+        arches: aarch64,armv7,x86_64
+        channel: nightly
+        upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+        upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+        patchset: ${{ needs.compatibility.outputs.patchset }}
+  aggregate:
+    name: Aggregate Nightly artifacts
+    needs: [resolve, compatibility, prepare, build, android-sign]
+    if: needs.build.result == 'success' && needs.android-sign.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      BUILD_CONFIGURATION: NIGHTLY
+      CHANNEL: nightly
+      EXPERIMENTAL: 'true'
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements-build.txt
+    - name: Package inspectors
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-nightly-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        path: .work/collected
+        merge-multiple: false
+    - name: Fail-closed expected target and cross-platform provenance gate
+      run: python3 scripts/qualification.py aggregate --channel nightly --experimental
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: nightly-aggregate-${{ github.run_id }}
+        path: .work/aggregate/
+        if-no-files-found: warn
+
+  draft:
+    name: Create Nightly Draft Release
+    needs: [resolve, compatibility, prepare, build, android-sign, aggregate]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release_mode == 'draft' &&
+      needs.build.result == 'success' &&
+      needs.aggregate.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PATCHSET: ${{ needs.compatibility.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
+      BUILD_CONFIGURATION: NIGHTLY
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements-build.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-nightly-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        path: .work/collected
+        merge-multiple: false
+    - name: Package inspectors
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Create Nightly Draft Release
+      run: python3 scripts/qualification.py draft --channel nightly --root .work/collected
