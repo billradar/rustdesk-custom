@@ -6,7 +6,7 @@ from scripts.upstream.resolve import api, choose_stable, resolve_ref
 from scripts.release.github import collect, request, gh
 from scripts.upstream.patchsets import verify, patch_hash
 from scripts.release.production import assets, REPOSITORY
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 
 def outputs(data):
     Path('.work').mkdir(exist_ok=True)
