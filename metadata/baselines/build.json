@@ -1,0 +1,21 @@
+{
+  ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759",
+  ".github/workflows/bridge.yml": "5f459496e0292c8a5e22a99b061d5f14d88749bc77ba0fbb81a124c93cc0b435",
+  ".github/workflows/ci.yml": "cbddf93305a625ea91aec4a31057d0491a4cbe9f4bacb036ecbabc197b608a75",
+  ".github/workflows/clear-cache.yml": "4b4c0091a8b5f72f7b1b1a60a521d35d1d2392fddd79f87a6f5b98cfa37d1234",
+  ".github/workflows/fdroid.yml": "95a81b529359e9924f842daf2347c0126588ee0ff76bb280f31f8fc97e96b262",
+  ".github/workflows/flutter-build.yml": "c6568d7473b089d5121945748b73e9181ce23e6a210c298bb1721fe3bca8463b",
+  ".github/workflows/flutter-ci.yml": "459045c300d74dee53f7a0b4a4d5b4c191c878a86822537eda4a92b98031f133",
+  ".github/workflows/flutter-nightly.yml": "69c704898a91eeda89734dd551ee10397177b730dd4c4a31722d328c29b93942",
+  ".github/workflows/flutter-tag.yml": "6285f969b977b31f2f5d88de4edd5c2c36b4192b9e34b9168124c6cf51abb189",
+  ".github/workflows/playground.yml": "c34d8bd6bc499b064d37b5b8eaddf2170552bfd6950b531cf347eb9c2a057621",
+  ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+  ".gitmodules": "0cbdb9cb5ecf1b8f977d5ebc91ef9a99fe02c256a12fe58eb32ee2e4ca52b2d6",
+  "Cargo.lock": "41bdf1ecbd5d2fe865bad1bc88a9bfb418e2b00d8ea86cd02306dd383113a82e",
+  "Cargo.toml": "45128962832c364d2129e24b773d2fc3330a7b4d5825d08767481eebcfe746e1",
+  "build.py": "d43ed2eb0a5e0f054b568ea59ba06e19f32a862a45380268640dcee8a8e2c3d8",
+  "build.rs": "8ef5daa629f04d6d330d1080b9b5444281c538161118cc3abb1cf94f11bf25bd",
+  "flutter/pubspec.lock": "64187c3702590d441658c8b2acfe87251f7d59c6b95f0644e88b10aa7a2f186f",
+  "flutter/pubspec.yaml": "4e56044bec57f5a43afb344397739ecc6de0b146d268b7564ea2880983019f13",
+  "vcpkg.json": "64507a425be8d92cbb28d180d33986d8c419238cd6cae960e6a365d7691bbea0"
+}
