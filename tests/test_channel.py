@@ -101,8 +101,8 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertFalse(any(r['variant']=='sos' and r['platform'] in ('android','ios','web') for r in planned))
     def test_no_auto_publish_calls(self):
         import ast
-        for name in ('production.py','channel.py'):
-            tree=ast.parse((ROOT/'scripts'/name).read_text())
+        for path in (ROOT/'scripts/release/production.py',ROOT/'scripts/release/channel.py'):
+            tree=ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node,ast.Dict):
                     for key,value in zip(node.keys,node.values):
