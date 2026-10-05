@@ -32,9 +32,6 @@ name: Reusable Cross-Platform Build Core
       include_experimental:
         type: boolean
         default: false
-      production_android_signing:
-        type: boolean
-        default: false
       direct_android_signing:
         type: boolean
         default: false
@@ -263,13 +260,12 @@ jobs:
     needs: plan
   android-signing-preflight:
     needs: plan
-    if: inputs.windows_only != true && inputs.other_platforms_only != true && inputs.android_only != true && inputs.production_android_signing
+    if: inputs.windows_only != true && inputs.other_platforms_only != true && inputs.android_only != true
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with: {persist-credentials: false}
     - name: Verify public YubiKey identity before expensive builds
-      if: inputs.production_android_signing
       run: |
         python3 - <<'PY'
         import json
@@ -297,7 +293,6 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      production_signing: ${{ inputs.production_android_signing }}
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
@@ -319,7 +314,6 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      production_signing: ${{ inputs.production_android_signing || false }}
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
@@ -378,7 +372,6 @@ jobs:
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: ${{ inputs.channel }}
       EXPERIMENTAL: ${{ inputs.include_experimental }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.production_android_signing }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
