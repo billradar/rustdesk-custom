@@ -309,17 +309,6 @@ jobs:
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
-  android-sign:
-    name: Sign all Android production artifacts with YubiKey PIV 9C
-    needs: android-platforms
-    if: inputs.production_android_signing && inputs.direct_android_signing != true
-    uses: ./.github/workflows/sign-android.yml
-    with:
-      arches: aarch64,armv7,x86_64
-      channel: ${{ inputs.channel }}
-      upstream_sha: ${{ inputs.upstream_sha }}
-      upstream_version: ${{ inputs.upstream_version }}
-      patchset: ${{ inputs.patchset }}
   validate:
     needs: build
     runs-on: ubuntu-22.04
