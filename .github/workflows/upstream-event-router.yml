@@ -2,12 +2,7 @@ name: Upstream Event Router
 'on':
   schedule:
     - cron: '*/15 * * * *'
-  workflow_dispatch:
-    inputs:
-      upstream_test_branch:
-        type: string
-        description: Optional upstream test branch; empty = repository variable
-        default: ''
+  workflow_dispatch: {}
 permissions:
   contents: read
   actions: write
@@ -22,8 +17,6 @@ jobs:
       production_sha: ${{ steps.detect.outputs.production_sha }}
       production_ref: ${{ steps.detect.outputs.production_ref }}
       stable_tag: ${{ steps.detect.outputs.stable_tag }}
-      test_branch: ${{ steps.detect.outputs.test_branch }}
-      test_sha: ${{ steps.detect.outputs.test_sha }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -31,8 +24,6 @@ jobs:
     - id: detect
       env:
         GH_TOKEN: ${{ github.token }}
-        TEST_BRANCH_INPUT: ${{ inputs.upstream_test_branch || '' }}
-        TEST_BRANCH_CONFIG: ${{ vars.UPSTREAM_TEST_BRANCH || '' }}
       run: |
         set -euo pipefail
         python3 - <<'PY'
@@ -49,22 +40,16 @@ jobs:
         repo='rustdesk/rustdesk'
         production=api(f'repos/{repo}')['default_branch']
         prod_sha=api(f'repos/{repo}/commits/{urllib.parse.quote(production,safe="")}')['sha']
-        test=os.environ.get('TEST_BRANCH_INPUT') or os.environ.get('TEST_BRANCH_CONFIG')
-        test_sha=''
-        if test and test != production and api(f'repos/{repo}/branches/{urllib.parse.quote(test,safe="")}',missing=True):
-            test_sha=api(f'repos/{repo}/commits/{urllib.parse.quote(test,safe="")}')['sha']
         releases=api(f'repos/{repo}/releases?per_page=20')
         stable=next((x for x in releases if not x['draft'] and not x['prerelease']),None)
         with open(os.environ['GITHUB_OUTPUT'],'a') as o:
             o.write(f'production_sha={prod_sha}\nproduction_ref={production}\n')
             o.write(f'stable_tag={stable["tag_name"] if stable else ""}\n')
-            o.write(f'test_branch={test if test_sha else ""}\ntest_sha={test_sha}\n')
         print(f'production={production} {prod_sha}')
-        if test_sha: print(f'test={test} {test_sha}')
         if stable: print(f'stable_tag={stable["tag_name"]}')
         PY
 
-  production-branch:
+  master-debounce:
     needs: detect
     runs-on: ubuntu-22.04
     steps:
@@ -72,49 +57,28 @@ jobs:
       id: state
       with:
         path: .upstream-state
-        key: upstream-router-production-${{ needs.detect.outputs.production_sha }}
-    - name: Route production branch change
+        key: upstream-router-master-\${{ needs.detect.outputs.production_sha }}
+    - name: Route master change to Nightly
       if: steps.state.outputs.cache-hit != 'true'
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: \${{ github.token }}
       run: |
         set -euo pipefail
-        gh workflow run upstream-compatibility.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.production_ref }}'
+        gh workflow run nightly.yml \
+          --repo '\${{ github.repository }}' \
+          --ref main \
+          -f upstream_ref='\${{ needs.detect.outputs.production_ref }}' \
+          -f force_rebuild=false \
+          -f include_experimental=true \
+          -f release_mode=build
         mkdir -p .upstream-state
-        echo '${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
-    - name: Remember routed production revision
+        echo '\${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
+    - name: Remember routed master revision
       if: steps.state.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: .upstream-state
-        key: upstream-router-production-${{ needs.detect.outputs.production_sha }}
-
-  test-branch:
-    needs: detect
-    if: needs.detect.outputs.test_sha != ''
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/cache/restore@v4
-      id: state
-      with:
-        path: .upstream-state
-        key: upstream-router-test-${{ needs.detect.outputs.test_sha }}
-    - name: Route test branch change
-      if: steps.state.outputs.cache-hit != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        set -euo pipefail
-        gh workflow run upstream-compatibility.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.test_branch }}'
-        mkdir -p .upstream-state
-        echo '${{ needs.detect.outputs.test_sha }}' > .upstream-state/sha
-    - name: Remember routed test revision
-      if: steps.state.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
-      with:
-        path: .upstream-state
-        key: upstream-router-test-${{ needs.detect.outputs.test_sha }}
-
+        key: upstream-router-master-\${{ needs.detect.outputs.production_sha }}
   stable-tag:
     needs: detect
     if: needs.detect.outputs.stable_tag != ''
