@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 from scripts.upstream.patchsets import patch_hash, verify
 from scripts.validation.compatibility import contracts
 from scripts.build.build_adapter import check
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 
 def git(tree,*args):return subprocess.check_output(['git','-C',str(tree),*args],text=True).strip()
 def run(*args):subprocess.run(list(map(str,args)),check=True)
@@ -42,14 +42,14 @@ def prepare(base,output,ref,sha,name,bridge):
     common=output/'common'
     # Copies remove Git shared-object alternates; archives are standalone across runners.
     shutil.copytree(base,common,symlinks=True)
-    run('bash',ROOT/'scripts/apply-patches.sh',common,'standard')
+    run('bash',ROOT/'scripts/source/apply-patches.sh',common,'standard')
     for variant in ('standard','sos'):
         tree=output/variant;shutil.copytree(common,tree,symlinks=True)
         if variant=='sos':
             for p in sorted((ROOT/'patchsets'/name/'sos').glob('*.patch')):
                 run('git','-C',tree,'apply','--check',p);run('git','-C',tree,'apply',p)
         contracts(tree,variant,name)
-        run('python3',ROOT/'scripts/package.py','restore-bridge',tree,bridge)
+        run('python3',ROOT/'scripts/release/package.py','restore-bridge',tree,bridge)
         from scripts.signing.production_config import scan_bytes
         for p in tree.rglob('*'):
             if p.is_file() and '.git' not in p.relative_to(tree).parts:scan_bytes(p.read_bytes())

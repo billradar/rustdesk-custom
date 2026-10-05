@@ -3,7 +3,7 @@
 import argparse, hashlib, json, os, re, shutil, time, zipfile
 from pathlib import Path
 from scripts.upstream.patchsets import patch_hash
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 FORBIDDEN={'android','ios','web'}
 def target(e):return '-'.join((e['platform'],e['arch'],e['variant']))
 def entries():

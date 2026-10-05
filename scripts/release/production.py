@@ -14,7 +14,7 @@ from scripts.upstream.patchsets import mapped, select
 from scripts.release.github import collect, gh, request
 from scripts.signing.production_config import payload, scan_bytes
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = 'billradar/rustdesk-custom'
 
 def guard():
