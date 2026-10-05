@@ -109,11 +109,9 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
       patchset: ${{ needs.compatibility.outputs.patchset }}
-  build:
-    needs:
-    - resolve
-    - compatibility
-    - prepare
+  build-desktop:
+    name: Build Stable desktop/other targets
+    needs: [resolve, compatibility, prepare]
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
@@ -125,14 +123,33 @@ jobs:
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
       include_experimental: ${{ inputs.include_experimental || false }}
-      production_android_signing: ${{ github.event_name == 'workflow_dispatch' && inputs.production_android_signing == true && inputs.dry_run == false && inputs.include_experimental == false }}
-      direct_android_signing: false
+      production_android_signing: false
+      android_only: false
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  build-android:
+    name: Build Stable Android artifacts
+    needs: [resolve, compatibility, prepare]
+    uses: ./.github/workflows/build.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: stable
+      patchset: ${{ needs.compatibility.outputs.patchset }}
+      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+      revision: ${{ needs.resolve.outputs.revision }}
+      include_experimental: false
+      production_android_signing: false
+      android_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
     name: Sign Stable Android production artifacts with YubiKey PIV 9C
-    needs: [resolve, draft-preflight, compatibility, prepare, build]
+    needs: [resolve, draft-preflight, compatibility, prepare, build-android]
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
@@ -141,7 +158,7 @@ jobs:
       inputs.production_android_signing == true &&
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
-      needs.build.result == 'success' &&
+      needs.build-android.result == 'success' &&
       needs.compatibility.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
@@ -204,14 +221,15 @@ jobs:
         patchset: ${{ needs.compatibility.outputs.patchset }}
   aggregate:
     name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, compatibility, prepare, build, android-sign]
+    needs: [resolve, draft-preflight, compatibility, prepare, build-desktop, build-android, android-sign]
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
       inputs.production_android_signing == true &&
       inputs.dry_run == false &&
       inputs.include_experimental == false &&
-      needs.build.result == 'success' &&
+      needs.build-desktop.result == 'success' &&
+      needs.build-android.result == 'success' &&
       needs.android-sign.result == 'success'
     runs-on: ubuntu-22.04
     env:
@@ -249,7 +267,8 @@ jobs:
     - draft-preflight
     - compatibility
     - prepare
-    - build
+    - build-desktop
+    - build-android
     - aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
