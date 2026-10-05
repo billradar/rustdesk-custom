@@ -4,7 +4,7 @@ import argparse,datetime,hashlib,json,os,shutil,struct,subprocess,tempfile,zipfi
 from pathlib import Path
 from scripts.signing.production_config import configured,server_fingerprint,scan_bytes,FORBIDDEN
 from scripts.upstream.patchsets import patch_hash,verify
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 ELF={'x86_64':62,'aarch64':183,'armv7':40}
 MACH={'x86_64':0x1000007,'aarch64':0x100000c}
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
