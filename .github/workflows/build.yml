@@ -355,6 +355,7 @@ jobs:
     - platforms
     - android-platforms
     if: >-
+      inputs.android_only != true &&
       always() &&
       needs.plan.result == 'success'
     runs-on: ubuntu-22.04
