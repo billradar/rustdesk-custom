@@ -75,9 +75,8 @@ def resolve(channel,ref='',force=False,discovery_only=False):
             release_preflight(data,force)
     else:
         repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
-        if channel=='nightly' and ref:raise ValueError('Nightly must use official default branch')
         chosen=ref or branch
-        data={'upstream_sha':resolve_ref(chosen),'upstream_branch':branch,'upstream_ref':chosen,
+        data={'upstream_sha':resolve_ref(chosen),'upstream_branch':chosen,'upstream_ref':chosen,
               'upstream_tag':'','build_needed':True,'draft_needed':False,'revision':(ROOT/'patch-revision.txt').read_text().strip()}
     data['channel']=channel;outputs(data)
 
