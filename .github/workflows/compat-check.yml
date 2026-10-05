@@ -111,6 +111,25 @@ jobs:
 
           .work/build-profile.json'
         if-no-files-found: warn
+  contracts:
+    name: Repository architecture contracts
+    needs: resolve
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements-build.txt
+    - name: Run release and repository contracts
+      run: |
+        set -euo pipefail
+        python3 scripts/release/production_contract.py
+        python3 scripts/release/qualification_contract.py
+        python3 scripts/release/channel_contract.py
+        python3 scripts/build/config_mir_contract.py
+        python3 scripts/validation/native_config_contract.py
+        python3 scripts/signing/android_signing_contract.py
   preflight:
     needs: resolve
     runs-on: ubuntu-22.04
@@ -131,8 +150,6 @@ jobs:
     - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: ${{ needs.resolve.outputs.rust }}
-    - name: Automation gate regression tests
-      run: python3 -m unittest discover -s tests -v
     - name: Patch/API/config gate before expensive Windows dependencies
       run: 'source scripts/validation/test-config.sh
 
@@ -371,6 +388,7 @@ jobs:
   validation-report:
     needs:
     - resolve
+    - contracts
     - preflight
     - bridge
     - flutter-analyze
@@ -393,9 +411,10 @@ jobs:
         BRIDGE_RESULT: ${{ needs.bridge.result }}
         FLUTTER_RESULT: ${{ needs.flutter-analyze.result }}
         HELPER_RESULT: ${{ needs.windows-helper.result }}
+        CONTRACT_RESULT: ${{ needs.contracts.result }}
         CHANNEL: ${{ inputs.channel }}
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\nroots=list(Path('diagnostics').rglob('patchset-selection.json'))\n\
-        report=json.loads(roots[0].read_text()) if roots else {'selected':None,'patchsets':[]}\npassed=(os.environ['PREFLIGHT_RESULT']=='success'\
+        report=json.loads(roots[0].read_text()) if roots else {'selected':None,'patchsets':[]}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success'\
         \ and os.environ['BRIDGE_RESULT']=='success' and os.environ['FLUTTER_RESULT']=='success' and (os.environ['CHANNEL']=='ci'\
         \ or os.environ['HELPER_RESULT']=='success'))\nreport['overall']='PASS' if passed else 'FAIL'\nreport['Rust fast check']='PASS'\
         \ if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'\nreport['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success'\
