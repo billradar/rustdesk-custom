@@ -118,7 +118,7 @@ for arch in arches:
         ["apksigner", "verify", "--verbose", "--print-certs", str(signed)],
         check=True, capture_output=True, text=True,
     )
-    certs = re.findall(r"^Signer #d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$", result.stdout, re.M)
+    certs = re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$", result.stdout, re.M)
     if len(certs) != 1 or certs[0].lower() != EXPECTED_FINGERPRINT:
         fail(f"SIGNING[{arch}]: signer certificate fingerprint mismatch")
     schemes = [int(value) for value in re.findall(
