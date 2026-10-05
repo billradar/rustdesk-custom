@@ -6,7 +6,7 @@ name: Nightly - Development artifacts
     inputs:
       upstream_ref:
         type: string
-        description: Upstream ref; empty = official default branch
+        description: Upstream ref; empty = configured test branch
         default: ''
       force_rebuild:
         type: boolean
