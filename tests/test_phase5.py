@@ -26,12 +26,13 @@ class MatrixTests(unittest.TestCase):
             with patch.object(phase5.json,'loads',side_effect=loads),self.assertRaises(ValueError):phase5.entries()
     def test_parallel_dag_and_gates(self):
         w=yaml.safe_load((ROOT/'.github/workflows/build.yml').read_text());j=w['jobs']
-        self.assertEqual(j['build']['needs'],'plan');self.assertEqual(j['platforms']['needs'],['plan','android-signing-preflight'])
+        self.assertEqual(j['build']['needs'],'plan');self.assertEqual(j['platforms']['needs'],'plan')
         self.assertFalse(j['build']['strategy']['fail-fast']);self.assertFalse(j['platforms']['strategy']['fail-fast'])
         self.assertEqual(j['build']['if'], 'inputs.android_only != true')
-        self.assertEqual(j['platforms']['if'], "inputs.android_only != true && needs.plan.outputs.other_platform_count != '0'")
-        self.assertEqual(j['validate']['if'], 'inputs.android_only != true')
+        self.assertEqual(j['platforms']['if'], "inputs.android_only != true && inputs.desktop_only != true && needs.plan.outputs.other_platform_count != '0'")
+        self.assertEqual(j['validate']['if'], 'inputs.android_only != true && inputs.desktop_only != true')
         self.assertIn('inputs.android_only != true', j['aggregate']['if'])
+        self.assertIn('inputs.desktop_only != true', j['aggregate']['if'])
         self.assertEqual(set(j['aggregate']['needs']),{'plan','build','platforms','android-platforms','validate'})
         self.assertNotIn('concurrency',j['platforms']);self.assertNotIn('continue-on-error',j['platforms'])
         smoke=yaml.safe_load((ROOT/'.github/workflows/android-yubikey-signing-test.yml').read_text())

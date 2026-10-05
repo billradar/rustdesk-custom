@@ -41,6 +41,9 @@ name: Reusable Cross-Platform Build Core
       android_only:
         type: boolean
         default: false
+      desktop_only:
+        type: boolean
+        default: false
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -254,11 +257,12 @@ jobs:
     needs: plan
   android-signing-preflight:
     needs: plan
+    if: inputs.desktop_only != true && inputs.android_only != true && inputs.production_android_signing
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with: {persist-credentials: false}
-    - name: Android-only production signing availability before expensive builds
+    - name: Verify public YubiKey identity before expensive builds
       if: inputs.production_android_signing
       run: |
         python3 - <<'PY'
@@ -269,9 +273,10 @@ jobs:
         assert info['piv_slot'] == '9C' and info['pkcs11_id'] == '02'
         print('YubiKey identity metadata: PASS')
         PY
+
   platforms:
     needs: [plan, android-signing-preflight]
-    if: inputs.android_only != true && needs.plan.outputs.other_platform_count != '0'
+    if: inputs.android_only != true && inputs.desktop_only != true && needs.plan.outputs.other_platform_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
@@ -293,7 +298,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-platforms:
     needs: [plan, android-signing-preflight]
-    if: needs.plan.outputs.android_count != '0'
+    if: inputs.desktop_only != true && needs.plan.outputs.android_count != '0'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.android_matrix) }}
@@ -308,13 +313,13 @@ jobs:
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      production_signing: ${{ inputs.production_android_signing }}
+      production_signing: false
       source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
-    if: inputs.android_only != true
+    if: inputs.android_only != true && inputs.desktop_only != true
     needs: build
     runs-on: ubuntu-22.04
     permissions:
@@ -356,6 +361,7 @@ jobs:
     - android-platforms
     if: >-
       inputs.android_only != true &&
+      inputs.desktop_only != true &&
       always() &&
       needs.plan.result == 'success'
     runs-on: ubuntu-22.04
