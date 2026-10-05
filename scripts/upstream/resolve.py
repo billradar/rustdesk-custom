@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
+RELEASE_IDENTITY = ROOT / 'metadata' / 'release-identity.json'
 OFFICIAL = 'rustdesk/rustdesk'
 TEST_REPO = 'billradar/rustdesk-custom-test'
 VERSION = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)$')
