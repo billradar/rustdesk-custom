@@ -110,6 +110,23 @@ jobs:
           --custom-sha "${{ github.sha }}" \
           --upstream-sha "${{ needs.resolve.outputs.upstream_sha }}" \
           --upstream-ref "${{ needs.resolve.outputs.upstream_ref }}"
+    - name: Rehydrate CI bridge artifact for this Stable run
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        CI_RUN_ID="$(python3 - <<'PY'
+        import json
+        print(json.load(open('.work/ci-qualification.json'))['workflow_run_id'])
+        PY
+        )"
+        rm -rf .work/bridge-rehydrated .work/bridge-files
+        mkdir -p .work/bridge-rehydrated .work/bridge-files
+        gh run download "$CI_RUN_ID" \
+          --repo "${{ github.repository }}" \
+          --name "ci-bridge-${{ github.sha }}" \
+          --dir .work/bridge-rehydrated
+        cp -a .work/bridge-rehydrated/. .work/bridge-files/
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
