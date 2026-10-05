@@ -83,8 +83,6 @@ jobs:
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: "signing-test"
       include_experimental: false
-      production_android_signing: false
-      direct_android_signing: false
       android_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
