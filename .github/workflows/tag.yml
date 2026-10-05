@@ -90,30 +90,49 @@ jobs:
         name: release-preflight-${{ github.run_id }}
         path: .work/channel.json
         if-no-files-found: warn
-  compatibility:
+  qualification:
+    name: Verify CI qualification for Stable
     needs: [resolve, draft-preflight]
-    uses: ./.github/workflows/compat-check.yml
-    with:
-      upstream_repository: rustdesk/rustdesk
-      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
-      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-      channel: stable
     if: needs.draft-preflight.outputs.build_needed == 'true'
+    runs-on: ubuntu-22.04
+    outputs:
+      patchset: ${{ steps.verify.outputs.patchset }}
+      upstream_version: ${{ steps.verify.outputs.upstream_version }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: verify
+      name: Verify exact CI qualification
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        python3 scripts/ci_qualification.py \
+          --repository "${{ github.repository }}" \
+          --custom-sha "${{ github.sha }}" \
+          --upstream-sha "${{ needs.resolve.outputs.upstream_sha }}" \
+          --upstream-ref "${{ needs.resolve.outputs.upstream_ref }}"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: ci-qualification-consumed-${{ github.run_id }}
+        path: .work/ci-qualification.json
+        if-no-files-found: warn
   prepare:
     needs:
     - resolve
-    - compatibility
+    - qualification
     uses: ./.github/workflows/prepare-source.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.compatibility.outputs.patchset }}
+      patchset: ${{ needs.qualification.outputs.patchset }}
   windows-build:
     name: Build Stable Windows targets
     needs:
     - resolve
-    - compatibility
+    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
@@ -176,7 +195,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
     name: Sign Stable Android production artifacts with YubiKey PIV 9C
-    needs: [resolve, draft-preflight, compatibility, prepare, android-build]
+    needs: [resolve, draft-preflight, qualification, prepare, android-build]
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
@@ -185,7 +204,7 @@ jobs:
       inputs.production_android_signing == true &&
       inputs.release_mode != 'dry-run' &&
       needs.android-build.result == 'success' &&
-      needs.compatibility.result == 'success' &&
+      needs.qualification.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
       - self-hosted
