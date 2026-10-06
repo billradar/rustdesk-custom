@@ -37,6 +37,19 @@ def mapped(sha):
     if name: verify(name)
     return name
 
+def resolve_exact(sha, upstream_ref):
+    """Resolve a prevalidated upstream release to its frozen patch generation."""
+    if not re.fullmatch(r'[0-9a-f]{40}', sha):
+        raise ValueError('Exact SHA required')
+    if not upstream_ref or not re.fullmatch(r'v?[0-9]+(?:\.[0-9]+){2}', upstream_ref):
+        raise ValueError('Exact upstream release ref required')
+    index=json.loads((ROOT/'patchsets/index.json').read_text())
+    name=index['validated_mapping'].get(upstream_ref.lstrip('v'))
+    if not name:
+        raise ValueError(f'No validated patchset mapping for upstream release: {upstream_ref}')
+    verify(name)
+    return name
+
 def probe(source, sha, name, base):
     from scripts.validation.compatibility import contracts
     env=dict(os.environ,PATCHSET=name,UPSTREAM_EXPECTED_SHA=sha)
