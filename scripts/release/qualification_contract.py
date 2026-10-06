@@ -141,7 +141,7 @@ class MatrixTests(unittest.TestCase):
         self.assertNotIn('stable_owner_run_id', tag_text)
         self.assertNotIn('gh workflow run ci.yml', tag_text)
         patchsets_text=(ROOT/'scripts/upstream/patchsets.py').read_text()
-        self.assertEqual(patchsets_text.count("f.write('patchset='+name+'\\\\n')"),1)
+        self.assertEqual(patchsets_text.count("f.write('patchset='+name+'\\n')"),1)
         prepared=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())
         prepare_runs=[s.get('run','') for s in prepared['jobs']['prepare']['steps']]
         self.assertLess(next(i for i,x in enumerate(prepare_runs) if 'scripts/source/prepare.sh' in x),
