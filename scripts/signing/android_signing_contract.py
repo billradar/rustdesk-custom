@@ -62,27 +62,26 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("direct_android_signing", json.dumps(self.build))
 
     def test_stable_build_split_and_sign_dependency(self):
-        windows = self.tag["jobs"]["windows-build"]
-        platforms = self.tag["jobs"]["platforms-build"]
-        android = self.tag["jobs"]["android-build"]
+        windows=self.tag["jobs"]["windows-build"]
+        platforms=self.tag["jobs"]["platforms-build"]
+        android=self.tag["jobs"]["android-build"]
+        self.assertEqual(windows["uses"],"./.github/workflows/build-stable-windows.yml")
+        self.assertEqual(platforms["uses"],"./.github/workflows/build-stable-platforms.yml")
+        self.assertEqual(android["uses"],"./.github/workflows/build-stable-android.yml")
+        for job in (windows,platforms,android):
+            self.assertNotIn("windows_only",job.get("with",{}))
+            self.assertNotIn("other_platforms_only",job.get("with",{}))
+            self.assertNotIn("android_only",job.get("with",{}))
+            self.assertNotIn("production_android_signing",json.dumps(job))
+            self.assertNotIn("direct_android_signing",json.dumps(job))
+        self.assertEqual(self.tag["jobs"]["android-sign"]["needs"],["resolve","android-build"])
+        aggregate=self.tag["jobs"]["aggregate"]
+        for name in ("windows-build","platforms-build","android-build","android-sign"):
+            self.assertIn(name,json.dumps(aggregate["needs"]))
+        draft=self.tag["jobs"]["draft"]
+        self.assertEqual(draft["needs"],"aggregate")
+        self.assertIn("needs.aggregate.result == 'success'",draft["if"])
 
-        self.assertTrue(windows["with"].get("windows_only", False))
-        self.assertNotIn("production_android_signing", json.dumps(windows))
-        self.assertTrue(platforms["with"].get("other_platforms_only", False))
-        self.assertNotIn("production_android_signing", json.dumps(platforms))
-        self.assertTrue(android["with"]["android_only"])
-        self.assertNotIn("production_android_signing", json.dumps(android))
-        self.assertNotIn("direct_android_signing", json.dumps(self.tag))
-
-        self.assertEqual(self.tag["jobs"]["android-sign"]["needs"][-1], "android-build")
-
-        aggregate = self.tag["jobs"]["aggregate"]
-        for name in ("windows-build", "platforms-build", "android-build", "android-sign"):
-            self.assertIn(name, json.dumps(aggregate["needs"]))
-
-        draft = self.tag["jobs"]["draft"]
-        self.assertEqual(draft["needs"], "aggregate")
-        self.assertIn("needs.aggregate.result == 'success'", draft["if"])
 
     def test_android_artifact_name_contract_matches_build_and_sign_downloads(self):
         build_platform = (ROOT / ".github/workflows/build-platform.yml").read_text()
