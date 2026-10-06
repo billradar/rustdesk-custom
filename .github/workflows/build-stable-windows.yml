@@ -20,6 +20,17 @@ permissions:
   contents: read
   actions: read
 jobs:
+  plan:
+    name: Resolve Windows build inputs
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Validate Stable target plan
+      env:
+        CHANNEL: ${{ inputs.channel }}
+      run: python3 scripts/release/qualification.py plan --channel "$CHANNEL"
   windows-helper:
     name: Build shared Windows helper
     if: inputs.android_only != true && inputs.other_platforms_only != true
@@ -238,7 +249,7 @@ jobs:
         path: artifacts/rustdesk-*-${{ matrix.variant }}-windows-x86_64/
         if-no-files-found: error
         retention-days: 14
-    needs: [plan, windows-helper]
+    needs: [windows-helper, plan]
   validate:
     name: Validate Windows build provenance
     if: inputs.android_only != true && inputs.windows_only != true && inputs.other_platforms_only != true
