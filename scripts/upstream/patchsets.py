@@ -49,9 +49,6 @@ def resolve_exact(sha, upstream_ref):
     data={'upstream_sha':sha,'upstream_ref':upstream_ref,'known_validated_mapping':True,
           'selected':name,'overall':'EXACT_MAPPING_PASS'}
     print(json.dumps(data,indent=2))
-    if os.environ.get('GITHUB_OUTPUT'):
-        with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-            f.write('patchset='+name+'\\n')
     return name
 
 def probe(source, sha, name, base):

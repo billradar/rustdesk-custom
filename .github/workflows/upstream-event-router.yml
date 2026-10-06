@@ -56,16 +56,36 @@ jobs:
   default-branch-debounce:
     needs: detect
     runs-on: ubuntu-22.04
+    env:
+      RUN_NAME: Nightly ${{ needs.detect.outputs.production_ref || 'configured-test-ref' }} / build
+      GH_TOKEN: ${{ github.token }}
     steps:
-    - uses: actions/cache/restore@v4
+    - name: Check latest routed Nightly state
       id: state
-      with:
-        path: .upstream-state
-        key: upstream-router-default-branch-${{ needs.detect.outputs.production_sha }}
+      run: |
+        set -euo pipefail
+        runs="$(gh run list --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
+        export RUNS="$runs"
+        state="$(python3 - <<'PY'
+        import json, os
+        rows=json.loads(os.environ["RUNS"])
+        name=os.environ["RUN_NAME"]
+        for row in rows:
+            if row.get("displayTitle")==name:
+                status=row.get("status")
+                conclusion=row.get("conclusion")
+                if status in {"queued","in_progress","waiting","pending","requested"}:
+                    print("ACTIVE"); break
+                if conclusion=="success":
+                    print("SUCCESS"); break
+                print("RETRY"); break
+        else:
+            print("RETRY")
+        PY
+        )"
+        echo "state=$state" >> "$GITHUB_OUTPUT"
     - name: Route default-branch change to Nightly
-      if: steps.state.outputs.cache-hit != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
+      if: steps.state.outputs.state == 'RETRY'
       run: |
         set -euo pipefail
         gh workflow run nightly.yml \
@@ -76,28 +96,42 @@ jobs:
           -f include_experimental=true \
           -f release_mode=build \
           -f automation_source=upstream-event-router
-        mkdir -p .upstream-state
-        echo '${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
-    - name: Remember routed default-branch revision
-      if: steps.state.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
-      with:
-        path: .upstream-state
-        key: upstream-router-master-${{ needs.detect.outputs.production_sha }}
+        echo "Nightly dispatch requested for $RUN_NAME"
+
   stable-tag:
     needs: detect
     if: needs.detect.outputs.stable_tag != ''
     runs-on: ubuntu-22.04
+    env:
+      RUN_NAME: Stable ${{ needs.detect.outputs.stable_tag }} / dry-run
+      GH_TOKEN: ${{ github.token }}
     steps:
-    - uses: actions/cache/restore@v4
+    - name: Check latest routed Stable state
       id: state
-      with:
-        path: .stable-state
-        key: upstream-router-stable-${{ needs.detect.outputs.stable_tag }}-${{ needs.detect.outputs.stable_sha }}
+      run: |
+        set -euo pipefail
+        runs="$(gh run list --workflow tag.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
+        export RUNS="$runs"
+        state="$(python3 - <<'PY'
+        import json, os
+        rows=json.loads(os.environ["RUNS"])
+        name=os.environ["RUN_NAME"]
+        for row in rows:
+            if row.get("displayTitle")==name:
+                status=row.get("status")
+                conclusion=row.get("conclusion")
+                if status in {"queued","in_progress","waiting","pending","requested"}:
+                    print("ACTIVE"); break
+                if conclusion=="success":
+                    print("SUCCESS"); break
+                print("RETRY"); break
+        else:
+            print("RETRY")
+        PY
+)"
+        echo "state=$state" >> "$GITHUB_OUTPUT"
     - name: Route new Stable Tag directly to Stable CD
-      if: steps.state.outputs.cache-hit != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
+      if: steps.state.outputs.state == 'RETRY'
       run: |
         set -euo pipefail
         gh workflow run tag.yml \
@@ -106,11 +140,4 @@ jobs:
           -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' \
           -f force_rebuild=false \
           -f release_mode=dry-run
-        mkdir -p .stable-state
-        printf '%s\n' '${{ needs.detect.outputs.stable_tag }}' > .stable-state/tag
-    - name: Remember routed Stable Tag
-      if: steps.state.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
-      with:
-        path: .stable-state
-        key: upstream-router-stable-${{ needs.detect.outputs.stable_tag }}-${{ needs.detect.outputs.stable_sha }}
+        echo "Stable dispatch requested for $RUN_NAME"

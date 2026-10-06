@@ -59,10 +59,14 @@ def release_preflight(data,force=False):
             required=set(supplied)
         if existing['prerelease'] or not all(x in body for x in expected) or {x['name'] for x in existing['assets'] if x['state']=='uploaded'}!=required:
             raise ValueError('Existing release incomplete or incompatible; never overwrite')
-        data['build_needed']=force;data['draft_needed']=False
+        data['build_needed']=force
+        data['draft_needed']=False
+        data['publish_existing']=bool(existing.get('draft'))
     else:
         if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True):raise ValueError('Existing tag without completed release; review revision')
-        data['build_needed']=True;data['draft_needed']=True
+        data['build_needed']=True
+        data['draft_needed']=True
+        data['publish_existing']=False
     return data
 
 def resolve(channel,ref='',force=False,discovery_only=False):
