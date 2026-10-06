@@ -122,7 +122,7 @@ jobs:
       run: |
         git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
         git -C .work/topmost checkout --detach "${{ steps.profile.outputs.helper_commit }}"
-        MSBuild.exe .work/topmost/WindowInjection/WindowInjection.vcxproj /p:Configuration=Release /p:Platform=x64 /p:TargetVersion=Windows10
+        MSBuild.exe .work/topmost/WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=x64 -p:TargetVersion=Windows10
     - name: Bind helper digest to exact source
       run: |
         python3 - <<'PY'
