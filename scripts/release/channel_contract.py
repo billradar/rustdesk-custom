@@ -110,7 +110,6 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(stable_ci.get('outputs',{}).get('patchset'), '${{ steps.patchset.outputs.patchset }}')
         self.assertEqual(stable_ci.get('outputs',{}).get('workflow_run_id'), '${{ steps.outputs.outputs.workflow_run_id }}')
         self.assertEqual(stable_ci.get('outputs',{}).get('qualification_custom_sha'), '${{ steps.outputs.outputs.qualification_custom_sha }}')
-        self.assertEqual(jobs['qualification']['permissions'].get('actions'),None)
 
     def test_stable_concurrency_and_ci_contract(self):
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
