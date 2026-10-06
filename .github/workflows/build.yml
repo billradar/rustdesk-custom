@@ -380,5 +380,5 @@ jobs:
       if: always()
       with:
         name: platform-aggregate-${{ github.run_id }}
-        path: .work/phase5-aggregate/
+        path: .work/platform-aggregate/
         if-no-files-found: warn

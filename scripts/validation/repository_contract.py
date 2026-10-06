@@ -31,6 +31,7 @@ LEGACY_TEXT_MARKERS = (
 SIGNING_WORKFLOWS = {
     ".github/workflows/tag.yml",
     ".github/workflows/android-yubikey-signing-test.yml",
+    ".github/workflows/nightly.yml",
 }
 SIGNING_MARKERS = (
     "YUBIKEY_PIV_PIN",
@@ -113,7 +114,7 @@ def check_forbidden_paths(files: list[Path], errors: list[str]) -> None:
 def check_current_legacy_references(files: list[Path], errors: list[str]) -> None:
     for path in files:
         r = rel(path)
-        if r.startswith("docs/archive/"):
+        if r.startswith("docs/archive/") or r == "scripts/validation/repository_contract.py":
             continue
         if path.suffix.lower() not in {".md", ".py", ".sh", ".json", ".yaml", ".yml", ".txt"}:
             continue
