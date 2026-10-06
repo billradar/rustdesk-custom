@@ -1,4 +1,4 @@
-name: Reusable Experimental Platform Build
+name: Reusable Platform Build
 env:
   PYTHONPATH: .
 'on':
