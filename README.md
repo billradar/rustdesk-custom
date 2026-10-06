@@ -1,5 +1,9 @@
 # RustDesk Custom
 
+[![Stable Release Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
+[![Nightly - Development artifacts](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
+[![CI - Patch and Build compatibility](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
+
 RustDesk Custom is a maintained RustDesk distribution built from upstream RustDesk with a reviewed set of custom patches.
 
 The repository provides the build, validation, packaging, signing, and release automation needed to maintain those changes without keeping a separate full copy of the upstream source tree.
