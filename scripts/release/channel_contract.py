@@ -80,7 +80,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
-        self.assertEqual(set(jobs['draft-preflight']['needs']),{'resolve'})
+        self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.draft-preflight.outputs.draft_needed',jobs['draft']['if'])
         self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
