@@ -59,6 +59,7 @@ class ChannelPolicyTests(unittest.TestCase):
             with patch.object(channel,'api',side_effect=[None,[self.draft_fixture()]]),patch.object(channel,'choose_stable') as resolve:
                 data=channel.release_preflight(self.discovery(),force)
                 resolve.assert_not_called();self.assertEqual(data['build_needed'],force);self.assertFalse(data['draft_needed'])
+                self.assertTrue(data['publish_existing'])
     def test_incomplete_or_mismatched_draft_blocks_before_build(self):
         for mutate in ('missing-asset','wrong-sha','incomplete'):
             draft=self.draft_fixture()
@@ -77,7 +78,7 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertFalse(channel.release_preflight(self.discovery())['build_needed'])
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
-        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release'})
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
@@ -89,8 +90,8 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_stable_concurrency_and_ci_contract(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        self.assertEqual(tag['concurrency']['group'],'stable-${{ github.ref }}')
-        self.assertTrue(tag['concurrency']['cancel-in-progress'])
+        self.assertEqual(tag['concurrency']['group'],"stable-${{ inputs.upstream_ref || format('manual-{0}', github.run_id) }}")
+        self.assertFalse(tag['concurrency']['cancel-in-progress'])
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         concurrency=ci['concurrency']
         self.assertIn("inputs.automation_source == 'upstream-event-router'",concurrency['group'])
