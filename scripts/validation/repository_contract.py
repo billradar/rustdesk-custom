@@ -211,6 +211,23 @@ def check_signing_boundary(files: list[Path], errors: list[str]) -> None:
             fail(errors, signing_meta, "canonical production key identity mismatch")
 
 
+def check_stable_runtime_contract(files: list[Path], errors: list[str]) -> None:
+    paths = {rel(p): p for p in files}
+
+    wrapper = paths.get("scripts/build/config_mir.py")
+    if wrapper is None:
+        fail(errors, ROOT / "scripts/build/config_mir.py", "Stable Android compiler wrapper is missing")
+    elif not (wrapper.stat().st_mode & 0o111):
+        fail(errors, wrapper, "Stable Android compiler wrapper must be executable", "mode with execute bit", oct(wrapper.stat().st_mode & 0o777))
+
+    windows = paths.get(".github/workflows/build-stable-windows.yml")
+    if windows:
+        text = windows.read_text(encoding="utf-8")
+        if "bytes((0x50,0x45,0,0))" not in text:
+            fail(errors, windows, "Stable Windows PE signature check must use explicit NUL bytes")
+        if "int.from_bytes(b[off+4:off+6],'little')!=0x8664" not in text:
+            fail(errors, windows, "Stable Windows PE machine check must validate AMD64 explicitly")
+
 def check_workflow_syntax(files: list[Path], errors: list[str]) -> None:
     for path in files:
         r = rel(path)
@@ -235,6 +252,7 @@ def main() -> int:
         ("legacy references", lambda: check_current_legacy_references(files, errors)),
         ("metadata uniqueness", lambda: check_metadata(files, errors)),
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
+        ("Stable runtime contract", lambda: check_stable_runtime_contract(files, errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
     ]
 
