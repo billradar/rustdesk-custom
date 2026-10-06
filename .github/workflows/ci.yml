@@ -44,7 +44,8 @@ jobs:
       env:
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_EVENT_BEFORE: ${{ github.event.before }}
-        GITHUB_BASE_REF: ${{ github.base_ref }}
+        GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         GITHUB_SHA: ${{ github.sha }}
         FORCE_REBUILD: ${{ inputs.force_rebuild || false }}
       run: |
