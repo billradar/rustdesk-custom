@@ -272,6 +272,7 @@ jobs:
 
           '
   windows-helper:
+    name: Validate Windows helper compatibility
     needs: resolve
     if: inputs.channel != 'ci'
     runs-on: windows-2022
