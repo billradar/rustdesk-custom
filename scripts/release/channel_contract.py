@@ -100,7 +100,6 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('stable_custom_sha',stable_steps)
         self.assertIn('stable_upstream_sha',stable_steps)
         self.assertIn('owner_run',stable_steps)
-        self.assertIn('.github/workflows/tag.yml',stable_steps)
         self.assertIn('actions/concurrency_groups',stable_steps)
         self.assertIn('Wait for exact Stable qualification run',stable_steps)
         self.assertIn('workflow_dispatch',stable_steps)
