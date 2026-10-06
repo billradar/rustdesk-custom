@@ -31,10 +31,27 @@ def verify(name):
             raise ValueError('Patchset integrity mismatch: '+name+'/'+folder)
     return m
 
-def mapped(sha):
+def mapped(upstream_ref):
     index=json.loads((ROOT/'patchsets/index.json').read_text())
-    name=index['validated_mapping'].get(sha)
+    name=index['validated_mapping'].get(upstream_ref)
     if name: verify(name)
+    return name
+
+def resolve_exact(sha, upstream_ref):
+    if not re.fullmatch('[0-9a-f]{40}', sha):
+        raise ValueError('Exact SHA required')
+    if not upstream_ref:
+        raise ValueError('Exact upstream ref required')
+    name=mapped(upstream_ref)
+    if not name:
+        raise RuntimeError('NO VALIDATED PATCHSET MAPPING FOR UPSTREAM REF: '+upstream_ref)
+    verify(name)
+    data={'upstream_sha':sha,'upstream_ref':upstream_ref,'known_validated_mapping':True,
+          'selected':name,'overall':'EXACT_MAPPING_PASS'}
+    print(json.dumps(data,indent=2))
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+            f.write('patchset='+name+'\\n')
     return name
 
 def probe(source, sha, name, base):
@@ -84,7 +101,7 @@ def select(sha, source=None, report=None, upstream_ref=None):
         return selected
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('sha');p.add_argument('--source',type=Path);p.add_argument('--report',default='.work/patchset-selection.json');p.add_argument('--ref',default='');args=p.parse_args()
-    name=select(args.sha,args.source,args.report,args.ref)
+    p=argparse.ArgumentParser();p.add_argument('sha');p.add_argument('--source',type=Path);p.add_argument('--report',default='.work/patchset-selection.json');p.add_argument('--ref',default='');p.add_argument('--exact',action='store_true');args=p.parse_args()
+    name=resolve_exact(args.sha,args.ref) if args.exact else select(args.sha,args.source,args.report,args.ref)
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('patchset='+name+'\n')
