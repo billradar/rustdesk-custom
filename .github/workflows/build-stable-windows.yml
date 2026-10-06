@@ -22,7 +22,7 @@ permissions:
 jobs:
   windows-helper:
     name: Build shared Windows helper
-        runs-on: windows-2022
+    runs-on: windows-2022
     timeout-minutes: 30
     defaults:
       run:
@@ -79,7 +79,7 @@ jobs:
         retention-days: 7
 
   build:
-        name: build/windows-${{ matrix.variant }}
+    name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
@@ -239,7 +239,7 @@ jobs:
     needs: windows-helper
   validate:
     name: Validate Windows build provenance
-        needs: build
+    needs: build
     runs-on: ubuntu-22.04
     permissions:
       contents: read
