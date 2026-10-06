@@ -132,7 +132,7 @@ jobs:
     needs:
     - resolve
     - prepare
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-stable-windows.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
@@ -142,7 +142,6 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      windows_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -151,7 +150,7 @@ jobs:
     needs:
     - resolve
     - prepare
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-stable-platforms.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
@@ -160,8 +159,6 @@ jobs:
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
-      revision: ${{ needs.resolve.outputs.revision }}
-      other_platforms_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -170,7 +167,7 @@ jobs:
     needs:
     - resolve
     - prepare
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-stable-android.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
@@ -179,8 +176,6 @@ jobs:
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
-      revision: ${{ needs.resolve.outputs.revision }}
-      android_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}

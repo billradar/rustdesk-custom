@@ -1,0 +1,66 @@
+name: Stable Linux and macOS Build Core
+env:
+  PYTHONPATH: .
+  AUTOMATION_MODE: '1'
+'on':
+  workflow_call:
+    inputs:
+      upstream_ref: {type: string, required: true}
+      upstream_sha: {type: string, required: true}
+      channel: {type: string, required: true}
+      patchset: {type: string, required: true}
+      upstream_version: {type: string, required: true}
+      standard_artifact: {type: string, required: true}
+      sos_artifact: {type: string, required: true}
+    secrets:
+      RUSTDESK_KEY: {required: true}
+      RUSTDESK_PASSWORD: {required: true}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  plan:
+    name: Resolve build target matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: plan
+      env:
+        CHANNEL: ${{ inputs.channel }}
+      run: |
+        python3 scripts/release/qualification.py plan --channel "$CHANNEL"
+        matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
+        count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
+        echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        echo "count=$count" >> "$GITHUB_OUTPUT"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: target-plan-${{ github.run_id }}
+        path: .work/target-plan.json
+        if-no-files-found: error
+  platforms:
+    name: Build Linux and macOS targets
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      platform: ${{ matrix.platform }}
+      arch: ${{ matrix.arch }}
+      variant: ${{ matrix.variant }}
+      runner: ${{ matrix.runner }}
+      upstream_ref: ${{ inputs.upstream_ref }}
+      upstream_sha: ${{ inputs.upstream_sha }}
+      upstream_version: ${{ inputs.upstream_version }}
+      patchset: ${{ inputs.patchset }}
+      channel: ${{ inputs.channel }}
+      source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}

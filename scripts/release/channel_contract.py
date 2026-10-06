@@ -84,6 +84,13 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
+        self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
+        self.assertEqual(jobs['platforms-build']['uses'],'./.github/workflows/build-stable-platforms.yml')
+        self.assertEqual(jobs['android-build']['uses'],'./.github/workflows/build-stable-android.yml')
+        for name in ('windows-build','platforms-build','android-build'):
+            self.assertNotIn('windows_only',jobs[name].get('with',{}))
+            self.assertNotIn('other_platforms_only',jobs[name].get('with',{}))
+            self.assertNotIn('android_only',jobs[name].get('with',{}))
         self.assertEqual(jobs['release']['needs'],'aggregate')
         self.assertEqual(jobs['draft']['needs'],'aggregate')
         self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign'])

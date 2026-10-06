@@ -1,101 +1,27 @@
-name: Reusable Cross-Platform Build Core
+name: Stable Windows Build Core
 env:
   PYTHONPATH: .
   AUTOMATION_MODE: '1'
 'on':
   workflow_call:
     inputs:
-      upstream_repository:
-        type: string
-        default: rustdesk/rustdesk
-      upstream_ref:
-        type: string
-        required: true
-      upstream_sha:
-        type: string
-        required: true
-      channel:
-        type: string
-        required: true
-      patchset:
-        type: string
-        required: true
-      upstream_version:
-        type: string
-        required: true
-      standard_artifact:
-        type: string
-        required: true
-      sos_artifact:
-        type: string
-        required: true
-      revision:
-        type: string
-        default: '1'
-      include_experimental:
-        type: boolean
-        default: false
-      android_only:
-        type: boolean
-        default: false
-      desktop_only:
-        type: boolean
-        default: false
-      windows_only:
-        type: boolean
-        default: false
-      other_platforms_only:
-        type: boolean
-        default: false
+      upstream_ref: {type: string, required: true}
+      upstream_sha: {type: string, required: true}
+      channel: {type: string, required: true}
+      patchset: {type: string, required: true}
+      upstream_version: {type: string, required: true}
+      standard_artifact: {type: string, required: true}
+      sos_artifact: {type: string, required: true}
+      revision: {type: string, default: '1'}
     secrets:
-      RUSTDESK_KEY:
-        required: true
-      RUSTDESK_PASSWORD:
-        required: true
+      RUSTDESK_KEY: {required: true}
+      RUSTDESK_PASSWORD: {required: true}
 permissions:
   contents: read
   actions: read
 jobs:
-  plan:
-    name: Resolve build target matrix
-    runs-on: ubuntu-22.04
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      count: ${{ steps.plan.outputs.count }}
-      android_matrix: ${{ steps.split.outputs.android_matrix }}
-      android_count: ${{ steps.split.outputs.android_count }}
-      other_platform_matrix: ${{ steps.split.outputs.other_platform_matrix }}
-      other_platform_count: ${{ steps.split.outputs.other_platform_count }}
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - id: plan
-      env:
-        CHANNEL: ${{ inputs.channel }}
-        EXPERIMENTAL: ${{ inputs.include_experimental }}
-      run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
-
-        python3 scripts/release/qualification.py plan --channel "$CHANNEL" "${args[@]}"'
-    - id: split
-      name: Split Android and other platform target matrices
-      run: |
-        android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
-        android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
-        other_platform_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
-        other_platform_count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
-        echo "android_matrix=$android_matrix" >> "$GITHUB_OUTPUT"
-        echo "android_count=$android_count" >> "$GITHUB_OUTPUT"
-        echo "other_platform_matrix=$other_platform_matrix" >> "$GITHUB_OUTPUT"
-        echo "other_platform_count=$other_platform_count" >> "$GITHUB_OUTPUT"
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: target-plan-${{ github.run_id }}
-        path: .work/target-plan.json
-        if-no-files-found: error
   windows-helper:
     name: Build shared Windows helper
-    if: inputs.android_only != true && inputs.other_platforms_only != true
     runs-on: windows-2022
     timeout-minutes: 30
     defaults:
@@ -153,7 +79,6 @@ jobs:
         retention-days: 7
 
   build:
-    if: inputs.android_only != true && inputs.other_platforms_only != true
     name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
@@ -311,54 +236,9 @@ jobs:
         path: artifacts/rustdesk-*-${{ matrix.variant }}-windows-x86_64/
         if-no-files-found: error
         retention-days: 14
-    needs: [plan, windows-helper]
-  platforms:
-    name: Build Linux and macOS targets
-    needs: plan
-    if: inputs.android_only != true && inputs.windows_only != true && needs.plan.outputs.other_platform_count != '0'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
-    uses: ./.github/workflows/build-platform.yml
-    with:
-      platform: ${{ matrix.platform }}
-      arch: ${{ matrix.arch }}
-      variant: ${{ matrix.variant }}
-      runner: ${{ matrix.runner }}
-      upstream_ref: ${{ inputs.upstream_ref }}
-      upstream_sha: ${{ inputs.upstream_sha }}
-      upstream_version: ${{ inputs.upstream_version }}
-      patchset: ${{ inputs.patchset }}
-      channel: ${{ inputs.channel }}
-      source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
-    secrets:
-      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
-      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
-  android-platforms:
-    name: Build Android targets
-    needs: plan
-    if: inputs.windows_only != true && inputs.other_platforms_only != true && needs.plan.outputs.android_count != '0'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.android_matrix) }}
-    uses: ./.github/workflows/build-platform.yml
-    with:
-      platform: ${{ matrix.platform }}
-      arch: ${{ matrix.arch }}
-      variant: ${{ matrix.variant }}
-      runner: ${{ matrix.runner }}
-      upstream_ref: ${{ inputs.upstream_ref }}
-      upstream_sha: ${{ inputs.upstream_sha }}
-      upstream_version: ${{ inputs.upstream_version }}
-      patchset: ${{ inputs.patchset }}
-      channel: ${{ inputs.channel }}
-      source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
-    secrets:
-      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
-      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+    needs: windows-helper
   validate:
     name: Validate Windows build provenance
-    if: inputs.android_only != true && inputs.windows_only != true && inputs.other_platforms_only != true
     needs: build
     runs-on: ubuntu-22.04
     permissions:
@@ -391,54 +271,3 @@ jobs:
 
           .work/production-release-assets/'
         if-no-files-found: error
-  aggregate:
-    name: Aggregate verified build artifacts
-    needs:
-    - plan
-    - build
-    - validate
-    - platforms
-    - android-platforms
-    if: >-
-      inputs.android_only != true &&
-      inputs.windows_only != true &&
-      inputs.other_platforms_only != true &&
-      always() &&
-      needs.plan.result == 'success'
-    runs-on: ubuntu-22.04
-    env:
-      PATCHSET: ${{ inputs.patchset }}
-      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
-      BUILD_CONFIGURATION: PRODUCTION
-      CHANNEL: ${{ inputs.channel }}
-      EXPERIMENTAL: ${{ inputs.include_experimental }}
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - run: python3 -m pip install -r requirements.txt
-    - name: Package inspectors
-      run: 'sudo apt-get update -y
-
-        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt'
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      with:
-        pattern: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-*
-        path: .work/all-targets
-        merge-multiple: false
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      if: inputs.include_experimental
-      with:
-        pattern: diagnostic-*
-        path: .work/all-targets/diagnostics
-        merge-multiple: false
-    - name: Fail-closed expected target and cross-platform provenance gate
-      run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
-
-        python3 scripts/release/qualification.py aggregate --channel "$CHANNEL" "${args[@]}"'
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always()
-      with:
-        name: platform-aggregate-${{ github.run_id }}
-        path: .work/platform-aggregate/
-        if-no-files-found: warn
