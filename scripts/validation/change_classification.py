@@ -36,6 +36,10 @@ def is_non_functional(path: str) -> bool:
         return True
     if p.name in NON_FUNCTIONAL_ROOT_NAMES:
         return True
+    if p.name.startswith("LICENSE."):
+        return True
+    if p.name.startswith("CHANGELOG."):
+        return True
     if p.name.startswith("README.") and p.suffix.lower() == ".md":
         return True
     if p.name.startswith("CHANGELOG.") and p.suffix.lower() == ".md":
