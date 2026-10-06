@@ -28,7 +28,7 @@ def discover(ref, force=False, dry_run=True):
     revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
     if not re.fullmatch(r'[1-9][0-9]{0,5}', revision):
         raise ValueError('Invalid revision')
-    name = mapped(data['upstream_sha']) or select(data['upstream_sha'])
+    name = mapped(data['upstream_tag']) or select(data['upstream_sha'], upstream_ref=data['upstream_tag'])
     os.environ['PATCHSET'] = name
     data.update(patchset=name, revision=revision, common_patch_hash=patch_hash('common'),
                 sos_patch_hash=patch_hash('sos'))
