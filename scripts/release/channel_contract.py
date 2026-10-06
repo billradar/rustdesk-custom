@@ -78,9 +78,30 @@ class ChannelPolicyTests(unittest.TestCase):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release'})
         self.assertIn('draft-preflight',jobs['qualification']['needs'])
+        self.assertIn('stable-ci-qualification',jobs['qualification']['needs'])
         self.assertIn('qualification',jobs['prepare']['needs'])
         self.assertIn('needs.draft-preflight.outputs.draft_needed',jobs['draft']['if'])
         self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
+
+        stable_ci=jobs['stable-ci-qualification']
+        self.assertIn('resolve',stable_ci['needs'])
+        self.assertIn('draft-preflight',stable_ci['needs'])
+        self.assertIn('actions: write',yaml.safe_dump(stable_ci['permissions']))
+        stable_steps='\\n'.join(s.get('name','')+'\\n'+s.get('run','') for s in stable_ci['steps'] if isinstance(s,dict))
+        self.assertIn('Reuse existing exact CI qualification when available',stable_steps)
+        self.assertIn('scripts/release/qualification.py verify-ci',stable_steps)
+        self.assertIn('Dispatch CI only when exact qualification is missing',stable_steps)
+        self.assertIn('gh workflow run ci.yml',stable_steps)
+        self.assertIn('--ref main',stable_steps)
+        self.assertIn('-f upstream_ref="$UPSTREAM_REF"',stable_steps)
+        self.assertIn('steps.reuse.outputs.found != \'true\'',stable_steps)
+        self.assertIn('Wait for newly dispatched exact CI',stable_steps)
+        self.assertIn('workflow_dispatch',stable_steps)
+        self.assertIn('CUSTOM_SHA',stable_steps)
+        self.assertIn('DISPATCH_STARTED_AT',stable_steps)
+        self.assertEqual(jobs['stable-ci-qualification'].get('permissions',{}).get('contents'),'read')
+        self.assertEqual(jobs['stable-ci-qualification'].get('permissions',{}).get('actions'),'write')
+        self.assertEqual(jobs['qualification'].get('permissions',{}).get('actions'),None)
     def test_nightly_uses_default_branch_not_stable(self):
         with patch.object(channel,'api',return_value={'default_branch':'development'}),patch.object(channel,'resolve_ref',return_value='a'*40) as resolve,patch.object(channel,'outputs') as output:
             channel.resolve('nightly');resolve.assert_called_once_with('development')
