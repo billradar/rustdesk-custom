@@ -26,7 +26,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
                        "needs.prepare.result == 'success'"):
             self.assertIn(marker, signing["if"])
         self.assertNotIn("production_android_signing", signing["if"])
-        self.assertNotIn("release_mode != 'dry-run'", signing["if"])
+        self.assertIn("release_mode != 'dry-run'", signing["if"])
 
     def test_secret_is_bound_only_at_direct_job_steps(self):
         signing = self.tag["jobs"]["android-sign"]
