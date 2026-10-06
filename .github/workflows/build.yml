@@ -94,6 +94,7 @@ jobs:
         path: .work/target-plan.json
         if-no-files-found: error
   windows-helper:
+    name: Build shared Windows helper
     if: inputs.android_only != true && inputs.other_platforms_only != true
     runs-on: windows-2022
     timeout-minutes: 30
