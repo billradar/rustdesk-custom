@@ -50,7 +50,7 @@ jobs:
       name: Resolve exact Stable patchset
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
-          UPSTREAM_REF: ${{ steps.resolve.outputs.upstream_ref }}
+        UPSTREAM_REF: ${{ steps.resolve.outputs.upstream_ref }}
       run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --ref "$UPSTREAM_REF"
     - name: Validate Stable execution identity
       env:
