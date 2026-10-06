@@ -89,18 +89,18 @@ class MatrixTests(unittest.TestCase):
         nightly_resolve=n['jobs']['resolve']
         nightly_env=nightly_resolve['steps'][1]['env']
         nightly_run=nightly_resolve['steps'][1]['run']
-        self.assertEqual(nightly_env['TEST_BRANCH'], "${" + "{ vars.UPSTREAM_TEST_BRANCH || 'test' }}")
+        self.assertEqual(nightly_env['UPSTREAM_TEST_REF'], "${" + "{ vars.UPSTREAM_TEST_REF || vars.UPSTREAM_TEST_BRANCH || 'test' }}")
         self.assertIn('GITHUB_EVENT_NAME',nightly_run)
-        self.assertIn('REQUESTED_REF=\"$TEST_BRANCH\"',nightly_run)
+        self.assertIn('REQUESTED_REF=\"$UPSTREAM_TEST_REF\"',nightly_run)
         self.assertIn('REQUESTED_REF=\"${' + '{ inputs.upstream_ref }}\"',nightly_run)
         self.assertIn('draft', n['jobs'])
         router=yaml.safe_load((ROOT/'.github/workflows/upstream-event-router.yml').read_text())
         self.assertIn('schedule', router['on'])
-        self.assertIn('master-debounce', router['jobs'])
+        self.assertIn('default-branch-debounce', router['jobs'])
         self.assertNotIn('test-branch', router['jobs'])
         self.assertIn('stable-tag', router['jobs'])
-        self.assertIn('nightly.yml', str(router['jobs']['master-debounce']))
-        self.assertNotIn('upstream-compatibility.yml', str(router['jobs']['master-debounce']))
+        self.assertIn('nightly.yml', str(router['jobs']['default-branch-debounce']))
+        self.assertNotIn('upstream-compatibility.yml', str(router['jobs']['default-branch-debounce']))
         self.assertIn('ci.yml', str(router['jobs']['stable-tag']))
         self.assertIn("promote_stable=true", str(router['jobs']['stable-tag']))
         channel=(ROOT/'scripts/release/channel.py').read_text()
