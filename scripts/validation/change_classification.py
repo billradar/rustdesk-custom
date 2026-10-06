@@ -79,12 +79,12 @@ def classify(event: str, force_rebuild: bool) -> tuple[str, list[str], str]:
             "manual workflow_dispatch is an explicit functional CI request",
         )
 
-    base = (
-        os.environ.get("GITHUB_BASE_REF")
-        if event == "pull_request"
-        else os.environ.get("GITHUB_EVENT_BEFORE")
-    )
-    head = os.environ.get("GITHUB_SHA")
+    if event == "pull_request":
+        base = os.environ.get("GITHUB_BASE_SHA")
+        head = os.environ.get("GITHUB_HEAD_SHA")
+    else:
+        base = os.environ.get("GITHUB_EVENT_BEFORE")
+        head = os.environ.get("GITHUB_SHA")
 
     if event == "push" and (not base or set(base) == {"0"}):
         return (
