@@ -392,6 +392,7 @@ jobs:
         if-no-files-found: warn
         retention-days: 14
   validation-report:
+    name: Publish compatibility validation report
     needs:
     - resolve
     - contracts
