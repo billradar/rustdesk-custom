@@ -336,6 +336,7 @@ jobs:
         if-no-files-found: error
         retention-days: 7
   flutter-analyze:
+    name: Analyze patched Flutter interfaces
     needs:
     - resolve
     - bridge
