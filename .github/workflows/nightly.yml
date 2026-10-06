@@ -8,7 +8,7 @@ env:
     inputs:
       upstream_ref:
         type: string
-        description: Upstream ref; empty = configured test branch
+        description: Official upstream ref; empty = configured official test ref
         default: ''
       force_rebuild:
         type: boolean
@@ -48,7 +48,7 @@ jobs:
     - id: resolve
       env:
         GH_TOKEN: ${{ github.token }}
-        TEST_BRANCH: ${{ vars.UPSTREAM_TEST_BRANCH || 'test' }}
+        UPSTREAM_TEST_REF: ${{ vars.UPSTREAM_TEST_REF || vars.UPSTREAM_TEST_BRANCH || 'test' }}
         CHANNEL: nightly
         FORCE: ${{ inputs.force_rebuild || false }}
       run: 'args=()
@@ -56,13 +56,13 @@ jobs:
         [[ "$FORCE" != true ]] || args+=(--force)
 
         if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
-          REQUESTED_REF="$TEST_BRANCH"
+          REQUESTED_REF="$UPSTREAM_TEST_REF"
         else
           REQUESTED_REF="${{ inputs.upstream_ref }}"
-          REQUESTED_REF="${REQUESTED_REF:-$TEST_BRANCH}"
+          REQUESTED_REF="${REQUESTED_REF:-$UPSTREAM_TEST_REF}"
         fi
 
-        echo "Nightly upstream ref: $REQUESTED_REF"
+        echo "Nightly official upstream ref: $REQUESTED_REF"
         python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
