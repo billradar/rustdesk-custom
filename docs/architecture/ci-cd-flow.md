@@ -77,15 +77,29 @@ The separate helper validation in compat-check.yml is compatibility evidence. It
 ## 4. Ordering
 
 ### Stable
-1. Resolve
-2. Exact patchset
-3. Identity validation
-4. Release preflight
-5. Prepare source
-6. Build
-7. Android production signing when required
-8. Aggregate
-9. Draft / Release
+1. **01 · Resolve Stable source identity** — upstream SHA + stable ref/version + exact validated patchset
+2. **02 · Release preflight** — decide whether this revision needs a build, needs a Draft, or can publish an existing verified Draft
+3. **03 · Prepare exact production source** — only when a build is required
+4. **04 · Parallel production build stage**
+   - 04A · Windows Standard / SOS
+   - 04B · Linux + macOS
+   - 04C · Android artifacts
+5. **05 · Android production signing** — YubiKey PIV only for non-dry-run production paths
+6. **06 · Aggregate and verify** — single convergence point for all production artifacts
+7. **07 · Publication**
+   - 07A · Publish Stable Release
+   - 07B · Create Stable Draft
+   - 07C · Publish existing verified Stable Draft (preflight side path only)
+
+The intended Stable DAG is therefore:
+
+`Resolve → Preflight → Prepare → [Windows | Linux/macOS | Android] → Android Sign → Aggregate → Publication`
+
+The existing-Draft path is intentionally separate:
+
+`Resolve → Preflight → Publish existing Draft`
+
+Publication jobs consume the single **Aggregate** convergence point instead of independently depending on every build job. This keeps the GitHub Actions graph linear and readable without changing the underlying build, signing, or release semantics.
 
 ### Nightly
 1. Resolve
