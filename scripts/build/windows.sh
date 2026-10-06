@@ -21,10 +21,10 @@ workspace=$(mktemp -d "$root/.work/$variant.XXXXXX")
 bash "$root/scripts/source/prepare.sh" "$ref" "$workspace"
 if [[ -z "${PATCHSET:-}" ]]; then
     sha=$(git -C "$workspace" rev-parse HEAD)
-    bash "$root/scripts/source/select-patchset.sh" "$sha" --source "$workspace" --report "$workspace/patchset-selection.json"
+    bash "$root/scripts/source/select_patchset.sh" "$sha" --source "$workspace" --report "$workspace/patchset-selection.json"
     export PATCHSET=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["selected"])' "$workspace/patchset-selection.json")
 fi
-bash "$root/scripts/source/apply-patches.sh" "$workspace" "$variant"
+bash "$root/scripts/source/apply_patches.sh" "$workspace" "$variant"
 fi
 [[ "$PATCHSET" == v1 ]] || export AUTOMATION_MODE=1
 python3 "$root/scripts/source/verify_source.py" "$workspace" "$variant" ${AUTOMATION_MODE:+--automation}

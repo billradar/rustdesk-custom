@@ -98,7 +98,7 @@ jobs:
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
     - id: selection
       name: Select compatible frozen patch generation
-      run: 'source scripts/validation/test-config.sh
+      run: 'source scripts/validation/test_config.sh
 
         python3 scripts/upstream/patchsets.py "$UP_SHA" --source .work/official'
       env:
@@ -120,7 +120,9 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements.txt
-    - name: Run release and repository contracts
+    - name: Run repository architecture contract
+      run: python3 scripts/validation/repository_contract.py
+    - name: Run release and domain contracts
       run: |
         set -euo pipefail
         python3 scripts/release/production_contract.py
@@ -150,7 +152,7 @@ jobs:
       with:
         toolchain: ${{ needs.resolve.outputs.rust }}
     - name: Patch/API/config gate before expensive Windows dependencies
-      run: 'source scripts/validation/test-config.sh
+      run: 'source scripts/validation/test_config.sh
 
         args=()
 
@@ -164,7 +166,7 @@ jobs:
 
         sudo apt-get install -y libssl-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev pkg-config protobuf-compiler
 
-        source scripts/validation/test-config.sh
+        source scripts/validation/test_config.sh
 
         python3 scripts/validation/compatibility.py rust --variant "$SELECTED_VARIANT"
 
@@ -207,7 +209,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - name: Load fictional bridge fixtures
       shell: bash
-      run: "source scripts/validation/test-config.sh\npython3 - <<'PYCODE'\nimport os\nwith open(os.environ['GITHUB_ENV'],'a') as f:\n\
+      run: "source scripts/validation/test_config.sh\npython3 - <<'PYCODE'\nimport os\nwith open(os.environ['GITHUB_ENV'],'a') as f:\n\
         \ for key in ('RUSTDESK_ID_SERVER','RUSTDESK_RELAY_SERVER','RUSTDESK_API_SERVER','RUSTDESK_KEY','RUSTDESK_PASSWORD'):\n\
         \  f.write(key+'='+os.environ[key]+'\\n')\nPYCODE"
     - name: Prepare exact official source
@@ -366,7 +368,7 @@ jobs:
     - name: Analyze patched Flutter interfaces against generated bridge
       env:
         SELECTED_VARIANT: ${{ matrix.variant }}
-      run: "source scripts/validation/test-config.sh\npython3 scripts/validation/compatibility.py prepare --sha \"$UPSTREAM_EXPECTED_SHA\" --variant\
+      run: "source scripts/validation/test_config.sh\npython3 scripts/validation/compatibility.py prepare --sha \"$UPSTREAM_EXPECTED_SHA\" --variant\
         \ \"$SELECTED_VARIANT\"\nfor variant in standard sos; do\n  [[ \"$SELECTED_VARIANT\" == both || \"$SELECTED_VARIANT\"\
         \ == \"$variant\" ]] || continue\n  python3 scripts/release/package.py restore-bridge \".work/validation/$variant\" .work/bridge\n\
         done\npython3 scripts/validation/compatibility.py analyze --variant \"$SELECTED_VARIANT\"\n"

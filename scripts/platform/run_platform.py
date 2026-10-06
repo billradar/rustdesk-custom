@@ -8,7 +8,7 @@ values=sorted([os.environ[n] for n in NAMES if os.environ.get(n)],key=len,revers
 def redact(text):
     for value in values:text=text.replace(value,'[REDACTED]')
     scan_bytes(text.encode());return text
-lines=[];p=subprocess.Popen(['bash','scripts/build-'+platform+'.sh'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+lines=[];p=subprocess.Popen(['bash','scripts/build/'+platform+'.sh'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
 try:
     for line in p.stdout:
         line=redact(line);print(line,end='',flush=True);lines.append(line);lines=lines[-100:]

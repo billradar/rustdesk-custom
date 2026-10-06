@@ -156,7 +156,7 @@ def main():
                         raise RuntimeError('Failure simulation unexpectedly applied')
                     status['Patch Apply'] = 'FAIL (SIMULATED)'
                     raise RuntimeError('Simulated patch conflict: nonexistent-simulation; expensive builds blocked')
-                run(['bash', str(ROOT / 'scripts/source/apply-patches.sh'), str(tree), variant], log)
+                run(['bash', str(ROOT / 'scripts/source/apply_patches.sh'), str(tree), variant], log)
                 status['Patch Apply'] = 'PASS'
                 status['hbb_common Patch'] = 'PASS'
                 run([sys.executable, str(ROOT / 'scripts/source/verify_source.py'), str(tree), variant, '--automation'], log)

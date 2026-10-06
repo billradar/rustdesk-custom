@@ -22,11 +22,9 @@ docs/archive/            historical evidence
 
 ## Naming policy
 
-Production implementation files use responsibility-based names. Phase numbers are historical metadata, not implementation names.
+Production implementation files use responsibility-based names. Historical phase identifiers are archive metadata, not implementation names.
 
 Contract files end in `_contract.py` and are executable repository invariants. They validate architecture, workflow security, release policy and build/signing boundaries.
-
-The old `tests/` tree has been retired. Contract tests live beside the responsibility they protect and are executed by the reusable compatibility workflow.
 
 ## Release flow
 
@@ -36,10 +34,10 @@ Stable Android production signing is isolated to the dedicated YubiKey runner an
 
 ## Source of truth
 
-- Platform support: `metadata/platform-matrix.json`
-- Reviewed build interfaces: `metadata/build-adapter-profiles.json`
-- Android signing identity: `metadata/yubikey-android-signing-identity.json`
+- Platform support: `metadata/platform/matrix.json`
+- Reviewed build interfaces: `metadata/build/adapter-profiles.json`
+- Android signing identity: `metadata/signing/android-standard.json`
 - Release qualification implementation: `scripts/release/qualification.py`
 - Current signing architecture: `docs/signing/`
 
-Historical Phase reports and migration evidence live under `docs/archive/` and are not part of the current operational contract.
+Historical migration, acceptance and signing evidence lives under `docs/archive/` and is not part of the current operational contract.

@@ -97,10 +97,10 @@ class StableAndroidSigningContractTests(unittest.TestCase):
             )
             self.assertIn(expected, self.action)
         self.assertNotIn("pattern: *.apk", self.action)
-    def test_legacy_signer_resolves_repository_root_for_yubikey_metadata(self):
+    def test_signing_identity_resolves_repository_root_for_canonical_metadata(self):
         source = (ROOT / "scripts/signing/android_identity.py").read_text()
         self.assertIn("ROOT = Path(__file__).resolve().parents[2]", source)
-        self.assertTrue((ROOT / "metadata/yubikey-android-signing-identity.json").is_file())
+        self.assertTrue((ROOT / "metadata/signing/android-standard.json").is_file())
 
     def test_old_reusable_signer_is_gone(self):
         self.assertFalse((ROOT / ".github/workflows/sign-android.yml").exists())
