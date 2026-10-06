@@ -101,13 +101,18 @@ jobs:
       id: reuse
       env:
         GH_TOKEN: ${{ github.token }}
-        ${{ github.repository }}SITORY: ${{ github.repository }}
-        ${{ github.sha }}_SHA: ${{ github.sha }}
+        REPOSITORY: ${{ github.repository }}
+        CUSTOM_SHA: ${{ github.sha }}
         UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
         UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
       run: |
         set -euo pipefail
-        if python3 scripts/release/qualification.py verify-ci           --repository "$${{ github.repository }}SITORY"           --custom-sha "$${{ github.sha }}_SHA"           --upstream-sha "$UPSTREAM_SHA"           --upstream-ref "$UPSTREAM_REF"           --output .work/reused-ci-qualification.json; then
+        if python3 scripts/release/qualification.py verify-ci \
+          --repository "$REPOSITORY" \
+          --custom-sha "$CUSTOM_SHA" \
+          --upstream-sha "$UPSTREAM_SHA" \
+          --upstream-ref "$UPSTREAM_REF" \
+          --output .work/reused-ci-qualification.json; then
           echo "Exact CI qualification found; reusing existing CI run."
           echo "found=true" >> "$GITHUB_OUTPUT"
         else
@@ -118,30 +123,42 @@ jobs:
       if: steps.reuse.outputs.found != 'true'
       env:
         GH_TOKEN: ${{ github.token }}
-        ${{ github.repository }}SITORY: ${{ github.repository }}
-        ${{ github.sha }}_SHA: ${{ github.sha }}
+        REPOSITORY: ${{ github.repository }}
+        CUSTOM_SHA: ${{ github.sha }}
         UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
       run: |
         set -euo pipefail
         export DISPATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        gh workflow run ci.yml           --repo "$${{ github.repository }}SITORY"           --ref main           -f upstream_ref="$UPSTREAM_REF"           -f force_rebuild=false           -f promote_stable=false
-        echo "Dispatched CI for custom SHA $${{ github.sha }}_SHA and upstream ref $UPSTREAM_REF"
+        gh workflow run ci.yml \
+          --repo "$REPOSITORY" \
+          --ref main \
+          -f upstream_ref="$UPSTREAM_REF" \
+          -f force_rebuild=false \
+          -f promote_stable=false
+        echo "Dispatched CI for custom SHA $CUSTOM_SHA and upstream ref $UPSTREAM_REF"
         echo "DISPATCH_STARTED_AT=$DISPATCH_STARTED_AT" >> "$GITHUB_ENV"
     - name: Wait for newly dispatched exact CI
       if: steps.reuse.outputs.found != 'true'
       env:
         GH_TOKEN: ${{ github.token }}
-        ${{ github.repository }}SITORY: ${{ github.repository }}
-        ${{ github.sha }}_SHA: ${{ github.sha }}
+        REPOSITORY: ${{ github.repository }}
+        CUSTOM_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
         deadline=$((SECONDS + 3600))
         while (( SECONDS < deadline )); do
-          run_id="$(gh run list             --repo "$${{ github.repository }}SITORY"             --workflow ci.yml             --event workflow_dispatch             --branch main             --limit 50             --json databaseId,headSha,status,conclusion,createdAt             --jq 'map(select(.headSha == env.${{ github.sha }}_SHA and .createdAt >= env.DISPATCH_STARTED_AT)) | sort_by(.createdAt) | last | .databaseId // empty')"
+          run_id="$(gh run list \
+            --repo "$REPOSITORY" \
+            --workflow ci.yml \
+            --event workflow_dispatch \
+            --branch main \
+            --limit 50 \
+            --json databaseId,headSha,status,conclusion,createdAt \
+            --jq 'map(select(.headSha == env.CUSTOM_SHA and .createdAt >= env.DISPATCH_STARTED_AT)) | sort_by(.createdAt) | last | .databaseId // empty')"
           if [[ -n "$run_id" ]]; then
             echo "CI workflow run: $run_id"
-            status="$(gh run view "$run_id" --repo "$${{ github.repository }}SITORY" --json status --jq .status)"
-            conclusion="$(gh run view "$run_id" --repo "$${{ github.repository }}SITORY" --json conclusion --jq .conclusion)"
+            status="$(gh run view "$run_id" --repo "$REPOSITORY" --json status --jq .status)"
+            conclusion="$(gh run view "$run_id" --repo "$REPOSITORY" --json conclusion --jq .conclusion)"
             echo "CI status=$status conclusion=$conclusion"
             if [[ "$status" == "completed" ]]; then
               [[ "$conclusion" == "success" ]] || { echo "Exact CI qualification failed"; exit 1; }
