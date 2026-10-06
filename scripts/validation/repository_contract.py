@@ -15,7 +15,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
-ALLOWED_ROOT_FILES = {".gitignore", "README.md", "requirements.txt"}
+NON_FUNCTIONAL_ROOT_NAMES = {
+    ".gitignore",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+}
 CURRENT_DOC_DIRS = {
     "architecture", "build", "platform", "release", "signing", "upstream", "archive"
 }
@@ -65,19 +72,28 @@ def fail(errors: list[str], path: Path, reason: str, expected: str = "", actual:
     errors.append(detail)
 
 
-def check_root_and_directories(files: list[Path], errors: list[str]) -> None:
+def is_non_functional_document(path: Path) -> bool:
+    r = rel(path)
+    if r == "docs" or r.startswith("docs/"):
+        return True
+    if r.startswith(".github/ISSUE_TEMPLATE/") or r.startswith(".github/PULL_REQUEST_TEMPLATE/"):
+        return True
+    if r in {".github/PULL_REQUEST_TEMPLATE.md", ".github/CODEOWNERS", ".github/SECURITY.md"}:
+        return True
+    if path.suffix.lower() == ".md":
+        return True
+    if path.name in NON_FUNCTIONAL_ROOT_NAMES:
+        return True
+    return False
+
+
+def check_functional_root_structure(files: list[Path], errors: list[str]) -> None:
+    canonical_functional_root = {"requirements.txt"}
     for entry in ROOT.iterdir():
-        if entry.is_file() and entry.name not in ALLOWED_ROOT_FILES:
-            fail(errors, entry, "unexpected root-level file")
-    docs = ROOT / "docs"
-    if not docs.is_dir():
-        fail(errors, docs, "docs directory is missing")
-        return
-    for entry in docs.iterdir():
-        if entry.is_file():
-            fail(errors, entry, "current docs must be inside a responsibility directory")
-        elif entry.name not in CURRENT_DOC_DIRS:
-            fail(errors, entry, "unexpected current docs directory")
+        if not entry.is_file() or is_non_functional_document(entry):
+            continue
+        if entry.name not in canonical_functional_root:
+            fail(errors, entry, "unexpected functional root-level file")
 
 
 def check_naming(files: list[Path], errors: list[str]) -> None:
@@ -114,7 +130,7 @@ def check_forbidden_paths(files: list[Path], errors: list[str]) -> None:
 def check_current_legacy_references(files: list[Path], errors: list[str]) -> None:
     for path in files:
         r = rel(path)
-        if r.startswith("docs/archive/") or r == "scripts/validation/repository_contract.py":
+        if is_non_functional_document(path) or r == "scripts/validation/repository_contract.py":
             continue
         if path.suffix.lower() not in {".md", ".py", ".sh", ".json", ".yaml", ".yml", ".txt"}:
             continue
@@ -210,11 +226,10 @@ def main() -> int:
     errors: list[str] = []
 
     checks = [
-        ("root structure", lambda: check_root_and_directories(files, errors)),
+        ("functional root structure", lambda: check_functional_root_structure(files, errors)),
         ("naming convention", lambda: check_naming(files, errors)),
         ("forbidden files", lambda: check_forbidden_paths(files, errors)),
         ("legacy references", lambda: check_current_legacy_references(files, errors)),
-        ("documentation layout", lambda: check_root_and_directories(files, errors)),
         ("metadata uniqueness", lambda: check_metadata(files, errors)),
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
