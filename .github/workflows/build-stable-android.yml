@@ -59,8 +59,7 @@ jobs:
   android-platforms:
     name: Build Android targets
     needs: plan
-    if: inputs.windows_only != true && inputs.other_platforms_only != true && needs.plan.outputs.android_count != '0'
-    strategy:
+        strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.android_matrix) }}
     uses: ./.github/workflows/build-platform.yml
