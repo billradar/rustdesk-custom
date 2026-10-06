@@ -221,6 +221,19 @@ def check_signing_boundary(files: list[Path], errors: list[str]) -> None:
             fail(errors, signing_meta, "canonical production key identity mismatch")
 
 
+def check_platform_build_contract(files: list[Path], errors: list[str]) -> None:
+    path = ROOT / ".github/workflows/build-platform.yml"
+    if not path.is_file():
+        fail(errors, path, "shared platform build workflow is missing")
+        return
+    try:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if workflow.get("name") != "Reusable Platform Build":
+        fail(errors, path, "shared platform build workflow must be channel-neutral", "Reusable Platform Build", str(workflow.get("name")))
+
+
 def check_workflow_syntax(files: list[Path], errors: list[str]) -> None:
     for path in files:
         r = rel(path)
@@ -245,6 +258,7 @@ def main() -> int:
         ("legacy references", lambda: check_current_legacy_references(files, errors)),
         ("metadata uniqueness", lambda: check_metadata(files, errors)),
         ("executable-bit contract", lambda: check_executable_contract(files, errors)),
+        ("platform build contract", lambda: check_platform_build_contract(files, errors)),
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
     ]
