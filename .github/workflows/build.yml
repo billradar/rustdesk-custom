@@ -57,6 +57,7 @@ permissions:
   actions: read
 jobs:
   plan:
+    name: Resolve build target matrix
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
