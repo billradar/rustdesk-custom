@@ -82,7 +82,7 @@ jobs:
         else:
             print("RETRY")
         PY
-)"
+        )"
         echo "state=$state" >> "$GITHUB_OUTPUT"
     - name: Route default-branch change to Nightly
       if: steps.state.outputs.state == 'RETRY'
