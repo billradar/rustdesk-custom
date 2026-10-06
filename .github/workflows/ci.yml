@@ -16,6 +16,10 @@ env:
         type: boolean
         description: Run Stable CD dry-run after qualification
         default: false
+      automation_source:
+        type: string
+        description: Internal source marker for Action-created CI
+        default: manual
   pull_request:
   push:
     branches:
@@ -24,8 +28,8 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ inputs.automation_source == 'upstream-event-router' && 'action-created-ci' || format('normal-ci-{0}', github.ref) }}
+  cancel-in-progress: ${{ inputs.automation_source != 'upstream-event-router' }}
 
 jobs:
   classify:
