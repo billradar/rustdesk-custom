@@ -30,31 +30,23 @@ def preflight():
     if missing:
         raise ValueError('BLOCKED: LEGACY SIGNING SECRETS NOT AVAILABLE')
 
-def _identity_metadata():
-    data = json.loads((ROOT / 'metadata/signing/android-standard.json').read_text())
-    if data.get('schema') != 2 or data.get('platform') != 'android' or data.get('variant') != 'standard':
-        raise ValueError('SIGNING: untrusted Android identity metadata')
-    if not re.fullmatch('[A-Za-z0-9_.]+', data.get('package_name', '')):
+def expected():
+    data = json.loads((ROOT / 'metadata/android-signing-identity.json').read_text())
+    if data['source'] != 'legacy-production-apk' or data['private_key_stored'] is not False:
+        raise ValueError('SIGNING: untrusted identity metadata')
+    if not re.fullmatch('[0-9a-f]{64}', data['certificate_sha256']):
+        raise ValueError('SIGNING: missing canonical expected certificate')
+    if not re.fullmatch('[A-Za-z0-9_.]+', data['package_name']):
         raise ValueError('SIGNING: missing expected package')
     return data
 
-def expected():
-    data = _identity_metadata()
-    legacy = dict(data['legacy'], package_name=data['package_name'])
-    if legacy['source'] != 'legacy-production-apk' or legacy['private_key_stored'] is not False:
-        raise ValueError('SIGNING: untrusted legacy identity metadata')
-    if not re.fullmatch('[0-9a-f]{64}', legacy['certificate_sha256']):
-        raise ValueError('SIGNING: missing canonical legacy certificate')
-    return legacy
-
 def yubikey_expected():
-    data = _identity_metadata()
-    production = dict(data['production'], package_name=data['package_name'])
-    if production.get('identity_kind') != 'new-yubikey-hardware-signing-identity':
+    data = json.loads((ROOT / 'metadata/yubikey-android-signing-identity.json').read_text())
+    if data.get('identity_kind') != 'new-yubikey-hardware-signing-identity':
         raise ValueError('SIGNING: unexpected YubiKey identity metadata')
-    if not re.fullmatch('[0-9a-f]{64}', production.get('certificate_sha256', '')):
+    if not re.fullmatch('[0-9a-f]{64}', data.get('certificate_sha256', '')):
         raise ValueError('SIGNING: missing YubiKey certificate fingerprint')
-    return production
+    return data
 
 def tool(name):
     return os.environ.get(name.upper(), name)

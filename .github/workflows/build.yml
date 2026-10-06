@@ -244,7 +244,7 @@ jobs:
 
         export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
 
-        bash "scripts/build/build-$VARIANT.sh" "$UPSTREAM_REF"
+        bash "scripts/build/$VARIANT.sh" "$UPSTREAM_REF"
 
         '
     - name: Upload verified production bundle

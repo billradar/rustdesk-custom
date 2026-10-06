@@ -42,7 +42,7 @@ def prepare(base,output,ref,sha,name,bridge):
     common=output/'common'
     # Copies remove Git shared-object alternates; archives are standalone across runners.
     shutil.copytree(base,common,symlinks=True)
-    run('bash',ROOT/'scripts/source/apply-patches.sh',common,'standard')
+    run('bash',ROOT/'scripts/source/apply_patches.sh',common,'standard')
     for variant in ('standard','sos'):
         tree=output/variant;shutil.copytree(common,tree,symlinks=True)
         if variant=='sos':

@@ -231,7 +231,7 @@ jobs:
         ref: ${{ github.sha }}
         persist-credentials: false
         sparse-checkout: |
-          metadata/signing/android-standard.json
+          metadata/yubikey-android-signing-identity.json
           scripts/signing/android_yubikey_sign.py
           .github/actions/android-yubikey-sign/action.yml
         sparse-checkout-cone-mode: false
@@ -243,9 +243,9 @@ jobs:
         python3 - <<'PY'
         import json
         from pathlib import Path
-        info = json.loads(Path("metadata/signing/android-standard.json").read_text())
-        assert info["production"]["certificate_sha256"] == "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5"
-        assert info["production"]["piv_slot"] == "9C" and info["production"]["pkcs11_id"] == "02"
+        info = json.loads(Path("metadata/yubikey-android-signing-identity.json").read_text())
+        assert info["certificate_sha256"] == "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5"
+        assert info["piv_slot"] == "9C" and info["pkcs11_id"] == "02"
         print("YubiKey identity metadata: PASS")
         PY
     - name: Environment Secret Binding Preflight

@@ -49,7 +49,7 @@ def probe(source, sha, name, base):
             commands=[['git','clone','--quiet','--shared','--no-checkout',str(source),str(tree)],
                       ['git','-C',str(tree),'checkout','--quiet','--detach',sha],
                       ['git','-C',str(tree),'submodule','update','--init','--recursive'],
-                      ['bash',str(ROOT/'scripts/source/apply-patches.sh'),str(tree),variant],
+                      ['bash',str(ROOT/'scripts/source/apply_patches.sh'),str(tree),variant],
                       ['python3',str(ROOT/'scripts/source/verify_source.py'),str(tree),variant,'--automation','--static-only']]
             for command in commands:
                 run=subprocess.run(command,env=env,text=True,capture_output=True)
