@@ -221,7 +221,7 @@ class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
         text=(ROOT/'scripts/release/qualification.py').read_text()
         self.assertNotIn(r"\\n", text)
-        self.assertIn("target-plan.json').write_text(json.dumps(p,indent=2)+'\\n')", text)
+        self.assertIn("target-plan.json');target_plan.write_text(json.dumps(p,indent=2)+'\\n');json.loads(target_plan.read_text())", text)
         self.assertIn("f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='", text)
 
 class ParallelGateTests(unittest.TestCase):
@@ -249,9 +249,13 @@ class ParallelGateTests(unittest.TestCase):
         self.assertNotIn('qualification',tag['android-build']['needs'])
         self.assertIn('prepare',tag['android-build']['needs'])
         self.assertIn('android-build',tag['android-sign']['needs'])
-        self.assertIn('windows-build',tag['draft']['needs'])
-        self.assertIn('platforms-build',tag['draft']['needs'])
-        self.assertIn('android-build',tag['draft']['needs'])
+        self.assertEqual(tag['draft']['needs'],'aggregate')
+        self.assertEqual(tag['release']['needs'],'aggregate')
+        self.assertEqual(tag['publish-existing']['needs'],['resolve','draft-preflight'])
+        self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign'])
+        self.assertIn('build_needed',tag['aggregate']['outputs'])
+        self.assertIn('draft_needed',tag['aggregate']['outputs'])
+        self.assertIn('publish_existing',tag['aggregate']['outputs'])
         core=self.workflow('build.yml')['jobs']
         self.assertEqual(core['validate']['needs'],'build')
         self.assertTrue(any(s.get('name')=='Verify shared helper provenance and digest' for s in core['build']['steps']))
