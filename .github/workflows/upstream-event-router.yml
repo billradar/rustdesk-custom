@@ -67,21 +67,21 @@ jobs:
         runs="$(gh run list --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
         export RUNS="$runs"
         state="$(python3 - <<'PY'
-import json, os
-rows=json.loads(os.environ["RUNS"])
-name=os.environ["RUN_NAME"]
-for row in rows:
-    if row.get("displayTitle")==name:
-        status=row.get("status")
-        conclusion=row.get("conclusion")
-        if status in {"queued","in_progress","waiting","pending","requested"}:
-            print("ACTIVE"); break
-        if conclusion=="success":
-            print("SUCCESS"); break
-        print("RETRY"); break
-else:
-    print("RETRY")
-PY
+        import json, os
+        rows=json.loads(os.environ["RUNS"])
+        name=os.environ["RUN_NAME"]
+        for row in rows:
+            if row.get("displayTitle")==name:
+                status=row.get("status")
+                conclusion=row.get("conclusion")
+                if status in {"queued","in_progress","waiting","pending","requested"}:
+                    print("ACTIVE"); break
+                if conclusion=="success":
+                    print("SUCCESS"); break
+                print("RETRY"); break
+        else:
+            print("RETRY")
+        PY
 )"
         echo "state=$state" >> "$GITHUB_OUTPUT"
     - name: Route default-branch change to Nightly
@@ -113,21 +113,21 @@ PY
         runs="$(gh run list --workflow tag.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
         export RUNS="$runs"
         state="$(python3 - <<'PY'
-import json, os
-rows=json.loads(os.environ["RUNS"])
-name=os.environ["RUN_NAME"]
-for row in rows:
-    if row.get("displayTitle")==name:
-        status=row.get("status")
-        conclusion=row.get("conclusion")
-        if status in {"queued","in_progress","waiting","pending","requested"}:
-            print("ACTIVE"); break
-        if conclusion=="success":
-            print("SUCCESS"); break
-        print("RETRY"); break
-else:
-    print("RETRY")
-PY
+        import json, os
+        rows=json.loads(os.environ["RUNS"])
+        name=os.environ["RUN_NAME"]
+        for row in rows:
+            if row.get("displayTitle")==name:
+                status=row.get("status")
+                conclusion=row.get("conclusion")
+                if status in {"queued","in_progress","waiting","pending","requested"}:
+                    print("ACTIVE"); break
+                if conclusion=="success":
+                    print("SUCCESS"); break
+                print("RETRY"); break
+        else:
+            print("RETRY")
+        PY
 )"
         echo "state=$state" >> "$GITHUB_OUTPUT"
     - name: Route new Stable Tag directly to Stable CD
