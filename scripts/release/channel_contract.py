@@ -83,7 +83,11 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
-        self.assertIn('needs.draft-preflight.outputs.draft_needed',jobs['draft']['if'])
+        self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
+        self.assertIn('needs.aggregate.outputs.build_needed',jobs['draft']['if'])
+        self.assertEqual(jobs['release']['needs'],'aggregate')
+        self.assertEqual(jobs['draft']['needs'],'aggregate')
+        self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign'])
         self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
         for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('qualification',str(jobs[name].get('needs',[])))
