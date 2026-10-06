@@ -62,10 +62,10 @@ def probe(source, sha, name, base):
     except Exception as error: result['reason']=str(error)
     return result
 
-def select(sha, source=None, report=None):
+def select(sha, source=None, report=None, upstream_ref=None):
     if not re.fullmatch('[0-9a-f]{40}',sha): raise ValueError('Exact SHA required')
     index=json.loads((ROOT/'patchsets/index.json').read_text())
-    fixed=mapped(sha)
+    fixed=mapped(upstream_ref) if upstream_ref else None
     names=[fixed] if fixed else index['candidates']
     ROOT.joinpath('.work').mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='resolver-',dir=ROOT/'.work') as tmp:
@@ -84,7 +84,7 @@ def select(sha, source=None, report=None):
         return selected
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('sha');p.add_argument('--source',type=Path);p.add_argument('--report',default='.work/patchset-selection.json');args=p.parse_args()
-    name=select(args.sha,args.source,args.report)
+    p=argparse.ArgumentParser();p.add_argument('sha');p.add_argument('--source',type=Path);p.add_argument('--report',default='.work/patchset-selection.json');p.add_argument('--ref',default='');args=p.parse_args()
+    name=select(args.sha,args.source,args.report,args.ref)
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('patchset='+name+'\n')
