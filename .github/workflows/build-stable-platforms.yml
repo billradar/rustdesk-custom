@@ -38,17 +38,6 @@ jobs:
         count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
         echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
         echo "count=$count" >> "$GITHUB_OUTPUT"
-    - id: split
-      name: Split Android and other platform target matrices
-      run: |
-        android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
-        android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
-        other_platform_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
-        other_platform_count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
-        echo "android_matrix=$android_matrix" >> "$GITHUB_OUTPUT"
-        echo "android_count=$android_count" >> "$GITHUB_OUTPUT"
-        echo "other_platform_matrix=$other_platform_matrix" >> "$GITHUB_OUTPUT"
-        echo "other_platform_count=$other_platform_count" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: target-plan-${{ github.run_id }}
@@ -59,7 +48,7 @@ jobs:
     needs: plan
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     uses: ./.github/workflows/build-platform.yml
     with:
       platform: ${{ matrix.platform }}
