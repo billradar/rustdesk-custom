@@ -46,6 +46,8 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements.txt
+    - name: Fetch exact official source
+      run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
     - id: profile
       name: Resolve reviewed official bridge/build profile
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
@@ -77,10 +79,8 @@ jobs:
     - name: Install pinned Syft for exact-source upstream SBOM profile
       uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610
     - name: Prepare Common once and fork independent variant sources
-      run: 'bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
-
-        python3 scripts/source/prepared_source.py prepare --base .work/official --output .work/prepared --ref "$UPSTREAM_REF" --sha
-        "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --bridge .work/official'
+      run: |
+        python3 scripts/source/prepared_source.py prepare           --base .work/official           --output .work/prepared           --ref "$UPSTREAM_REF"           --sha "$UPSTREAM_EXPECTED_SHA"           --patchset "$PATCHSET"           --bridge .work/official
     - id: identity
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\na=json.loads(Path('.work/prepared/standard/source-manifest.json').read_text());\
         \ b=json.loads(Path('.work/prepared/sos/source-manifest.json').read_text())\nfor k in ('upstream_sha','patchset','common_patch_hash','custom_repository_sha','prepare_workflow_run'):\n\
