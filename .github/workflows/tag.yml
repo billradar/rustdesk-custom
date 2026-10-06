@@ -176,7 +176,6 @@ jobs:
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
-      android_only: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
