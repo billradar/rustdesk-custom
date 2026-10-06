@@ -363,12 +363,43 @@ def _release(root, publish, channel='stable'):
     final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\\n' if publish else 'Automation-State: complete\\n')})
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
+def publish_existing_draft(channel='stable'):
+    if channel != 'stable':
+        raise ValueError('Only Stable supports publishing an existing completed draft')
+    from scripts.release.github import request
+    repo='billradar/rustdesk-custom'
+    if os.environ.get('GITHUB_REPOSITORY') != repo:
+        raise ValueError('Wrong release repository')
+    tag=os.environ.get('RELEASE_TAG','')
+    if not re.fullmatch(r'v[0-9]+\\.[0-9]+\\.[0-9]+-custom\\.[1-9][0-9]{0,5}',tag):
+        raise ValueError('Invalid existing Stable release tag')
+    from scripts.release.channel import matching_drafts
+    drafts=matching_drafts(tag)
+    if len(drafts) != 1:
+        raise ValueError('Expected exactly one existing Stable draft')
+    existing=drafts[0]
+    body=existing.get('body') or ''
+    if not existing.get('draft') or existing.get('prerelease'):
+        raise ValueError('Existing release is not a publishable draft')
+    if 'Automation-State: complete' not in body:
+        raise ValueError('Existing draft is not marked complete')
+    if 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
+        raise ValueError('Existing draft missing complete aggregate marker')
+    final=request(
+        'PATCH',
+        f'repos/{repo}/releases/{existing["id"]}',
+        {'draft':False,'prerelease':False,'body':body+'Automation-State: published\\n'}
+    )
+    if final.get('draft') is not False:
+        raise ValueError('Existing Stable draft publication failed')
+    print(f'Published existing Stable draft: {tag}')
+
 def draft(root, channel='stable'): _release(root, False, channel)
 def release(root, channel='stable'): _release(root, True, channel)
 
 if __name__=='__main__':
     a=argparse.ArgumentParser()
-    a.add_argument('mode',choices=['check','plan','aggregate','draft','release','lookup','verify-ci'])
+    a.add_argument('mode',choices=['check','plan','aggregate','draft','release','publish-existing','lookup','verify-ci'])
     a.add_argument('--channel',default='nightly')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
@@ -390,6 +421,7 @@ if __name__=='__main__':
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='+str(len(extra))+'\\n')
     elif a.mode=='draft':draft(a.root,a.channel)
     elif a.mode=='release':release(a.root,a.channel)
+    elif a.mode=='publish-existing':publish_existing_draft(a.channel)
     elif a.mode=='lookup':
         if not all((a.custom_sha,a.upstream_sha,a.upstream_ref,a.patchset)):
             raise SystemExit('lookup requires --custom-sha, --upstream-sha, --upstream-ref and --patchset')
