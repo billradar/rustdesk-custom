@@ -235,5 +235,6 @@ if __name__=='__main__':
             with open(os.environ['GITHUB_OUTPUT'],'a') as out:
                 out.write(f"patchset={record['patchset']}\\n")
                 out.write(f"upstream_version={record['upstream_version']}\\n")
+                out.write(f"workflow_run_id={record['workflow_run_id']}\n")
     else:
         aggregate(a.root,a.channel,a.experimental)

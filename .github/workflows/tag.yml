@@ -93,6 +93,7 @@ jobs:
     outputs:
       patchset: ${{ steps.verify.outputs.patchset }}
       upstream_version: ${{ steps.verify.outputs.upstream_version }}
+      workflow_run_id: ${{ steps.verify.outputs.workflow_run_id }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -112,13 +113,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        CI_RUN_ID="$(python3 - <<'PY'
-        import json
-        print(json.load(open('.work/ci-qualification.json'))['workflow_run_id'])
-        PY
-        )"
-        rm -rf .work/bridge-rehydrated .work/bridge-files
-        mkdir -p .work/bridge-rehydrated .work/bridge-files
+        CI_RUN_ID="${{ steps.verify.outputs.workflow_run_id }}"
         gh run download "$CI_RUN_ID" \
           --repo "${{ github.repository }}" \
           --name "ci-bridge-${{ github.sha }}" \
