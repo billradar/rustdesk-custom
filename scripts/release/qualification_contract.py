@@ -30,7 +30,7 @@ class MatrixTests(unittest.TestCase):
             with patch.object(qualification.json,'loads',side_effect=loads),self.assertRaises(ValueError):qualification.entries()
     def test_parallel_dag_and_gates(self):
         w=yaml.safe_load((ROOT/'.github/workflows/build.yml').read_text());j=w['jobs']
-        self.assertEqual(j['build']['needs'],'plan');self.assertEqual(j['platforms']['needs'],'plan');self.assertEqual(j['android-platforms']['needs'],'plan')
+        self.assertEqual(j['build']['needs'],['plan','windows-helper']);self.assertEqual(j['platforms']['needs'],'plan');self.assertEqual(j['android-platforms']['needs'],'plan')
         self.assertFalse(j['build']['strategy']['fail-fast']);self.assertFalse(j['platforms']['strategy']['fail-fast'])
         self.assertEqual(j['build']['if'], 'inputs.android_only != true && inputs.other_platforms_only != true')
         self.assertEqual(j['platforms']['if'], "inputs.android_only != true && inputs.windows_only != true && needs.plan.outputs.other_platform_count != '0'")
@@ -211,12 +211,13 @@ class ParallelGateTests(unittest.TestCase):
             self.assertNotIn('continue-on-error',jobs[name])
     def test_clients_and_draft_remain_downstream_of_complete_compatibility(self):
         tag=self.workflow('tag.yml')['jobs']
-        self.assertIn('qualification',tag['prepare']['needs'])
-        self.assertIn('qualification',tag['windows-build']['needs'])
+        self.assertEqual(set(tag['prepare']['needs']),{'resolve','draft-preflight'})
+        self.assertNotIn('qualification',tag['prepare']['needs'])
+        self.assertNotIn('qualification',tag['windows-build']['needs'])
         self.assertIn('prepare',tag['windows-build']['needs'])
-        self.assertIn('qualification',tag['platforms-build']['needs'])
+        self.assertNotIn('qualification',tag['platforms-build']['needs'])
         self.assertIn('prepare',tag['platforms-build']['needs'])
-        self.assertIn('qualification',tag['android-build']['needs'])
+        self.assertNotIn('qualification',tag['android-build']['needs'])
         self.assertIn('prepare',tag['android-build']['needs'])
         self.assertIn('android-build',tag['android-sign']['needs'])
         self.assertIn('windows-build',tag['draft']['needs'])
