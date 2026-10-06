@@ -48,6 +48,7 @@ permissions:
   contents: read
 jobs:
   resolve:
+    name: Resolve official source and patchset
     runs-on: ubuntu-22.04
     outputs:
       sha: ${{ inputs.upstream_sha }}
