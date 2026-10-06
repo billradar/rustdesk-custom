@@ -59,8 +59,7 @@ jobs:
   platforms:
     name: Build Linux and macOS targets
     needs: plan
-    if: inputs.android_only != true && inputs.windows_only != true && needs.plan.outputs.other_platform_count != '0'
-    strategy:
+        strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
     uses: ./.github/workflows/build-platform.yml
