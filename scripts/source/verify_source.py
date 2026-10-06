@@ -38,7 +38,7 @@ if args.config_only:
 if not args.workspace or not args.variant:
     parser.error('workspace and variant are required')
 workspace = Path(args.workspace)
-expected = json.loads((ROOT / 'metadata/legacy-ui-baseline.json').read_text())[args.variant]
+expected = json.loads((ROOT / 'metadata/baselines/legacy-ui.json').read_text())[args.variant]
 for name, digest in ([] if args.automation else expected.items()):
     # Git for Windows may check out text as CRLF. Compare canonical LF bytes;
     # preserve every other byte, including whitespace, so content changes still fail.

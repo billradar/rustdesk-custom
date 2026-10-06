@@ -7,7 +7,7 @@ from scripts.release.github import collect, request, gh
 from scripts.upstream.patchsets import verify, patch_hash
 from scripts.release.production import assets, REPOSITORY
 ROOT=Path(__file__).resolve().parents[2]
-RELEASE_IDENTITY=ROOT/'metadata'/'release-identity.json'
+RELEASE_IDENTITY=ROOT/'metadata/release/identity.json'
 # Canonical release revision lives under metadata; root patch-revision.txt is retired.
 
 def outputs(data):
@@ -109,7 +109,7 @@ def validate(root,channel):
             'patchset':infos['standard']['patchset'],'common_patch_hash':infos['standard']['common_patch_hash'],
             'sos_patch_hash':infos['sos']['sos_patch_hash'],'runtime_ui':'SKIPPED BY USER',
             'real_remote_session':'NOT TESTED','signing':'NOT ENABLED','credential_scan':'KNOWN PATTERNS ONLY'}
-    baseline=json.loads((ROOT/'metadata/source-regression-baseline.json').read_text())
+    baseline=json.loads((ROOT/'metadata/baselines/source-regression.json').read_text())
     if infos['standard']['upstream_sha']==baseline['upstream_sha']:
         comparisons={k: infos['standard'].get(k)==baseline[k] for k in ('upstream_sha','patchset','common_patch_hash','server_config_fingerprint')}
         comparisons['sos_patch_hash']=infos['sos']['sos_patch_hash']==baseline['sos_patch_hash']

@@ -7,8 +7,8 @@ ROOT=Path(__file__).resolve().parents[2]
 FORBIDDEN={'android','ios','web'}
 def target(e):return '-'.join((e['platform'],e['arch'],e['variant']))
 def entries():
-    rows=json.loads((ROOT/'metadata/platform-matrix.json').read_text())['entries'];seen=set()
-    reviewed=json.loads((ROOT/'metadata/platform-adapter-profiles.json').read_text())['audited']
+    rows=json.loads((ROOT/'metadata/platform/matrix.json').read_text())['entries'];seen=set()
+    reviewed=json.loads((ROOT/'metadata/platform/adapter-profiles.json').read_text())['audited']
     for e in rows:
         name=target(e)
         if name in seen:raise ValueError('Duplicate matrix target')

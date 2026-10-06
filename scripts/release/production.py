@@ -15,7 +15,7 @@ from scripts.release.github import collect, gh, request
 from scripts.signing.production_config import payload, scan_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
-RELEASE_IDENTITY = ROOT / 'metadata' / 'release-identity.json'
+RELEASE_IDENTITY = ROOT / 'metadata' / 'release' / 'identity.json'
 REPOSITORY = 'billradar/rustdesk-custom'
 
 def guard():

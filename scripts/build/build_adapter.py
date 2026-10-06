@@ -44,7 +44,7 @@ def inspect(tree):
 
 def check(tree):
     profile,critical=inspect(tree)
-    known=json.loads((ROOT/'metadata/build-adapter-profiles.json').read_text())
+    known=json.loads((ROOT/'metadata/build/adapter-profiles.json').read_text())
     approved=next((p for p in known['profiles'] if p['signature']==profile['signature']),None)
     if approved is None: raise ValueError('BUILD_COMPATIBILITY=FAIL: unknown critical official Windows/bridge/build interface; review in staging')
     profile['reviewed_profile']=approved['id']; profile['Build Compatibility']='PASS'

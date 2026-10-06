@@ -14,7 +14,7 @@ class BuildInterfaceTests(unittest.TestCase):
         with patch.object(build_adapter,'inspect',return_value=(unknown,{})),self.assertRaisesRegex(ValueError,'BUILD_COMPATIBILITY=FAIL'):
             build_adapter.check(Path('.'))
     def test_known_profile_is_accepted_without_version_inference(self):
-        approved=json.loads((ROOT/'metadata/build-adapter-profiles.json').read_text())['profiles'][0]
+        approved=json.loads((ROOT/'metadata/build/adapter-profiles.json').read_text())['profiles'][0]
         profile={'signature':approved['signature'],'upstream_version':'9.8.7'}
         with patch.object(build_adapter,'inspect',return_value=(profile,{})):
             self.assertEqual(build_adapter.check(Path('.'))['upstream_version'],'9.8.7')
@@ -98,7 +98,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(docs['nightly.yml']['jobs']['draft']['permissions']['contents'],'write')
         matrix=docs['build.yml']['jobs']['build']['strategy']['matrix']['include']
         self.assertEqual({(r['platform'],r['arch'],r['variant']) for r in matrix},{('windows','x86_64','standard'),('windows','x86_64','sos')})
-        planned=json.loads((ROOT/'metadata/platform-matrix.json').read_text())['entries']
+        planned=json.loads((ROOT/'metadata/platform/matrix.json').read_text())['entries']
         self.assertFalse(any(r['variant']=='sos' and r['platform'] in ('android','ios','web') for r in planned))
     def test_no_auto_publish_calls(self):
         import ast

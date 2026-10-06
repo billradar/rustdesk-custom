@@ -1,0 +1,34 @@
+{
+  "schema": 2,
+  "platform": "android",
+  "variant": "standard",
+  "package_name": "com.carriez.flutter_hbb",
+  "legacy": {
+    "source": "legacy-production-apk",
+    "private_key_stored": false,
+    "certificate_sha256": "a53de75c536ba1431f5e1c0ecaee120a63b5107b563fcdd311efd38297be103c",
+    "version_name": "1.4.9",
+    "version_code": 2067,
+    "legacy_apk": {
+      "repository": "billradar/rustdesk",
+      "release_id": 350806253,
+      "release_tag": "master",
+      "asset_id": 480078839,
+      "name": "rustdesk-1.4.9-aarch64-signed.apk",
+      "url": "https://github.com/billradar/rustdesk/releases/download/master/rustdesk-1.4.9-aarch64-signed.apk",
+      "sha256": "d878e398aac88d284f0a2b872fdeafc6a4bc2f6d2e81c4c7559999feecda289e"
+    },
+    "legacy_signature_verification": "PASS",
+    "runtime_upgrade": "NOT TESTED"
+  },
+  "production": {
+    "identity_kind": "new-yubikey-hardware-signing-identity",
+    "certificate_sha256": "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5",
+    "certificate_subject": "CN=bill-yubikey-sign,OU=Signature,O=BillLab,C=SG",
+    "key_algorithm": "EC",
+    "curve": "secp384r1",
+    "piv_slot": "9C",
+    "pkcs11_id": "02",
+    "legacy_android_signing_identity": "NOT RECOVERED / NOT VALIDATED"
+  }
+}

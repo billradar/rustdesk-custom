@@ -17,7 +17,7 @@ class MatrixTests(unittest.TestCase):
         self.assertTrue(all(e['required'] for e in stable['selected']))
         self.assertFalse(any(e['platform'] in ('android','ios','web') and e['variant']=='sos' for e in night['selected']))
     def test_duplicate_forbidden_and_false_promotion_block(self):
-        good=json.loads((ROOT/'metadata/platform-matrix.json').read_text())
+        good=json.loads((ROOT/'metadata/platform/matrix.json').read_text())
         for edit in ('duplicate','android-sos','fake-supported','experimental-required'):
             d=json.loads(json.dumps(good));e=d['entries'][4]
             if edit=='duplicate':d['entries'].append(d['entries'][0])
