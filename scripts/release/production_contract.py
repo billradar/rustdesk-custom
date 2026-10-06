@@ -91,8 +91,9 @@ class GenerationTests(unittest.TestCase):
         m=verify('v1')
         self.assertEqual(m['hashes']['common'],'87b7fb949b3bbc55c6d1e166909e167ebb8e0b6586630c0269f6440ba0542531')
         self.assertEqual(m['hashes']['sos'],'d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34')
-        self.assertEqual(mapped('6c578292e8ebbbec708b76986ba8c4bc7c509747'),'v1')
-        self.assertIsNone(mapped('fada664df7a294d1d1a9ca3e7cd3637069122f17'))
+        self.assertEqual(mapped('1.4.9'),'v1')
+        self.assertEqual(mapped('1.5.0'),'v2')
+        self.assertIsNone(mapped('9.9.9'))
 
     def test_unknown_incompatible_source_fails_closed(self):
         from scripts.upstream.patchsets import select
