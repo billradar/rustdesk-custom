@@ -341,14 +341,14 @@ def _release(root, publish, channel='stable'):
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
-    notes='\\n'.join(['Upstream: rustdesk/rustdesk',f'Upstream Tag: {standard["upstream_tag"]}',f'Upstream SHA: {standard["upstream_sha"]}',f'Patch Set: {standard["patchset"]}',f'Common Patch Hash: {standard["common_patch_hash"]}',f'SOS Patch Hash: {sos["sos_patch_hash"]}',f'Custom Repository SHA: {standard["custom_repository_sha"]}',f'Prepared Source Run: {standard["prepare_run"]}',f'Build Run: {standard["build_run"]}',
+    notes='\n'.join(['Upstream: rustdesk/rustdesk',f'Upstream Tag: {standard["upstream_tag"]}',f'Upstream SHA: {standard["upstream_sha"]}',f'Patch Set: {standard["patchset"]}',f'Common Patch Hash: {standard["common_patch_hash"]}',f'SOS Patch Hash: {sos["sos_patch_hash"]}',f'Custom Repository SHA: {standard["custom_repository_sha"]}',f'Prepared Source Run: {standard["prepare_run"]}',f'Build Run: {standard["build_run"]}',
         'Required Targets: '+','.join(sorted(report['targets'])),
         'Asset Inventory: '+json.dumps(sorted(p.name for p in directory.iterdir())),
         'Build / Package / Checksum / Architecture / Provenance: PASS',
         'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Desktop Code Signing: NOT ENABLED',
         'Android artifacts: PRODUCTION SIGNED / IDENTITY VERIFIED','Password Security V2: DEFERRED',
         'Embedded client configuration/password can be extracted by client owners.',
-        'Release policy: '+('PUBLISHED RELEASE.' if publish else 'DRAFT ONLY; publication is a manual user decision.')])+'\\n'
+        'Release policy: '+('PUBLISHED RELEASE.' if publish else 'DRAFT ONLY; publication is a manual user decision.')])+'\n'
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
@@ -360,7 +360,7 @@ def _release(root, publish, channel='stable'):
         if attempt<11:time.sleep(5)
     if uploaded!=expected_assets:
         raise ValueError('Incomplete release upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
-    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\\n' if publish else 'Automation-State: complete\\n')})
+    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\n' if publish else 'Automation-State: complete\n')})
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
 def publish_existing_draft(channel='stable'):
@@ -388,7 +388,7 @@ def publish_existing_draft(channel='stable'):
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',
-        {'draft':False,'prerelease':False,'body':body+'Automation-State: published\\n'}
+        {'draft':False,'prerelease':False,'body':body+'Automation-State: published\n'}
     )
     if final.get('draft') is not False:
         raise ValueError('Existing Stable draft publication failed')
@@ -414,11 +414,11 @@ if __name__=='__main__':
     if a.mode=='check':
         entries();print('Explicit platform metadata: PASS')
     elif a.mode=='plan':
-        p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);Path('.work/target-plan.json').write_text(json.dumps(p,indent=2)+'\\n')
+        p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);target_plan=Path('.work/target-plan.json');target_plan.write_text(json.dumps(p,indent=2)+'\n');json.loads(target_plan.read_text())
         extra=[e for e in p['selected'] if e['platform']!='windows']
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-                f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='+str(len(extra))+'\\n')
+                f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
     elif a.mode=='draft':draft(a.root,a.channel)
     elif a.mode=='release':release(a.root,a.channel)
     elif a.mode=='publish-existing':publish_existing_draft(a.channel)

@@ -57,6 +57,7 @@ permissions:
   actions: read
 jobs:
   plan:
+    name: Resolve build target matrix
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -93,6 +94,7 @@ jobs:
         path: .work/target-plan.json
         if-no-files-found: error
   windows-helper:
+    name: Build shared Windows helper
     if: inputs.android_only != true && inputs.other_platforms_only != true
     runs-on: windows-2022
     timeout-minutes: 30
@@ -311,6 +313,7 @@ jobs:
         retention-days: 14
     needs: [plan, windows-helper]
   platforms:
+    name: Build Linux and macOS targets
     needs: plan
     if: inputs.android_only != true && inputs.windows_only != true && needs.plan.outputs.other_platform_count != '0'
     strategy:
@@ -332,6 +335,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-platforms:
+    name: Build Android targets
     needs: plan
     if: inputs.windows_only != true && inputs.other_platforms_only != true && needs.plan.outputs.android_count != '0'
     strategy:
@@ -353,6 +357,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
+    name: Validate Windows build provenance
     if: inputs.android_only != true && inputs.windows_only != true && inputs.other_platforms_only != true
     needs: build
     runs-on: ubuntu-22.04
@@ -387,6 +392,7 @@ jobs:
           .work/production-release-assets/'
         if-no-files-found: error
   aggregate:
+    name: Aggregate verified build artifacts
     needs:
     - plan
     - build

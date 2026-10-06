@@ -48,6 +48,7 @@ permissions:
   contents: read
 jobs:
   resolve:
+    name: Resolve official source and patchset
     runs-on: ubuntu-22.04
     outputs:
       sha: ${{ inputs.upstream_sha }}
@@ -112,7 +113,7 @@ jobs:
           .work/build-profile.json'
         if-no-files-found: warn
   contracts:
-    name: Repository architecture contracts
+    name: Validate repository architecture contracts
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -132,6 +133,7 @@ jobs:
         python3 scripts/validation/native_config_contract.py
         python3 scripts/signing/android_signing_contract.py
   preflight:
+    name: Validate patch and API compatibility
     needs: resolve
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -192,6 +194,7 @@ jobs:
         - standard
         - sos
   bridge:
+    name: Generate official bridge compatibility artifact
     needs:
     - resolve
     env:
@@ -269,6 +272,7 @@ jobs:
 
           '
   windows-helper:
+    name: Validate Windows helper compatibility
     needs: resolve
     if: inputs.channel != 'ci'
     runs-on: windows-2022
@@ -332,6 +336,7 @@ jobs:
         if-no-files-found: error
         retention-days: 7
   flutter-analyze:
+    name: Analyze patched Flutter interfaces
     needs:
     - resolve
     - bridge
@@ -387,6 +392,7 @@ jobs:
         if-no-files-found: warn
         retention-days: 14
   validation-report:
+    name: Publish compatibility validation report
     needs:
     - resolve
     - contracts

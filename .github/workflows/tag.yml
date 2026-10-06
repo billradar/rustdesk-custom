@@ -30,6 +30,7 @@ concurrency:
 
 jobs:
   resolve:
+    name: '01 · Resolve Stable source identity'
     runs-on: ubuntu-22.04
     outputs:
       upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
@@ -79,7 +80,7 @@ jobs:
         path: .work/channel.json
         if-no-files-found: warn
   draft-preflight:
-    name: Draft release preflight (no writes)
+    name: '02 · Release preflight / existing-draft decision'
     needs: resolve
     runs-on: ubuntu-22.04
     # GitHub requires Contents write permission to view unpublished drafts.
@@ -115,6 +116,7 @@ jobs:
         path: .work/channel.json
         if-no-files-found: warn
   prepare:
+    name: '03 · Prepare exact production source'
     needs:
     - resolve
     - draft-preflight
@@ -126,7 +128,7 @@ jobs:
       channel: stable
       patchset: ${{ needs.resolve.outputs.patchset }}
   windows-build:
-    name: Build Stable Windows targets
+    name: '04A · Build Stable Windows targets'
     needs:
     - resolve
     - prepare
@@ -145,7 +147,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   platforms-build:
-    name: Build Stable Linux and macOS targets
+    name: '04B · Build Stable Linux and macOS targets'
     needs:
     - resolve
     - prepare
@@ -164,7 +166,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-build:
-    name: Build Stable Android artifacts for production signing
+    name: '04C · Build Stable Android artifacts for signing'
     needs:
     - resolve
     - prepare
@@ -183,16 +185,15 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
-    name: Sign Stable Android production artifacts with YubiKey PIV 9C
-    needs: [resolve, draft-preflight, prepare, android-build]
+    name: '05 · Sign Stable Android production artifacts (YubiKey PIV 9C)'
+    needs: [resolve, android-build]
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
       inputs.release_mode != 'dry-run' &&
-      needs.android-build.result == 'success' &&
-      needs.prepare.result == 'success'
+      needs.android-build.result == 'success'
     runs-on:
       - self-hosted
       - linux
@@ -252,8 +253,17 @@ jobs:
         upstream_version: ${{ needs.resolve.outputs.upstream_version }}
         patchset: ${{ needs.resolve.outputs.patchset }}
   aggregate:
-    name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, prepare, windows-build, platforms-build, android-build, android-sign]
+    name: '06 · Aggregate and verify Stable production artifacts'
+    needs: [resolve, draft-preflight, windows-build, platforms-build, android-build, android-sign]
+    outputs:
+      build_needed: ${{ needs.draft-preflight.outputs.build_needed }}
+      draft_needed: ${{ needs.draft-preflight.outputs.draft_needed }}
+      publish_existing: ${{ needs.draft-preflight.outputs.publish_existing }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      revision: ${{ needs.resolve.outputs.revision }}
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
@@ -280,7 +290,7 @@ jobs:
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/all-targets
         merge-multiple: false
     - name: Fail-closed expected target and cross-platform provenance gate
@@ -292,7 +302,7 @@ jobs:
         path: .work/aggregate/
         if-no-files-found: warn
   publish-existing:
-    name: Publish existing verified Stable draft
+    name: '07C · Publish existing verified Stable draft'
     needs: [resolve, draft-preflight]
     if: >-
       github.event_name == 'workflow_dispatch' &&
@@ -314,24 +324,13 @@ jobs:
     - name: Publish verified existing Stable draft
       run: python3 scripts/release/qualification.py publish-existing --channel stable
   release:
-    name: Publish Stable Release
-    needs:
-    - resolve
-    - draft-preflight
-    - prepare
-    - windows-build
-    - platforms-build
-    - android-build
-    - android-sign
-    - aggregate
+    name: '07A · Publish Stable Release'
+    needs: aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      needs.draft-preflight.outputs.draft_needed == 'true' &&
-      needs.draft-preflight.outputs.build_needed == 'true' &&
+      needs.aggregate.outputs.draft_needed == 'true' &&
+      needs.aggregate.outputs.build_needed == 'true' &&
       inputs.release_mode == 'release' &&
-      needs.windows-build.result == 'success' &&
-      needs.platforms-build.result == 'success' &&
-      needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
@@ -347,7 +346,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
     - name: Package inspectors for supported aggregate
@@ -357,22 +356,12 @@ jobs:
     - name: Create and publish complete supported Release
       run: python3 scripts/release/qualification.py release --root .work/collected
   draft:
-    needs:
-    - resolve
-    - draft-preflight
-    - prepare
-    - windows-build
-    - platforms-build
-    - android-build
-    - android-sign
-    - aggregate
+    name: '07B · Create Stable Draft'
+    needs: aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      needs.draft-preflight.outputs.draft_needed == 'true' &&
+      needs.aggregate.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'draft' &&
-      needs.windows-build.result == 'success' &&
-      needs.platforms-build.result == 'success' &&
-      needs.android-build.result == 'success' &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
@@ -380,9 +369,9 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      PATCHSET: ${{ needs.resolve.outputs.patchset }}
-      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
-      UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
+      PATCHSET: ${{ needs.aggregate.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.aggregate.outputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ needs.aggregate.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -392,7 +381,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
     - name: Package inspectors for supported aggregate
