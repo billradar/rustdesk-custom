@@ -239,8 +239,7 @@ jobs:
     needs: windows-helper
   validate:
     name: Validate Windows build provenance
-    if: inputs.android_only != true && inputs.windows_only != true && inputs.other_platforms_only != true
-    needs: build
+        needs: build
     runs-on: ubuntu-22.04
     permissions:
       contents: read
