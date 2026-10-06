@@ -132,7 +132,7 @@ jobs:
     needs:
     - resolve
     - prepare
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-stable-windows.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
@@ -151,7 +151,7 @@ jobs:
     needs:
     - resolve
     - prepare
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-stable-platforms.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
@@ -170,7 +170,7 @@ jobs:
     needs:
     - resolve
     - prepare
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-stable-android.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
