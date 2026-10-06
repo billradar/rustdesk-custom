@@ -22,7 +22,7 @@ env:
         default: dry-run
 permissions:
   contents: read
-  actions: write
+  actions: read
 concurrency:
   group: stable-${{ github.ref }}
   cancel-in-progress: true
@@ -86,44 +86,62 @@ jobs:
         path: .work/channel.json
         if-no-files-found: warn
   stable-ci-qualification:
-    name: Run exact CI qualification for Stable
+    name: Reuse or run exact CI qualification for Stable
     needs: [resolve, draft-preflight]
-    if: needs.draft-preflight.outputs.build_needed == 'true'
+    if: ${{ needs.draft-preflight.outputs.build_needed == 'true' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       actions: write
     steps:
-    - name: Dispatch CI for this Stable revision
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Reuse existing exact CI qualification when available
+      id: reuse
       env:
         GH_TOKEN: ${{ github.token }}
-        REPOSITORY: ${{ github.repository }}
-        CUSTOM_SHA: ${{ github.sha }}
+        ${{ github.repository }}SITORY: ${{ github.repository }}
+        ${{ github.sha }}_SHA: ${{ github.sha }}
+        UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
         UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
       run: |
         set -euo pipefail
-        gh workflow run ci.yml \
-          --repo "$REPOSITORY" \
-          --ref main \
-          -f upstream_ref="$UPSTREAM_REF" \
-          -f force_rebuild=false \
-          -f promote_stable=false
-        echo "Dispatched CI for custom SHA $CUSTOM_SHA and upstream ref $UPSTREAM_REF"
-    - name: Wait for exact CI qualification
+        if python3 scripts/release/qualification.py verify-ci           --repository "$${{ github.repository }}SITORY"           --custom-sha "$${{ github.sha }}_SHA"           --upstream-sha "$UPSTREAM_SHA"           --upstream-ref "$UPSTREAM_REF"           --output .work/reused-ci-qualification.json; then
+          echo "Exact CI qualification found; reusing existing CI run."
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "No reusable exact CI qualification found; Stable will dispatch CI."
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Dispatch CI only when exact qualification is missing
+      if: steps.reuse.outputs.found != 'true'
       env:
         GH_TOKEN: ${{ github.token }}
-        REPOSITORY: ${{ github.repository }}
-        CUSTOM_SHA: ${{ github.sha }}
+        ${{ github.repository }}SITORY: ${{ github.repository }}
+        ${{ github.sha }}_SHA: ${{ github.sha }}
+        UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
+      run: |
+        set -euo pipefail
+        export DISPATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        gh workflow run ci.yml           --repo "$${{ github.repository }}SITORY"           --ref main           -f upstream_ref="$UPSTREAM_REF"           -f force_rebuild=false           -f promote_stable=false
+        echo "Dispatched CI for custom SHA $${{ github.sha }}_SHA and upstream ref $UPSTREAM_REF"
+        echo "DISPATCH_STARTED_AT=$DISPATCH_STARTED_AT" >> "$GITHUB_ENV"
+    - name: Wait for newly dispatched exact CI
+      if: steps.reuse.outputs.found != 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ${{ github.repository }}SITORY: ${{ github.repository }}
+        ${{ github.sha }}_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
         deadline=$((SECONDS + 3600))
-        run_id=""
         while (( SECONDS < deadline )); do
-          run_id="$(gh run list --repo "$REPOSITORY" --workflow ci.yml --event workflow_dispatch --branch main --limit 20 --json databaseId,headSha,status,conclusion,createdAt --jq 'map(select(.headSha == env.CUSTOM_SHA)) | sort_by(.createdAt) | last | .databaseId // empty')"
+          run_id="$(gh run list             --repo "$${{ github.repository }}SITORY"             --workflow ci.yml             --event workflow_dispatch             --branch main             --limit 50             --json databaseId,headSha,status,conclusion,createdAt             --jq 'map(select(.headSha == env.${{ github.sha }}_SHA and .createdAt >= env.DISPATCH_STARTED_AT)) | sort_by(.createdAt) | last | .databaseId // empty')"
           if [[ -n "$run_id" ]]; then
             echo "CI workflow run: $run_id"
-            status="$(gh run view "$run_id" --repo "$REPOSITORY" --json status --jq .status)"
-            conclusion="$(gh run view "$run_id" --repo "$REPOSITORY" --json conclusion --jq .conclusion)"
+            status="$(gh run view "$run_id" --repo "$${{ github.repository }}SITORY" --json status --jq .status)"
+            conclusion="$(gh run view "$run_id" --repo "$${{ github.repository }}SITORY" --json conclusion --jq .conclusion)"
             echo "CI status=$status conclusion=$conclusion"
             if [[ "$status" == "completed" ]]; then
               [[ "$conclusion" == "success" ]] || { echo "Exact CI qualification failed"; exit 1; }
@@ -136,7 +154,7 @@ jobs:
         exit 1
   qualification:
     name: Verify CI qualification for Stable
-    needs: [resolve, draft-preflight]
+    needs: [resolve, draft-preflight, stable-ci-qualification]
     if: needs.draft-preflight.outputs.build_needed == 'true'
     runs-on: ubuntu-22.04
     outputs:
