@@ -346,7 +346,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
     - name: Package inspectors for supported aggregate
@@ -381,7 +381,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
     - name: Package inspectors for supported aggregate
