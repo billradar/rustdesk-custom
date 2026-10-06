@@ -128,7 +128,7 @@ jobs:
         else:
             print("RETRY")
         PY
-)"
+        )"
         echo "state=$state" >> "$GITHUB_OUTPUT"
     - name: Route new Stable Tag directly to Stable CD
       if: steps.state.outputs.state == 'RETRY'
