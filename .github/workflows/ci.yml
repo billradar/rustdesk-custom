@@ -12,10 +12,6 @@ env:
         type: boolean
         description: Force rebuild
         default: false
-      promote_stable:
-        type: boolean
-        description: Run Stable CD dry-run after qualification
-        default: false
       automation_source:
         type: string
         description: Internal source marker for Action-created CI
@@ -26,7 +22,7 @@ env:
     - main
 permissions:
   contents: read
-  actions: write
+  actions: read
 concurrency:
   group: ${{ inputs.automation_source == 'upstream-event-router' && 'action-created-ci' || format('normal-ci-{0}', github.ref) }}
   cancel-in-progress: ${{ inputs.automation_source != 'upstream-event-router' }}
@@ -170,7 +166,7 @@ jobs:
         path: .work/ci-qualification.json
         if-no-files-found: error
         retention-days: 90
-    - name: Preserve bridge artifact for Stable CD
+    - name: Preserve bridge artifact
       uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: test-bridge-${{ github.run_id }}
@@ -181,15 +177,3 @@ jobs:
         path: .work/ci-bridge
         if-no-files-found: error
         retention-days: 90
-    - name: Trigger Stable CD dry-run for a qualified Stable Tag
-      if: inputs.promote_stable == true && startsWith(needs.resolve.outputs.upstream_ref, 'v')
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        set -euo pipefail
-        gh workflow run tag.yml \
-          --repo "${{ github.repository }}" \
-          --ref main \
-          -f upstream_ref="${{ needs.resolve.outputs.upstream_ref }}" \
-          -f force_rebuild=false \
-          -f release_mode=dry-run
