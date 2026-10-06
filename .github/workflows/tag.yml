@@ -22,7 +22,7 @@ env:
         default: dry-run
 permissions:
   contents: read
-  actions: read
+  actions: write
 concurrency:
   group: stable-${{ github.ref }}
   cancel-in-progress: true
@@ -85,6 +85,55 @@ jobs:
         name: release-preflight-${{ github.run_id }}
         path: .work/channel.json
         if-no-files-found: warn
+  stable-ci-qualification:
+    name: Run exact CI qualification for Stable
+    needs: [resolve, draft-preflight]
+    if: needs.draft-preflight.outputs.build_needed == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+    - name: Dispatch CI for this Stable revision
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        CUSTOM_SHA: ${{ github.sha }}
+        UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
+      run: |
+        set -euo pipefail
+        gh workflow run ci.yml \
+          --repo "$REPOSITORY" \
+          --ref main \
+          -f upstream_ref="$UPSTREAM_REF" \
+          -f force_rebuild=false \
+          -f promote_stable=false
+        echo "Dispatched CI for custom SHA $CUSTOM_SHA and upstream ref $UPSTREAM_REF"
+    - name: Wait for exact CI qualification
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        CUSTOM_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        deadline=$((SECONDS + 3600))
+        run_id=""
+        while (( SECONDS < deadline )); do
+          run_id="$(gh run list --repo "$REPOSITORY" --workflow ci.yml --event workflow_dispatch --branch main --limit 20 --json databaseId,headSha,status,conclusion,createdAt --jq 'map(select(.headSha == env.CUSTOM_SHA)) | sort_by(.createdAt) | last | .databaseId // empty')"
+          if [[ -n "$run_id" ]]; then
+            echo "CI workflow run: $run_id"
+            status="$(gh run view "$run_id" --repo "$REPOSITORY" --json status --jq .status)"
+            conclusion="$(gh run view "$run_id" --repo "$REPOSITORY" --json conclusion --jq .conclusion)"
+            echo "CI status=$status conclusion=$conclusion"
+            if [[ "$status" == "completed" ]]; then
+              [[ "$conclusion" == "success" ]] || { echo "Exact CI qualification failed"; exit 1; }
+              exit 0
+            fi
+          fi
+          sleep 15
+        done
+        echo "Timed out waiting for exact CI qualification"
+        exit 1
   qualification:
     name: Verify CI qualification for Stable
     needs: [resolve, draft-preflight]
