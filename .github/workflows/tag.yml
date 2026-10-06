@@ -1,4 +1,5 @@
 name: Stable Release Pipeline
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }}
 env:
   PYTHONPATH: .
 'on':
@@ -24,8 +25,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: stable-${{ github.ref }}
-  cancel-in-progress: true
+  group: stable-${{ inputs.upstream_ref || format('manual-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -51,7 +52,7 @@ jobs:
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
         UPSTREAM_REF: ${{ steps.resolve.outputs.upstream_ref }}
-      run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --ref "$UPSTREAM_REF" --exact --exact
+      run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --ref "$UPSTREAM_REF" --exact
     - name: Validate Stable execution identity
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
@@ -188,6 +189,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
+      inputs.release_mode != 'dry-run' &&
       needs.android-build.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
@@ -257,7 +259,7 @@ jobs:
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
-      needs.android-sign.result == 'success'
+      (needs.android-sign.result == 'success' || inputs.release_mode == 'dry-run')
     runs-on: ubuntu-22.04
     env:
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
@@ -265,7 +267,7 @@ jobs:
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
       EXPERIMENTAL: 'false'
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -288,6 +290,27 @@ jobs:
         name: platform-aggregate-${{ github.run_id }}
         path: .work/aggregate/
         if-no-files-found: warn
+  publish-existing:
+    name: Publish existing verified Stable draft
+    needs: [resolve, draft-preflight]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release_mode == 'release' &&
+      needs.draft-preflight.outputs.build_needed == 'false' &&
+      needs.draft-preflight.outputs.draft_needed == 'false'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.resolve.outputs.revision }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Publish verified existing Stable draft
+      run: python3 scripts/release/qualification.py publish-existing --channel stable
   release:
     name: Publish Stable Release
     needs:
@@ -302,6 +325,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       needs.draft-preflight.outputs.draft_needed == 'true' &&
+      needs.draft-preflight.outputs.build_needed == 'true' &&
       inputs.release_mode == 'release' &&
       needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' &&
