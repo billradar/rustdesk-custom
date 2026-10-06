@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
 import copy, contextlib, io, json, os, sys, tarfile, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
 import scripts.build.build_adapter as build_adapter
 import scripts.source.prepared_source as prepared_source
 import scripts.release.channel as channel
-ROOT=Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 import yaml
 
 class BuildInterfaceTests(unittest.TestCase):
@@ -109,4 +110,4 @@ class ChannelPolicyTests(unittest.TestCase):
                         if isinstance(key,ast.Constant) and key.value=='draft':
                             self.assertIsInstance(value,ast.Constant);self.assertIs(value.value,True)
 
-if __name__=='__main__':unittest.main()
+if __name__ == "__main__": unittest.main()

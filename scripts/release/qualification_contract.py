@@ -1,8 +1,10 @@
+#!/usr/bin/env python3
+"""Release qualification, target matrix and workflow dependency contracts."""
 import hashlib,json,os,struct,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import yaml
-ROOT=Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 import scripts.release.qualification as qualification
 import scripts.platform.platform_adapter as platform_adapter
 import scripts.platform.platform_package as platform_package
@@ -54,13 +56,13 @@ class MatrixTests(unittest.TestCase):
         self.assertNotIn('compatibility',t['jobs'])
         self.assertIn('qualification',t['jobs'])
         self.assertEqual(t['jobs']['qualification']['outputs']['patchset'], "${{ steps.verify.outputs.patchset }}")
-        self.assertIn('scripts/release/ci_qualification.py',t['jobs']['qualification']['steps'][1]['run'])
+        self.assertIn('scripts/release/qualification.py',t['jobs']['qualification']['steps'][1]['run'])
         for name in ('prepare','windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('compatibility',str(t['jobs'][name].get('needs',[])))
         c=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         self.assertIn('qualification',c['jobs'])
         self.assertIn('ci-qualification-${{ github.sha }}',str(c['jobs']['qualification']))
-        self.assertIn('ci-qualification-v1',str((ROOT/'scripts/release/ci_qualification.py').read_text()))
+        self.assertIn('ci-qualification-v1',str((ROOT/'scripts/release/qualification.py').read_text()))
         self.assertNotIn('schedule',t['on'])
         n=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(n['on']['workflow_dispatch']['inputs']['release_mode']['options'], ['build','draft'])
@@ -165,4 +167,42 @@ class AggregateTests(unittest.TestCase):
             channel.resolve('stable','1.4.9',True)
             data=outputs.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
 
-if __name__=='__main__':unittest.main()
+"""Release qualification and workflow dependency contracts."""
+from pathlib import Path
+import unittest
+import yaml
+ROOT = Path(__file__).resolve().parents[2]
+
+class ParallelGateTests(unittest.TestCase):
+    def workflow(self,name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
+    def test_independent_preparations_and_variant_checks(self):
+        jobs=self.workflow('compat-check.yml')['jobs']
+        self.assertEqual(jobs['bridge']['needs'],['resolve'])
+        self.assertEqual(jobs['preflight']['needs'],'resolve')
+        self.assertEqual(jobs['windows-helper']['needs'],'resolve')
+        self.assertEqual(set(jobs['flutter-analyze']['needs']),{'resolve','bridge'})
+        for name in ['preflight','flutter-analyze']:
+            self.assertEqual(set(jobs[name]['strategy']['matrix']['variant']),{'standard','sos'})
+            self.assertFalse(jobs[name]['strategy']['fail-fast'])
+        self.assertEqual(set(jobs['validation-report']['needs']),{'resolve','contracts','preflight','bridge','flutter-analyze','windows-helper'})
+        for name in ['preflight','bridge','flutter-analyze','windows-helper']:
+            self.assertNotIn('continue-on-error',jobs[name])
+    def test_clients_and_draft_remain_downstream_of_complete_compatibility(self):
+        tag=self.workflow('tag.yml')['jobs']
+        self.assertIn('qualification',tag['prepare']['needs'])
+        self.assertIn('qualification',tag['windows-build']['needs'])
+        self.assertIn('prepare',tag['windows-build']['needs'])
+        self.assertIn('qualification',tag['platforms-build']['needs'])
+        self.assertIn('prepare',tag['platforms-build']['needs'])
+        self.assertIn('qualification',tag['android-build']['needs'])
+        self.assertIn('prepare',tag['android-build']['needs'])
+        self.assertIn('android-build',tag['android-sign']['needs'])
+        self.assertIn('windows-build',tag['draft']['needs'])
+        self.assertIn('platforms-build',tag['draft']['needs'])
+        self.assertIn('android-build',tag['draft']['needs'])
+        core=self.workflow('build.yml')['jobs']
+        self.assertEqual(core['validate']['needs'],'build')
+        self.assertTrue(any(s.get('name')=='Verify shared helper provenance and digest' for s in core['build']['steps']))
+        self.assertFalse(any(s.get('name')=='Build official WindowInjection helper' for s in core['build']['steps']))
+
+if __name__ == "__main__": unittest.main()

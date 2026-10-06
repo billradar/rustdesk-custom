@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Exercise the real ctypes ABI against a compiled, fictional C bridge fixture."""
 import contextlib
 import ctypes as C
@@ -133,6 +134,4 @@ class NativeBridgeTests(unittest.TestCase):
         with patch.dict(os.environ,values), patch.object(probe,'verify',side_effect=ValueError('probe failed')), contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(ValueError):config.compiled(dll)
 
-
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__": unittest.main()

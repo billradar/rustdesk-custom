@@ -48,7 +48,7 @@
 
 ## 真实 APK 验证：Phase 5.1
 
-Run `36902005326` 的真实 apksig/YubiKey 签名证据同时用于 layer A（Bridge integration）与 layer B（production signing identity）。依 key10.md 修订后的候选策略，同一可信 APK 可以覆盖两个验证目标；这只是对既有结果重新分类，没有重复签名。输入 SHA-256 为 `596591B25C4910D7E17FBD2EC499DC2592B06256965F6C50A885B538F6E81325`；真实操作数预期/实际均为 2，v1/v2 验证通过，最终单一签名者 SHA-256 精确匹配 production identity `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`，输入未改变、私钥未导出、PIN 清零通过。此轮另对已有签名 APK 执行了只读 `apksigner verify`，结果 PASS。详细来源、artifact 和证据见 [PHASE5-1-LOCAL-VALIDATION-REPORT.md](PHASE5-1-LOCAL-VALIDATION-REPORT.md)。
+Run `36902005326` 的真实 apksig/YubiKey 签名证据同时用于 layer A（Bridge integration）与 layer B（production signing identity）。依 key10.md 修订后的候选策略，同一可信 APK 可以覆盖两个验证目标；这只是对既有结果重新分类，没有重复签名。输入 SHA-256 为 `596591B25C4910D7E17FBD2EC499DC2592B06256965F6C50A885B538F6E81325`；真实操作数预期/实际均为 2，v1/v2 验证通过，最终单一签名者 SHA-256 精确匹配 production identity `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`，输入未改变、私钥未导出、PIN 清零通过。此轮另对已有签名 APK 执行了只读 `apksigner verify`，结果 PASS。详细来源、artifact 和证据见 [PHASE5-1-LOCAL-VALIDATION-REPORT.md](phase5.1-local-validation.md)。
 
 ## 安全与范围边界
 

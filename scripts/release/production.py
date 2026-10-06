@@ -15,6 +15,7 @@ from scripts.release.github import collect, gh, request
 from scripts.signing.production_config import payload, scan_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
+RELEASE_IDENTITY = ROOT / 'metadata' / 'release-identity.json'
 REPOSITORY = 'billradar/rustdesk-custom'
 
 def guard():
@@ -24,7 +25,7 @@ def guard():
 def discover(ref, force=False, dry_run=True):
     guard()
     data = choose_stable(ref)
-    revision = (ROOT / 'patch-revision.txt').read_text().strip()
+    revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
     if not re.fullmatch(r'[1-9][0-9]{0,5}', revision):
         raise ValueError('Invalid revision')
     name = mapped(data['upstream_sha']) or select(data['upstream_sha'])

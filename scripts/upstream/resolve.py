@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
+RELEASE_IDENTITY = ROOT / 'metadata' / 'release-identity.json'
 OFFICIAL = 'rustdesk/rustdesk'
 TEST_REPO = 'billradar/rustdesk-custom-test'
 VERSION = re.compile(r'^v?(\d+)\.(\d+)\.(\d+)$')
@@ -70,7 +71,7 @@ def main():
         data = {'upstream_branch': ref, 'upstream_ref': ref, 'upstream_sha': resolve_ref(ref)}
     else:
         data = choose_stable(args.ref)
-        revision = (ROOT / 'patch-revision.txt').read_text().strip()
+        revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
         if not re.fullmatch(r'[1-9][0-9]{0,5}', revision):
             raise ValueError('Invalid patch revision')
         name=mapped(data['upstream_sha']) or select(data['upstream_sha'])

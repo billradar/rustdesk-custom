@@ -14,7 +14,7 @@
 
 Prepared source contains no production inputs. Configuration enters only platform compile jobs. Cargo/Flutter dependency caches are optional acceleration. Prepared source is a run-bound artifact and must be verified after download.
 
-## Phase 5 fan-out / fan-in
+## current build architecture fan-out / fan-in
 
 ```mermaid
 flowchart TD
@@ -34,7 +34,7 @@ flowchart TD
 
 Each target is a separate platform/architecture/variant job, `fail-fast: false`, with no dependency on another platform's build. Actual runner overlap is proven by run 36902005326: Linux x86_64 Standard and macOS ARM64 Standard overlap 18:01:42–18:26:15 UTC on 2026-10-01. Existing Windows pair validation remains a regression gate. Aggregate waits for all selected target jobs and records failed experimental targets without promoting them.
 
-| Dependency | Class | Phase 5 treatment |
+| Dependency | Class | current build architecture treatment |
 |---|---|---|
 | Exact SHA, patch resolver | SHARED | Central selection only |
 | Standard / SOS archive and manifest | VARIANT-SPECIFIC, shared across platforms | Artifact, verified before every consumer |

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os,sys,tempfile,unittest,shutil,subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -68,3 +69,5 @@ common::apply_custom_build_defaults().len()+common::get_api_server_().len()
             path=Path(tmp)/'lib.rs';path.write_text(source)
             self.assertEqual(config_mir.wrapper([compiler,'--crate-name','librustdesk','--crate-type','cdylib','--emit=link','-O','--out-dir',tmp,str(path)]),0)
             self.assertTrue((Path(tmp)/'validated.json').exists())
+
+if __name__ == "__main__": unittest.main()
