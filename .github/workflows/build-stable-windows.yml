@@ -79,8 +79,7 @@ jobs:
         retention-days: 7
 
   build:
-    if: inputs.android_only != true && inputs.other_platforms_only != true
-    name: build/windows-${{ matrix.variant }}
+        name: build/windows-${{ matrix.variant }}
     env:
       PATCHSET: ${{ inputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
