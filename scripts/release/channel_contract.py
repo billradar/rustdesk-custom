@@ -86,6 +86,22 @@ class ChannelPolicyTests(unittest.TestCase):
             channel.resolve('nightly');resolve.assert_called_once_with('development')
             self.assertEqual(output.call_args.args[0]['upstream_sha'],'a'*40)
             self.assertEqual(output.call_args.args[0]['upstream_tag'],'')
+    def test_nightly_explicit_ref_bypasses_default_branch(self):
+        with patch.object(channel,'api',return_value={'default_branch':'development'}),patch.object(channel,'resolve_ref',return_value='a'*40) as resolve,patch.object(channel,'outputs') as output:
+            channel.resolve('nightly','test')
+            resolve.assert_called_once_with('test')
+            self.assertEqual(output.call_args.args[0]['upstream_ref'],'test')
+
+    def test_nightly_workflow_uses_official_test_ref_and_router_default_branch(self):
+        nightly=(ROOT/'.github/workflows/nightly.yml').read_text()
+        router=(ROOT/'.github/workflows/upstream-event-router.yml').read_text()
+        self.assertIn('UPSTREAM_TEST_REF: ${{ vars.UPSTREAM_TEST_REF || vars.UPSTREAM_TEST_BRANCH || \'test\' }}',nightly)
+        self.assertIn('REQUESTED_REF="$UPSTREAM_TEST_REF"',nightly)
+        self.assertIn('REQUESTED_REF="${REQUESTED_REF:-$UPSTREAM_TEST_REF}"',nightly)
+        self.assertIn("repos/rustdesk/rustdesk')['default_branch']",router)
+        self.assertIn("-f upstream_ref='${{ needs.detect.outputs.production_ref }}'",router)
+        self.assertIn('--ref main',router)
+        self.assertNotIn('billradar/rustdesk-custom:test/development',nightly+router)
     def test_existing_draft_skips_costly_build_and_never_overwrites(self):
         sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
