@@ -17,15 +17,9 @@ env:
         description: Run Stable CD dry-run after qualification
         default: false
   pull_request:
-    paths-ignore:
-    - docs/**
-    - README.md
   push:
     branches:
     - main
-    paths-ignore:
-    - docs/**
-    - README.md
 permissions:
   contents: read
   actions: write
@@ -34,7 +28,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  classify:
+    name: Classify repository change
+    runs-on: ubuntu-22.04
+    outputs:
+      change_class: ${{ steps.classify.outputs.change_class }}
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+    - id: classify
+      name: Detect documentation-only changes
+      env:
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+        GITHUB_SHA: ${{ github.sha }}
+        FORCE_REBUILD: ${{ inputs.force_rebuild || false }}
+      run: |
+        set -euo pipefail
+        args=()
+        [[ "$FORCE_REBUILD" != "true" ]] || args+=(--force-rebuild)
+        python3 scripts/validation/change_classification.py --github-output "${args[@]}"
+
+  docs-only-summary:
+    name: Documentation-only validation
+    needs: classify
+    if: needs.classify.outputs.docs_only == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Report functional CI skip
+      run: |
+        cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+        ## Change classification: DOCS_ONLY
+
+        Functional CI: **SKIPPED**
+        Reason: documentation-only change
+
+        - Repository architecture contract: SKIPPED
+        - Build: SKIPPED
+        - Compatibility: SKIPPED
+        - Release qualification: SKIPPED
+        - Signing: SKIPPED
+        EOF
+
   resolve:
+    needs: classify
+    if: needs.classify.outputs.change_class == 'FUNCTIONAL'
     runs-on: ubuntu-22.04
     outputs:
       upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
