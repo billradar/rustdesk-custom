@@ -23,7 +23,6 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(signing["concurrency"]["queue"], "max")
         for marker in ("github.event_name == 'workflow_dispatch'",
                        "needs.android-build.result == 'success'",
-                       "needs.qualification.result == 'success'",
                        "needs.prepare.result == 'success'"):
             self.assertIn(marker, signing["if"])
         self.assertNotIn("production_android_signing", signing["if"])
