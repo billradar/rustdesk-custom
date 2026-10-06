@@ -146,6 +146,12 @@ class MatrixTests(unittest.TestCase):
         prepare_runs=[s.get('run','') for s in prepared['jobs']['prepare']['steps']]
         self.assertLess(next(i for i,x in enumerate(prepare_runs) if 'scripts/source/prepare.sh' in x),
                         next(i for i,x in enumerate(prepare_runs) if 'build_adapter.py' in x))
+        bridge_step=next(s for s in prepared['jobs']['prepare']['steps'] if s.get('name')=='Generate bridge from exact official source')
+        self.assertEqual(bridge_step['working-directory'], '.work/bridge-source')
+        bridge_copy=next(s for s in prepared['jobs']['prepare']['steps'] if s.get('name')=='Copy exact official source for bridge generation')
+        self.assertIn('cp -a .work/official .work/bridge-source', bridge_copy['run'])
+        prepare_step=next(s for s in prepared['jobs']['prepare']['steps'] if 'scripts/source/prepared_source.py prepare' in s.get('run',''))
+        self.assertIn('--bridge .work/bridge-source', prepare_step['run'])
         self.assertNotIn('actions/cache',router_text)
         self.assertIn('gh run list',stable_router)
     def test_platforms_consume_source_not_resolver(self):
