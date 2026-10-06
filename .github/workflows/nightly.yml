@@ -25,12 +25,16 @@ env:
           - build
           - draft
         default: build
+      automation_source:
+        type: string
+        description: Internal source marker for Action-created Nightly
+        default: manual
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ inputs.automation_source == 'upstream-event-router' && 'action-created-ci-nightly' || format('normal-nightly-{0}', github.ref) }}
+  cancel-in-progress: ${{ inputs.automation_source != 'upstream-event-router' }}
 
 jobs:
   resolve:
