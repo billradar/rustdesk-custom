@@ -6,15 +6,15 @@ env:
     inputs:
       upstream_ref:
         type: string
-        description: CI ref; empty = official default branch
+        description: Stable upstream version
         default: ''
       force_rebuild:
         type: boolean
-        description: Rebuild even if this upstream revision was already validated
+        description: Force rebuild
         default: false
       promote_stable:
         type: boolean
-        description: Dispatch Stable CD dry-run after a qualified official Stable Tag
+        description: Run Stable CD dry-run after qualification
         default: false
   pull_request:
     paths-ignore:
