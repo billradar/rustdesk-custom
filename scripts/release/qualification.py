@@ -414,7 +414,7 @@ if __name__=='__main__':
     if a.mode=='check':
         entries();print('Explicit platform metadata: PASS')
     elif a.mode=='plan':
-        p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);Path('.work/target-plan.json').write_text(json.dumps(p,indent=2)+'\n')
+        p=plan(a.channel,a.experimental);Path('.work').mkdir(exist_ok=True);target_plan=Path('.work/target-plan.json');target_plan.write_text(json.dumps(p,indent=2)+'\n');json.loads(target_plan.read_text())
         extra=[e for e in p['selected'] if e['platform']!='windows']
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
