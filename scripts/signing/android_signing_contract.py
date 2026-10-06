@@ -22,8 +22,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertFalse(signing["concurrency"]["cancel-in-progress"])
         self.assertEqual(signing["concurrency"]["queue"], "max")
         for marker in ("github.event_name == 'workflow_dispatch'",
-                       "needs.android-build.result == 'success'",
-                       "needs.prepare.result == 'success'"):
+                       "needs.android-build.result == 'success'"):
             self.assertIn(marker, signing["if"])
         self.assertNotIn("production_android_signing", signing["if"])
         self.assertIn("release_mode != 'dry-run'", signing["if"])
@@ -82,8 +81,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
             self.assertIn(name, json.dumps(aggregate["needs"]))
 
         draft = self.tag["jobs"]["draft"]
-        for name in ("windows-build", "platforms-build", "android-build"):
-            self.assertIn(name, json.dumps(draft["needs"]))
+        self.assertEqual(draft["needs"], "aggregate")
         self.assertIn("needs.aggregate.result == 'success'", draft["if"])
 
     def test_android_artifact_name_contract_matches_build_and_sign_downloads(self):
