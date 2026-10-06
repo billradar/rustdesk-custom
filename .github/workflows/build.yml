@@ -357,6 +357,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   validate:
+    name: Validate Windows build provenance
     if: inputs.android_only != true && inputs.windows_only != true && inputs.other_platforms_only != true
     needs: build
     runs-on: ubuntu-22.04
