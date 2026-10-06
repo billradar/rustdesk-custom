@@ -1,6 +1,6 @@
 # RustDesk Custom
 
-[中文](README.zh-CN.md)
+[English](README.md) · [中文](README.zh-CN.md)
 
 [![Stable Release Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
 [![Nightly - Development artifacts](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
