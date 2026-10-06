@@ -24,8 +24,18 @@ def run(command, log):
         print(log.read_text()[-18000:])
         raise RuntimeError(f'Command failed ({completed.returncode}); see {log}')
 
+def executable_contract(tree):
+    path = tree / 'scripts/build/config_mir.py'
+    if not path.is_file():
+        raise RuntimeError('Missing Android compiler wrapper: scripts/build/config_mir.py')
+    mode = path.stat().st_mode & 0o777
+    if mode != 0o755:
+        raise RuntimeError(f'Android compiler wrapper is not executable: scripts/build/config_mir.py mode={mode:04o}; expected=0755')
+    return {'config_mir executable': 'PASS'}
+
 def contracts(tree, variant, patchset=None):
     patchset=patchset or os.environ.get("PATCHSET", "v1")
+    executable_status = executable_contract(tree)
     texts = {}
     for file in FILES:
         path = tree / file
@@ -83,7 +93,7 @@ def contracts(tree, variant, patchset=None):
     elif 'final isSosMode' in home or '"sos-mode"' in common:
         raise RuntimeError('SOS customization leaked into Standard')
     return {'Config API': 'PASS', 'Rust API structure': 'PASS', 'Flutter API structure': 'PASS',
-            'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
+            'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A', **executable_status}
 
 def build_system(tree):
     baseline = json.loads((ROOT / 'metadata/baselines/build.json').read_text())
