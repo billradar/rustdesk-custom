@@ -392,6 +392,7 @@ jobs:
           .work/production-release-assets/'
         if-no-files-found: error
   aggregate:
+    name: Aggregate verified build artifacts
     needs:
     - plan
     - build
