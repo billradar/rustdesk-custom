@@ -1,10 +1,10 @@
 # Platform support
 
-SUPPORTED means **BUILD SUPPORT ONLY**, never runtime validation. Machine-readable authority: `metadata/platform-matrix.json`. Actual cross-platform evidence: [run 36902005326](https://github.com/billradar/rustdesk-custom/actions/runs/36902005326); CI gate: [36940045038](https://github.com/billradar/rustdesk-custom/actions/runs/36940045038).
+SUPPORTED means **BUILD SUPPORT ONLY**, never runtime validation. Machine-readable authority: `metadata/platform/matrix.json`. Actual cross-platform evidence: [run 36902005326](https://github.com/billradar/rustdesk-custom/actions/runs/36902005326); CI gate: [36940045038](https://github.com/billradar/rustdesk-custom/actions/runs/36940045038).
 
 | Platform | Architecture | Standard | SOS | Package | Signing | Runtime/UI | Notes |
 |---|---|---|---|---|---|---|---|
-| Windows | x86_64 | SUPPORTED | SUPPORTED | Portable Flutter ZIP | NOT ENABLED | SKIPPED BY USER | Phase 4 retained; Phase 5 regression PASS |
+| Windows | x86_64 | SUPPORTED | SUPPORTED | Portable Flutter ZIP | NOT ENABLED | SKIPPED BY USER | Existing reviewed build path; regression gates PASS |
 | Windows | ARM64 | PLANNED | PLANNED | Portable Flutter bundle planned | NOT ENABLED | SKIPPED BY USER | Dedicated ARM Flutter/Bridge adapter pending; not built |
 | Linux | x86_64 | SUPPORTED | SUPPORTED | deb, rpm | NOT ENABLED | SKIPPED BY USER | Official Ubuntu 18.04 compiler container; native package/config gates PASS |
 | Linux | ARM64 | SUPPORTED | SUPPORTED | deb, rpm | NOT ENABLED | SKIPPED BY USER | Native ARM runner; package/config gates PASS |

@@ -1,52 +1,53 @@
 # RustDesk Custom — Patch Maintenance
 
-This repository maintains reviewed RustDesk patch generations, prepared-source boundaries, platform builds, validation and release orchestration. It is **not** a full RustDesk source fork.
+RustDesk Custom is a reviewed maintenance and release system for RustDesk patch generations. It is **not** a full RustDesk source fork.
 
 ## Architecture
 
-- `.github/workflows/` — CI/CD orchestration and reusable workflow boundaries.
-- `scripts/upstream/` — upstream resolution and frozen patch generations.
+- `.github/workflows/` — CI/CD lifecycle orchestration and reusable workflow boundaries.
+- `.github/actions/` — reusable action implementations.
 - `scripts/source/` — exact-source preparation and provenance boundary.
+- `scripts/upstream/` — upstream resolution and frozen patchset selection.
 - `scripts/build/` — build adapters and compiler/configuration validation.
 - `scripts/platform/` — platform adapters and package validation.
-- `scripts/release/` — channels, qualification, aggregation and publication.
-- `scripts/signing/` — production signing implementation.
-- `scripts/validation/` — fail-closed validation and repository contracts.
-- `metadata/` — machine-readable policy, support and signing identity.
-- `docs/` — current operational documentation; `docs/archive/` is historical evidence.
+- `scripts/release/` — channel discovery, qualification, aggregation and publication.
+- `scripts/signing/` — production signing implementation and identity gates.
+- `scripts/validation/` — repository-wide and domain-specific fail-closed contracts.
+- `metadata/` — canonical machine-readable policy, platform, release and signing data.
+- `patchsets/` — reviewed patch generations.
+- `docs/` — current engineering and operations documentation.
+- `docs/archive/` — historical evidence retained for auditability.
 
-See [current architecture](docs/architecture/current.md) and [dependency map](docs/build/dependency-map.md).
+See [current architecture](docs/architecture/current.md) and [build dependency map](docs/build/dependency-map.md).
 
-## Build and release model
+## Build and release flow
 
-The pipeline is intentionally staged:
+**upstream resolution → compatibility and patch selection → prepared source → platform builds → package/provenance validation → aggregate → optional Android production signing → draft/release**
 
-**upstream resolution → compatibility/patch selection → prepared source → parallel platform builds → package/provenance validation → aggregate → optional production Android signing → Draft/Release**
-
-Standard and SOS are generated from the same exact upstream source. Provenance binds upstream SHA, patch generation, repository revision, workflow run and variant-specific source identity. Unexpected source/build interfaces fail closed.
-
-Stable and Nightly release workflows consume the same responsibility-based release implementation. Release publication is never an automatic side effect of compatibility testing.
+Build does not own release publication. Release does not own production signing. Production signing consumes already-qualified build artifacts and independently verifies package, ABI, certificate and provenance identity.
 
 ## Android production signing
 
-Android Standard supports ARM64, ARMv7 and x86_64 builds. Production signing is isolated from the normal build workflow.
+Android Standard supports ARM64, ARMv7 and x86_64 build targets. Production signing is a separate trust boundary.
 
-The Stable signing job requires:
+The signing path requires:
 
-- exact qualified source and build artifacts;
-- the dedicated ARM64 signing runner;
+- an explicitly authorized production-signing workflow;
+- the dedicated ARM64 YubiKey runner;
 - the `android-production-signing` GitHub Environment;
-- `YUBIKEY_PIV_PIN` available only at the signing boundary;
-- the pinned production certificate identity;
-- successful hardware-backed signing and post-sign verification.
+- `YUBIKEY_PIV_PIN` bound only at the signing job boundary;
+- the canonical production certificate identity;
+- post-signature certificate, package, ABI and provenance verification.
 
-The current production certificate fingerprint is recorded in `metadata/yubikey-android-signing-identity.json`. The signing architecture is documented in [docs/signing](docs/signing/architecture.md).
+The single canonical Android identity source is `metadata/signing/android-standard.json`. It records both the legacy public signing identity and the current hardware-backed production identity without treating them as the same certificate.
 
-Desktop code signing remains disabled. Android production signing is a separate hardware-backed trust boundary.
+## Repository validation
 
-## Repository contracts
+Run:
 
-The legacy `tests/` tree has been retired. Contract tests are now responsibility-based and executable:
+`python3 scripts/validation/repository_contract.py`
+
+Domain-specific contracts remain responsible for their own invariants:
 
 ```text
 scripts/release/production_contract.py
@@ -57,8 +58,6 @@ scripts/validation/native_config_contract.py
 scripts/signing/android_signing_contract.py
 ```
 
-The reusable compatibility workflow runs these contracts once, outside the platform matrix, so the same tests are not repeated for every variant.
-
 ## Current support
 
 - Windows x86_64: Standard/SOS
@@ -66,13 +65,13 @@ The reusable compatibility workflow runs these contracts once, outside the platf
 - macOS x86_64/ARM64: Standard/SOS
 - Android ARM64/ARMv7/x86_64: Standard
 - Windows ARM64 and iOS: planned
-- Web: blocked by the audited disabled upstream job
+- Web: blocked by the audited upstream definition
 - Android/iOS/Web SOS: unsupported
 
-Platform support is governed by `metadata/platform-matrix.json`; see [platform support](docs/platform/support.md).
+Machine-readable platform authority is `metadata/platform/matrix.json`; reviewed platform adapter profiles live under `metadata/platform/`.
 
-## Historical evidence
+## Development
 
-Phase-based implementation names are retired. Historical Phase 4/5/5.1/5.2B reports, migration reports and hardware-validation evidence are preserved under [docs/archive](docs/archive/) for auditability, but they are not current architecture entry points.
+Install the reviewed Python dependency set from `requirements.txt`. Run repository and domain contracts before expensive builds. Shell scripts use responsibility-based snake_case names.
 
-No current workflow should depend on a historical Phase filename.
+Historical migration, acceptance and signing evidence is retained under `docs/archive/`. Historical material is evidence only and is not part of the current operational architecture.

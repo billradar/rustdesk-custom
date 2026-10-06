@@ -2,7 +2,7 @@
 
 Stable: 1.4.9 / 6c578292e8ebbbec708b76986ba8c4bc7c509747. Development: master / 1.5.0 / fada664df7a294d1d1a9ca3e7cd3637069122f17.
 
-Both snapshots reviewed from official Git history, including CI/Tag/Nightly/Bridge and referenced build.py, helper, Android dependencies/NDK scripts. Toolchain profiles are machine-readable in metadata/platform-adapter-profiles.json. These are official definitions, not proof our customization builds on those platforms.
+Both snapshots reviewed from official Git history, including CI/Tag/Nightly/Bridge and referenced build.py, helper, Android dependencies/NDK scripts. Toolchain profiles are machine-readable in metadata/platform/adapter-profiles.json. These are official definitions, not proof our customization builds on those platforms.
 
 | SHA | Platform | Arch | Runner | Rust | Flutter | vcpkg | Package / official status |
 |---|---|---|---|---|---|---|---|
