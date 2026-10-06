@@ -400,7 +400,7 @@ def release(root, channel='stable'): _release(root, True, channel)
 if __name__=='__main__':
     a=argparse.ArgumentParser()
     a.add_argument('mode',choices=['check','plan','aggregate','draft','release','publish-existing','lookup','verify-ci'])
-    a.add_argument('--channel',default='nightly')
+    a.add_argument('--channel',choices=['stable','nightly'],default='stable')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
     a.add_argument('--repository',default=os.environ.get('GITHUB_REPOSITORY',''))
