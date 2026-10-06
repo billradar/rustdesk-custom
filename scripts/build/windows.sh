@@ -37,9 +37,12 @@ from scripts.validation.compatibility import contracts
 contracts(Path(sys.argv[1]), sys.argv[2])
 PY
 fi
-# Bridge files must have been generated from this exact official baseline.
-: "${RUSTDESK_BRIDGE_DIR:?Generate the official Flutter bridge first (see test-build.yml)}"
-python3 "$root/scripts/release/package.py" restore-bridge "$workspace" "$RUSTDESK_BRIDGE_DIR"
+# Prepared sources already contain the bridge restored and verified during preparation.
+# Standalone builds restore the separate verified bridge artifact here.
+if [[ -z "${PREPARED_SOURCE_DIR:-}" ]]; then
+    : "${RUSTDESK_BRIDGE_DIR:?Generate the official Flutter bridge first (see test-build.yml)}"
+    python3 "$root/scripts/release/package.py" restore-bridge "$workspace" "$RUSTDESK_BRIDGE_DIR"
+fi
 pushd "$workspace" >/dev/null
 # The corresponding official build.py owns Rust/Cargo and Flutter compilation.
 python3 build.py --portable --flutter --skip-portable-pack --hwcodec --vram
