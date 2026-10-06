@@ -3,6 +3,9 @@
 import json,os,re,subprocess,sys
 from pathlib import Path
 
+_REPO_ROOT=Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:sys.path.insert(0,str(_REPO_ROOT))
+
 def function(text,name):
     # rustc 1.75 trims module paths when a function name is unambiguous.
     # Accept its qualified or trimmed spelling, but never choose among duplicates.
