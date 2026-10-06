@@ -177,6 +177,16 @@ def check_metadata(files: list[Path], errors: list[str]) -> None:
             fail(errors, ROOT / obsolete, "duplicate/legacy metadata source remains")
 
 
+def check_executable_contract(files: list[Path], errors: list[str]) -> None:
+    path = ROOT / "scripts/build/config_mir.py"
+    if not path.is_file():
+        fail(errors, path, "Android compiler wrapper is missing")
+        return
+    mode = path.stat().st_mode & 0o777
+    if mode != 0o755:
+        fail(errors, path, "Android compiler wrapper must be executable", "0755", f"{mode:04o}")
+
+
 def check_signing_boundary(files: list[Path], errors: list[str]) -> None:
     paths = {rel(p): p for p in files}
     for path, file in paths.items():
@@ -234,6 +244,7 @@ def main() -> int:
         ("forbidden files", lambda: check_forbidden_paths(files, errors)),
         ("legacy references", lambda: check_current_legacy_references(files, errors)),
         ("metadata uniqueness", lambda: check_metadata(files, errors)),
+        ("executable-bit contract", lambda: check_executable_contract(files, errors)),
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
     ]
