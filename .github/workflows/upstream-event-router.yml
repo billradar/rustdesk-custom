@@ -17,6 +17,7 @@ jobs:
       production_sha: ${{ steps.detect.outputs.production_sha }}
       production_ref: ${{ steps.detect.outputs.production_ref }}
       stable_tag: ${{ steps.detect.outputs.stable_tag }}
+      stable_sha: ${{ steps.detect.outputs.stable_sha }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -45,6 +46,9 @@ jobs:
         with open(os.environ['GITHUB_OUTPUT'],'a') as o:
             o.write(f'production_sha={prod_sha}\nproduction_ref={production}\n')
             o.write(f'stable_tag={stable["tag_name"] if stable else ""}\n')
+            if stable:
+                stable_sha=api(f'repos/{repo}/commits/{urllib.parse.quote(stable["tag_name"],safe="")}')['sha']
+                o.write(f'stable_sha={stable_sha}\n')
         print(f'production={production} {prod_sha}')
         if stable: print(f'stable_tag={stable["tag_name"]}')
         PY
@@ -85,33 +89,28 @@ jobs:
     if: needs.detect.outputs.stable_tag != ''
     runs-on: ubuntu-22.04
     steps:
-    - name: Check whether this Stable Tag already has a qualified CI run
-      id: check
+    - uses: actions/cache/restore@v4
+      id: state
+      with:
+        path: .stable-state
+        key: upstream-router-stable-${{ needs.detect.outputs.stable_tag }}-${{ needs.detect.outputs.stable_sha }}
+    - name: Route new Stable Tag directly to Stable CD
+      if: steps.state.outputs.cache-hit != 'true'
       env:
         GH_TOKEN: ${{ github.token }}
-        TAG: ${{ needs.detect.outputs.stable_tag }}
       run: |
         set -euo pipefail
-        sha="$(gh api "repos/rustdesk/rustdesk/commits/$TAG" --jq '.sha')"
-        all_runs="$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&event=workflow_dispatch&per_page=100" --jq '.workflow_runs[] | [.id,.status,.conclusion] | @tsv')"
-        qualified=false
-        active=false
-        while IFS=$'\t' read -r run status conclusion; do
-          [[ -n "${run:-}" ]] || continue
-          if [[ "$status" != "completed" ]]; then active=true; continue; fi
-          if [[ "$conclusion" != "success" ]]; then continue; fi
-          rm -rf .qualification
-          if gh run download "$run" --repo '${{ github.repository }}' --name 'ci-qualification-${{ github.sha }}' --dir .qualification >/dev/null 2>&1; then
-            if jq -e --arg tag "$TAG" --arg sha "$sha" '.upstream_ref == $tag and .upstream_sha == $sha and .qualified == true' .qualification/ci-qualification.json >/dev/null; then
-              qualified=true; break
-            fi
-          fi
-        done <<< "$all_runs"
-        echo "qualified=$qualified" >> "$GITHUB_OUTPUT"
-        echo "active=$active" >> "$GITHUB_OUTPUT"
-    - name: Start CI qualification for new Stable Tag
-      if: steps.check.outputs.qualified != 'true' && steps.check.outputs.active != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        gh workflow run ci.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' -f force_rebuild=false -f promote_stable=true -f automation_source=upstream-event-router
+        gh workflow run tag.yml \
+          --repo '${{ github.repository }}' \
+          --ref main \
+          -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' \
+          -f force_rebuild=false \
+          -f release_mode=dry-run
+        mkdir -p .stable-state
+        printf '%s\n' '${{ needs.detect.outputs.stable_tag }}' > .stable-state/tag
+    - name: Remember routed Stable Tag
+      if: steps.state.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: .stable-state
+        key: upstream-router-stable-${{ needs.detect.outputs.stable_tag }}-${{ needs.detect.outputs.stable_sha }}
