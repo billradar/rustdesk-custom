@@ -93,11 +93,22 @@ jobs:
     permissions:
       contents: read
       actions: write
+    outputs:
+      patchset: ${{ steps.patchset.outputs.patchset }}
+      workflow_run_id: ${{ steps.outputs.outputs.workflow_run_id }}
+      qualification_custom_sha: ${{ steps.outputs.outputs.qualification_custom_sha }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Reuse existing exact CI qualification when available
+    - name: Resolve patchset identity using existing selector
+      id: patchset
+      env:
+        UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      run: |
+        set -euo pipefail
+        python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --report .work/patchset-selection.json
+    - name: Lookup reusable CI qualification
       id: reuse
       env:
         GH_TOKEN: ${{ github.token }}
@@ -105,40 +116,83 @@ jobs:
         CUSTOM_SHA: ${{ github.sha }}
         UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
         UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
+        PATCHSET: ${{ steps.patchset.outputs.patchset }}
       run: |
         set -euo pipefail
-        if python3 scripts/release/qualification.py verify-ci \
+        python3 scripts/release/qualification.py lookup \
           --repository "$REPOSITORY" \
           --custom-sha "$CUSTOM_SHA" \
           --upstream-sha "$UPSTREAM_SHA" \
           --upstream-ref "$UPSTREAM_REF" \
-          --output .work/reused-ci-qualification.json; then
-          echo "Exact CI qualification found; reusing existing CI run."
-          echo "found=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "No reusable exact CI qualification found; Stable will dispatch CI."
-          echo "found=false" >> "$GITHUB_OUTPUT"
+          --patchset "$PATCHSET" \
+          --output .work/qualification-lookup.json
+    - name: Fail closed on invalid qualification
+      if: steps.reuse.outputs.status == 'INVALID'
+      env:
+        REASON: ${{ steps.reuse.outputs.reason }}
+      run: |
+        echo "Qualification lookup INVALID: $REASON"
+        exit 1
+    - name: Adopt existing Stable qualification run
+      if: steps.reuse.outputs.status == 'FOUND'
+      env:
+        FOUND_RUN_ID: ${{ steps.reuse.outputs.workflow_run_id }}
+        FOUND_CUSTOM_SHA: ${{ steps.reuse.outputs.qualification_custom_sha }}
+      run: |
+        set -euo pipefail
+        echo "QUALIFICATION_RUN_ID=$FOUND_RUN_ID" >> "$GITHUB_ENV"
+        echo "QUALIFICATION_CUSTOM_SHA=$FOUND_CUSTOM_SHA" >> "$GITHUB_ENV"
+    - name: Reuse active Stable-owned qualification when available
+      id: active
+      if: steps.reuse.outputs.status == 'MISSING'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+        UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
+      run: |
+        set -euo pipefail
+        GROUP="stable-qualification-${UPSTREAM_SHA}-${UPSTREAM_REF}"
+        GROUP_PATH="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=""))' "$GROUP")"
+        if response="$(gh api "repos/$REPOSITORY/actions/concurrency_groups/$GROUP_PATH" 2>/dev/null)"; then
+          run_id="$(printf '%s' "$response" | jq -r '.group_members[] | select(.status == "in_progress" or .status == "pending") | .run_id' | head -n1)"
+          if [[ -n "$run_id" && "$run_id" != "null" ]]; then
+            echo "Found active Stable-owned qualification run: $run_id"
+            active_sha="$(gh run view "$run_id" --repo "$REPOSITORY" --json headSha --jq .headSha)"
+            echo "QUALIFICATION_RUN_ID=$run_id" >> "$GITHUB_ENV"
+            echo "QUALIFICATION_CUSTOM_SHA=$active_sha" >> "$GITHUB_ENV"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
         fi
-    - name: Dispatch CI only when exact qualification is missing
-      if: steps.reuse.outputs.found != 'true'
+        echo "found=false" >> "$GITHUB_OUTPUT"
+    - name: Dispatch Stable-owned CI qualification
+      if: steps.reuse.outputs.status == 'MISSING' && steps.active.outputs.found != 'true'
       env:
         GH_TOKEN: ${{ github.token }}
         REPOSITORY: ${{ github.repository }}
         CUSTOM_SHA: ${{ github.sha }}
+        UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
         UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
+        STABLE_OWNER_RUN_ID: ${{ github.run_id }}
       run: |
         set -euo pipefail
-        export DISPATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        gh workflow run ci.yml \
-          --repo "$REPOSITORY" \
-          --ref main \
-          -f upstream_ref="$UPSTREAM_REF" \
-          -f force_rebuild=false \
-          -f promote_stable=false
-        echo "Dispatched CI for custom SHA $CUSTOM_SHA and upstream ref $UPSTREAM_REF"
-        echo "DISPATCH_STARTED_AT=$DISPATCH_STARTED_AT" >> "$GITHUB_ENV"
-    - name: Wait for newly dispatched exact CI
-      if: steps.reuse.outputs.found != 'true'
+        payload="$(jq -n \
+          --arg ref "main" \
+          --arg upstream_ref "$UPSTREAM_REF" \
+          --arg qualification_mode "stable" \
+          --arg stable_owner_run_id "$STABLE_OWNER_RUN_ID" \
+          --arg stable_custom_sha "$CUSTOM_SHA" \
+          --arg stable_upstream_sha "$UPSTREAM_SHA" \
+          '{ref:$ref,return_run_details:true,inputs:{upstream_ref:$upstream_ref,force_rebuild:"false",promote_stable:"false",qualification_mode:$qualification_mode,stable_owner_run_id:$stable_owner_run_id,stable_custom_sha:$stable_custom_sha,stable_upstream_sha:$stable_upstream_sha}}')"
+        response="$(printf '%s' "$payload" | gh api --method POST "repos/$REPOSITORY/actions/workflows/ci.yml/dispatches" --input -)"
+        run_id="$(printf '%s' "$response" | jq -r '.workflow_run_id // empty')"
+        [[ -n "$run_id" ]] || { echo "Dispatch did not return workflow_run_id"; exit 1; }
+        echo "QUALIFICATION_RUN_ID=$run_id" >> "$GITHUB_ENV"
+        echo "QUALIFICATION_CUSTOM_SHA=$CUSTOM_SHA" >> "$GITHUB_ENV"
+        echo "Dispatched Stable-owned CI qualification run: $run_id"
+    - name: Wait for exact Stable qualification run
+      if: steps.reuse.outputs.status == 'MISSING'
       env:
         GH_TOKEN: ${{ github.token }}
         REPOSITORY: ${{ github.repository }}
@@ -147,28 +201,37 @@ jobs:
         set -euo pipefail
         deadline=$((SECONDS + 3600))
         while (( SECONDS < deadline )); do
-          run_id="$(gh run list \
-            --repo "$REPOSITORY" \
-            --workflow ci.yml \
-            --event workflow_dispatch \
-            --branch main \
-            --limit 50 \
-            --json databaseId,headSha,status,conclusion,createdAt \
-            --jq 'map(select(.headSha == env.CUSTOM_SHA and .createdAt >= env.DISPATCH_STARTED_AT)) | sort_by(.createdAt) | last | .databaseId // empty')"
+          run_id="${QUALIFICATION_RUN_ID:-}"
           if [[ -n "$run_id" ]]; then
-            echo "CI workflow run: $run_id"
-            status="$(gh run view "$run_id" --repo "$REPOSITORY" --json status --jq .status)"
-            conclusion="$(gh run view "$run_id" --repo "$REPOSITORY" --json conclusion --jq .conclusion)"
-            echo "CI status=$status conclusion=$conclusion"
+            data="$(gh run view "$run_id" --repo "$REPOSITORY" --json status,conclusion,headSha,event)"
+            status="$(printf '%s' "$data" | jq -r .status)"
+            conclusion="$(printf '%s' "$data" | jq -r '.conclusion // ""')"
+            head_sha="$(printf '%s' "$data" | jq -r .headSha)"
+            event="$(printf '%s' "$data" | jq -r .event)"
+            echo "CI run=$run_id status=$status conclusion=$conclusion head_sha=$head_sha event=$event"
+            [[ "$event" == "workflow_dispatch" ]] || { echo "Wrong workflow event"; exit 1; }
+            expected_custom_sha="${QUALIFICATION_CUSTOM_SHA:-$CUSTOM_SHA}"
+            [[ "$head_sha" == "$expected_custom_sha" ]] || { echo "Stable qualification run provenance SHA mismatch"; exit 1; }
             if [[ "$status" == "completed" ]]; then
-              [[ "$conclusion" == "success" ]] || { echo "Exact CI qualification failed"; exit 1; }
+              [[ "$conclusion" == "success" ]] || { echo "Exact Stable qualification failed"; exit 1; }
               exit 0
             fi
           fi
           sleep 15
         done
-        echo "Timed out waiting for exact CI qualification"
+        echo "Timed out waiting for exact Stable qualification"
         exit 1
+    - name: Export Stable qualification provenance
+      id: outputs
+      env:
+        CUSTOM_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        [[ -n "${QUALIFICATION_RUN_ID:-}" ]] || { echo "Missing qualification run ID"; exit 1; }
+        {
+          echo "workflow_run_id=$QUALIFICATION_RUN_ID"
+          echo "qualification_custom_sha=${QUALIFICATION_CUSTOM_SHA:-$CUSTOM_SHA}"
+        } >> "$GITHUB_OUTPUT"
   qualification:
     name: Verify CI qualification for Stable
     needs: [resolve, draft-preflight, stable-ci-qualification]
@@ -178,6 +241,7 @@ jobs:
       patchset: ${{ steps.verify.outputs.patchset }}
       upstream_version: ${{ steps.verify.outputs.upstream_version }}
       workflow_run_id: ${{ steps.verify.outputs.workflow_run_id }}
+      qualification_custom_sha: ${{ steps.verify.outputs.custom_repository_sha }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -191,7 +255,9 @@ jobs:
           --repository "${{ github.repository }}" \
           --custom-sha "${{ github.sha }}" \
           --upstream-sha "${{ needs.resolve.outputs.upstream_sha }}" \
-          --upstream-ref "${{ needs.resolve.outputs.upstream_ref }}"
+          --upstream-ref "${{ needs.resolve.outputs.upstream_ref }}" \
+          --patchset "${{ needs.stable-ci-qualification.outputs.patchset }}" \
+          --workflow-run-id "${{ needs.stable-ci-qualification.outputs.workflow_run_id }}"
     - name: Rehydrate CI bridge artifact for this Stable run
       env:
         GH_TOKEN: ${{ github.token }}
@@ -200,7 +266,7 @@ jobs:
         CI_RUN_ID="${{ steps.verify.outputs.workflow_run_id }}"
         gh run download "$CI_RUN_ID" \
           --repo "${{ github.repository }}" \
-          --name "ci-bridge-${{ github.sha }}" \
+          --name "ci-bridge-${{ needs.qualification.outputs.qualification_custom_sha }}" \
           --dir .work/bridge-rehydrated
         cp -a .work/bridge-rehydrated/. .work/bridge-files/
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -219,6 +285,8 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
       patchset: ${{ needs.qualification.outputs.patchset }}
+      qualification_workflow_run_id: ${{ needs.qualification.outputs.workflow_run_id }}
+      qualification_custom_sha: ${{ needs.qualification.outputs.qualification_custom_sha }}
   windows-build:
     name: Build Stable Windows targets
     needs:

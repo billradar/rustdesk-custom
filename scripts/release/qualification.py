@@ -31,7 +31,7 @@ def plan(channel,experimental=False):
     for e in selected:e['required']=e['support_status']=='SUPPORTED'
     return {'channel':channel,'selected':selected,'include_experimental':experimental}
 
-def identity(i):
+def build_provenance_identity(i):
     return (i['upstream_sha'],i['patchset'],i['common_patch_hash'],i['custom_repository_sha'],str(i['build_run']))
 
 def aggregate(root,channel,experimental):
@@ -58,7 +58,7 @@ def aggregate(root,channel,experimental):
     if found:
         first=next(iter(found.values()))
         for i in found.values():
-            if identity(i)!=identity(first):raise ValueError('PROVENANCE: cross-platform source/generation mismatch')
+            if build_provenance_identity(i)!=build_provenance_identity(first):raise ValueError('PROVENANCE: cross-platform source/generation mismatch')
             if i.get('server_config_fingerprint')!=first.get('server_config_fingerprint'):raise ValueError('PROVENANCE: configuration mismatch')
         for variant in ('standard','sos'):
             sources={i.get('prepared_source_identity',i.get('prepared_source_manifest_hash')) for i in found.values() if i['variant']==variant}
@@ -120,38 +120,201 @@ def gh_json(path):
     p=subprocess.run(["gh","api",path],check=True,capture_output=True,text=True,env=os.environ)
     return json.loads(p.stdout)
 
-def verify_ci(repo,custom_sha,upstream_sha,upstream_ref):
+
+def qualification_identity(record):
+    return (
+        record.get("upstream_repository"),
+        record.get("upstream_sha"),
+        record.get("upstream_ref"),
+        record.get("patchset"),
+        record.get("common_patch_hash"),
+        record.get("sos_patch_hash"),
+    )
+
+
+def expected_qualification_identity(upstream_sha, upstream_ref, patchset):
+    return (
+        "rustdesk/rustdesk",
+        upstream_sha,
+        upstream_ref,
+        patchset,
+        patch_hash("common", patchset),
+        patch_hash("sos", patchset),
+    )
+
+
+def validate_ci_record(record, repo, run_id, custom_sha=None, upstream_sha=None, upstream_ref=None, patchset=None):
+    if record.get("schema") != "ci-qualification-v1" or record.get("qualified") is not True:
+        raise ValueError("Qualification artifact schema/qualified flag mismatch")
+    if record.get("upstream_repository") != "rustdesk/rustdesk":
+        raise ValueError("Qualification upstream repository mismatch")
+    if record.get("event") != "workflow_dispatch":
+        raise ValueError("Qualification event mismatch")
+    if record.get("workflow_run_id") != run_id:
+        raise ValueError("Qualification workflow run mismatch")
+    if custom_sha is not None and record.get("custom_repository_sha") != custom_sha:
+        raise ValueError("Qualification custom repository SHA mismatch")
+    if upstream_sha is not None and record.get("upstream_sha") != upstream_sha:
+        raise ValueError("Qualification upstream SHA mismatch")
+    if upstream_ref is not None and record.get("upstream_ref") != upstream_ref:
+        raise ValueError("Qualification upstream ref mismatch")
+    selected_patchset = patchset or record.get("patchset")
+    if not isinstance(selected_patchset, str) or not selected_patchset:
+        raise ValueError("Qualification missing patchset")
+    if record.get("patchset") != selected_patchset:
+        raise ValueError("Qualification patchset mismatch")
+    if record.get("common_patch_hash") != patch_hash("common", selected_patchset):
+        raise ValueError("Qualification common patch hash mismatch")
+    if record.get("sos_patch_hash") != patch_hash("sos", selected_patchset):
+        raise ValueError("Qualification SOS patch hash mismatch")
+    mode = record.get("qualification_mode", "legacy")
+    if mode == "stable":
+        owner = record.get("stable_owner_run_id")
+        stable_sha = record.get("stable_custom_sha")
+        if not isinstance(owner, int) or owner <= 0:
+            raise ValueError("Stable qualification missing owner run ID")
+        if not isinstance(stable_sha, str) or len(stable_sha) != 40:
+            raise ValueError("Stable qualification missing owner custom SHA")
+        if stable_sha != record.get("custom_repository_sha"):
+            raise ValueError("Stable qualification owner/custom SHA mismatch")
+    elif mode not in ("manual", "legacy"):
+        raise ValueError("Unknown qualification mode")
+    return record
+
+
+def _download_qualification(repo, run_id, artifact_name):
+    target=Path(".work/qualification-lookup")
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True)
+    subprocess.run(
+        ["gh","run","download",str(run_id),"-R",repo,"-n",artifact_name,"-D",str(target)],
+        check=True,env=os.environ
+    )
+    files=list(target.rglob("ci-qualification.json"))
+    if len(files)!=1:
+        raise ValueError("Qualification artifact must contain exactly one record")
+    return json.loads(files[0].read_text())
+
+
+def _workflow_dispatch_success_runs(repo):
+    rows=[]
+    for page in range(1,11):
+        data=gh_json(
+            f"repos/{repo}/actions/workflows/ci.yml/runs"
+            f"?event=workflow_dispatch&status=success&branch=main&per_page=100&page={page}"
+        )
+        batch=data.get("workflow_runs",[])
+        rows.extend(batch)
+        if len(batch)<100:
+            break
+    return rows
+
+
+def lookup_ci_qualification(repo, custom_sha, upstream_sha, upstream_ref, patchset):
     if len(custom_sha)!=40 or len(upstream_sha)!=40:
         raise ValueError("Invalid release SHA")
-    runs=gh_json(f"repos/{repo}/actions/workflows/ci.yml/runs?head_sha={custom_sha}&event=workflow_dispatch&status=success&per_page=100").get("workflow_runs",[])
-    candidates=[r for r in runs if r.get("head_sha")==custom_sha and r.get("head_branch")=="main"]
+    expected=expected_qualification_identity(upstream_sha, upstream_ref, patchset)
+    invalid_reason=None
+    for run in _workflow_dispatch_success_runs(repo):
+        run_id=run.get("id")
+        head_sha=run.get("head_sha")
+        if not run_id or run.get("head_branch")!="main":
+            continue
+        artifacts=gh_json(
+            f"repos/{repo}/actions/runs/{run_id}/artifacts?name=ci-qualification-{head_sha}&per_page=100"
+        ).get("artifacts",[])
+        if not artifacts or all(a.get("expired") for a in artifacts):
+            if head_sha==custom_sha:
+                invalid_reason="Successful CI run for this custom revision has no usable qualification artifact"
+            continue
+        for artifact in artifacts:
+            if artifact.get("expired"):
+                continue
+            record=None
+            try:
+                record=_download_qualification(repo,run_id,artifact["name"])
+                identity=qualification_identity(record)
+                if identity==expected:
+                    validate_ci_record(
+                        record,repo,run_id,upstream_sha=upstream_sha,
+                        upstream_ref=upstream_ref,patchset=patchset
+                    )
+                    return {"status":"FOUND","record":record,"workflow_run_id":run_id}
+                if (
+                    record.get("custom_repository_sha")==custom_sha
+                    or (
+                        record.get("upstream_repository")=="rustdesk/rustdesk"
+                        and (
+                            record.get("upstream_sha")==upstream_sha
+                            or record.get("upstream_ref")==upstream_ref
+                        )
+                    )
+                ):
+                    invalid_reason="Candidate qualification identity mismatch"
+            except Exception as exc:
+                if (
+                    head_sha==custom_sha
+                    or (
+                        isinstance(record,dict)
+                        and (
+                            record.get("upstream_sha")==upstream_sha
+                            or record.get("upstream_ref")==upstream_ref
+                        )
+                    )
+                ):
+                    invalid_reason=str(exc)
+    if invalid_reason:
+        return {"status":"INVALID","reason":invalid_reason}
+    return {"status":"MISSING"}
+
+
+def verify_ci(repo,custom_sha,upstream_sha,upstream_ref,patchset=None,workflow_run_id=None):
+    if len(custom_sha)!=40 or len(upstream_sha)!=40:
+        raise ValueError("Invalid release SHA")
+    if workflow_run_id is None:
+        runs=gh_json(
+            f"repos/{repo}/actions/workflows/ci.yml/runs"
+            f"?head_sha={custom_sha}&event=workflow_dispatch&status=success&per_page=100"
+        ).get("workflow_runs",[])
+        candidates=[r for r in runs if r.get("head_sha")==custom_sha and r.get("head_branch")=="main"]
+    else:
+        candidates=[gh_json(f"repos/{repo}/actions/runs/{workflow_run_id}")]
     if not candidates:
-        raise ValueError("No successful CI qualification run for this custom revision; run CI workflow_dispatch on main with the exact Stable upstream ref first")
+        raise ValueError("No successful CI qualification run for the requested qualification identity")
+    last_error=None
     for run in candidates:
         run_id=run["id"]
-        artifacts=gh_json(f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100").get("artifacts",[])
-        wanted=f"ci-qualification-{custom_sha}"
-        if not [a for a in artifacts if a.get("name")==wanted and not a.get("expired")]:
+        if run.get("head_branch")!="main" or run.get("event")!="workflow_dispatch" or run.get("conclusion")!="success":
+            last_error=ValueError("Qualification workflow provenance mismatch")
             continue
-        target=Path(".work/qualification")
-        if target.exists(): shutil.rmtree(target)
-        target.mkdir(parents=True)
-        subprocess.run(["gh","run","download",str(run_id),"-R",repo,"-n",wanted,"-D",str(target)],check=True,env=os.environ)
-        files=list(target.rglob("ci-qualification.json"))
-        if len(files)!=1: raise ValueError("Qualification artifact must contain exactly one record")
-        record=json.loads(files[0].read_text())
-        expected={"schema":"ci-qualification-v1","qualified":True,"custom_repository_sha":custom_sha,
-                  "upstream_repository":"rustdesk/rustdesk","upstream_sha":upstream_sha,
-                  "upstream_ref":upstream_ref,"event":"workflow_dispatch"}
-        for key,value in expected.items():
-            if record.get(key)!=value: raise ValueError(f"Qualification identity mismatch: {key}")
-        if record.get("workflow_run_id")!=run_id: raise ValueError("Qualification workflow run mismatch")
-        patchset=record.get("patchset")
-        if not isinstance(patchset,str) or not patchset: raise ValueError("Qualification missing patchset")
-        if record.get("common_patch_hash")!=patch_hash("common",patchset): raise ValueError("Qualification common patch hash mismatch")
-        if record.get("sos_patch_hash")!=patch_hash("sos",patchset): raise ValueError("Qualification SOS patch hash mismatch")
-        return record
-    raise ValueError("Successful CI workflow exists, but no exact qualification artifact was found")
+        artifact_name=f"ci-qualification-{run.get('head_sha')}"
+        artifacts=gh_json(
+            f"repos/{repo}/actions/runs/{run_id}/artifacts?name={artifact_name}&per_page=100"
+        ).get("artifacts",[])
+        usable=[a for a in artifacts if not a.get("expired")]
+        if not usable:
+            last_error=ValueError("Successful CI workflow exists, but no exact qualification artifact was found")
+            continue
+        try:
+            record=_download_qualification(repo,run_id,artifact_name)
+            if not re.fullmatch(r'[0-9a-f]{40}', str(record.get('custom_repository_sha',''))):
+                raise ValueError('Qualification custom repository SHA missing or invalid')
+            validate_ci_record(
+                record,repo,run_id,custom_sha=None,
+                upstream_sha=upstream_sha,upstream_ref=upstream_ref,
+                patchset=patchset
+            )
+            if qualification_identity(record)!=expected_qualification_identity(
+                upstream_sha,upstream_ref,record["patchset"]
+            ):
+                raise ValueError("Qualification identity mismatch")
+            return record
+        except Exception as exc:
+            last_error=exc
+            if workflow_run_id is not None:
+                break
+    raise last_error or ValueError("No exact qualification artifact was found")
 
 def _release(root, publish, channel='stable'):
     if channel == 'nightly' and publish:
@@ -205,7 +368,7 @@ def release(root, channel='stable'): _release(root, True, channel)
 
 if __name__=='__main__':
     a=argparse.ArgumentParser()
-    a.add_argument('mode',choices=['check','plan','aggregate','draft','release','verify-ci'])
+    a.add_argument('mode',choices=['check','plan','aggregate','draft','release','lookup','verify-ci'])
     a.add_argument('--channel',default='nightly')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
@@ -213,6 +376,8 @@ if __name__=='__main__':
     a.add_argument('--custom-sha')
     a.add_argument('--upstream-sha')
     a.add_argument('--upstream-ref')
+    a.add_argument('--patchset')
+    a.add_argument('--workflow-run-id',type=int)
     a.add_argument('--output',type=Path,default=Path('.work/ci-qualification.json'))
     a=a.parse_args()
     if a.mode=='check':
@@ -225,16 +390,33 @@ if __name__=='__main__':
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='+str(len(extra))+'\\n')
     elif a.mode=='draft':draft(a.root,a.channel)
     elif a.mode=='release':release(a.root,a.channel)
+    elif a.mode=='lookup':
+        if not all((a.custom_sha,a.upstream_sha,a.upstream_ref,a.patchset)):
+            raise SystemExit('lookup requires --custom-sha, --upstream-sha, --upstream-ref and --patchset')
+        result=lookup_ci_qualification(a.repository,a.custom_sha,a.upstream_sha,a.upstream_ref,a.patchset)
+        a.output.parent.mkdir(parents=True,exist_ok=True)
+        a.output.write_text(json.dumps(result,indent=2)+'\n')
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+                out.write(f"status={result['status']}\n")
+                out.write(f"patchset={a.patchset}\n")
+                if result.get('workflow_run_id'):
+                    out.write(f"workflow_run_id={result['workflow_run_id']}\n")
+                if result.get('record',{}).get('custom_repository_sha'):
+                    out.write(f"qualification_custom_sha={result['record']['custom_repository_sha']}\n")
+                if result.get('reason'):
+                    out.write("reason="+result['reason'].replace('\n',' ')+"\n")
     elif a.mode=='verify-ci':
         if not all((a.custom_sha,a.upstream_sha,a.upstream_ref)):
             raise SystemExit('verify-ci requires --custom-sha, --upstream-sha and --upstream-ref')
-        record=verify_ci(a.repository,a.custom_sha,a.upstream_sha,a.upstream_ref)
+        record=verify_ci(a.repository,a.custom_sha,a.upstream_sha,a.upstream_ref,a.patchset,a.workflow_run_id)
         a.output.parent.mkdir(parents=True,exist_ok=True)
-        a.output.write_text(json.dumps(record,indent=2)+'\\n')
+        a.output.write_text(json.dumps(record,indent=2)+'\n')
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as out:
-                out.write(f"patchset={record['patchset']}\\n")
-                out.write(f"upstream_version={record['upstream_version']}\\n")
+                out.write(f"patchset={record['patchset']}\n")
+                out.write(f"upstream_version={record['upstream_version']}\n")
                 out.write(f"workflow_run_id={record['workflow_run_id']}\n")
+                out.write(f"custom_repository_sha={record['custom_repository_sha']}\n")
     else:
         aggregate(a.root,a.channel,a.experimental)

@@ -109,7 +109,7 @@ class MatrixTests(unittest.TestCase):
         self.assertIn('promote_stable', ci_text)
         self.assertIn('ci-bridge-${{ github.sha }}', ci_text)
         tag_text=(ROOT/'.github/workflows/tag.yml').read_text()
-        self.assertIn('ci-bridge-${{ github.sha }}', tag_text)
+        self.assertIn('ci-bridge-${{ needs.qualification.outputs.qualification_custom_sha }}', tag_text)
     def test_platforms_consume_source_not_resolver(self):
         w=yaml.safe_load((ROOT/'.github/workflows/build-platform.yml').read_text());steps=w['jobs']['platform-build']['steps'];runs='\n'.join(s.get('run','') for s in steps)
         self.assertIn('prepared_source.py unpack',runs)

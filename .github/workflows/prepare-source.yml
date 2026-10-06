@@ -19,6 +19,12 @@ env:
       patchset:
         type: string
         required: true
+      qualification_workflow_run_id:
+        type: string
+        default: ''
+      qualification_custom_sha:
+        type: string
+        default: ''
     outputs:
       standard_artifact:
         value: ${{ jobs.prepare.outputs.standard_artifact }}
@@ -28,6 +34,7 @@ env:
         value: ${{ jobs.prepare.outputs.upstream_version }}
 permissions:
   contents: read
+  actions: read
 jobs:
   prepare:
     runs-on: ubuntu-22.04
@@ -40,6 +47,8 @@ jobs:
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
       UPSTREAM_REF: ${{ inputs.upstream_ref }}
       BUILD_CHANNEL: ${{ inputs.channel }}
+      QUALIFICATION_WORKFLOW_RUN_ID: ${{ inputs.qualification_workflow_run_id }}
+      QUALIFICATION_CUSTOM_SHA: ${{ inputs.qualification_custom_sha }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -48,8 +57,10 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        name: test-bridge-${{ github.run_id }}
+        name: ${{ inputs.qualification_workflow_run_id != '' && format('ci-bridge-{0}', inputs.qualification_custom_sha) || format('test-bridge-{0}', github.run_id) }}
         path: .work/bridge-files
+        repository: ${{ github.repository }}
+        run-id: ${{ inputs.qualification_workflow_run_id != '' && inputs.qualification_workflow_run_id || github.run_id }}
     - name: Install pinned Syft for exact-source upstream SBOM profile
       uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610
     - name: Prepare Common once and fork independent variant sources
