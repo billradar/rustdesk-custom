@@ -296,8 +296,6 @@ jobs:
         RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
       run: 'export PREPARED_SOURCE_DIR="$PWD/.work/prepared-input/source"
 
-        export RUSTDESK_BRIDGE_DIR="$(cygpath -w "$PWD/.work/prepared-input/source")"
-
         export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
 
         bash "scripts/build/$VARIANT.sh" "$UPSTREAM_REF"

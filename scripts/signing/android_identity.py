@@ -31,7 +31,9 @@ def preflight():
         raise ValueError('BLOCKED: LEGACY SIGNING SECRETS NOT AVAILABLE')
 
 def expected():
-    data = json.loads((ROOT / 'metadata/android-signing-identity.json').read_text())
+    metadata = json.loads((ROOT / 'metadata/signing/android-standard.json').read_text())
+    data = dict(metadata['legacy'])
+    data['package_name'] = metadata['package_name']
     if data['source'] != 'legacy-production-apk' or data['private_key_stored'] is not False:
         raise ValueError('SIGNING: untrusted identity metadata')
     if not re.fullmatch('[0-9a-f]{64}', data['certificate_sha256']):
@@ -41,11 +43,15 @@ def expected():
     return data
 
 def yubikey_expected():
-    data = json.loads((ROOT / 'metadata/yubikey-android-signing-identity.json').read_text())
+    metadata = json.loads((ROOT / 'metadata/signing/android-standard.json').read_text())
+    data = dict(metadata['production'])
+    data['package_name'] = metadata['package_name']
     if data.get('identity_kind') != 'new-yubikey-hardware-signing-identity':
         raise ValueError('SIGNING: unexpected YubiKey identity metadata')
     if not re.fullmatch('[0-9a-f]{64}', data.get('certificate_sha256', '')):
         raise ValueError('SIGNING: missing YubiKey certificate fingerprint')
+    if not re.fullmatch('[A-Za-z0-9_.]+', data.get('package_name', '')):
+        raise ValueError('SIGNING: missing YubiKey package identity')
     return data
 
 def tool(name):
