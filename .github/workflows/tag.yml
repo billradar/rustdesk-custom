@@ -131,7 +131,7 @@ jobs:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.qualification.outputs.patchset }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
@@ -144,14 +144,13 @@ jobs:
     name: Build Stable Linux and macOS targets
     needs:
     - resolve
-    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.qualification.outputs.patchset }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
@@ -164,15 +163,14 @@ jobs:
     name: Build Stable Android artifacts for production signing
     needs:
     - resolve
-    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.qualification.outputs.patchset }}
-      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
@@ -182,7 +180,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-sign:
     name: Sign Stable Android production artifacts with YubiKey PIV 9C
-    needs: [resolve, draft-preflight, qualification, prepare, android-build]
+    needs: [resolve, draft-preflight, prepare, android-build]
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
@@ -246,11 +244,11 @@ jobs:
         arches: aarch64,armv7,x86_64
         channel: stable
         upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-        upstream_version: ${{ needs.prepare.outputs.upstream_version }}
-        patchset: ${{ needs.qualification.outputs.patchset }}
+        upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+        patchset: ${{ needs.resolve.outputs.patchset }}
   aggregate:
     name: Aggregate verified Stable production artifacts
-    needs: [resolve, draft-preflight, qualification, prepare, windows-build, platforms-build, android-build, android-sign]
+    needs: [resolve, draft-preflight, prepare, windows-build, platforms-build, android-build, android-sign]
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
@@ -277,7 +275,7 @@ jobs:
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
         path: .work/all-targets
         merge-multiple: false
     - name: Fail-closed expected target and cross-platform provenance gate
@@ -293,7 +291,6 @@ jobs:
     needs:
     - resolve
     - draft-preflight
-    - qualification
     - prepare
     - windows-build
     - platforms-build
@@ -322,7 +319,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
     - name: Package inspectors for supported aggregate
@@ -335,7 +332,6 @@ jobs:
     needs:
     - resolve
     - draft-preflight
-    - qualification
     - prepare
     - windows-build
     - platforms-build
@@ -356,7 +352,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      PATCHSET: ${{ needs.qualification.outputs.patchset }}
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.resolve.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
@@ -368,7 +364,7 @@ jobs:
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-stable-${{ needs.prepare.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
         path: .work/collected
         merge-multiple: false
     - name: Package inspectors for supported aggregate
