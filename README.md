@@ -8,6 +8,30 @@ RustDesk Custom is a maintained RustDesk distribution built from upstream RustDe
 
 The repository provides the build, validation, packaging, signing, and release automation needed to maintain those changes without keeping a separate full copy of the upstream source tree.
 
+## 中文桥接
+
+**RustDesk Custom 是一个面向维护、构建、验证和发布的 RustDesk 定制仓库，而不是完整的 RustDesk 源码 Fork。**
+
+项目以官方 RustDesk 上游源码为基础，通过经过审查的 `patchsets/` 管理定制修改，并由 CI/CD 自动完成：
+
+- 上游版本与精确源码版本解析；
+- Standard / SOS 多平台构建；
+- 架构、配置、校验和与 provenance 验证；
+- Android Standard 生产签名隔离；
+- Stable / Nightly 构建与发布资格检查；
+- Stable Release 的制品聚合、验证和发布。
+
+### 中文入口
+
+- **架构总览**：[docs/architecture/current.md](docs/architecture/current.md)
+- **构建文档**：[docs/build/](docs/build/)
+- **平台文档**：[docs/platform/](docs/platform/)
+- **发布与资格检查**：[docs/release/](docs/release/)
+- **Android 生产签名**：[docs/signing/](docs/signing/)
+- **上游与 Patch 管理**：[docs/upstream/](docs/upstream/)
+
+> 中文部分用于帮助中文使用者快速理解仓库定位、CI/CD 边界和文档入口；具体操作规范以对应的当前英文文档和可执行 Contract 为准。
+
 ## What this project does
 
 - Maintains reviewed RustDesk patchsets.
