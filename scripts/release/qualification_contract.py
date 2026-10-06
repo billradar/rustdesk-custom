@@ -140,6 +140,14 @@ class MatrixTests(unittest.TestCase):
         self.assertNotIn('stable_custom_sha', tag_text)
         self.assertNotIn('stable_owner_run_id', tag_text)
         self.assertNotIn('gh workflow run ci.yml', tag_text)
+        patchsets_text=(ROOT/'scripts/upstream/patchsets.py').read_text()
+        self.assertEqual(patchsets_text.count("f.write('patchset='+name+'\\\\n')"),1)
+        prepared=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())
+        prepare_runs=[s.get('run','') for s in prepared['jobs']['prepare']['steps']]
+        self.assertLess(next(i for i,x in enumerate(prepare_runs) if 'scripts/source/prepare.sh' in x),
+                        next(i for i,x in enumerate(prepare_runs) if 'build_adapter.py' in x))
+        self.assertNotIn('actions/cache',router_text)
+        self.assertIn('gh run list',stable_router)
     def test_platforms_consume_source_not_resolver(self):
         w=yaml.safe_load((ROOT/'.github/workflows/build-platform.yml').read_text());steps=w['jobs']['platform-build']['steps'];runs='\n'.join(s.get('run','') for s in steps)
         self.assertIn('prepared_source.py unpack',runs)
