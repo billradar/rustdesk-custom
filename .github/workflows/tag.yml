@@ -285,6 +285,8 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
       patchset: ${{ needs.qualification.outputs.patchset }}
+      qualification_workflow_run_id: ${{ needs.qualification.outputs.workflow_run_id }}
+      qualification_custom_sha: ${{ needs.qualification.outputs.qualification_custom_sha }}
   windows-build:
     name: Build Stable Windows targets
     needs:
