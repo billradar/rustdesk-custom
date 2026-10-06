@@ -5,6 +5,7 @@ from unittest.mock import patch
 import scripts.build.build_adapter as build_adapter
 import scripts.source.prepared_source as prepared_source
 import scripts.release.channel as channel
+import scripts.release.qualification as qualification
 ROOT = Path(__file__).resolve().parents[2]
 import yaml
 
@@ -86,23 +87,94 @@ class ChannelPolicyTests(unittest.TestCase):
         stable_ci=jobs['stable-ci-qualification']
         self.assertIn('resolve',stable_ci['needs'])
         self.assertIn('draft-preflight',stable_ci['needs'])
-        self.assertIn('actions: write',yaml.safe_dump(stable_ci['permissions']))
-        stable_steps='\\n'.join(s.get('name','')+'\\n'+s.get('run','') for s in stable_ci['steps'] if isinstance(s,dict))
-        self.assertIn('Reuse existing exact CI qualification when available',stable_steps)
-        self.assertIn('scripts/release/qualification.py verify-ci',stable_steps)
-        self.assertIn('Dispatch CI only when exact qualification is missing',stable_steps)
-        self.assertIn('gh workflow run ci.yml',stable_steps)
-        self.assertIn('--ref main',stable_steps)
-        self.assertIn('-f upstream_ref="$UPSTREAM_REF"',stable_steps)
-        dispatch_step=next(s for s in stable_ci['steps'] if s.get('name') == 'Dispatch CI only when exact qualification is missing')
-        self.assertEqual(dispatch_step.get('if'), "steps.reuse.outputs.found != 'true'")
-        self.assertIn('Wait for newly dispatched exact CI',stable_steps)
+        self.assertEqual(stable_ci['permissions'],{'contents':'read','actions':'write'})
+        stable_steps='\n'.join(s.get('name','')+'\n'+s.get('run','') for s in stable_ci['steps'] if isinstance(s,dict))
+        self.assertIn('Lookup reusable CI qualification',stable_steps)
+        self.assertIn('scripts/release/qualification.py lookup',stable_steps)
+        invalid_step=next(s for s in stable_ci['steps'] if s.get('name') == 'Fail closed on invalid qualification')
+        self.assertEqual(invalid_step.get('if'), "steps.reuse.outputs.status == 'INVALID'")
+        self.assertIn('Dispatch Stable-owned CI qualification',stable_steps)
+        self.assertIn('return_run_details:true',stable_steps)
+        self.assertIn('qualification_mode',stable_steps)
+        self.assertIn('stable_owner_run_id',stable_steps)
+        self.assertIn('stable_custom_sha',stable_steps)
+        self.assertIn('stable_upstream_sha',stable_steps)
+        self.assertIn('owner_run',stable_steps)
+        self.assertIn('actions/concurrency_groups',stable_steps)
+        self.assertIn('Wait for exact Stable qualification run',stable_steps)
         self.assertIn('workflow_dispatch',stable_steps)
-        self.assertIn('CUSTOM_SHA',stable_steps)
-        self.assertIn('DISPATCH_STARTED_AT',stable_steps)
-        self.assertEqual(jobs['stable-ci-qualification'].get('permissions',{}).get('contents'),'read')
-        self.assertEqual(jobs['stable-ci-qualification'].get('permissions',{}).get('actions'),'write')
-        self.assertEqual(jobs['qualification'].get('permissions',{}).get('actions'),None)
+        self.assertIn('head_sha',stable_steps)
+        self.assertIn('workflow_run_id',stable_steps)
+        dispatch_step=next(s for s in stable_ci['steps'] if s.get('name') == 'Dispatch Stable-owned CI qualification')
+        self.assertEqual(dispatch_step.get('if'), "steps.reuse.outputs.status == 'MISSING' && steps.active.outputs.found != 'true'")
+        self.assertEqual(stable_ci.get('outputs',{}).get('patchset'), '${{ steps.patchset.outputs.patchset }}')
+        self.assertEqual(stable_ci.get('outputs',{}).get('workflow_run_id'), '${{ steps.outputs.outputs.workflow_run_id }}')
+        self.assertEqual(stable_ci.get('outputs',{}).get('qualification_custom_sha'), '${{ steps.outputs.outputs.qualification_custom_sha }}')
+
+    def test_stable_concurrency_and_ci_contract(self):
+        ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
+        concurrency=ci['concurrency']
+        self.assertIn("inputs.qualification_mode == 'stable'",concurrency['group'])
+        self.assertIn("format('stable-qualification-",concurrency['group'])
+        self.assertIn("inputs.qualification_mode == 'stable'",concurrency['cancel-in-progress'])
+        self.assertIn('workflow_dispatch',ci['on'])
+        self.assertIn('qualification_mode',ci['on']['workflow_dispatch']['inputs'])
+        self.assertIn('stable_owner_run_id',ci['on']['workflow_dispatch']['inputs'])
+        self.assertIn('stable_custom_sha',ci['on']['workflow_dispatch']['inputs'])
+        self.assertIn('stable_upstream_sha',ci['on']['workflow_dispatch']['inputs'])
+        qual=ci['jobs']['qualification']
+        steps='\n'.join(st.get('name','')+'\n'+st.get('run','') for st in qual['steps'] if isinstance(st,dict))
+        self.assertIn('Validate Stable qualification ownership and source',steps)
+        self.assertIn("'qualification_mode':os.environ['QUALIFICATION_MODE']",steps)
+        self.assertIn("'stable_owner_run_id'",steps)
+        self.assertIn("'stable_custom_sha'",steps)
+        self.assertNotEqual(concurrency['cancel-in-progress'],False)
+
+    def test_qualification_identity_and_lookup_semantics(self):
+        common='c'*64; sos='d'*64
+        def record(custom='a'*40, upstream='b'*40, ref='v2', patchset='v2', common_hash=common, sos_hash=sos, mode='manual'):
+            return {
+                'schema':'ci-qualification-v1','qualified':True,'workflow_run_id':101,
+                'event':'workflow_dispatch','custom_repository_sha':custom,
+                'upstream_repository':'rustdesk/rustdesk','upstream_sha':upstream,
+                'upstream_ref':ref,'patchset':patchset,
+                'common_patch_hash':common_hash,'sos_patch_hash':sos_hash,
+                'qualification_mode':mode
+            }
+        with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
+             patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'a'*40}]), \
+             patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'a'*40,'expired':False}]}), \
+             patch.object(qualification,'_download_qualification',return_value=record()):
+            result=qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')
+            self.assertEqual(result['status'],'FOUND')
+        with patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[]):
+            result=qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')
+            self.assertEqual(result['status'],'MISSING')
+        bad_upstream=record(upstream='e'*40)
+        with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
+             patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'a'*40}]), \
+             patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'a'*40,'expired':False}]}), \
+             patch.object(qualification,'_download_qualification',return_value=bad_upstream):
+            self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'INVALID')
+        bad_patchset=record(patchset='v1')
+        with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
+             patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'f'*40}]), \
+             patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'f'*40,'expired':False}]}), \
+             patch.object(qualification,'_download_qualification',return_value=bad_patchset):
+            self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'INVALID')
+        bad_hash=record(common_hash='0'*64)
+        with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
+             patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'a'*40}]), \
+             patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'a'*40,'expired':False}]}), \
+             patch.object(qualification,'_download_qualification',return_value=bad_hash):
+            self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'INVALID')
+        reused=record(custom='f'*40)
+        with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
+             patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'f'*40}]), \
+             patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'f'*40,'expired':False}]}), \
+             patch.object(qualification,'_download_qualification',return_value=reused):
+            self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'FOUND')
+
     def test_nightly_uses_default_branch_not_stable(self):
         with patch.object(channel,'api',return_value={'default_branch':'development'}),patch.object(channel,'resolve_ref',return_value='a'*40) as resolve,patch.object(channel,'outputs') as output:
             channel.resolve('nightly');resolve.assert_called_once_with('development')
