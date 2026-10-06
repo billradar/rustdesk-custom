@@ -107,6 +107,21 @@ class ChannelPolicyTests(unittest.TestCase):
         steps='\n'.join(st.get('name','')+'\n'+st.get('run','') for st in qual['steps'] if isinstance(st,dict))
         self.assertIn('Create exact CI qualification record',steps)
         self.assertNotIn('Validate Stable qualification ownership and source',steps)
+    def test_ci_cd_isolation_contract(self):
+        ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
+        router=yaml.safe_load((ROOT/'.github/workflows/upstream-event-router.yml').read_text())
+        tag=(ROOT/'.github/workflows/tag.yml').read_text()
+        ci_text=(ROOT/'.github/workflows/ci.yml').read_text()
+        self.assertNotIn('promote_stable',ci['on']['workflow_dispatch']['inputs'])
+        self.assertNotIn('gh workflow run tag.yml',ci_text)
+        self.assertNotIn('ci-qualification-',router['jobs']['stable-tag']['steps'][1].get('run',''))
+        self.assertNotIn('workflow run ci.yml',router['jobs']['stable-tag']['steps'][1].get('run',''))
+        self.assertIn('gh workflow run tag.yml',router['jobs']['stable-tag']['steps'][1].get('run',''))
+        self.assertNotIn('compat-check.yml',tag)
+        self.assertNotIn('verify_source.py',tag)
+        self.assertIn('--exact',tag)
+        self.assertNotIn('ci-qualification',tag)
+
     def test_qualification_identity_and_lookup_semantics(self):
         common='c'*64; sos='d'*64
         def record(custom='a'*40, upstream='b'*40, ref='v2', patchset='v2', common_hash=common, sos_hash=sos, mode='manual'):
