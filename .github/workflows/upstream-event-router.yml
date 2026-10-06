@@ -64,7 +64,7 @@ jobs:
       id: state
       run: |
         set -euo pipefail
-        runs="$(gh run list --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
+        runs="$(gh run list --repo '${{ github.repository }}' --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
         export RUNS="$runs"
         state="$(python3 - <<'PY'
         import json, os
@@ -110,7 +110,7 @@ jobs:
       id: state
       run: |
         set -euo pipefail
-        runs="$(gh run list --workflow tag.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
+        runs="$(gh run list --repo '${{ github.repository }}' --workflow tag.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
         export RUNS="$runs"
         state="$(python3 - <<'PY'
         import json, os
