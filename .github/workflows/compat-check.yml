@@ -133,6 +133,7 @@ jobs:
         python3 scripts/validation/native_config_contract.py
         python3 scripts/signing/android_signing_contract.py
   preflight:
+    name: Validate patch and API compatibility
     needs: resolve
     runs-on: ubuntu-22.04
     timeout-minutes: 45
