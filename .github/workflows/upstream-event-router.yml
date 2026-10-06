@@ -70,7 +70,8 @@ jobs:
           -f upstream_ref='${{ needs.detect.outputs.production_ref }}' \
           -f force_rebuild=false \
           -f include_experimental=true \
-          -f release_mode=build
+          -f release_mode=build \
+          -f automation_source=upstream-event-router
         mkdir -p .upstream-state
         echo '${{ needs.detect.outputs.production_sha }}' > .upstream-state/sha
     - name: Remember routed default-branch revision
@@ -113,4 +114,4 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh workflow run ci.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' -f force_rebuild=false -f promote_stable=true
+        gh workflow run ci.yml --repo '${{ github.repository }}' --ref main -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' -f force_rebuild=false -f promote_stable=true -f automation_source=upstream-event-router
