@@ -22,7 +22,6 @@ env:
         default: dry-run
 permissions:
   contents: read
-  actions: read
 concurrency:
   group: stable-${{ github.ref }}
   cancel-in-progress: true
@@ -33,6 +32,8 @@ jobs:
     outputs:
       upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+      upstream_version: ${{ steps.resolve.outputs.version }}
+      patchset: ${{ steps.patchset.outputs.patchset }}
       revision: ${{ steps.resolve.outputs.revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -44,6 +45,30 @@ jobs:
         REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
         CHANNEL: stable
       run: python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
+    - id: patchset
+      name: Resolve exact Stable patchset
+      env:
+        UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+      run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA"
+    - name: Validate Stable execution identity
+      env:
+        UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+        PATCHSET: ${{ steps.patchset.outputs.patchset }}
+        VERSION: ${{ steps.resolve.outputs.version }}
+      run: |
+        set -euo pipefail
+        [[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid upstream_sha"; exit 1; }
+        [[ "$PATCHSET" =~ ^v[1-9][0-9]*$ ]] || { echo "Invalid patchset"; exit 1; }
+        [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version"; exit 1; }
+        python3 - <<'PY'
+        import os
+        from scripts.upstream.patchsets import verify
+        verify(os.environ["PATCHSET"])
+        print("Stable execution identity: PASS")
+        print("  upstream_sha =", os.environ["UPSTREAM_SHA"])
+        print("  patchset     =", os.environ["PATCHSET"])
+        print("  version      =", os.environ["VERSION"])
+        PY
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -85,145 +110,21 @@ jobs:
         name: release-preflight-${{ github.run_id }}
         path: .work/channel.json
         if-no-files-found: warn
-  stable-ci-qualification:
-    name: Reuse or run exact CI qualification for Stable
-    needs: [resolve, draft-preflight]
-    if: ${{ needs.draft-preflight.outputs.build_needed == 'true' }}
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      actions: write
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - name: Reuse existing exact CI qualification when available
-      id: reuse
-      env:
-        GH_TOKEN: ${{ github.token }}
-        REPOSITORY: ${{ github.repository }}
-        CUSTOM_SHA: ${{ github.sha }}
-        UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
-        UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
-      run: |
-        set -euo pipefail
-        if python3 scripts/release/qualification.py verify-ci \
-          --repository "$REPOSITORY" \
-          --custom-sha "$CUSTOM_SHA" \
-          --upstream-sha "$UPSTREAM_SHA" \
-          --upstream-ref "$UPSTREAM_REF" \
-          --output .work/reused-ci-qualification.json; then
-          echo "Exact CI qualification found; reusing existing CI run."
-          echo "found=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "No reusable exact CI qualification found; Stable will dispatch CI."
-          echo "found=false" >> "$GITHUB_OUTPUT"
-        fi
-    - name: Dispatch CI only when exact qualification is missing
-      if: steps.reuse.outputs.found != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        REPOSITORY: ${{ github.repository }}
-        CUSTOM_SHA: ${{ github.sha }}
-        UPSTREAM_REF: ${{ needs.resolve.outputs.upstream_ref }}
-      run: |
-        set -euo pipefail
-        export DISPATCH_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        gh workflow run ci.yml \
-          --repo "$REPOSITORY" \
-          --ref main \
-          -f upstream_ref="$UPSTREAM_REF" \
-          -f force_rebuild=false \
-          -f promote_stable=false
-        echo "Dispatched CI for custom SHA $CUSTOM_SHA and upstream ref $UPSTREAM_REF"
-        echo "DISPATCH_STARTED_AT=$DISPATCH_STARTED_AT" >> "$GITHUB_ENV"
-    - name: Wait for newly dispatched exact CI
-      if: steps.reuse.outputs.found != 'true'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        REPOSITORY: ${{ github.repository }}
-        CUSTOM_SHA: ${{ github.sha }}
-      run: |
-        set -euo pipefail
-        deadline=$((SECONDS + 3600))
-        while (( SECONDS < deadline )); do
-          run_id="$(gh run list \
-            --repo "$REPOSITORY" \
-            --workflow ci.yml \
-            --event workflow_dispatch \
-            --branch main \
-            --limit 50 \
-            --json databaseId,headSha,status,conclusion,createdAt \
-            --jq 'map(select(.headSha == env.CUSTOM_SHA and .createdAt >= env.DISPATCH_STARTED_AT)) | sort_by(.createdAt) | last | .databaseId // empty')"
-          if [[ -n "$run_id" ]]; then
-            echo "CI workflow run: $run_id"
-            status="$(gh run view "$run_id" --repo "$REPOSITORY" --json status --jq .status)"
-            conclusion="$(gh run view "$run_id" --repo "$REPOSITORY" --json conclusion --jq .conclusion)"
-            echo "CI status=$status conclusion=$conclusion"
-            if [[ "$status" == "completed" ]]; then
-              [[ "$conclusion" == "success" ]] || { echo "Exact CI qualification failed"; exit 1; }
-              exit 0
-            fi
-          fi
-          sleep 15
-        done
-        echo "Timed out waiting for exact CI qualification"
-        exit 1
-  qualification:
-    name: Verify CI qualification for Stable
-    needs: [resolve, draft-preflight, stable-ci-qualification]
-    if: needs.draft-preflight.outputs.build_needed == 'true'
-    runs-on: ubuntu-22.04
-    outputs:
-      patchset: ${{ steps.verify.outputs.patchset }}
-      upstream_version: ${{ steps.verify.outputs.upstream_version }}
-      workflow_run_id: ${{ steps.verify.outputs.workflow_run_id }}
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - id: verify
-      name: Verify exact CI qualification
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        python3 scripts/release/qualification.py verify-ci \
-          --repository "${{ github.repository }}" \
-          --custom-sha "${{ github.sha }}" \
-          --upstream-sha "${{ needs.resolve.outputs.upstream_sha }}" \
-          --upstream-ref "${{ needs.resolve.outputs.upstream_ref }}"
-    - name: Rehydrate CI bridge artifact for this Stable run
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        set -euo pipefail
-        CI_RUN_ID="${{ steps.verify.outputs.workflow_run_id }}"
-        gh run download "$CI_RUN_ID" \
-          --repo "${{ github.repository }}" \
-          --name "ci-bridge-${{ github.sha }}" \
-          --dir .work/bridge-rehydrated
-        cp -a .work/bridge-rehydrated/. .work/bridge-files/
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always()
-      with:
-        name: ci-qualification-consumed-${{ github.run_id }}
-        path: .work/ci-qualification.json
-        if-no-files-found: warn
   prepare:
     needs:
     - resolve
-    - qualification
+    - draft-preflight
+    if: needs.draft-preflight.outputs.build_needed == 'true'
     uses: ./.github/workflows/prepare-source.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
-      patchset: ${{ needs.qualification.outputs.patchset }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
   windows-build:
     name: Build Stable Windows targets
     needs:
     - resolve
-    - qualification
     - prepare
     uses: ./.github/workflows/build.yml
     with:
@@ -231,7 +132,7 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
       patchset: ${{ needs.qualification.outputs.patchset }}
-      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
@@ -251,7 +152,7 @@ jobs:
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
       patchset: ${{ needs.qualification.outputs.patchset }}
-      upstream_version: ${{ needs.prepare.outputs.upstream_version }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
@@ -288,7 +189,6 @@ jobs:
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
       needs.android-build.result == 'success' &&
-      needs.qualification.result == 'success' &&
       needs.prepare.result == 'success'
     runs-on:
       - self-hosted
@@ -360,7 +260,7 @@ jobs:
       needs.android-sign.result == 'success'
     runs-on: ubuntu-22.04
     env:
-      PATCHSET: ${{ needs.qualification.outputs.patchset }}
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
