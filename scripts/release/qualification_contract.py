@@ -217,6 +217,13 @@ import unittest
 import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
+class QualificationSerializationTests(unittest.TestCase):
+    def test_release_qualification_writes_real_newlines(self):
+        text=(ROOT/'scripts/release/qualification.py').read_text()
+        self.assertNotIn(r"\\n", text)
+        self.assertIn("target-plan.json').write_text(json.dumps(p,indent=2)+'\\n')", text)
+        self.assertIn("f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='", text)
+
 class ParallelGateTests(unittest.TestCase):
     def workflow(self,name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
     def test_independent_preparations_and_variant_checks(self):
