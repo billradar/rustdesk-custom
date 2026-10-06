@@ -51,7 +51,7 @@ jobs:
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
         UPSTREAM_REF: ${{ steps.resolve.outputs.upstream_ref }}
-      run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --ref "$UPSTREAM_REF"
+      run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --ref "$UPSTREAM_REF" --exact
     - name: Validate Stable execution identity
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
