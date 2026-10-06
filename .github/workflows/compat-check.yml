@@ -194,6 +194,7 @@ jobs:
         - standard
         - sos
   bridge:
+    name: Generate official bridge compatibility artifact
     needs:
     - resolve
     env:
