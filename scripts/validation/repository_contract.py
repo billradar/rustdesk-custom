@@ -23,9 +23,6 @@ NON_FUNCTIONAL_ROOT_NAMES = {
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
 }
-CURRENT_DOC_DIRS = {
-    "architecture", "build", "platform", "release", "signing", "upstream", "archive"
-}
 FORBIDDEN_FILENAMES = {
     "patch-revision.txt",
     "requirements-build.txt",
@@ -84,6 +81,10 @@ def is_non_functional_document(path: Path) -> bool:
         return True
     if path.name in NON_FUNCTIONAL_ROOT_NAMES:
         return True
+    if path.name.startswith("LICENSE."):
+        return True
+    if path.name.startswith("CHANGELOG."):
+        return True
     return False
 
 
@@ -115,6 +116,8 @@ def check_naming(files: list[Path], errors: list[str]) -> None:
 
 def check_forbidden_paths(files: list[Path], errors: list[str]) -> None:
     for path in files:
+        if is_non_functional_document(path):
+            continue
         r = rel(path)
         parts = path.parts
         if "tests" in parts:
