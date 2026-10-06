@@ -59,7 +59,7 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(t['jobs']['resolve']['outputs']['patchset'], "${{ steps.patchset.outputs.patchset }}")
         self.assertEqual(t['jobs']['resolve']['outputs']['upstream_version'], "${{ steps.resolve.outputs.version }}")
         self.assertIn('scripts/upstream/patchsets.py',t['jobs']['resolve']['steps'][2]['run'])
-        for name in ('prepare','windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
+        for name in ('prepare','windows-build','platforms-build','android-build','android-sign','aggregate','publish-existing','release','draft'):
             self.assertNotIn('qualification',str(t['jobs'][name].get('needs',[])))
             self.assertNotIn('compatibility',str(t['jobs'][name].get('needs',[])))
         self.assertNotIn('gh workflow run ci.yml',str(t['jobs']))
@@ -100,8 +100,8 @@ class MatrixTests(unittest.TestCase):
         self.assertIn("needs.android-sign.result == 'success'", stable)
         nightly=(ROOT/".github/workflows/nightly.yml").read_text()
         self.assertNotIn("production_android_signing", nightly)
-        self.assertIn("needs.android-sign.result == 'success'", nightly)
-        self.assertIn("REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'", nightly)
+        self.assertNotIn("android-sign", nightly)
+        self.assertIn("REQUIRE_ANDROID_PRODUCTION_SIGNING: 'false'", nightly)
         self.assertIn("channel in ('stable','nightly')", p)
         self.assertEqual(t['jobs']['draft']['steps'][-1]['run'],'python3 scripts/release/qualification.py draft --root .work/collected')
         self.assertEqual(t['jobs']['publish-existing']['steps'][-1]['run'],'python3 scripts/release/qualification.py publish-existing --channel stable')
