@@ -1,0 +1,80 @@
+name: Stable Linux and macOS Build Core
+env:
+  PYTHONPATH: .
+  AUTOMATION_MODE: '1'
+'on':
+  workflow_call:
+    inputs:
+      upstream_ref: {type: string, required: true}
+      upstream_sha: {type: string, required: true}
+      channel: {type: string, required: true}
+      patchset: {type: string, required: true}
+      upstream_version: {type: string, required: true}
+      standard_artifact: {type: string, required: true}
+      sos_artifact: {type: string, required: true}
+    secrets:
+      RUSTDESK_KEY: {required: true}
+      RUSTDESK_PASSWORD: {required: true}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  plan:
+    name: Resolve build target matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      android_matrix: ${{ steps.split.outputs.android_matrix }}
+      android_count: ${{ steps.split.outputs.android_count }}
+      other_platform_matrix: ${{ steps.split.outputs.other_platform_matrix }}
+      other_platform_count: ${{ steps.split.outputs.other_platform_count }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: plan
+      env:
+        CHANNEL: ${{ inputs.channel }}
+        EXPERIMENTAL: ${{ inputs.include_experimental }}
+      run: 'args=(); [[ "$EXPERIMENTAL" != true ]] || args+=(--experimental)
+
+        python3 scripts/release/qualification.py plan --channel "$CHANNEL" "${args[@]}"'
+    - id: split
+      name: Split Android and other platform target matrices
+      run: |
+        android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
+        android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
+        other_platform_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
+        other_platform_count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
+        echo "android_matrix=$android_matrix" >> "$GITHUB_OUTPUT"
+        echo "android_count=$android_count" >> "$GITHUB_OUTPUT"
+        echo "other_platform_matrix=$other_platform_matrix" >> "$GITHUB_OUTPUT"
+        echo "other_platform_count=$other_platform_count" >> "$GITHUB_OUTPUT"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: target-plan-${{ github.run_id }}
+        path: .work/target-plan.json
+        if-no-files-found: error
+  platforms:
+    name: Build Linux and macOS targets
+    needs: plan
+    if: inputs.android_only != true && inputs.windows_only != true && needs.plan.outputs.other_platform_count != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.other_platform_matrix) }}
+    uses: ./.github/workflows/build-platform.yml
+    with:
+      platform: ${{ matrix.platform }}
+      arch: ${{ matrix.arch }}
+      variant: ${{ matrix.variant }}
+      runner: ${{ matrix.runner }}
+      upstream_ref: ${{ inputs.upstream_ref }}
+      upstream_sha: ${{ inputs.upstream_sha }}
+      upstream_version: ${{ inputs.upstream_version }}
+      patchset: ${{ inputs.patchset }}
+      channel: ${{ inputs.channel }}
+      source_artifact: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
