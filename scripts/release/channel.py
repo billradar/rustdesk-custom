@@ -6,6 +6,7 @@ from scripts.upstream.resolve import api, choose_stable, resolve_ref
 from scripts.release.github import collect, request, gh
 from scripts.upstream.patchsets import verify, patch_hash
 from scripts.release.production import assets, REPOSITORY
+from scripts.release.naming import windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
 RELEASE_IDENTITY=ROOT/'metadata/release/identity.json'
 # Canonical release revision lives under metadata/release/identity.json.
@@ -54,11 +55,11 @@ def release_preflight(data,force=False):
         automation_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
         if automation_lines and automation_lines != [automation_marker]:
             raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-    required={'SHA256SUMS',
-                  f'rustdesk-{data["version"]}-standard-windows-x86_64.exe',
-                  f'rustdesk-{data["version"]}-standard-windows-x86_64.msi',
-                  f'rustdesk-{data["version"]}-sos-windows-x86_64.exe',
-                  f'rustdesk-{data["version"]}-sos-windows-x86_64.msi'}
+        required={'SHA256SUMS',
+                  windows_installer_name(data['version'], 'standard', 'exe'),
+                  windows_installer_name(data['version'], 'standard', 'msi'),
+                  windows_installer_name(data['version'], 'sos', 'exe'),
+                  windows_installer_name(data['version'], 'sos', 'msi')}
         inventory=re.search(r'Asset Inventory: (.+)',body)
         if inventory:
             supplied=json.loads(inventory.group(1))
