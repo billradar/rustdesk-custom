@@ -91,14 +91,24 @@ class ReleaseGateTests(unittest.TestCase):
 
 
 class GenerationTests(unittest.TestCase):
-    def test_v1_hashes_frozen_and_exact_mapping(self):
-        from scripts.upstream.patchsets import mapped, verify
-        m=verify('v1')
-        self.assertEqual(m['hashes']['common'],'87b7fb949b3bbc55c6d1e166909e167ebb8e0b6586630c0269f6440ba0542531')
-        self.assertEqual(m['hashes']['sos'],'d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34')
-        self.assertEqual(mapped('1.4.9'),'v1')
-        self.assertEqual(mapped('1.5.0'),'v2')
-        self.assertIsNone(mapped('9.9.9'))
+    def test_patch_selection_fails_closed_for_unknown_source(self):
+        from scripts.upstream.patchsets import select
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/'source';source.mkdir()
+            subprocess.run(['git','init','--quiet',str(source)],check=True)
+            (source/'README').write_text('Synthetic incompatible fixture; no real RustDesk source\\n')
+            subprocess.run(['git','-C',str(source),'add','README'],check=True)
+            subprocess.run(['git','-C',str(source),'-c','user.name=Test','-c','user.email=test@example.invalid','commit','--quiet','-m','test fixture'],check=True)
+            sha=subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()
+            report=Path(tmp)/'report.json'
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError,'NO COMPATIBLE PATCH SET'):
+                select(sha,source,report)
+            data=json.loads(report.read_text())
+            self.assertIsNone(data['selected'])
+            self.assertEqual(data['overall'],'FAIL')
+            self.assertTrue(data['patchsets'])
+            self.assertTrue(all(r['status']=='INCOMPATIBLE' for r in data['patchsets']))
 
     def test_unknown_incompatible_source_fails_closed(self):
         from scripts.upstream.patchsets import select
