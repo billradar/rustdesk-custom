@@ -37,19 +37,23 @@ class SourceBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Unsafe archive'):prepared_source.unpack(bundle,root/'output','standard','a'*40,'v1')
             self.assertFalse((root/'escape').exists())
     def test_changed_source_inventory_blocks(self):
-        m=dict(variant='standard',upstream_sha='a'*40,patchset='v1',custom_repository_sha='b'*40,
+        m=dict(variant='standard',upstream_sha='a'*40,patchset='v999999',custom_repository_sha='b'*40,
                prepare_workflow_run='3',upstream_repository='rustdesk/rustdesk',common_patch_hash='c'*64,sos_patch_hash=None,files={'main.rs':'unchanged'})
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);(root/'source-manifest.json').write_text(json.dumps(m));(root/'main.rs').write_text('modified')
             with patch.object(prepared_source,'git',return_value='a'*40),patch.object(prepared_source,'patch_hash',return_value='c'*64),self.assertRaisesRegex(ValueError,'inventory'):
-                prepared_source.verify_tree(root,'standard','a'*40,'v1','b'*40,3)
+                prepared_source.verify_tree(root,'standard','a'*40,'v999999','b'*40,3)
 
 class ChannelPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
+        self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
+        self.addCleanup(self._verify.stop);self.addCleanup(self._hash.stop)
     def discovery(self):
         return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,revision='1',release_tag='v1.4.9-custom.1')
     def draft_fixture(self):
         return dict(name='v1.4.9-custom.1',tag_name='untagged-123',draft=True,prerelease=False,
-            body=f'Automation-State: complete\nUpstream SHA: {"a"*40}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}',
+            body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: v999999\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'d'*64,
             assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:
@@ -242,7 +246,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(native_package_name('1.4.9','standard','macos','aarch64','standard-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-macos-aarch64-unsigned.dmg')
 
     def test_existing_draft_skips_costly_build_and_never_overwrites(self):
-        sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
+        sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nSOS Patch Hash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
             channel.resolve('stable');data=out.call_args.args[0];self.assertFalse(data['build_needed']);self.assertFalse(data['draft_needed'])
             channel.resolve('stable',force=True);data=out.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
