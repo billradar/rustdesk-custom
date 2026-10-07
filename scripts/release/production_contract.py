@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import patch
 import scripts.upstream.resolve as upstream
 import scripts.release.github as release
+from scripts.release.naming import windows_installer_name
 
 class DiscoveryTests(unittest.TestCase):
     def test_official_release_metadata_controls_stability(self):
@@ -227,10 +228,10 @@ class ProductionDiscoveryTests(unittest.TestCase):
         self.assertNotIn("ZipFile(",source)
         self.assertIn("p.suffix.lower() != '.json'",source)
         public_assets=['SHA256SUMS',
-                       'rustdesk-1.4.9-standard-windows-x86_64.exe',
-                       'rustdesk-1.4.9-standard-windows-x86_64.msi',
-                       'rustdesk-1.4.9-sos-windows-x86_64.exe',
-                       'rustdesk-1.4.9-sos-windows-x86_64.msi']
+                       windows_installer_name('1.4.9','standard','exe'),
+                       windows_installer_name('1.4.9','standard','msi'),
+                       windows_installer_name('1.4.9','sos','exe'),
+                       windows_installer_name('1.4.9','sos','msi')]
         self.assertFalse(any(name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')
                              for name in public_assets))
 
