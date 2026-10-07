@@ -60,17 +60,23 @@ def release_preflight(data,force=False):
                   windows_installer_name(data['version'], 'standard', 'msi'),
                   windows_installer_name(data['version'], 'sos', 'exe'),
                   windows_installer_name(data['version'], 'sos', 'msi')}
+        legacy_required={'SHA256SUMS',
+                         f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
+                         f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
         inventory=re.search(r'Asset Inventory: (.+)',body)
+        has_inventory=bool(inventory)
         if inventory:
             supplied=json.loads(inventory.group(1))
-            if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
+            if not required.issubset(set(supplied)) and not legacy_required.issubset(set(supplied)):
+                raise ValueError('Invalid historical asset inventory')
+            if len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
             required=set(supplied)
         uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
         missing_identity=[x for x in expected_identity if x not in body]
         identity_ok=not missing_identity
-        # Historical drafts may contain legacy JSON metadata assets. Existing releases
-        # are immutable, so preflight only requires the complete required public set.
-        assets_ok=required.issubset(uploaded)
+        # Historical drafts/releases may contain the legacy Windows ZIP set. They are
+        # immutable and may be reused, while every new release uses MSI/EXE names.
+        assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
         draft_ok=not existing['prerelease']
         if not (draft_ok and identity_ok and assets_ok):
             problems=[]
