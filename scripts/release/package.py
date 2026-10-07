@@ -36,7 +36,8 @@ def build_windows_installers(tree, release, packages, version):
     # generated installer executable.
     manifest = tree / 'res/manifest.xml'
     if manifest.is_file():
-        subprocess.run(['sed', '-i', '/dpiAware/d', str(manifest)], cwd=tree, check=True, env=env)
+        lines = manifest.read_text().splitlines(keepends=True)
+        manifest.write_text(''.join(line for line in lines if 'dpiAware' not in line))
     portable_root = tree / 'libs/portable'
     requirements = portable_root / 'requirements.txt'
     generate = portable_root / 'generate.py'
@@ -66,13 +67,24 @@ def build_windows_installers(tree, release, packages, version):
 
     # Upstream builds the MSI from res/msi using the reviewed WiX project.
     # setup-msbuild is installed by the calling workflow before this script runs.
-    msi_script = (
-        'cd res/msi && '
-        'python preprocess.py --arp -d ../../flutter/build/windows/x64/runner/Release && '
-        'nuget restore msi.sln && '
-        'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10'
+    msi_root = tree / 'res/msi'
+    subprocess.run(
+        [sys.executable, 'preprocess.py', '--arp', '-d', str(release)],
+        cwd=msi_root, check=True, env=env,
     )
-    subprocess.run(['bash', '-lc', msi_script], cwd=tree, check=True, env=env)
+    subprocess.run(
+        ['nuget', 'restore', 'msi.sln'],
+        cwd=msi_root, check=True, env=env,
+    )
+    subprocess.run(
+        [
+            'msbuild', 'msi.sln',
+            '-p:Configuration=Release',
+            '-p:Platform=x64',
+            '/p:TargetVersion=Windows10',
+        ],
+        cwd=msi_root, check=True, env=env,
+    )
     candidates = sorted((tree / 'res/msi/Package/bin').glob('*/Release/en-us/Package.msi'))
     if not candidates:
         raise ValueError('Windows MSI was not generated')
