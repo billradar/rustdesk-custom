@@ -64,7 +64,9 @@ def release_preflight(data,force=False):
         uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
         missing_identity=[x for x in expected_identity if x not in body]
         identity_ok=not missing_identity
-        assets_ok=uploaded==required
+        # Historical drafts may contain legacy JSON metadata assets. Existing releases
+        # are immutable, so preflight only requires the complete required public set.
+        assets_ok=required.issubset(uploaded)
         draft_ok=not existing['prerelease']
         if not (draft_ok and identity_ok and assets_ok):
             problems=[]
