@@ -248,7 +248,8 @@ jobs:
 
         cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
 
-        PYTHONPATH="$GITHUB_WORKSPACE" python3 ../../scripts/release/package.py bridge-info .
+        cd "$GITHUB_WORKSPACE"
+        python3 -m scripts.release.package bridge-info .work/bridge
 
         '
       env:
