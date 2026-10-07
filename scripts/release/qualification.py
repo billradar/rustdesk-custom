@@ -114,7 +114,11 @@ def aggregate(root,channel,experimental):
                         raise ValueError('PACKAGE: unexpected non-file package entry')
                     if package.suffix.lower() not in allowed_suffixes:
                         raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
-                    filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-{e["platform"]}-{e["arch"]}-{package.name}'
+                    prefix=f'{info["variant"]}-rustdesk-{info["upstream_version"]}-'
+                    package_tail=package.name
+                    if package_tail.startswith(prefix):
+                        package_tail=package_tail[len(prefix):]
+                    filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-{e["platform"]}-{e["arch"]}-{package_tail}'
                     shutil.copy2(package,assets/filename)
         from scripts.platform.platform_package import checksums
         checksums(assets)
