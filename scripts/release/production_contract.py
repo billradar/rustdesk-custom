@@ -34,7 +34,7 @@ class DiscoveryTests(unittest.TestCase):
                 if not completed: return None
                 sos = '-sos-' in path
                 return dict(prerelease=True, draft=False,
-                    body=f'Patch Set: v1\nUpstream SHA: {"a"*40}\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos") if sos else "N/A"}\nAutomation-State: complete',
+                    body='Patch Set: v999999\nUpstream SHA: '+'a'*40+'\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+('c'*64 if sos else 'N/A')+'\nAutomation-State: complete',
                     assets=[{'name': n} for n in ('client.zip','build-info.json','SHA256SUMS')])
             raise AssertionError(path)
         with tempfile.TemporaryDirectory() as tmp, patch.object(upstream, 'api', side_effect=api), patch.object(upstream, 'mapped', return_value='v999999'), patch.object(upstream, 'patch_hash', return_value='c'*64), \
@@ -80,7 +80,7 @@ class ReleaseGateTests(unittest.TestCase):
             info['upstream_sha']='c'*40; (root/'sos/build-info.json').write_text(json.dumps(info)); self.sums(root/'sos')
             with self.assertRaises(ValueError): release.collect(root)
     def test_checksum_architecture_and_runtime_lies_block(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v1','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v999999','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
             folder=Path(tmp); info=self.payload(folder,'standard'); release.validate(folder)
             exe=folder/'rustdesk/rustdesk.exe'; data=bytearray(exe.read_bytes()); data[68:70]=b'\x4c\x01'; exe.write_bytes(data)
             with self.assertRaises(ValueError): release.validate(folder)
