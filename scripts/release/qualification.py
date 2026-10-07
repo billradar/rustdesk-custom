@@ -103,11 +103,12 @@ def aggregate(root,channel,experimental):
                 packages_dir=folder/'packages'
                 if not packages_dir.is_dir():
                     raise ValueError('PACKAGE: missing validated native package directory')
+                allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}[e['platform']]
                 for package in sorted(packages_dir.iterdir()):
                     if not package.is_file():
                         raise ValueError('PACKAGE: unexpected non-file package entry')
-                    if package.suffix.lower() == '.json' or package.name.startswith('source-'):
-                        raise ValueError('PACKAGE: non-binary release asset is forbidden')
+                    if package.suffix.lower() not in allowed_suffixes:
+                        raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
                     filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-{e["platform"]}-{e["arch"]}-{package.name}'
                     shutil.copy2(package,assets/filename)
         from scripts.platform.platform_package import checksums
