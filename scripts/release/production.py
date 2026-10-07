@@ -115,7 +115,6 @@ def assets(root):
             for file in sorted(folder.rglob('*')):
                 if file.is_file():
                     output.write(file, file.relative_to(folder).as_posix())
-        (directory / f'build-info-{variant}.json').write_bytes((folder / 'build-info.json').read_bytes())
     release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'
                    for p in release_files)
