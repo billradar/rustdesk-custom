@@ -222,10 +222,15 @@ class ProductionDiscoveryTests(unittest.TestCase):
         source=Path(production.__file__).read_text()
         self.assertNotIn("build-info-{variant}.json",source)
         self.assertNotIn("source-",source)
+        self.assertIn("packages = folder / 'packages'",source)
+        self.assertIn("Windows release requires exactly one EXE and one MSI per variant",source)
+        self.assertNotIn("ZipFile(",source)
         self.assertIn("p.suffix.lower() != '.json'",source)
         public_assets=['SHA256SUMS',
-                       'rustdesk-1.4.9-standard-windows-x86_64.zip',
-                       'rustdesk-1.4.9-sos-windows-x86_64.zip']
+                       'rustdesk-1.4.9-standard-windows-x86_64.exe',
+                       'rustdesk-1.4.9-standard-windows-x86_64.msi',
+                       'rustdesk-1.4.9-sos-windows-x86_64.exe',
+                       'rustdesk-1.4.9-sos-windows-x86_64.msi']
         self.assertFalse(any(name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')
                              for name in public_assets))
 
