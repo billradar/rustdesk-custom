@@ -147,12 +147,13 @@ class ReleaseBodyContractTests(unittest.TestCase):
 
     def test_custom_metadata_is_last_and_uses_key_value_contract(self):
         official='# 1.5.0\n\n# Changelog\n'
-        metadata=['upstream_sha='+'a'*40,'patchset=v2','automation_state=complete']
+        metadata=['upstream_sha='+'a'*40,'patchset=v2','release_policy=DRAFT ONLY; publication is a manual user decision','automation_state=complete']
         body=qualification.build_release_body(official,metadata)
         self.assertTrue(body.startswith(official.rstrip()))
         self.assertNotIn('RustDesk Server Pro',body)
         self.assertLess(body.index('# Changelog'),body.index('## Custom release metadata'))
         self.assertEqual(body.rstrip().splitlines()[-1],'automation_state=complete')
+        self.assertIn('release_policy=DRAFT ONLY; publication is a manual user decision',body)
         self.assertIn('upstream_sha='+'a'*40,body)
 
 class QualificationSerializationTests(unittest.TestCase):
