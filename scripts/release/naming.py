@@ -28,29 +28,30 @@ def native_package_name(version, variant, platform, arch, package_name):
             tail = tail[len(prefix):]
             break
 
-    separator = '-'\n    if tail.startswith(f'{platform}-{arch}.'):\n        tail = tail[len(f'{platform}-{arch}'):]; separator = ''\n    elif tail.startswith(f'{arch}.'):\n        tail = tail[len(arch):]; separator = ''\n    prefixes = (
-        f'{variant}-{platform}-{arch}-',
-        f'{platform}-{arch}-{variant}-{platform}-{arch}-',
-        f'{platform}-{arch}-{platform}-{arch}-',
-        f'{platform}-{arch}-',
-        f'{platform}-{arch}.',
-        f'{arch}-',
-        f'{arch}.',
-        f'{variant}-',
-    )
-    changed = True
-    while changed:
-        changed = False
-        for prefix in prefixes:
-            if tail.startswith(prefix):
-                tail = tail[len(prefix):]
-                changed = True
-                break
+    if tail.startswith(f'{arch}.'):
+        payload = tail[len(arch):]
+    else:
+        prefixes = (
+            f'{variant}-{platform}-{arch}-',
+            f'{platform}-{arch}-{variant}-{platform}-{arch}-',
+            f'{platform}-{arch}-{platform}-{arch}-',
+            f'{platform}-{arch}-',
+            f'{arch}-',
+            f'{variant}-',
+        )
+        changed = True
+        while changed:
+            changed = False
+            for prefix in prefixes:
+                if tail.startswith(prefix):
+                    tail = tail[len(prefix):]
+                    changed = True
+                    break
+        for marker in (f'-{variant}-{platform}-{arch}-', f'-{platform}-{arch}-'):
+            if marker in tail:
+                tail = tail.replace(marker, '-', 1)
+        if not tail:
+            raise ValueError('Package name has no payload suffix: '+package_name)
+        payload = '-' + tail
 
-    for marker in (f'-{variant}-{platform}-{arch}-', f'-{platform}-{arch}-'):
-        if marker in tail:
-            tail = tail.replace(marker, '-', 1)
-
-    if not tail:
-        raise ValueError('Package name has no payload suffix: '+package_name)
-    return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}{separator}{tail}'
+    return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}{payload}'
