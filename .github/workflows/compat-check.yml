@@ -427,8 +427,7 @@ jobs:
         \ if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'\nreport['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success'\
         \ else 'NOT PASSED'\nreport['Bridge']='PASS' if os.environ['BRIDGE_RESULT']=='success' else 'NOT PASSED'\nreport['Windows\
         \ helper']='N/A (CI)' if os.environ['CHANNEL']=='ci' else ('PASS' if os.environ['HELPER_RESULT']=='success' else 'NOT\
-        \ PASSED')\nfor item in report['patchsets']:\n    if item['patchset']==os.environ['SELECTED']:\n        item['full_compatibility']='COMPATIBLE'\
-        \ if passed else 'NOT VALIDATED'\nPath('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\\n')\n\
+        \ PASSED')\nif isinstance(report.get('patchsets'), list):\n    for item in report['patchsets']:\n        if item.get('patchset')==os.environ['SELECTED']:\n            item['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'\nelse:\n    report['selected']=os.environ['SELECTED']\n    report['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'\nPath('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\\n')\n\
         with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:\n    f.write('## Patch Generation Compatibility\\n```json\\\
         n'+json.dumps(report,indent=2)+'\\n```\\n')\nPYCODE\n"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
