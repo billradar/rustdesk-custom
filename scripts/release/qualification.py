@@ -327,7 +327,7 @@ def verify_ci(repo,custom_sha,upstream_sha,upstream_ref,patchset=None,workflow_r
                 break
     raise last_error or ValueError("No exact qualification artifact was found")
 
-def _release(root, publish, channel='stable'):
+def _release(root, publish, channel='stable', experimental=False):
     if channel == 'nightly' and publish:
         raise ValueError('Nightly release is forbidden; only draft publication is allowed')
     if channel not in ('stable','nightly'):
@@ -336,14 +336,16 @@ def _release(root, publish, channel='stable'):
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong release repository')
-    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel in ('stable','nightly') else 'false'
-    report=aggregate(root,channel,channel=='nightly')
+    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel=='stable' else 'false'
+    report=aggregate(root,channel,experimental)
     if report['result']!='PASS':raise ValueError('No complete supported aggregate')
     infos=[json.loads(p.read_text()) for p in root.rglob('build-info.json')]
     standard=next(i for i in infos if i['variant']=='standard' and i['platform']=='windows-x86_64')
     sos=next(i for i in infos if i['variant']=='sos' and i['platform']=='windows-x86_64')
     suffix='' if channel=='stable' else '-nightly'
-    tag=f'v{standard["upstream_tag"].lstrip("v")}-custom.{standard["patch_revision"]}{suffix}'
+    version=standard['upstream_version']
+    upstream_sha=standard['upstream_sha']
+    tag=f'v{version}-custom.{standard["patch_revision"]}' if channel=='stable' else f'v{version}-custom.{standard["patch_revision"]}-nightly.{upstream_sha[:12]}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
     if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
@@ -357,7 +359,7 @@ def _release(root, publish, channel='stable'):
         'Asset Inventory: '+json.dumps(sorted(p.name for p in directory.iterdir())),
         'Build / Package / Checksum / Architecture / Provenance: PASS',
         'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Desktop Code Signing: NOT ENABLED',
-        'Android artifacts: PRODUCTION SIGNED / IDENTITY VERIFIED','Password Security V2: DEFERRED',
+        'Android artifacts: '+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),'Password Security V2: DEFERRED',
         'Embedded client configuration/password can be extracted by client owners.',
         'Release policy: '+('PUBLISHED RELEASE.' if publish else 'DRAFT ONLY; publication is a manual user decision.')])+'\n'
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
@@ -405,8 +407,8 @@ def publish_existing_draft(channel='stable'):
         raise ValueError('Existing Stable draft publication failed')
     print(f'Published existing Stable draft: {tag}')
 
-def draft(root, channel='stable'): _release(root, False, channel)
-def release(root, channel='stable'): _release(root, True, channel)
+def draft(root, channel='stable', experimental=False): _release(root, False, channel, experimental)
+def release(root, channel='stable', experimental=False): _release(root, True, channel, experimental)
 
 if __name__=='__main__':
     a=argparse.ArgumentParser()
@@ -430,8 +432,8 @@ if __name__=='__main__':
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
-    elif a.mode=='draft':draft(a.root,a.channel)
-    elif a.mode=='release':release(a.root,a.channel)
+    elif a.mode=='draft':draft(a.root,a.channel,a.experimental)
+    elif a.mode=='release':release(a.root,a.channel,a.experimental)
     elif a.mode=='publish-existing':publish_existing_draft(a.channel)
     elif a.mode=='lookup':
         if not all((a.custom_sha,a.upstream_sha,a.upstream_ref,a.patchset)):
