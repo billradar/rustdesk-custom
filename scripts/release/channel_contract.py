@@ -145,7 +145,9 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('gh workflow run tag.yml',stable_run)
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)
-        self.assertIn('--exact',tag)
+        self.assertIn('Select Stable patchset by version boundary',tag)
+        self.assertIn('patchsets.py --version "$UPSTREAM_VERSION"',tag)
+        self.assertNotIn('--exact',tag)
         self.assertNotIn('ci-qualification',tag)
 
     def test_qualification_identity_and_lookup_semantics(self):
