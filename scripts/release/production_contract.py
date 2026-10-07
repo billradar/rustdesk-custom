@@ -18,10 +18,10 @@ import scripts.release.github as release
 
 class DiscoveryTests(unittest.TestCase):
     def test_official_release_metadata_controls_stability(self):
-        rows = [dict(id=1, tag_name='1.4.9', draft=False, prerelease=False),
-                dict(id=2, tag_name='1.5.0', draft=False, prerelease=True),
-                dict(id=3, tag_name='nightly', draft=False, prerelease=False),
-                dict(id=4, tag_name='1.6.0', draft=True, prerelease=False)]
+        rows = [dict(id=1, tag_name='1.4.9', draft=False, prerelease=False, body='# Changelog\n\n- test change'),
+                dict(id=2, tag_name='1.5.0', draft=False, prerelease=True, body='# Changelog\n\n- prerelease'),
+                dict(id=3, tag_name='nightly', draft=False, prerelease=False, body='# Changelog'),
+                dict(id=4, tag_name='1.6.0', draft=True, prerelease=False, body='# Changelog')]
         with patch.object(upstream, 'api', return_value=rows), patch.object(upstream, 'resolve_ref', return_value='a'*40):
             self.assertEqual(upstream.choose_stable()['upstream_tag'], '1.4.9')
             with self.assertRaises(ValueError): upstream.choose_stable('1.5.0')
@@ -203,7 +203,7 @@ class ProductionDiscoveryTests(unittest.TestCase):
         def api(path, missing=False):
             if '/git/ref/' in path: return None
             if not existing:return None
-            names=['SHA256SUMS','build-info-standard.json','build-info-sos.json',
+            names=['SHA256SUMS',
                    'rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
             if partial:names.pop()
             return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos")}\nAutomation-State: complete',
@@ -218,6 +218,18 @@ class ProductionDiscoveryTests(unittest.TestCase):
 
     def test_new_stable_dryrun_cannot_publish(self):
         d=self.discovery(dry_run=True);self.assertTrue(d['build_needed']);self.assertFalse(d['publish_needed'])
+    def test_public_release_asset_contract_excludes_json_metadata(self):
+        public_assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+        self.assertFalse(any(name.lower().endswith('.json') for name in public_assets))
+
+    def test_sha256sums_contract_excludes_json_metadata(self):
+        import scripts.release.production as production
+        source=Path(production.__file__).read_text()
+        sums_block=source[source.index("release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')"):source.index("release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')", source.index("release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')")+1)]
+        self.assertIn("p.suffix.lower() != '.json'", sums_block)
+        self.assertIn("hashlib.sha256(p.read_bytes())", sums_block)
+        self.assertNotIn("build-info-", sums_block)
+
     def test_existing_complete_release_skips_build(self):
         d=self.discovery(existing=True);self.assertFalse(d['build_needed']);self.assertFalse(d['publish_needed'])
     def test_force_never_overwrites(self):
