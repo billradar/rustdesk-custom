@@ -29,7 +29,7 @@ def api(path, missing=False):
             return None
         raise
 
-from scripts.upstream.patchsets import patch_hash, mapped, select
+from scripts.upstream.patchsets import patch_hash, mapped
 
 def resolve_ref(ref):
     value = api(f'repos/{OFFICIAL}/commits/{urllib.parse.quote(ref, safe="")}')['sha']
@@ -74,7 +74,7 @@ def main():
         revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
         if not re.fullmatch(r'[1-9][0-9]{0,5}', revision):
             raise ValueError('Invalid patch revision')
-        name=mapped(data['upstream_tag']) or select(data['upstream_sha'], upstream_ref=data['upstream_tag'])
+        name=mapped(data['upstream_tag'])
         os.environ['PATCHSET']=name
         data['patchset']=name
         data.update(revision=revision, common_patch_hash=patch_hash('common'), sos_patch_hash=patch_hash('sos'))
