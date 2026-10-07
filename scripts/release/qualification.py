@@ -428,9 +428,12 @@ def publish_existing_draft(channel='stable'):
     body=existing.get('body') or ''
     if not existing.get('draft') or existing.get('prerelease'):
         raise ValueError('Existing release is not a publishable draft')
-    if 'Automation-State: complete' not in body:
+    if 'Automation-State: complete' not in body and 'automation_state=complete' not in body:
         raise ValueError('Existing draft is not marked complete')
-    if 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
+    if 'automation_state=complete' in body:
+        if 'build_package_checksum_architecture_provenance=PASS' not in body:
+            raise ValueError('Existing draft missing complete aggregate marker')
+    elif 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
         raise ValueError('Existing draft missing complete aggregate marker')
     final=request(
         'PATCH',
