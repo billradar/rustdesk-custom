@@ -327,6 +327,25 @@ def verify_ci(repo,custom_sha,upstream_sha,upstream_ref,patchset=None,workflow_r
                 break
     raise last_error or ValueError("No exact qualification artifact was found")
 
+def normalize_release_body(body):
+    """Normalize the official release body and remove the Pro promotion badge."""
+    body=(body or '').replace('\r\n','\n').strip()
+    body=re.sub(r'\n?\[!\[RustDesk Server Pro\]\([^)]*\)\]\([^)]*\)\s*', '\n', body)
+    return body.strip()
+
+def release_notes_body(upstream_tag):
+    """Use the official upstream release body, without the Pro promotion badge."""
+    from scripts.upstream.resolve import api
+    tag=upstream_tag or 'nightly'
+    release=api(f'repos/rustdesk/rustdesk/releases/tags/{tag}',missing=True)
+    return normalize_release_body(release.get('body') if release else '')
+
+def build_release_body(official_body, metadata):
+    body=normalize_release_body(official_body)
+    if not body:
+        raise ValueError('Official release body is unavailable')
+    return body+'\n\n## Custom release metadata\n\n'+'\n'.join(metadata)+'\n'
+
 def _release(root, publish, channel='stable', experimental=False):
     if channel == 'nightly' and publish:
         raise ValueError('Nightly release is forbidden; only draft publication is allowed')
@@ -354,14 +373,29 @@ def _release(root, publish, channel='stable', experimental=False):
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
-    notes='\n'.join(['Upstream: rustdesk/rustdesk',f'Upstream Tag: {standard["upstream_tag"]}',f'Upstream SHA: {standard["upstream_sha"]}',f'Patch Set: {standard["patchset"]}',f'Common Patch Hash: {standard["common_patch_hash"]}',f'SOS Patch Hash: {sos["sos_patch_hash"]}',f'Custom Repository SHA: {standard["custom_repository_sha"]}',f'Prepared Source Run: {standard["prepare_run"]}',f'Build Run: {standard["build_run"]}',
-        'Required Targets: '+','.join(sorted(report['targets'])),
-        'Asset Inventory: '+json.dumps(sorted(p.name for p in directory.iterdir())),
-        'Build / Package / Checksum / Architecture / Provenance: PASS',
-        'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Desktop Code Signing: NOT ENABLED',
-        'Android artifacts: '+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),'Password Security V2: DEFERRED',
-        'Embedded client configuration/password can be extracted by client owners.',
-        'Release policy: '+('PUBLISHED RELEASE.' if publish else 'DRAFT ONLY; publication is a manual user decision.')])+'\n'
+    official_notes=release_notes_body(standard['upstream_tag'] or ('nightly' if channel=='nightly' else standard['upstream_version']))
+    metadata=[
+        'upstream_repository=rustdesk/rustdesk',
+        f'upstream_tag={standard["upstream_tag"]}',
+        f'upstream_sha={standard["upstream_sha"]}',
+        f'patchset={standard["patchset"]}',
+        f'common_patch_hash={standard["common_patch_hash"]}',
+        f'sos_patch_hash={sos["sos_patch_hash"]}',
+        f'custom_repository_sha={standard["custom_repository_sha"]}',
+        f'prepare_run={standard["prepare_run"]}',
+        f'build_run={standard["build_run"]}',
+        'required_targets='+','.join(sorted(report['targets'])),
+        'asset_inventory='+json.dumps(sorted(p.name for p in directory.iterdir()),separators=(',',':')),
+        'build_package_checksum_architecture_provenance=PASS',
+        'runtime_ui_validation=SKIPPED BY USER',
+        'real_remote_session_validation=NOT TESTED',
+        'desktop_code_signing=NOT ENABLED',
+        'android_signing='+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),
+        'password_security_v2=DEFERRED',
+        'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
+        'automation_state=complete',
+    ]
+    notes=build_release_body(official_notes, metadata)
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
@@ -373,7 +407,12 @@ def _release(root, publish, channel='stable', experimental=False):
         if attempt<11:time.sleep(5)
     if uploaded!=expected_assets:
         raise ValueError('Incomplete release upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
-    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\n' if publish else 'Automation-State: complete\n')})
+    final_body=notes
+    if publish:
+        if 'automation_state=complete' not in final_body:
+            raise ValueError('New release body missing automation_state=complete marker')
+        final_body=final_body.replace('automation_state=complete','automation_state=published',1)
+    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':final_body})
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
 def publish_existing_draft(channel='stable'):
@@ -394,14 +433,17 @@ def publish_existing_draft(channel='stable'):
     body=existing.get('body') or ''
     if not existing.get('draft') or existing.get('prerelease'):
         raise ValueError('Existing release is not a publishable draft')
-    if 'Automation-State: complete' not in body:
+    if 'Automation-State: complete' not in body and 'automation_state=complete' not in body:
         raise ValueError('Existing draft is not marked complete')
-    if 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
+    if 'automation_state=complete' in body:
+        if 'build_package_checksum_architecture_provenance=PASS' not in body:
+            raise ValueError('Existing draft missing complete aggregate marker')
+    elif 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
         raise ValueError('Existing draft missing complete aggregate marker')
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',
-        {'draft':False,'prerelease':False,'body':body+'Automation-State: published\n'}
+        {'draft':False,'prerelease':False,'body':(body.replace('automation_state=complete','automation_state=published',1) if 'automation_state=complete' in body else body.rstrip()+'\nAutomation-State: published\n')}
     )
     if final.get('draft') is not False:
         raise ValueError('Existing Stable draft publication failed')

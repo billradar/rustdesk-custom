@@ -19,20 +19,39 @@ def windows_installer_name(version, variant, extension):
     return f'rustdesk-{version}{variant_suffix(variant)}-windows-x86_64.{ext}'
 
 def native_package_name(version, variant, platform, arch, package_name):
-    """Normalize an upstream package into the public RustDesk asset name."""
+    """Normalize native package names into one canonical public name."""
     if platform not in ('android', 'linux', 'macos'):
-        raise ValueError('Unsupported native release platform: '+str(platform))
-    tail = package_name
-    prefix = f'{variant}-rustdesk-{version}-'
-    if tail.startswith(prefix):
-        tail = tail[len(prefix):]
-    arch_prefix = f'{arch}-'
-    separator = '-'
-    if tail.startswith(arch_prefix):
-        tail = tail[len(arch_prefix):]
-    elif tail.startswith(f'{arch}.'):
-        # Upstream may encode an extension directly after the architecture.
-        # Keep the leading dot so the public name remains x86_64.deb.
-        tail = tail[len(arch):]
-        separator = ''
-    return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}{separator}{tail}'
+        raise ValueError('Unsupported release platform: '+str(platform))
+    tail = package_name.rsplit('/', 1)[-1]
+    for prefix in (f'{variant}-rustdesk-{version}-', f'rustdesk-{version}-'):
+        if tail.startswith(prefix):
+            tail = tail[len(prefix):]
+            break
+
+    if tail.startswith(f'{arch}.'):
+        payload = tail[len(arch):]
+    else:
+        prefixes = (
+            f'{variant}-{platform}-{arch}-',
+            f'{platform}-{arch}-{variant}-{platform}-{arch}-',
+            f'{platform}-{arch}-{platform}-{arch}-',
+            f'{platform}-{arch}-',
+            f'{arch}-',
+            f'{variant}-',
+        )
+        changed = True
+        while changed:
+            changed = False
+            for prefix in prefixes:
+                if tail.startswith(prefix):
+                    tail = tail[len(prefix):]
+                    changed = True
+                    break
+        for marker in (f'-{variant}-{platform}-{arch}-', f'-{platform}-{arch}-'):
+            if marker in tail:
+                tail = tail.replace(marker, '-', 1)
+        if not tail:
+            raise ValueError('Package name has no payload suffix: '+package_name)
+        payload = '-' + tail
+
+    return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}{payload}'

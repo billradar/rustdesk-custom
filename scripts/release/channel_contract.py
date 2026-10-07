@@ -247,6 +247,33 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(native_package_name('1.4.9','sos','linux','x86_64','sos-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-sos-linux-x86_64.deb')
         self.assertEqual(native_package_name('1.4.9','standard','macos','aarch64','standard-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-macos-aarch64-unsigned.dmg')
 
+    def test_new_metadata_automation_state_is_accepted(self):
+        sha='a'*40
+        common='c'*64
+        existing={
+            'body':chr(10).join([
+                'Patch Set: v999999',
+                f'Upstream SHA: {sha}',
+                f'Common Patch Hash: {common}',
+                f'SOS Patch Hash: {common}',
+                '## Custom release metadata',
+                '',
+                'automation_state=complete',
+            ]),
+            'draft':True,'prerelease':False,
+            'assets':[{'name':n,'state':'uploaded'} for n in [
+                'SHA256SUMS',
+                'build-info-standard.json',
+                'build-info-sos.json',
+                'rustdesk-1.4.9-standard-windows-x86_64.zip',
+                'rustdesk-1.4.9-sos-windows-x86_64.zip',
+            ]]
+        }
+        with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
+            channel.resolve('stable')
+            self.assertFalse(out.call_args.args[0]['build_needed'])
+            self.assertFalse(out.call_args.args[0]['draft_needed'])
+
     def test_existing_draft_skips_costly_build_and_never_overwrites(self):
         sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nSOS Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:

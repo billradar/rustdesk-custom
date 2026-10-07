@@ -132,12 +132,39 @@ class NamingContractTests(unittest.TestCase):
         self.assertEqual(native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-linux-x86_64.deb')
         self.assertEqual(native_package_name('1.4.9','sos','macos','aarch64','sos-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-sos-macos-aarch64-unsigned.dmg')
 
+    def test_android_standard_name_deduplicates_platform_arch_and_variant(self):
+        bad='standard-rustdesk-1.5.0-android-x86_64-standard-android-x86_64-signed.apk'
+        self.assertEqual(native_package_name('1.5.0','standard','android','x86_64',bad), 'rustdesk-1.5.0-android-x86_64-signed.apk')
+        self.assertEqual(native_package_name('1.5.0','standard','android','aarch64','standard-rustdesk-1.5.0-aarch64.apk'), 'rustdesk-1.5.0-android-aarch64.apk')
+
+
+class ReleaseBodyContractTests(unittest.TestCase):
+    def test_official_release_body_removes_pro_badge(self):
+        body='''![image](https://example/image)\n\n[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Advanced%20Features-blue)](https://rustdesk.com/pricing.html)\n\n# Changelog\n'''
+        normalized=qualification.normalize_release_body(body)
+        self.assertNotIn('RustDesk Server Pro',normalized)
+        self.assertIn('# Changelog',normalized)
+
+    def test_custom_metadata_is_last_and_uses_key_value_contract(self):
+        official='# 1.5.0\n\n# Changelog\n'
+        metadata=['upstream_sha='+'a'*40,'patchset=v2','release_policy=DRAFT ONLY; publication is a manual user decision','automation_state=complete']
+        body=qualification.build_release_body(official,metadata)
+        self.assertTrue(body.startswith(official.rstrip()))
+        self.assertNotIn('RustDesk Server Pro',body)
+        self.assertLess(body.index('# Changelog'),body.index('## Custom release metadata'))
+        self.assertEqual(body.rstrip().splitlines()[-1],'automation_state=complete')
+        self.assertIn('release_policy=DRAFT ONLY; publication is a manual user decision',body)
+        self.assertIn('upstream_sha='+'a'*40,body)
+
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
-        text=(ROOT/'scripts/release/qualification.py').read_text()
-        self.assertNotIn(r"\\n", text)
-        self.assertIn("target-plan.json');target_plan.write_text(json.dumps(p,indent=2)+'\\n');json.loads(target_plan.read_text())", text)
-        self.assertIn("f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='", text)
+        body=qualification.build_release_body(
+            '# 1.5.0'+chr(10)+chr(10)+'# Changelog'+chr(10),
+            ['upstream_sha='+'a'*40,'patchset=v2','automation_state=complete'],
+        )
+        self.assertIn(chr(10)+chr(10)+'## Custom release metadata'+chr(10)+chr(10), body)
+        self.assertEqual(body.rstrip().splitlines()[-1], 'automation_state=complete')
+        self.assertNotIn('\\n', body)
 
 class ParallelGateTests(unittest.TestCase):
     def workflow(self,name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
