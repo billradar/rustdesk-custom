@@ -7,11 +7,12 @@ import os
 from pathlib import Path
 import re
 import urllib.parse
-import zipfile
+import shutil
 from scripts.upstream.resolve import api, choose_stable, VERSION
 from scripts.upstream.patchsets import patch_hash
 from scripts.upstream.patchsets import mapped
 from scripts.release.github import collect, gh, request
+from scripts.release.naming import windows_installer_name
 from scripts.signing.production_config import payload, scan_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -42,9 +43,15 @@ def discover(ref, force=False, dry_run=True):
                     f'SOS Patch Hash: {data["sos_patch_hash"]}', 'Automation-State: complete']
         asset_names = {a['name'] for a in existing['assets'] if a['state'] == 'uploaded'}
         required = {'SHA256SUMS',
-                    f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
-                    f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-        if existing['prerelease'] or not all(x in body for x in expected) or not required.issubset(asset_names):
+                    windows_installer_name(data['version'], 'standard', 'exe'),
+                    windows_installer_name(data['version'], 'standard', 'msi'),
+                    windows_installer_name(data['version'], 'sos', 'exe'),
+                    windows_installer_name(data['version'], 'sos', 'msi')}
+        legacy_required = {'SHA256SUMS',
+                           f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
+                           f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+        assets_complete = required.issubset(asset_names) or legacy_required.issubset(asset_names)
+        if existing['prerelease'] or not all(x in body for x in expected) or not assets_complete:
             raise ValueError('Existing release incomplete or different; never overwrite, review revision')
     else:
         # An existing tag without a matching complete release is also a hard stop.
@@ -110,11 +117,15 @@ def assets(root):
     directory = ROOT / '.work/production-release-assets'
     directory.mkdir(parents=True, exist_ok=False)
     for variant, folder in folders.items():
-        archive = directory / f'rustdesk-{version}-{variant}-windows-x86_64.zip'
-        with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as output:
-            for file in sorted(folder.rglob('*')):
-                if file.is_file():
-                    output.write(file, file.relative_to(folder).as_posix())
+        packages = folder / 'packages'
+        if not packages.is_dir():
+            raise ValueError('Missing Windows installer package directory')
+        files = sorted(p for p in packages.iterdir() if p.is_file())
+        if {p.suffix.lower() for p in files} != {'.exe', '.msi'}:
+            raise ValueError('Windows release requires exactly one EXE and one MSI per variant')
+        for package in files:
+            target = directory / windows_installer_name(version, variant, package.suffix)
+            shutil.copy2(package, target)
     release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'
                    for p in release_files)
@@ -169,6 +180,7 @@ def publish(root, dry_run_id):
         upstream_release=api(f'repos/rustdesk/rustdesk/releases/tags/{info["upstream_tag"]}',missing=True)
         changelog=((upstream_release or {}).get('body') or '').strip()
     if not changelog:raise ValueError('Official upstream release changelog is empty')
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     inventory=json.dumps([p.name for p in release_files],separators=(', ',': '))
     metadata='\n'.join([
         '<!-- rustdesk-custom-release-metadata',
