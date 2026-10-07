@@ -218,9 +218,16 @@ class ProductionDiscoveryTests(unittest.TestCase):
 
     def test_new_stable_dryrun_cannot_publish(self):
         d=self.discovery(dry_run=True);self.assertTrue(d['build_needed']);self.assertFalse(d['publish_needed'])
-    def test_public_release_asset_contract_excludes_json_metadata(self):
-        public_assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
-        self.assertFalse(any(name.lower().endswith('.json') for name in public_assets))
+    def test_public_release_asset_contract_is_binary_only(self):
+        source=Path(production.__file__).read_text()
+        self.assertNotIn("build-info-{variant}.json",source)
+        self.assertNotIn("source-",source)
+        self.assertIn("p.suffix.lower() != '.json'",source)
+        public_assets=['SHA256SUMS',
+                       'rustdesk-1.4.9-standard-windows-x86_64.zip',
+                       'rustdesk-1.4.9-sos-windows-x86_64.zip']
+        self.assertFalse(any(name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')
+                             for name in public_assets))
 
     def test_sha256sums_contract_excludes_json_metadata(self):
         import scripts.release.production as production
