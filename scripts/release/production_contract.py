@@ -203,7 +203,7 @@ class ProductionDiscoveryTests(unittest.TestCase):
         def api(path, missing=False):
             if '/git/ref/' in path: return None
             if not existing:return None
-            names=['SHA256SUMS','build-info-standard.json','build-info-sos.json',
+            names=['SHA256SUMS',
                    'rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
             if partial:names.pop()
             return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos")}\nAutomation-State: complete',
@@ -218,6 +218,10 @@ class ProductionDiscoveryTests(unittest.TestCase):
 
     def test_new_stable_dryrun_cannot_publish(self):
         d=self.discovery(dry_run=True);self.assertTrue(d['build_needed']);self.assertFalse(d['publish_needed'])
+    def test_public_release_asset_contract_excludes_json_metadata(self):
+        public_assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+        self.assertFalse(any(name.lower().endswith('.json') for name in public_assets))
+
     def test_existing_complete_release_skips_build(self):
         d=self.discovery(existing=True);self.assertFalse(d['build_needed']);self.assertFalse(d['publish_needed'])
     def test_force_never_overwrites(self):
