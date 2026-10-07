@@ -12,6 +12,7 @@ import sys
 import tempfile
 import zipfile
 from scripts.upstream.resolve import patch_hash, TEST_REPO, VERSION
+from scripts.release.naming import windows_installer_name
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -64,7 +65,7 @@ def validate(folder):
         if len(data) < 64 or data[:2] != b'MZ':
             raise ValueError('Missing PE header: ' + file.name)
         offset = struct.unpack_from('<I', data, 0x3c)[0]
-        if offset + 6 > len(data) or data[offset:offset+4] != b'PE\\0\\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
+        if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
             raise ValueError('Not Windows AMD64: ' + file.name)
     packages = folder / 'packages'
     expected_suffixes = {'.exe', '.msi'}
@@ -73,6 +74,13 @@ def validate(folder):
     package_files = sorted(p for p in packages.iterdir() if p.is_file())
     if {p.suffix.lower() for p in package_files} != expected_suffixes:
         raise ValueError('Windows installers must contain exactly one EXE and one MSI')
+    version = info.get('upstream_version') or str(info.get('upstream_tag', '')).lstrip('v')
+    expected_names = {
+        windows_installer_name(version, info['variant'], 'exe'),
+        windows_installer_name(version, info['variant'], 'msi'),
+    }
+    if {p.name for p in package_files} != expected_names:
+        raise ValueError('Windows installer names violate the canonical variant contract')
     for file in package_files:
         data = file.read_bytes()
         if not data:
