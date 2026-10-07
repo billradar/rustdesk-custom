@@ -54,8 +54,11 @@ def release_preflight(data,force=False):
         automation_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
         if automation_lines and automation_lines != [automation_marker]:
             raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-        required={'SHA256SUMS',
-                  f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+    required={'SHA256SUMS',
+                  f'rustdesk-{data["version"]}-standard-windows-x86_64.exe',
+                  f'rustdesk-{data["version"]}-standard-windows-x86_64.msi',
+                  f'rustdesk-{data["version"]}-sos-windows-x86_64.exe',
+                  f'rustdesk-{data["version"]}-sos-windows-x86_64.msi'}
         inventory=re.search(r'Asset Inventory: (.+)',body)
         if inventory:
             supplied=json.loads(inventory.group(1))
