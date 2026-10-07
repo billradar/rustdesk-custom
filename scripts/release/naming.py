@@ -32,5 +32,5 @@ def native_package_name(version, variant, platform, arch, package_name):
     elif tail.startswith(f'{arch}.'):
         # Upstream may encode an extension directly after the architecture.
         # Strip the architecture and separator to avoid names such as x86_64-.deb.
-        tail = tail[len(arch):].lstrip('-.')
+        tail = tail[len(arch):]
     return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}-{tail}'
