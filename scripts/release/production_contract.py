@@ -37,7 +37,7 @@ class DiscoveryTests(unittest.TestCase):
                     body=f'Patch Set: v1\nUpstream SHA: {"a"*40}\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos") if sos else "N/A"}\nAutomation-State: complete',
                     assets=[{'name': n} for n in ('client.zip','build-info.json','SHA256SUMS')])
             raise AssertionError(path)
-        with tempfile.TemporaryDirectory() as tmp, patch.object(upstream, 'api', side_effect=api), patch.object(upstream, 'mapped', return_value='v1'), \
+        with tempfile.TemporaryDirectory() as tmp, patch.object(upstream, 'api', side_effect=api), patch.object(upstream, 'mapped', return_value='v999999'), patch.object(upstream, 'patch_hash', return_value='c'*64), \
              patch.object(upstream, 'choose_stable', return_value=dict(upstream_tag='1.4.9', version='1.4.9', upstream_sha='a'*40, official_release_id=1)), \
              patch.object(sys, 'argv', ['upstream.py', 'stable'] + (['--force'] if force else [])), \
              patch.dict(os.environ, {'GITHUB_OUTPUT': ''}), contextlib.redirect_stdout(io.StringIO()):
@@ -63,7 +63,7 @@ class ReleaseGateTests(unittest.TestCase):
         (folder/'packages').mkdir()
         (folder/'packages'/('rustdesk-1.4.9'+('-sos' if variant == 'sos' else '')+'-windows-x86_64.exe')).write_bytes(pe)
         (folder/'packages'/('rustdesk-1.4.9'+('-sos' if variant == 'sos' else '')+'-windows-x86_64.msi')).write_bytes(bytes.fromhex('D0CF11E0A1B11AE1'))
-        info=dict(patchset='v1',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.4.9',
+        info=dict(patchset='v999999',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.4.9',
                   custom_repository_sha='b'*40, common_patch_hash=upstream.patch_hash('common'),
                   sos_patch_hash=upstream.patch_hash('sos') if variant=='sos' else None,
                   workflow_run='42', patch_revision='1', signed=False, configuration='TEST ONLY',
@@ -73,7 +73,7 @@ class ReleaseGateTests(unittest.TestCase):
     def sums(self, folder):
         (folder/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(folder).as_posix()+'\n' for p in sorted(folder.rglob('*')) if p.is_file() and p.name!='SHA256SUMS'))
     def test_pair_requires_matching_source_and_both_variants(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v1','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v999999','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
             root=Path(tmp); self.payload(root/'standard','standard')
             with self.assertRaises(ValueError): release.collect(root)
             info=self.payload(root/'sos','sos'); release.collect(root)
@@ -221,7 +221,7 @@ class ProductionDiscoveryTests(unittest.TestCase):
             names=['SHA256SUMS',
                    'rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
             if partial:names.pop()
-            return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos")}\nAutomation-State: complete',
+            return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: NaN\nSOS Patch Hash: NaN\nAutomation-State: complete',
                     'assets':[{'name':x,'state':'uploaded'} for x in names]}
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{'GITHUB_REPOSITORY':production.REPOSITORY,'GITHUB_OUTPUT':''}), \
              patch.object(production,'choose_stable',return_value={'upstream_tag':'1.4.9','version':'1.4.9','upstream_sha':sha}), \
