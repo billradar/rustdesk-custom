@@ -12,6 +12,7 @@ from scripts.upstream.resolve import api, choose_stable, VERSION
 from scripts.upstream.patchsets import patch_hash
 from scripts.upstream.patchsets import mapped, select
 from scripts.release.github import collect, gh, request
+from scripts.release.naming import windows_installer_name
 from scripts.signing.production_config import payload, scan_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,11 +42,11 @@ def discover(ref, force=False, dry_run=True):
                     f'Common Patch Hash: {data["common_patch_hash"]}',
                     f'SOS Patch Hash: {data["sos_patch_hash"]}', 'Automation-State: complete']
         asset_names = {a['name'] for a in existing['assets'] if a['state'] == 'uploaded'}
-    required = {'SHA256SUMS',
-                f'rustdesk-{data["version"]}-standard-windows-x86_64.exe',
-                f'rustdesk-{data["version"]}-standard-windows-x86_64.msi',
-                f'rustdesk-{data["version"]}-sos-windows-x86_64.exe',
-                f'rustdesk-{data["version"]}-sos-windows-x86_64.msi'}
+        required = {'SHA256SUMS',
+                    windows_installer_name(data['version'], 'standard', 'exe'),
+                    windows_installer_name(data['version'], 'standard', 'msi'),
+                    windows_installer_name(data['version'], 'sos', 'exe'),
+                    windows_installer_name(data['version'], 'sos', 'msi')}
         if existing['prerelease'] or not all(x in body for x in expected) or not required.issubset(asset_names):
             raise ValueError('Existing release incomplete or different; never overwrite, review revision')
     else:
@@ -119,7 +120,7 @@ def assets(root):
         if {p.suffix.lower() for p in files} != {'.exe', '.msi'}:
             raise ValueError('Windows release requires exactly one EXE and one MSI per variant')
         for package in files:
-            target = directory / f'rustdesk-{version}-{variant}-windows-x86_64{package.suffix.lower()}'
+            target = directory / windows_installer_name(version, variant, package.suffix)
             shutil.copy2(package, target)
     release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'
