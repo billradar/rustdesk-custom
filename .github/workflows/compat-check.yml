@@ -248,7 +248,7 @@ jobs:
 
         cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
 
-        python3 ../../scripts/release/package.py bridge-info .
+        PYTHONPATH="$GITHUB_WORKSPACE" python3 ../../scripts/release/package.py bridge-info .
 
         '
       env:
@@ -421,7 +421,7 @@ jobs:
         CONTRACT_RESULT: ${{ needs.contracts.result }}
         CHANNEL: ${{ inputs.channel }}
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\nroots=list(Path('diagnostics').rglob('patchset-selection.json'))\n\
-        report=json.loads(roots[0].read_text()) if roots else {'selected':None,'patchsets':[]}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success'\
+        report=json.loads(roots[0].read_text()) if roots else {'selected':None}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success'\
         \ and os.environ['BRIDGE_RESULT']=='success' and os.environ['FLUTTER_RESULT']=='success' and (os.environ['CHANNEL']=='ci'\
         \ or os.environ['HELPER_RESULT']=='success'))\nreport['overall']='PASS' if passed else 'FAIL'\nreport['Rust fast check']='PASS'\
         \ if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'\nreport['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success'\
