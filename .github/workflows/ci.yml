@@ -160,6 +160,7 @@ jobs:
         Path('.work').mkdir(exist_ok=True)
         Path('.work/ci-qualification.json').write_text(json.dumps(record,indent=2)+'\n')
         print(json.dumps(record,indent=2))
+        PY
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ci-qualification-${{ github.sha }}
