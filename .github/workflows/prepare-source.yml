@@ -77,7 +77,8 @@ jobs:
         (cd flutter && flutter pub get)
         flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
         cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
-        python3 ../../scripts/release/package.py bridge-info .
+        cd "$GITHUB_WORKSPACE"
+        python3 -m scripts.release.package bridge-info .work/bridge-source
     - name: Install pinned Syft for exact-source upstream SBOM profile
       uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610
     - name: Prepare Common once and fork independent variant sources
