@@ -158,12 +158,12 @@ class ReleaseBodyContractTests(unittest.TestCase):
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
         body=qualification.build_release_body(
-            '# 1.5.0\\n\\n# Changelog\\n',
+            '# 1.5.0'+chr(10)+chr(10)+'# Changelog'+chr(10),
             ['upstream_sha='+'a'*40,'patchset=v2','automation_state=complete'],
         )
-        self.assertIn('\\n\\n## Custom release metadata\\n\\n', body)
+        self.assertIn(chr(10)+chr(10)+'## Custom release metadata'+chr(10)+chr(10), body)
         self.assertEqual(body.rstrip().splitlines()[-1], 'automation_state=complete')
-        self.assertNotIn('\\\\n', body)
+        self.assertNotIn('\\n', body)
 
 class ParallelGateTests(unittest.TestCase):
     def workflow(self,name):return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
