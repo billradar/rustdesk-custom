@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Explicit targets and cross-platform fan-in; support requires reviewed Actions evidence."""
-import argparse, hashlib, json, os, re, shutil, subprocess, time, zipfile
+import argparse, hashlib, json, os, re, shutil, subprocess, time
 from pathlib import Path
 from scripts.upstream.patchsets import patch_hash
 ROOT=Path(__file__).resolve().parents[2]
@@ -95,10 +95,15 @@ def aggregate(root,channel,experimental):
             if not e['required']:continue
             info=found[name];folder=folders[name]
             if e['platform']=='windows':
-                filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-windows-x86_64.zip'
-                with zipfile.ZipFile(assets/filename,'w',zipfile.ZIP_DEFLATED) as z:
-                    for f in sorted(folder.rglob('*')):
-                        if f.is_file():z.write(f,f.relative_to(folder).as_posix())
+                packages_dir=folder/'packages'
+                if not packages_dir.is_dir():
+                    raise ValueError('PACKAGE: missing validated Windows installer directory')
+                packages=sorted(p for p in packages_dir.iterdir() if p.is_file())
+                if {p.suffix.lower() for p in packages} != {'.exe','.msi'}:
+                    raise ValueError('PACKAGE: Windows release requires exactly one EXE and one MSI')
+                for package in packages:
+                    filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-windows-x86_64{package.suffix.lower()}'
+                    shutil.copy2(package,assets/filename)
             else:
                 packages_dir=folder/'packages'
                 if not packages_dir.is_dir():
