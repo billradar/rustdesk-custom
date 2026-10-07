@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 
+from scripts.release.naming import windows_installer_name
+
 EXPECTED_SHA = os.environ.get('UPSTREAM_EXPECTED_SHA')
 BRIDGE_FILES = [
     'src/bridge_generated.rs', 'src/bridge_generated.io.rs',
@@ -21,6 +23,52 @@ def git(path, *args):
 def patch_hash(root, folder):
     from scripts.upstream.patchsets import patch_hash as digest
     return digest(folder)
+
+
+def build_windows_installers(tree, release, packages, version):
+    """Build the same user-facing Windows EXE/MSI installers used by upstream."""
+    packages.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env.setdefault('PYTHONUNBUFFERED', '1')
+
+    # Upstream's self-extracted installer is generated from the complete Release
+    # directory. Keep the internal unpacked bundle for audit, but publish only the
+    # generated installer executable.
+    manifest = tree / 'res/manifest.xml'
+    if manifest.is_file():
+        subprocess.run(['sed', '-i', '/dpiAware/d', str(manifest)], cwd=tree, check=True, env=env)
+    portable = (
+        'pushd libs/portable && '
+        'pip3 install -r requirements.txt && '
+        'python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release '
+        '-o . -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe && '
+        'popd'
+    )
+    subprocess.run(['bash', '-lc', portable], cwd=tree, check=True, env=env)
+    packed = tree / 'target/release/rustdesk-portable-packer.exe'
+    if not packed.is_file() or packed.stat().st_size == 0:
+        raise ValueError('Windows self-extracted EXE was not generated')
+    exe = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'exe')
+    shutil.copy2(packed, exe)
+
+    # Upstream builds the MSI from res/msi using the reviewed WiX project.
+    # setup-msbuild is installed by the calling workflow before this script runs.
+    msi_script = (
+        'cd res/msi && '
+        'python preprocess.py --arp -d ../../flutter/build/windows/x64/runner/Release && '
+        'nuget restore msi.sln && '
+        'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10'
+    )
+    subprocess.run(['bash', '-lc', msi_script], cwd=tree, check=True, env=env)
+    candidates = sorted((tree / 'res/msi/Package/bin').glob('*/Release/en-us/Package.msi'))
+    if not candidates:
+        raise ValueError('Windows MSI was not generated')
+    msi = candidates[0]
+    if msi.stat().st_size == 0:
+        raise ValueError('Generated Windows MSI is empty')
+    msi_out = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'msi')
+    shutil.copy2(msi, msi_out)
+    return exe, msi_out
 
 command, tree, *args = sys.argv[1:]
 tree = Path(tree)
@@ -85,6 +133,7 @@ elif command == 'package':
     if not re.fullmatch(r'[0-9A-Za-z][0-9A-Za-z.-]{0,80}', version):
         raise SystemExit('Invalid artifact version')
     suffix = '' if configuration == 'PRODUCTION' else '-test'
+    os.environ['BUILD_VARIANT'] = variant
     folder = output / f'rustdesk-{version}-{variant}{suffix}-windows-x86_64'
     if folder.exists():
         raise SystemExit('Artifact destination already exists; never overwrite it')
@@ -93,7 +142,9 @@ elif command == 'package':
         raise SystemExit('Unexpected artifact upstream SHA')
     folder.mkdir(parents=True)
     shutil.copytree(release, folder / 'rustdesk')
-    # This is an unsigned unpacked Flutter test bundle, not a production MSI/installer.
+    build_windows_installers(tree, release, folder / 'packages', version)
+    # Keep the unpacked bundle and provenance internally; Release/Draft publication
+    # selects only the generated Windows installers from packages/.
     info = {
         'variant': variant,
         'patchset': os.environ.get('PATCHSET', 'v1'),
