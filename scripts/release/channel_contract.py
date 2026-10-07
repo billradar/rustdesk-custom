@@ -249,9 +249,26 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_new_metadata_automation_state_is_accepted(self):
         sha='a'*40
-        existing={'body':f'Patch Set: v999999\\nUpstream SHA: {sha}\\nCommon Patch Hash: {'c'*64}\\nSOS Patch Hash: {'c'*64}\\n## Custom release metadata\\n\\nautomation_state=complete',
-                  'draft':True,'prerelease':False,
-                  'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
+        common='c'*64
+        existing={
+            'body':chr(10).join([
+                'Patch Set: v999999',
+                f'Upstream SHA: {sha}',
+                f'Common Patch Hash: {common}',
+                f'SOS Patch Hash: {common}',
+                '## Custom release metadata',
+                '',
+                'automation_state=complete',
+            ]),
+            'draft':True,'prerelease':False,
+            'assets':[{'name':n,'state':'uploaded'} for n in [
+                'SHA256SUMS',
+                'build-info-standard.json',
+                'build-info-sos.json',
+                'rustdesk-1.4.9-standard-windows-x86_64.zip',
+                'rustdesk-1.4.9-sos-windows-x86_64.zip',
+            ]]
+        }
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
             channel.resolve('stable')
             self.assertFalse(out.call_args.args[0]['build_needed'])
