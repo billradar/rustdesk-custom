@@ -54,9 +54,9 @@ def release_preflight(data,force=False):
         automation_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
         if automation_lines and automation_lines != [automation_marker]:
             raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-        required={'SHA256SUMS','build-info-standard.json','build-info-sos.json',
+        required={'SHA256SUMS',
                   f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-        inventory=re.search(r'^Asset Inventory: (\[.*\])$',body,re.M)
+        inventory=re.search(r'Asset Inventory: (.+)',body)
         if inventory:
             supplied=json.loads(inventory.group(1))
             if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
@@ -64,7 +64,9 @@ def release_preflight(data,force=False):
         uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
         missing_identity=[x for x in expected_identity if x not in body]
         identity_ok=not missing_identity
-        assets_ok=uploaded==required
+        # Historical drafts may contain legacy JSON metadata assets. Existing releases
+        # are immutable, so preflight only requires the complete required public set.
+        assets_ok=required.issubset(uploaded)
         draft_ok=not existing['prerelease']
         if not (draft_ok and identity_ok and assets_ok):
             problems=[]
@@ -149,21 +151,31 @@ def draft(root):
     if api(f'repos/{REPOSITORY}/releases/tags/{tag}',missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     if any(r.get('draft') and r.get('name')==tag for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])):
         raise ValueError('Existing unpublished revision draft; never replace it')
-    notes='\n'.join([f'Upstream: rustdesk/rustdesk',f'Upstream Tag: {info["upstream_tag"]}',f'Upstream SHA: {info["upstream_sha"]}',
-        f'Patch Set: {info["patchset"]}',f'Custom Repository SHA: {info["custom_repository_sha"]}',f'Common Patch Hash: {info["common_patch_hash"]}',
-        f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',f'Prepared Source Run: {info["prepare_run"]}',f'Build Run: {info["build_run"]}',
-        'Variants: Standard / SOS','Platform: Windows x86_64','Build / Checksums / Architecture / Provenance: PASS',
-        'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Code Signing: NOT ENABLED',
-        'Password Security V2: DEFERRED','Embedded client configuration/password can be extracted by client owners.',
-        'Release policy: DRAFT ONLY; publication is a manual user decision.'])+'\n'
+    release_files=sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
+    inventory=json.dumps([p.name for p in release_files],separators=(', ',': '))
+    changelog=(info.get('upstream_changelog') or '').strip()
+    if not changelog:
+        upstream_release=api(f'repos/rustdesk/rustdesk/releases/tags/{info["upstream_tag"]}',missing=True)
+        changelog=((upstream_release or {}).get('body') or '').strip()
+    if not changelog:raise ValueError('Official upstream release changelog is empty')
+    metadata='\n'.join([
+        '<!-- rustdesk-custom-release-metadata',
+        f'Upstream SHA: {info["upstream_sha"]}',
+        f'Patch Set: {info["patchset"]}',
+        f'Common Patch Hash: {info["common_patch_hash"]}',
+        f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',
+        f'Asset Inventory: {inventory}',
+        '-->'
+    ])
+    notes=changelog+'\n\n'+metadata+'\n'
     result=request('POST',f'repos/{REPOSITORY}/releases',{'tag_name':tag,'target_commitish':info['custom_repository_sha'],
                     'name':tag,'body':notes,'draft':True,'prerelease':False})
-    gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',REPOSITORY)
+    gh('release','upload',tag,*map(str,release_files),'--repo',REPOSITORY)
     uploaded=api(f'repos/{REPOSITORY}/releases/{result["id"]}/assets')
-    if {a['name']:a['size'] for a in uploaded if a['state']=='uploaded'}!={p.name:p.stat().st_size for p in directory.iterdir()}:
+    expected={p.name:p.stat().st_size for p in release_files}
+    if {a['name']:a['size'] for a in uploaded if a['state']=='uploaded'}!=expected:
         raise ValueError('Incomplete draft upload; remains unpublished')
-    final=request('PATCH',f'repos/{REPOSITORY}/releases/{result["id"]}',{'draft':True,'body':notes+'Automation-State: complete\n'})
-    if not final['draft']:raise ValueError('Draft protection failed')
+    final=request('PATCH',f'repos/{REPOSITORY}/releases/{result["id"]}',{'draft':True,'body':notes})
     print('Draft created; automatic publication disabled.')
 
 if __name__=='__main__':

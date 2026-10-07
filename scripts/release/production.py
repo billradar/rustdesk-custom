@@ -41,10 +41,10 @@ def discover(ref, force=False, dry_run=True):
                     f'Common Patch Hash: {data["common_patch_hash"]}',
                     f'SOS Patch Hash: {data["sos_patch_hash"]}', 'Automation-State: complete']
         asset_names = {a['name'] for a in existing['assets'] if a['state'] == 'uploaded'}
-        required = {'SHA256SUMS', 'build-info-standard.json', 'build-info-sos.json',
+        required = {'SHA256SUMS',
                     f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
                     f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-        if existing['prerelease'] or not all(x in body for x in expected) or asset_names != required:
+        if existing['prerelease'] or not all(x in body for x in expected) or not required.issubset(asset_names):
             raise ValueError('Existing release incomplete or different; never overwrite, review revision')
     else:
         # An existing tag without a matching complete release is also a hard stop.
@@ -115,10 +115,11 @@ def assets(root):
             for file in sorted(folder.rglob('*')):
                 if file.is_file():
                     output.write(file, file.relative_to(folder).as_posix())
-        (directory / f'build-info-{variant}.json').write_bytes((folder / 'build-info.json').read_bytes())
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'
-                   for p in sorted(directory.iterdir()))
+                   for p in release_files)
     (directory / 'SHA256SUMS').write_text(sums)
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     result = {'result': 'PASS', 'upstream_sha': info['upstream_sha'], 'patchset': info['patchset'],
               'common_patch_hash': info['common_patch_hash'], 'sos_patch_hash': infos['sos']['sos_patch_hash'],
               'custom_repository_sha': info['custom_repository_sha'], 'workflow_run': info['workflow_run'],
@@ -163,41 +164,29 @@ def publish(root, dry_run_id):
     tag = f'v{info["upstream_tag"].lstrip("v")}-custom.{info["patch_revision"]}'
     if api(f'repos/{REPOSITORY}/releases/tags/{tag}', missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}', missing=True):
         raise ValueError('Release/tag already exists; no overwrite')
-    dry_run_note = (f'https://github.com/{REPOSITORY}/actions/runs/{dry_run_id}' if dry_run_id else 'Not required after initial validated release')
-    notes = f'''RustDesk Standard and SOS — unsigned Windows x86_64 clients.
-
-Upstream: rustdesk/rustdesk
-Upstream Tag: {info['upstream_tag']}
-Upstream SHA: {info['upstream_sha']}
-Patch Set: {info['patchset']}
-Custom Repository SHA: {info['custom_repository_sha']}
-Common Patch Hash: {info['common_patch_hash']}
-SOS Patch Hash: {sos['sos_patch_hash']}
-Variants: Standard / SOS
-Platform: Windows x86_64
-Workflow: https://github.com/{REPOSITORY}/actions/runs/{info['workflow_run']}
-Production Dry Run: {dry_run_note}
-
-Build Validation: PASS
-Checksum Validation: PASS
-Architecture Validation: PASS
-Provenance Validation: PASS
-Runtime/UI Validation: SKIPPED BY USER
-Real Remote Session Validation: NOT TESTED
-Code Signing: NOT ENABLED
-Configuration: PRODUCTION
-Password Security V2: DEFERRED
-
-Embedded client password/configuration can be extracted by a client owner.
-SOS retains historical UI restrictions; native controller capability is not disabled.
-Source: exact upstream SHA + this maintenance commit and patches included in both ZIPs.
-'''
+    changelog=(info.get('upstream_changelog') or '').strip()
+    if not changelog:
+        upstream_release=api(f'repos/rustdesk/rustdesk/releases/tags/{info["upstream_tag"]}',missing=True)
+        changelog=((upstream_release or {}).get('body') or '').strip()
+    if not changelog:raise ValueError('Official upstream release changelog is empty')
+    inventory=json.dumps([p.name for p in release_files],separators=(', ',': '))
+    metadata='\n'.join([
+        '<!-- rustdesk-custom-release-metadata',
+        f'Upstream SHA: {info["upstream_sha"]}',
+        f'Patch Set: {info["patchset"]}',
+        f'Common Patch Hash: {info["common_patch_hash"]}',
+        f'SOS Patch Hash: {sos["sos_patch_hash"]}',
+        f'Asset Inventory: {inventory}',
+        '-->'
+    ])
+    notes=changelog+'\n\n'+metadata+'\n'
     draft = request('POST', f'repos/{REPOSITORY}/releases', {
         'tag_name': tag, 'target_commitish': info['custom_repository_sha'],
         'name': tag, 'body': notes, 'draft': True, 'prerelease': False})
-    gh('release', 'upload', tag, *map(str, sorted(directory.iterdir())), '--repo', REPOSITORY)
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
+    gh('release', 'upload', tag, *map(str, release_files), '--repo', REPOSITORY)
     uploaded = api(f'repos/{REPOSITORY}/releases/{draft["id"]}/assets')
-    expected = {p.name: p.stat().st_size for p in directory.iterdir()}
+    expected = {p.name: p.stat().st_size for p in release_files}
     if {a['name']: a['size'] for a in uploaded if a['state'] == 'uploaded'} != expected:
         raise ValueError('Incomplete draft upload; release remains unpublished')
     result = request('PATCH', f'repos/{REPOSITORY}/releases/{draft["id"]}', {

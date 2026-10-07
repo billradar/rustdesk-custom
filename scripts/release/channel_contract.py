@@ -49,7 +49,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def draft_fixture(self):
         return dict(name='v1.4.9-custom.1',tag_name='untagged-123',draft=True,prerelease=False,
             body=f'Automation-State: complete\nUpstream SHA: {"a"*40}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}',
-            assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
+            assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:
             channel.resolve('stable',discovery_only=True)
@@ -210,6 +210,23 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn("-f upstream_ref='${{ needs.detect.outputs.production_ref }}'",router)
         self.assertIn('--ref main',router)
         self.assertNotIn('billradar/rustdesk-custom:test/development',nightly+router)
+    def test_public_release_assets_are_binary_only(self):
+        source=(ROOT/'scripts/release/qualification.py').read_text()
+        self.assertNotIn("source-'+name+'.zip",source)
+        self.assertNotIn("build-info-'+name+'.json",source)
+        self.assertNotIn("shutil.copy2(folder/'build-info.json',assets/metadata_name)",source)
+        self.assertIn("package.suffix.lower() not in allowed_suffixes",source)
+        self.assertIn("allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}",source)
+        self.assertIn("name.startswith('source-')",source)
+        self.assertIn("name.startswith('build-info-')",source)
+        names=['SHA256SUMS',
+               'rustdesk-1.4.9-standard-windows-x86_64.zip',
+               'rustdesk-1.4.9-sos-windows-x86_64.zip',
+               'rustdesk-1.4.9-standard-linux-x86_64.deb',
+               'rustdesk-1.4.9-standard-macos-x86_64.dmg']
+        forbidden=[n for n in names if n.lower().endswith('.json') or n.startswith('source-') or n.startswith('build-info-')]
+        self.assertEqual(forbidden,[])
+
     def test_existing_draft_skips_costly_build_and_never_overwrites(self):
         sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:

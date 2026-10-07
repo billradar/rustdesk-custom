@@ -99,19 +99,24 @@ def aggregate(root,channel,experimental):
                 with zipfile.ZipFile(assets/filename,'w',zipfile.ZIP_DEFLATED) as z:
                     for f in sorted(folder.rglob('*')):
                         if f.is_file():z.write(f,f.relative_to(folder).as_posix())
-                metadata_name='build-info-'+info['variant']+'.json'
             else:
-                for package in sorted((folder/'packages').iterdir()):
+                packages_dir=folder/'packages'
+                if not packages_dir.is_dir():
+                    raise ValueError('PACKAGE: missing validated native package directory')
+                allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}[e['platform']]
+                for package in sorted(packages_dir.iterdir()):
+                    if not package.is_file():
+                        raise ValueError('PACKAGE: unexpected non-file package entry')
+                    if package.suffix.lower() not in allowed_suffixes:
+                        raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
                     filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-{e["platform"]}-{e["arch"]}-{package.name}'
                     shutil.copy2(package,assets/filename)
-                metadata_name='build-info-'+name+'.json'
-                # Corresponding customization source and licence accompany native packages.
-                with zipfile.ZipFile(assets/('source-'+name+'.zip'),'w',zipfile.ZIP_DEFLATED) as z:
-                    for f in [folder/'LICENCE',folder/'SOURCE-README.md',folder/'source-manifest.json']+list((folder/'patches').rglob('*.patch')):
-                        z.write(f,f.relative_to(folder).as_posix())
-            shutil.copy2(folder/'build-info.json',assets/metadata_name)
         from scripts.platform.platform_package import checksums
         checksums(assets)
+        public_assets=sorted(p.name for p in assets.iterdir())
+        forbidden=[name for name in public_assets if name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')]
+        if forbidden:
+            raise ValueError('PACKAGE: non-public release assets generated: '+', '.join(forbidden))
     print(json.dumps(report,indent=2))
     if errors:raise ValueError('Aggregate required gate FAIL')
     return report
