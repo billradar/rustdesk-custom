@@ -29,4 +29,6 @@ def native_package_name(version, variant, platform, arch, package_name):
     arch_prefix = f'{arch}-'
     if tail.startswith(arch_prefix):
         tail = tail[len(arch_prefix):]
+    elif tail.startswith(f'{arch}.'):
+        tail = tail[len(arch):]
     return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}-{tail}'
