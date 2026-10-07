@@ -392,8 +392,8 @@ def _release(root, publish, channel='stable', experimental=False):
         'desktop_code_signing=NOT ENABLED',
         'android_signing='+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),
         'password_security_v2=DEFERRED',
-        'automation_state=complete',
         'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
+        'automation_state=complete',
     ]
     notes=build_release_body(official_notes, metadata)
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
@@ -407,7 +407,12 @@ def _release(root, publish, channel='stable', experimental=False):
         if attempt<11:time.sleep(5)
     if uploaded!=expected_assets:
         raise ValueError('Incomplete release upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
-    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':notes+('Automation-State: published\n' if publish else 'Automation-State: complete\n')})
+    final_body=notes
+    if publish:
+        if 'automation_state=complete' not in final_body:
+            raise ValueError('New release body missing automation_state=complete marker')
+        final_body=final_body.replace('automation_state=complete','automation_state=published',1)
+    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':final_body})
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
 def publish_existing_draft(channel='stable'):
@@ -438,7 +443,7 @@ def publish_existing_draft(channel='stable'):
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',
-        {'draft':False,'prerelease':False,'body':(body.replace('automation_state=complete','automation_state=published',1) if 'automation_state=complete' in body else body+'Automation-State: published\\n')}
+        {'draft':False,'prerelease':False,'body':(body.replace('automation_state=complete','automation_state=published',1) if 'automation_state=complete' in body else body.rstrip()+'\nAutomation-State: published\n')}
     )
     if final.get('draft') is not False:
         raise ValueError('Existing Stable draft publication failed')
