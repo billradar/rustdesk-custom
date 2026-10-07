@@ -44,7 +44,7 @@ def discover(ref, force=False, dry_run=True):
         required = {'SHA256SUMS',
                     f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
                     f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-        if existing['prerelease'] or not all(x in body for x in expected) or asset_names != required:
+        if existing['prerelease'] or not all(x in body for x in expected) or not required.issubset(asset_names):
             raise ValueError('Existing release incomplete or different; never overwrite, review revision')
     else:
         # An existing tag without a matching complete release is also a hard stop.
