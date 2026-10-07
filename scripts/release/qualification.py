@@ -438,7 +438,7 @@ def publish_existing_draft(channel='stable'):
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',
-        {'draft':False,'prerelease':False,'body':body+'Automation-State: published\n'}
+        {'draft':False,'prerelease':False,'body':(body.replace('automation_state=complete','automation_state=published',1) if 'automation_state=complete' in body else body+'Automation-State: published\\n')}
     )
     if final.get('draft') is not False:
         raise ValueError('Existing Stable draft publication failed')
