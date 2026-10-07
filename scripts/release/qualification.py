@@ -329,8 +329,8 @@ def verify_ci(repo,custom_sha,upstream_sha,upstream_ref,patchset=None,workflow_r
 
 def normalize_release_body(body):
     """Normalize the official release body and remove the Pro promotion badge."""
-    body=(body or '').replace('\\r\\n','\\n').strip()
-    body=re.sub(r'\\n?\\[!\\[RustDesk Server Pro\\]\\([^)]*\\)\\]\\([^)]*\\)\\s*', '\\n', body)
+    body=(body or '').replace('\r\n','\n').strip()
+    body=re.sub(r'\n?\[!\[RustDesk Server Pro\]\([^)]*\)\]\([^)]*\)\s*', '\n', body)
     return body.strip()
 
 def release_notes_body(upstream_tag):
@@ -344,7 +344,7 @@ def build_release_body(official_body, metadata):
     body=normalize_release_body(official_body)
     if not body:
         raise ValueError('Official release body is unavailable')
-    return body+'\\n\\n## Custom release metadata\\n\\n'+'\\n'.join(metadata)+'\\n'
+    return body+'\n\n## Custom release metadata\n\n'+'\n'.join(metadata)+'\n'
 
 def _release(root, publish, channel='stable', experimental=False):
     if channel == 'nightly' and publish:
