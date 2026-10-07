@@ -6,6 +6,7 @@ import scripts.build.build_adapter as build_adapter
 import scripts.source.prepared_source as prepared_source
 import scripts.release.channel as channel
 import scripts.release.qualification as qualification
+from scripts.release.naming import native_package_name, windows_installer_name
 ROOT = Path(__file__).resolve().parents[2]
 import yaml
 
@@ -220,18 +221,25 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn("name.startswith('source-')",source)
         self.assertIn("name.startswith('build-info-')",source)
         names=['SHA256SUMS',
-               'rustdesk-1.4.9-standard-windows-x86_64.exe',
-               'rustdesk-1.4.9-standard-windows-x86_64.msi',
-               'rustdesk-1.4.9-sos-windows-x86_64.exe',
-               'rustdesk-1.4.9-sos-windows-x86_64.msi',
-               'rustdesk-1.4.9-standard-linux-x86_64.deb',
-               'rustdesk-1.4.9-standard-macos-x86_64.dmg']
+               windows_installer_name('1.4.9','standard','exe'),
+               windows_installer_name('1.4.9','standard','msi'),
+               windows_installer_name('1.4.9','sos','exe'),
+               windows_installer_name('1.4.9','sos','msi'),
+               native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'),
+               native_package_name('1.4.9','standard','macos','x86_64','standard-rustdesk-1.4.9-x86_64.dmg')]
         forbidden=[n for n in names if n.lower().endswith('.json') or n.startswith('source-') or n.startswith('build-info-')]
         self.assertEqual(forbidden,[])
         qualification=source
         self.assertIn("packages_dir=folder/'packages'", qualification)
         self.assertIn("Windows release requires exactly one EXE and one MSI", qualification)
         self.assertNotIn("windows-x86_64.zip", qualification)
+
+    def test_canonical_variant_naming(self):
+        self.assertEqual(windows_installer_name('1.4.9','standard','exe'), 'rustdesk-1.4.9-windows-x86_64.exe')
+        self.assertEqual(windows_installer_name('1.4.9','sos','msi'), 'rustdesk-1.4.9-sos-windows-x86_64.msi')
+        self.assertEqual(native_package_name('1.4.9','standard','android','aarch64','standard-rustdesk-1.4.9-aarch64.apk'), 'rustdesk-1.4.9-android-aarch64.apk')
+        self.assertEqual(native_package_name('1.4.9','sos','linux','x86_64','sos-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-sos-linux-x86_64.deb')
+        self.assertEqual(native_package_name('1.4.9','standard','macos','aarch64','standard-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-macos-aarch64-unsigned.dmg')
 
     def test_existing_draft_skips_costly_build_and_never_overwrites(self):
         sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
