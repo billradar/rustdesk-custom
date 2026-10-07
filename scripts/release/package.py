@@ -37,14 +37,27 @@ def build_windows_installers(tree, release, packages, version):
     manifest = tree / 'res/manifest.xml'
     if manifest.is_file():
         subprocess.run(['sed', '-i', '/dpiAware/d', str(manifest)], cwd=tree, check=True, env=env)
-    portable = (
-        'pushd libs/portable && '
-        'pip3 install -r requirements.txt && '
-        'python3 ./generate.py -f ../../flutter/build/windows/x64/runner/Release '
-        '-o . -e ../../flutter/build/windows/x64/runner/Release/rustdesk.exe && '
-        'popd'
+    portable_root = tree / 'libs/portable'
+    requirements = portable_root / 'requirements.txt'
+    generate = portable_root / 'generate.py'
+    if not requirements.is_file() or not generate.is_file():
+        raise ValueError('Windows portable packer sources are incomplete')
+    # Invoke the pinned portable packer directly with the workflow Python
+    # instead of spawning Git Bash. This keeps Python/Cargo on the native
+    # Windows toolchain and avoids depending on an unrelated POSIX/WSL shell.
+    subprocess.run(
+        [sys.executable, '-m', 'pip', 'install', '-r', str(requirements)],
+        cwd=portable_root, check=True, env=env,
     )
-    subprocess.run(['bash', '-lc', portable], cwd=tree, check=True, env=env)
+    subprocess.run(
+        [
+            sys.executable, str(generate),
+            '-f', str(release),
+            '-o', str(portable_root),
+            '-e', str(release / 'rustdesk.exe'),
+        ],
+        cwd=portable_root, check=True, env=env,
+    )
     packed = tree / 'target/release/rustdesk-portable-packer.exe'
     if not packed.is_file() or packed.stat().st_size == 0:
         raise ValueError('Windows self-extracted EXE was not generated')
