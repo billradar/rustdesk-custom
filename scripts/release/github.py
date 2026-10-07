@@ -89,7 +89,7 @@ def validate(folder):
             if len(data) < 64 or data[:2] != b'MZ':
                 raise ValueError('Installer EXE is not a PE file: ' + file.name)
             offset = struct.unpack_from('<I', data, 0x3c)[0]
-            if offset + 6 > len(data) or data[offset:offset+4] != b'PE\\0\\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
+            if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
                 raise ValueError('Installer EXE is not Windows AMD64: ' + file.name)
         else:
             if data[:8] != bytes.fromhex('D0CF11E0A1B11AE1'):
