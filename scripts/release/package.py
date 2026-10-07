@@ -66,13 +66,28 @@ def build_windows_installers(tree, release, packages, version):
 
     # Upstream builds the MSI from res/msi using the reviewed WiX project.
     # setup-msbuild is installed by the calling workflow before this script runs.
-    msi_script = (
-        'cd res/msi && '
-        'python preprocess.py --arp -d ../../flutter/build/windows/x64/runner/Release && '
-        'nuget restore msi.sln && '
-        'msbuild msi.sln -p:Configuration=Release -p:Platform=x64 /p:TargetVersion=Windows10'
+    # Keep the entire MSI toolchain native on Windows; do not route through Git Bash/WSL.
+    msi_root = tree / 'res/msi'
+    preprocess = msi_root / 'preprocess.py'
+    solution = msi_root / 'msi.sln'
+    if not preprocess.is_file() or not solution.is_file():
+        raise ValueError('Windows MSI project sources are incomplete')
+    subprocess.run(
+        [sys.executable, str(preprocess), '--arp',
+         '-d', str(release)],
+        cwd=msi_root, check=True, env=env,
     )
-    subprocess.run(['bash', '-lc', msi_script], cwd=tree, check=True, env=env)
+    subprocess.run(
+        ['nuget', 'restore', str(solution)],
+        cwd=msi_root, check=True, env=env,
+    )
+    subprocess.run(
+        ['msbuild', str(solution),
+         '-p:Configuration=Release',
+         '-p:Platform=x64',
+         '/p:TargetVersion=Windows10'],
+        cwd=msi_root, check=True, env=env,
+    )
     candidates = sorted((tree / 'res/msi/Package/bin').glob('*/Release/en-us/Package.msi'))
     if not candidates:
         raise ValueError('Windows MSI was not generated')
