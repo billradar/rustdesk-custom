@@ -25,7 +25,7 @@ class SourceBoundaryTests(unittest.TestCase):
     def test_checksum_failure_happens_before_extraction(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);bundle=root/'bundle';bundle.mkdir();(bundle/'source.tar.gz').write_bytes(b'wrong');(bundle/'SHA256SUMS').write_text('0'*64+'  source.tar.gz\n')
-            with self.assertRaisesRegex(ValueError,'checksum'):prepared_source.unpack(bundle,root/'output','standard','a'*40,'v1')
+            with self.assertRaisesRegex(ValueError,'checksum'):prepared_source.unpack(bundle,root/'output','standard','a'*40,'v999999')
             self.assertFalse((root/'output').exists())
     def test_path_traversal_is_blocked(self):
         import hashlib
@@ -174,7 +174,7 @@ class ChannelPolicyTests(unittest.TestCase):
              patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'a'*40,'expired':False}]}), \
              patch.object(qualification,'_download_qualification',return_value=bad_upstream):
             self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'INVALID')
-        bad_patchset=record(patchset='v1')
+        bad_patchset=record(patchset='v888888')
         with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
              patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'f'*40}]), \
              patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'f'*40,'expired':False}]}), \
