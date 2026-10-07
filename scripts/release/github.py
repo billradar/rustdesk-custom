@@ -12,6 +12,7 @@ import sys
 import tempfile
 import zipfile
 from scripts.upstream.resolve import patch_hash, TEST_REPO, VERSION
+from scripts.release.naming import windows_installer_name
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -66,7 +67,34 @@ def validate(folder):
         offset = struct.unpack_from('<I', data, 0x3c)[0]
         if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
             raise ValueError('Not Windows AMD64: ' + file.name)
-    print(f'{info["variant"]}: metadata, checksums, Windows AMD64: PASS')
+    packages = folder / 'packages'
+    expected_suffixes = {'.exe', '.msi'}
+    if not packages.is_dir():
+        raise ValueError('Missing Windows installer package directory')
+    package_files = sorted(p for p in packages.iterdir() if p.is_file())
+    if {p.suffix.lower() for p in package_files} != expected_suffixes:
+        raise ValueError('Windows installers must contain exactly one EXE and one MSI')
+    version = info.get('upstream_version') or str(info.get('upstream_tag', '')).lstrip('v')
+    expected_names = {
+        windows_installer_name(version, info['variant'], 'exe'),
+        windows_installer_name(version, info['variant'], 'msi'),
+    }
+    if {p.name for p in package_files} != expected_names:
+        raise ValueError('Windows installer names violate the canonical variant contract')
+    for file in package_files:
+        data = file.read_bytes()
+        if not data:
+            raise ValueError('Empty Windows installer: ' + file.name)
+        if file.suffix.lower() == '.exe':
+            if len(data) < 64 or data[:2] != b'MZ':
+                raise ValueError('Installer EXE is not a PE file: ' + file.name)
+            offset = struct.unpack_from('<I', data, 0x3c)[0]
+            if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
+                raise ValueError('Installer EXE is not Windows AMD64: ' + file.name)
+        else:
+            if data[:8] != bytes.fromhex('D0CF11E0A1B11AE1'):
+                raise ValueError('Installer MSI is not an OLE compound package: ' + file.name)
+    print(f'{info["variant"]}: metadata, checksums, Windows AMD64, MSI/EXE installers: PASS')
     return info
 
 def collect(root):

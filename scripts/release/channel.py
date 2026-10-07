@@ -6,6 +6,7 @@ from scripts.upstream.resolve import api, choose_stable, resolve_ref
 from scripts.release.github import collect, request, gh
 from scripts.upstream.patchsets import verify, patch_hash
 from scripts.release.production import assets, REPOSITORY
+from scripts.release.naming import windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
 RELEASE_IDENTITY=ROOT/'metadata/release/identity.json'
 # Canonical release revision lives under metadata/release/identity.json.
@@ -55,18 +56,27 @@ def release_preflight(data,force=False):
         if automation_lines and automation_lines != [automation_marker]:
             raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
         required={'SHA256SUMS',
-                  f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+                  windows_installer_name(data['version'], 'standard', 'exe'),
+                  windows_installer_name(data['version'], 'standard', 'msi'),
+                  windows_installer_name(data['version'], 'sos', 'exe'),
+                  windows_installer_name(data['version'], 'sos', 'msi')}
+        legacy_required={'SHA256SUMS',
+                         f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
+                         f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
         inventory=re.search(r'Asset Inventory: (.+)',body)
+        has_inventory=bool(inventory)
         if inventory:
             supplied=json.loads(inventory.group(1))
-            if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
+            if not required.issubset(set(supplied)) and not legacy_required.issubset(set(supplied)):
+                raise ValueError('Invalid historical asset inventory')
+            if len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
             required=set(supplied)
         uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
         missing_identity=[x for x in expected_identity if x not in body]
         identity_ok=not missing_identity
-        # Historical drafts may contain legacy JSON metadata assets. Existing releases
-        # are immutable, so preflight only requires the complete required public set.
-        assets_ok=required.issubset(uploaded)
+        # Historical drafts/releases may contain the legacy Windows ZIP set. They are
+        # immutable and may be reused, while every new release uses MSI/EXE names.
+        assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
         draft_ok=not existing['prerelease']
         if not (draft_ok and identity_ok and assets_ok):
             problems=[]

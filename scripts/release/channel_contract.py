@@ -6,6 +6,7 @@ import scripts.build.build_adapter as build_adapter
 import scripts.source.prepared_source as prepared_source
 import scripts.release.channel as channel
 import scripts.release.qualification as qualification
+from scripts.release.naming import native_package_name, windows_installer_name
 ROOT = Path(__file__).resolve().parents[2]
 import yaml
 
@@ -24,7 +25,7 @@ class SourceBoundaryTests(unittest.TestCase):
     def test_checksum_failure_happens_before_extraction(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);bundle=root/'bundle';bundle.mkdir();(bundle/'source.tar.gz').write_bytes(b'wrong');(bundle/'SHA256SUMS').write_text('0'*64+'  source.tar.gz\n')
-            with self.assertRaisesRegex(ValueError,'checksum'):prepared_source.unpack(bundle,root/'output','standard','a'*40,'v1')
+            with self.assertRaisesRegex(ValueError,'checksum'):prepared_source.unpack(bundle,root/'output','standard','a'*40,'v999999')
             self.assertFalse((root/'output').exists())
     def test_path_traversal_is_blocked(self):
         import hashlib
@@ -36,19 +37,23 @@ class SourceBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Unsafe archive'):prepared_source.unpack(bundle,root/'output','standard','a'*40,'v1')
             self.assertFalse((root/'escape').exists())
     def test_changed_source_inventory_blocks(self):
-        m=dict(variant='standard',upstream_sha='a'*40,patchset='v1',custom_repository_sha='b'*40,
+        m=dict(variant='standard',upstream_sha='a'*40,patchset='v999999',custom_repository_sha='b'*40,
                prepare_workflow_run='3',upstream_repository='rustdesk/rustdesk',common_patch_hash='c'*64,sos_patch_hash=None,files={'main.rs':'unchanged'})
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);(root/'source-manifest.json').write_text(json.dumps(m));(root/'main.rs').write_text('modified')
             with patch.object(prepared_source,'git',return_value='a'*40),patch.object(prepared_source,'patch_hash',return_value='c'*64),self.assertRaisesRegex(ValueError,'inventory'):
-                prepared_source.verify_tree(root,'standard','a'*40,'v1','b'*40,3)
+                prepared_source.verify_tree(root,'standard','a'*40,'v999999','b'*40,3)
 
 class ChannelPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
+        self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
+        self.addCleanup(self._verify.stop);self.addCleanup(self._hash.stop)
     def discovery(self):
         return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,revision='1',release_tag='v1.4.9-custom.1')
     def draft_fixture(self):
         return dict(name='v1.4.9-custom.1',tag_name='untagged-123',draft=True,prerelease=False,
-            body=f'Automation-State: complete\nUpstream SHA: {"a"*40}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}',
+            body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: v999999\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'c'*64,
             assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:
@@ -140,7 +145,9 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('gh workflow run tag.yml',stable_run)
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)
-        self.assertIn('--exact',tag)
+        self.assertIn('Select Stable patchset by version boundary',tag)
+        self.assertIn('patchsets.py --version "$UPSTREAM_VERSION"',tag)
+        self.assertNotIn('--exact',tag)
         self.assertNotIn('ci-qualification',tag)
 
     def test_qualification_identity_and_lookup_semantics(self):
@@ -169,7 +176,7 @@ class ChannelPolicyTests(unittest.TestCase):
              patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'a'*40,'expired':False}]}), \
              patch.object(qualification,'_download_qualification',return_value=bad_upstream):
             self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'INVALID')
-        bad_patchset=record(patchset='v1')
+        bad_patchset=record(patchset='v888888')
         with patch.object(qualification,'patch_hash',side_effect=lambda folder,name: common if folder=='common' else sos), \
              patch.object(qualification,'_workflow_dispatch_success_runs',return_value=[{'id':101,'head_branch':'main','head_sha':'f'*40}]), \
              patch.object(qualification,'gh_json',return_value={'artifacts':[{'name':'ci-qualification-'+'f'*40,'expired':False}]}), \
@@ -220,15 +227,28 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn("name.startswith('source-')",source)
         self.assertIn("name.startswith('build-info-')",source)
         names=['SHA256SUMS',
-               'rustdesk-1.4.9-standard-windows-x86_64.zip',
-               'rustdesk-1.4.9-sos-windows-x86_64.zip',
-               'rustdesk-1.4.9-standard-linux-x86_64.deb',
-               'rustdesk-1.4.9-standard-macos-x86_64.dmg']
+               windows_installer_name('1.4.9','standard','exe'),
+               windows_installer_name('1.4.9','standard','msi'),
+               windows_installer_name('1.4.9','sos','exe'),
+               windows_installer_name('1.4.9','sos','msi'),
+               native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'),
+               native_package_name('1.4.9','standard','macos','x86_64','standard-rustdesk-1.4.9-x86_64.dmg')]
         forbidden=[n for n in names if n.lower().endswith('.json') or n.startswith('source-') or n.startswith('build-info-')]
         self.assertEqual(forbidden,[])
+        qualification=source
+        self.assertIn("packages_dir=folder/'packages'", qualification)
+        self.assertIn("Windows release requires exactly one EXE and one MSI", qualification)
+        self.assertNotIn("windows-x86_64.zip", qualification)
+
+    def test_canonical_variant_naming(self):
+        self.assertEqual(windows_installer_name('1.4.9','standard','exe'), 'rustdesk-1.4.9-windows-x86_64.exe')
+        self.assertEqual(windows_installer_name('1.4.9','sos','msi'), 'rustdesk-1.4.9-sos-windows-x86_64.msi')
+        self.assertEqual(native_package_name('1.4.9','standard','android','aarch64','standard-rustdesk-1.4.9-aarch64.apk'), 'rustdesk-1.4.9-android-aarch64.apk')
+        self.assertEqual(native_package_name('1.4.9','sos','linux','x86_64','sos-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-sos-linux-x86_64.deb')
+        self.assertEqual(native_package_name('1.4.9','standard','macos','aarch64','standard-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-macos-aarch64-unsigned.dmg')
 
     def test_existing_draft_skips_costly_build_and_never_overwrites(self):
-        sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {channel.patch_hash("common","v1")}\nSOS Patch Hash: {channel.patch_hash("sos","v1")}', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
+        sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nSOS Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
             channel.resolve('stable');data=out.call_args.args[0];self.assertFalse(data['build_needed']);self.assertFalse(data['draft_needed'])
             channel.resolve('stable',force=True);data=out.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])

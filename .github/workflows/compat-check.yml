@@ -98,10 +98,10 @@ jobs:
       name: Fail-closed official build adapter
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
     - id: selection
-      name: Select compatible frozen patch generation
+      name: Select patchset by upstream version boundary
       run: 'source scripts/validation/test_config.sh
 
-        python3 scripts/upstream/patchsets.py "$UP_SHA" --source .work/official'
+        python3 scripts/upstream/patchsets.py "$UP_SHA" --version "${{ steps.adapter.outputs.upstream_version }}"'
       env:
         UP_SHA: ${{ inputs.upstream_sha }}
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -248,7 +248,7 @@ jobs:
 
         cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
 
-        python3 ../../scripts/release/package.py bridge-info .
+        PYTHONPATH="$GITHUB_WORKSPACE" python3 ../../scripts/release/package.py bridge-info .
 
         '
       env:
@@ -421,14 +421,13 @@ jobs:
         CONTRACT_RESULT: ${{ needs.contracts.result }}
         CHANNEL: ${{ inputs.channel }}
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\nroots=list(Path('diagnostics').rglob('patchset-selection.json'))\n\
-        report=json.loads(roots[0].read_text()) if roots else {'selected':None,'patchsets':[]}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success'\
+        report=json.loads(roots[0].read_text()) if roots else {'selected':None}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success'\
         \ and os.environ['BRIDGE_RESULT']=='success' and os.environ['FLUTTER_RESULT']=='success' and (os.environ['CHANNEL']=='ci'\
         \ or os.environ['HELPER_RESULT']=='success'))\nreport['overall']='PASS' if passed else 'FAIL'\nreport['Rust fast check']='PASS'\
         \ if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'\nreport['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success'\
         \ else 'NOT PASSED'\nreport['Bridge']='PASS' if os.environ['BRIDGE_RESULT']=='success' else 'NOT PASSED'\nreport['Windows\
         \ helper']='N/A (CI)' if os.environ['CHANNEL']=='ci' else ('PASS' if os.environ['HELPER_RESULT']=='success' else 'NOT\
-        \ PASSED')\nfor item in report['patchsets']:\n    if item['patchset']==os.environ['SELECTED']:\n        item['full_compatibility']='COMPATIBLE'\
-        \ if passed else 'NOT VALIDATED'\nPath('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\\n')\n\
+        \ PASSED')\nif isinstance(report.get('patchsets'), list):\n    for item in report['patchsets']:\n        if item.get('patchset')==os.environ['SELECTED']:\n            item['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'\nelse:\n    report['selected']=os.environ['SELECTED']\n    report['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'\nPath('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\\n')\n\
         with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:\n    f.write('## Patch Generation Compatibility\\n```json\\\
         n'+json.dumps(report,indent=2)+'\\n```\\n')\nPYCODE\n"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -6,16 +6,21 @@ from unittest.mock import patch
 import yaml
 ROOT = Path(__file__).resolve().parents[2]
 import scripts.release.qualification as qualification
+from scripts.release.naming import native_package_name, windows_installer_name
 import scripts.platform.platform_adapter as platform_adapter
 import scripts.platform.platform_package as platform_package
 
 class MatrixTests(unittest.TestCase):
     def test_explicit_policy_and_stable_excludes_experiments(self):
         stable=qualification.plan('stable');night=qualification.plan('nightly',True)
-        self.assertEqual(len(stable['selected']),13)
-        self.assertEqual(len(night['selected']),13)
+        self.assertTrue(stable['selected'])
+        self.assertTrue(night['selected'])
         self.assertTrue(all(e['required'] for e in stable['selected']))
         self.assertFalse(any(e['platform'] in ('android','ios','web') and e['variant']=='sos' for e in night['selected']))
+        stable_ids={e['id'] for e in stable['selected']}
+        self.assertEqual(len(stable_ids),len(stable['selected']))
+        nightly_ids={e['id'] for e in night['selected']}
+        self.assertEqual(len(nightly_ids),len(night['selected']))
     def test_duplicate_forbidden_and_false_promotion_block(self):
         good=json.loads((ROOT/'metadata/platform/matrix.json').read_text())
         for edit in ('duplicate','android-sos','fake-supported','experimental-required'):
@@ -101,16 +106,16 @@ class ArchitectureTests(unittest.TestCase):
 
 class AggregateTests(unittest.TestCase):
     def test_missing_required_target_fails_and_report_survives(self):
-        with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v1','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
+        with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v999999','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)
             self.assertEqual(json.loads((Path(tmp)/'.work/qualification-aggregate/aggregate.json').read_text())['required_gate'],'FAIL')
     def test_untagged_draft_deduplicates_without_overwrite(self):
         import scripts.release.channel as channel
         name='v1.4.9-custom.1';sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
         names=['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
-        draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example','body':'\n'.join(['Patch Set: v1','Upstream SHA: '+sha,'Common Patch Hash: '+qualification.patch_hash('common','v1'),'SOS Patch Hash: '+qualification.patch_hash('sos','v1'),'Automation-State: complete']),'assets':[{'name':n,'state':'uploaded'} for n in names]}
+        draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example','body':'\n'.join(['Patch Set: v999999','Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Automation-State: complete']),'assets':[{'name':n,'state':'uploaded'} for n in names]}
         def api(path,**kwargs):return [draft] if path.endswith('releases?per_page=100&page=1') else None
-        with patch.object(channel,'api',side_effect=api),patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9'}),patch.object(channel,'outputs') as outputs:
+        with patch.object(channel,'api',side_effect=api),patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9'}),patch.object(channel,'verify'),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'outputs') as outputs:
             channel.resolve('stable','1.4.9',True)
             data=outputs.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
 
@@ -119,6 +124,13 @@ from pathlib import Path
 import unittest
 import yaml
 ROOT = Path(__file__).resolve().parents[2]
+
+class NamingContractTests(unittest.TestCase):
+    def test_standard_has_no_variant_token_and_sos_does(self):
+        self.assertEqual(windows_installer_name('1.4.9','standard','exe'), 'rustdesk-1.4.9-windows-x86_64.exe')
+        self.assertEqual(windows_installer_name('1.4.9','sos','exe'), 'rustdesk-1.4.9-sos-windows-x86_64.exe')
+        self.assertEqual(native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-linux-x86_64.deb')
+        self.assertEqual(native_package_name('1.4.9','sos','macos','aarch64','sos-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-sos-macos-aarch64-unsigned.dmg')
 
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):

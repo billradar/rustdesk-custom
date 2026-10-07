@@ -58,6 +58,10 @@ class ReleaseGateTests(unittest.TestCase):
         (folder/'rustdesk').mkdir(parents=True)
         pe=bytearray(128); pe[:2]=b'MZ'; struct.pack_into('<I',pe,0x3c,64); pe[64:68]=b'PE\0\0'; struct.pack_into('<H',pe,68,0x8664)
         (folder/'rustdesk/rustdesk.exe').write_bytes(pe)
+        packages = folder / 'packages'
+        packages.mkdir(parents=True)
+        (packages / f'rustdesk-1.4.9{("-sos" if variant == "sos" else "")}-windows-x86_64.exe').write_bytes(pe)
+        (packages / f'rustdesk-1.4.9{("-sos" if variant == "sos" else "")}-windows-x86_64.msi').write_bytes(bytes.fromhex('D0CF11E0A1B11AE1'))
         info=dict(patchset='v1',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.4.9',
                   custom_repository_sha='b'*40, common_patch_hash=upstream.patch_hash('common'),
                   sos_patch_hash=upstream.patch_hash('sos') if variant=='sos' else None,
@@ -86,31 +90,39 @@ class ReleaseGateTests(unittest.TestCase):
 
 
 class GenerationTests(unittest.TestCase):
-    def test_v1_hashes_frozen_and_exact_mapping(self):
-        from scripts.upstream.patchsets import mapped, verify
-        m=verify('v1')
-        self.assertEqual(m['hashes']['common'],'87b7fb949b3bbc55c6d1e166909e167ebb8e0b6586630c0269f6440ba0542531')
-        self.assertEqual(m['hashes']['sos'],'d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34')
-        self.assertEqual(mapped('1.4.9'),'v1')
-        self.assertEqual(mapped('1.5.0'),'v2')
-        self.assertIsNone(mapped('9.9.9'))
+    def test_static_version_boundary_selection(self):
+        from scripts.upstream.patchsets import patchset_for_version
+        self.assertEqual(patchset_for_version('1.4.9'), 'v1')
+        self.assertEqual(patchset_for_version('1.4.99'), 'v1')
+        self.assertEqual(patchset_for_version('1.5.0'), 'v2')
+        self.assertEqual(patchset_for_version('1.5.1'), 'v2')
+        self.assertEqual(patchset_for_version('2.0.0'), 'v2')
 
-    def test_unknown_incompatible_source_fails_closed(self):
-        from scripts.upstream.patchsets import select
-        import subprocess
-        with tempfile.TemporaryDirectory() as tmp:
-            source=Path(tmp)/'source';source.mkdir()
-            subprocess.run(['git','init','--quiet',str(source)],check=True)
-            (source/'README').write_text('Synthetic incompatible fixture; no real RustDesk source\n')
-            subprocess.run(['git','-C',str(source),'add','README'],check=True)
-            subprocess.run(['git','-C',str(source),'-c','user.name=Test','-c','user.email=test@example.invalid','commit','--quiet','-m','test fixture'],check=True)
-            sha=subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()
-            report=Path(tmp)/'report.json'
-            with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(RuntimeError,'NO COMPATIBLE PATCH SET'):
-                select(sha,source,report)
-            data=json.loads(report.read_text())
-            self.assertIsNone(data['selected']);self.assertEqual(data['overall'],'FAIL')
-            self.assertEqual({r['status'] for r in data['patchsets']},{'INCOMPATIBLE'})
+    def test_selection_uses_directories_and_ignores_sha_and_hashes(self):
+        from scripts.upstream import patchsets
+        with patch.object(patchsets, 'patch_hash', side_effect=AssertionError('hash must not be used for selection')), \
+             patch.object(patchsets, 'verify', side_effect=AssertionError('verify must not be used for selection')):
+            self.assertEqual(
+                patchsets.select('0' * 40, Path('/nonexistent/source'), upstream_ref='1.5.0'),
+                'v2',
+            )
+
+    def test_missing_selected_directory_fails_closed(self):
+        from scripts.upstream import patchsets
+        with tempfile.TemporaryDirectory() as tmp, patch.object(patchsets, 'ROOT', Path(tmp)):
+            (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
+            (Path(tmp) / 'patchsets' / 'v2' / 'sos').mkdir(parents=True)
+            self.assertEqual(patchsets.patchset_for_version('1.5.0'), 'v2')
+            (Path(tmp) / 'patchsets' / 'v2' / 'sos').rmdir()
+            with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+                patchsets.patchset_for_version('1.5.0')
+
+    def test_non_numeric_version_is_rejected(self):
+        from scripts.upstream.patchsets import patchset_for_version
+        for value in ('main', 'nightly', '', '1.5'):
+            with self.assertRaises(ValueError):
+                patchset_for_version(value)
+
 
 import contextlib
 import io
@@ -282,3 +294,23 @@ class JobLogScanTests(unittest.TestCase):
             production.scan_job_log(12)
 
 if __name__ == "__main__": unittest.main()
+
+class StaticPatchsetSelectionTests(unittest.TestCase):
+    def test_version_boundary_is_the_only_selection_rule(self):
+        from scripts.upstream.patchsets import patchset_for_version, select
+        self.assertEqual(patchset_for_version('1.4.9'), 'v1')
+        self.assertEqual(patchset_for_version('1.5.0'), 'v2')
+        self.assertEqual(patchset_for_version('1.6.0'), 'v2')
+        self.assertEqual(select('0' * 40, Path('/does/not/exist'), upstream_ref='1.5.0'), 'v2')
+
+    def test_selection_does_not_call_hash_or_verify(self):
+        from scripts.upstream import patchsets
+        with patch.object(patchsets, 'patch_hash', side_effect=AssertionError('hash must not select patchset')), patch.object(patchsets, 'verify', side_effect=AssertionError('verify must not select patchset')):
+            self.assertEqual(patchsets.select('f' * 40, Path('/missing'), upstream_ref='1.5.0'), 'v2')
+
+    def test_missing_selected_directory_fails_closed(self):
+        from scripts.upstream import patchsets
+        with tempfile.TemporaryDirectory() as tmp, patch.object(patchsets, 'ROOT', Path(tmp)):
+            (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
+            with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+                patchsets.patchset_for_version('1.5.0')

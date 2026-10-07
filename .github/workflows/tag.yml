@@ -49,11 +49,10 @@ jobs:
         CHANNEL: stable
       run: python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
     - id: patchset
-      name: Resolve exact Stable patchset
+      name: Select Stable patchset by version boundary
       env:
-        UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
-        UPSTREAM_REF: ${{ steps.resolve.outputs.upstream_ref }}
-      run: python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --ref "$UPSTREAM_REF" --exact
+        UPSTREAM_VERSION: ${{ steps.resolve.outputs.version }}
+      run: python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION"
     - name: Validate Stable execution identity
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
@@ -64,11 +63,7 @@ jobs:
         [[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid upstream_sha"; exit 1; }
         [[ "$PATCHSET" =~ ^v[1-9][0-9]*$ ]] || { echo "Invalid patchset"; exit 1; }
         [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version"; exit 1; }
-        python3 - <<'PY'
-        import os
-        from scripts.upstream.patchsets import verify
-        verify(os.environ["PATCHSET"])
-        print("Stable execution identity: PASS")
+        print("Static patchset selection: PASS")
         print("  upstream_sha =", os.environ["UPSTREAM_SHA"])
         print("  patchset     =", os.environ["PATCHSET"])
         print("  version      =", os.environ["VERSION"])

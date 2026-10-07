@@ -1,104 +1,103 @@
 #!/usr/bin/env python3
-"""Frozen generations and fail-closed selection, independent clean candidate clones."""
+"""Static upstream-version to patchset selection.
+
+Selection is deliberately independent of upstream SHA, patch hashes, patch
+contents, and patch applicability. Those checks belong to later gates.
+
+Current policy:
+  upstream < 1.5.0  -> patchsets/v1
+  upstream >= 1.5.0 -> patchsets/v2
+
+Add future upstream migration boundaries explicitly here; do not reintroduce
+content/hash probing into the selector.
+"""
 import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import subprocess
-import tempfile
+
 ROOT = Path(__file__).resolve().parents[2]
+VERSION = re.compile(r'^(?:v)?([0-9]+)\.([0-9]+)\.([0-9]+)$')
+PATCHSET_V1 = 'v1'
+PATCHSET_V2 = 'v2'
+V2_BOUNDARY = (1, 5, 0)
+
+def version_tuple(value):
+    match = VERSION.fullmatch(str(value).strip())
+    if not match:
+        raise ValueError('Numeric upstream version required: ' + str(value))
+    return tuple(int(part) for part in match.groups())
+
+def patchset_for_version(version):
+    selected = PATCHSET_V1 if version_tuple(version) < V2_BOUNDARY else PATCHSET_V2
+    folder = ROOT / 'patchsets' / selected
+    if not folder.is_dir():
+        raise RuntimeError('Selected patchset directory is missing: ' + str(folder))
+    for required in ('common', 'sos'):
+        if not (folder / required).is_dir():
+            raise RuntimeError('Selected patchset directory is incomplete: ' + str(folder / required))
+    return selected
+
+def mapped(upstream_ref):
+    return patchset_for_version(upstream_ref)
 
 def metadata(name):
     if not re.fullmatch(r'v[1-9][0-9]*', name):
         raise ValueError('Invalid patchset ID')
-    return json.loads((ROOT / 'patchsets' / name / 'patchset.json').read_text())
+    path = ROOT / 'patchsets' / name / 'patchset.json'
+    if not path.is_file():
+        raise ValueError('Patchset metadata missing: ' + name)
+    return json.loads(path.read_text())
 
 def patch_hash(folder, name=None):
+    """Calculate provenance/integrity hash; never used for selection."""
     name = name or os.environ.get('PATCHSET', 'v1')
     metadata(name)
-    paths=sorted((ROOT/'patchsets'/name/folder).glob('*.patch'))
-    if not paths: raise ValueError('Empty patch generation')
-    d=hashlib.sha256()
-    for p in paths: d.update(p.name.encode()+b'\0'+p.read_bytes().replace(b'\r\n',b'\n'))
-    return d.hexdigest()
+    paths = sorted((ROOT / 'patchsets' / name / folder).glob('*.patch'))
+    if not paths:
+        raise ValueError('Empty patch generation')
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(path.name.encode() + b'\0' + path.read_bytes().replace(b'\r\n', b'\n'))
+    return digest.hexdigest()
 
 def verify(name):
-    m=metadata(name)
-    for folder in ('common','sos'):
-        if patch_hash(folder,name)!=m['hashes'][folder]:
-            raise ValueError('Patchset integrity mismatch: '+name+'/'+folder)
-    return m
+    """Explicit integrity gate; not part of patchset selection."""
+    data = metadata(name)
+    for folder in ('common', 'sos'):
+        if patch_hash(folder, name) != data['hashes'][folder]:
+            raise ValueError('Patchset integrity mismatch: ' + name + '/' + folder)
+    return data
 
-def mapped(upstream_ref):
-    index=json.loads((ROOT/'patchsets/index.json').read_text())
-    name=index['validated_mapping'].get(upstream_ref)
-    if name: verify(name)
-    return name
+def select(sha=None, source=None, report=None, upstream_ref=None, version=None):
+    """Select by upstream version only; legacy SHA/source parameters are ignored."""
+    selected_version = version or upstream_ref
+    if not selected_version:
+        raise ValueError('Upstream version/ref required for static patchset selection')
+    selected = patchset_for_version(selected_version)
+    data = {'upstream_version': str(selected_version).lstrip('v'),
+            'upstream_ref': upstream_ref or str(selected_version),
+            'selected': selected,
+            'selection_policy': 'version-boundary',
+            'overall': 'STATIC_SELECTION_PASS'}
+    if report:
+        report_path = Path(report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(data, indent=2) + '\n')
+    print(json.dumps(data, indent=2))
+    return selected
 
-def resolve_exact(sha, upstream_ref):
-    if not re.fullmatch('[0-9a-f]{40}', sha):
-        raise ValueError('Exact SHA required')
-    if not upstream_ref:
-        raise ValueError('Exact upstream ref required')
-    name=mapped(upstream_ref)
-    if not name:
-        raise RuntimeError('NO VALIDATED PATCHSET MAPPING FOR UPSTREAM REF: '+upstream_ref)
-    verify(name)
-    data={'upstream_sha':sha,'upstream_ref':upstream_ref,'known_validated_mapping':True,
-          'selected':name,'overall':'EXACT_MAPPING_PASS'}
-    print(json.dumps(data,indent=2))
-    return name
-
-def probe(source, sha, name, base):
-    from scripts.validation.compatibility import contracts
-    env=dict(os.environ,PATCHSET=name,UPSTREAM_EXPECTED_SHA=sha)
-    result={'patchset':name,'status':'INCOMPATIBLE','checks':{}}
-    verify(name)
-    base.mkdir(parents=True,exist_ok=True)
-    try:
-        for variant in ('standard','sos'):
-            tree=base/variant
-            commands=[['git','clone','--quiet','--shared','--no-checkout',str(source),str(tree)],
-                      ['git','-C',str(tree),'checkout','--quiet','--detach',sha],
-                      ['git','-C',str(tree),'submodule','update','--init','--recursive'],
-                      ['bash',str(ROOT/'scripts/source/apply_patches.sh'),str(tree),variant],
-                      ['python3',str(ROOT/'scripts/source/verify_source.py'),str(tree),variant,'--automation','--static-only']]
-            for command in commands:
-                run=subprocess.run(command,env=env,text=True,capture_output=True)
-                if run.returncode:
-                    raise RuntimeError(run.stdout[-5000:]+run.stderr[-5000:])
-            contracts(tree,variant,name)
-            result['checks'][variant]='PATCH / CONFIG / STRUCTURAL API PASS'
-        result['status']='PREFLIGHT_COMPATIBLE'
-        result['coverage']='Static selection only; real Rust/Flutter/Bridge must pass downstream'
-    except Exception as error: result['reason']=str(error)
-    return result
-
-def select(sha, source=None, report=None, upstream_ref=None):
-    if not re.fullmatch('[0-9a-f]{40}',sha): raise ValueError('Exact SHA required')
-    index=json.loads((ROOT/'patchsets/index.json').read_text())
-    fixed=mapped(upstream_ref) if upstream_ref else None
-    names=[fixed] if fixed else index['candidates']
-    ROOT.joinpath('.work').mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='resolver-',dir=ROOT/'.work') as tmp:
-        tmp=Path(tmp)
-        if source is None:
-            source=tmp/'upstream'
-            subprocess.run(['bash',str(ROOT/'scripts/source/prepare.sh'),sha,str(source)],check=True,stdout=subprocess.DEVNULL)
-        rows=[probe(Path(source).resolve(),sha,name,tmp/name) for name in names]
-        selected=next((r['patchset'] for r in rows if r['status']=='PREFLIGHT_COMPATIBLE'),None)
-        data={'upstream_sha':sha,'known_validated_mapping':bool(fixed),'patchsets':rows,'selected':selected,
-              'overall':'PREFLIGHT_PASS' if selected else 'FAIL','runtime_ui':'SKIPPED BY USER','real_remote_session':'NOT TESTED'}
-        if report:
-            report=Path(report);report.parent.mkdir(parents=True,exist_ok=True);report.write_text(json.dumps(data,indent=2)+'\n')
-        print(json.dumps(data,indent=2))
-        if not selected: raise RuntimeError('NO COMPATIBLE PATCH SET; no build or release allowed')
-        return selected
-
-if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('sha');p.add_argument('--source',type=Path);p.add_argument('--report',default='.work/patchset-selection.json');p.add_argument('--ref',default='');p.add_argument('--exact',action='store_true');args=p.parse_args()
-    name=resolve_exact(args.sha,args.ref) if args.exact else select(args.sha,args.source,args.report,args.ref)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('sha', nargs='?', help='Retained for compatibility; never used for selection')
+    parser.add_argument('--source', type=Path, help='Retained for compatibility; never used for selection')
+    parser.add_argument('--report', default='.work/patchset-selection.json')
+    parser.add_argument('--ref', default='')
+    parser.add_argument('--version', default='')
+    args = parser.parse_args()
+    name = select(sha=args.sha, source=args.source, report=args.report, upstream_ref=args.ref, version=args.version)
     if os.environ.get('GITHUB_OUTPUT'):
-        with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('patchset='+name+'\n')
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as file:
+            file.write('patchset=' + name + '\n')
