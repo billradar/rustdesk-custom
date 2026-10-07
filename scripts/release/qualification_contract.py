@@ -115,7 +115,7 @@ class AggregateTests(unittest.TestCase):
         names=['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example','body':'\n'.join(['Patch Set: v999999','Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Automation-State: complete']),'assets':[{'name':n,'state':'uploaded'} for n in names]}
         def api(path,**kwargs):return [draft] if path.endswith('releases?per_page=100&page=1') else None
-        with patch.object(channel,'api',side_effect=api),patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9'}),patch.object(channel,'outputs') as outputs:
+        with patch.object(channel,'api',side_effect=api),patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9'}),patch.object(channel,'verify'),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'outputs') as outputs:
             channel.resolve('stable','1.4.9',True)
             data=outputs.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
 
