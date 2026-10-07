@@ -52,9 +52,14 @@ def release_preflight(data,force=False):
         expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
                           f'SOS Patch Hash: {patch_hash("sos",name)}']
         automation_marker='Automation-State: complete'
-        automation_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
-        if automation_lines and automation_lines != [automation_marker]:
+        legacy_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
+        metadata_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('automation_state=')]
+        if legacy_lines and legacy_lines != [automation_marker]:
             raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
+        if metadata_lines and metadata_lines != ['automation_state=complete']:
+            raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
+        if legacy_lines and metadata_lines:
+            raise ValueError('Existing release has duplicate automation state markers')
         required={'SHA256SUMS',
                   windows_installer_name(data['version'], 'standard', 'exe'),
                   windows_installer_name(data['version'], 'standard', 'msi'),
