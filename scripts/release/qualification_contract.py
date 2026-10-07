@@ -135,7 +135,7 @@ class NamingContractTests(unittest.TestCase):
     def test_android_standard_name_deduplicates_platform_arch_and_variant(self):
         bad='standard-rustdesk-1.5.0-android-x86_64-standard-android-x86_64-signed.apk'
         self.assertEqual(native_package_name('1.5.0','standard','android','x86_64',bad), 'rustdesk-1.5.0-android-x86_64-signed.apk')
-        self.assertEqual(native_package_name('1.5.0','standard','android','aarch64','standard-rustdesk-1.5.0-aarch64.apk'), 'rustdesk-1.5.0-android-aarch64-apk')
+        self.assertEqual(native_package_name('1.5.0','standard','android','aarch64','standard-rustdesk-1.5.0-aarch64.apk'), 'rustdesk-1.5.0-android-aarch64.apk')
 
 
 class ReleaseBodyContractTests(unittest.TestCase):
