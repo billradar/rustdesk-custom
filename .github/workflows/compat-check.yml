@@ -98,10 +98,10 @@ jobs:
       name: Fail-closed official build adapter
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
     - id: selection
-      name: Select compatible frozen patch generation
+      name: Select patchset by upstream version boundary
       run: 'source scripts/validation/test_config.sh
 
-        python3 scripts/upstream/patchsets.py "$UP_SHA" --source .work/official'
+        python3 scripts/upstream/patchsets.py "$UP_SHA" --version "${{ steps.adapter.outputs.upstream_version }}"'
       env:
         UP_SHA: ${{ inputs.upstream_sha }}
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
