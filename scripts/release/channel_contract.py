@@ -60,6 +60,15 @@ class ChannelPolicyTests(unittest.TestCase):
                 data=channel.release_preflight(self.discovery(),force)
                 resolve.assert_not_called();self.assertEqual(data['build_needed'],force);self.assertFalse(data['draft_needed'])
                 self.assertTrue(data['publish_existing'])
+    def test_legacy_complete_draft_without_automation_marker_is_accepted(self):
+        draft=self.draft_fixture()
+        draft['body']=draft['body'].replace('Automation-State: complete\n','')
+        with patch.object(channel,'api',side_effect=[None,[draft]]):
+            data=channel.release_preflight(self.discovery(),False)
+            self.assertFalse(data['build_needed'])
+            self.assertFalse(data['draft_needed'])
+            self.assertTrue(data['publish_existing'])
+
     def test_incomplete_or_mismatched_draft_blocks_before_build(self):
         for mutate in ('missing-asset','wrong-sha','incomplete'):
             draft=self.draft_fixture()

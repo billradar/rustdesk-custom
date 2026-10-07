@@ -48,8 +48,12 @@ def release_preflight(data,force=False):
         generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
         if generation is None:raise ValueError('Existing release missing generation identity')
         name=generation.group(1);verify(name)
-        expected=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
-                  f'SOS Patch Hash: {patch_hash("sos",name)}','Automation-State: complete']
+        expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
+                          f'SOS Patch Hash: {patch_hash("sos",name)}']
+        automation_marker='Automation-State: complete'
+        automation_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
+        if automation_lines and automation_lines != [automation_marker]:
+            raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
         required={'SHA256SUMS','build-info-standard.json','build-info-sos.json',
                   f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
         inventory=re.search(r'^Asset Inventory: (\[.*\])$',body,re.M)
@@ -57,8 +61,21 @@ def release_preflight(data,force=False):
             supplied=json.loads(inventory.group(1))
             if not required.issubset(set(supplied)) or len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
             required=set(supplied)
-        if existing['prerelease'] or not all(x in body for x in expected) or {x['name'] for x in existing['assets'] if x['state']=='uploaded'}!=required:
-            raise ValueError('Existing release incomplete or incompatible; never overwrite')
+        uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
+        missing_identity=[x for x in expected_identity if x not in body]
+        identity_ok=not missing_identity
+        assets_ok=uploaded==required
+        draft_ok=not existing['prerelease']
+        if not (draft_ok and identity_ok and assets_ok):
+            problems=[]
+            if not draft_ok:problems.append('prerelease release')
+            if missing_identity:problems.append('missing identity: '+', '.join(missing_identity))
+            if not assets_ok:problems.append('asset inventory mismatch')
+            raise ValueError('Existing release incomplete or incompatible; never overwrite ('+'; '.join(problems)+')')
+        if automation_marker not in body:
+            # Older drafts predate Automation-State. They remain immutable and
+            # are accepted only after the same identity and asset checks pass.
+            print('Existing release is legacy-complete: Automation-State marker missing; no overwrite will occur.')
         data['build_needed']=force
         data['draft_needed']=False
         data['publish_existing']=bool(existing.get('draft'))
