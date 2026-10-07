@@ -28,7 +28,7 @@ def native_package_name(version, variant, platform, arch, package_name):
             tail = tail[len(prefix):]
             break
 
-    prefixes = (
+    separator = '-'\n    if tail.startswith(f'{platform}-{arch}.'):\n        tail = tail[len(f'{platform}-{arch}'):]; separator = ''\n    elif tail.startswith(f'{arch}.'):\n        tail = tail[len(arch):]; separator = ''\n    prefixes = (
         f'{variant}-{platform}-{arch}-',
         f'{platform}-{arch}-{variant}-{platform}-{arch}-',
         f'{platform}-{arch}-{platform}-{arch}-',
@@ -53,4 +53,4 @@ def native_package_name(version, variant, platform, arch, package_name):
 
     if not tail:
         raise ValueError('Package name has no payload suffix: '+package_name)
-    return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}-{tail}'
+    return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}{separator}{tail}'
