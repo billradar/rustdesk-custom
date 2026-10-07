@@ -59,6 +59,10 @@ class ReleaseGateTests(unittest.TestCase):
         (folder/'rustdesk').mkdir(parents=True)
         pe=bytearray(128); pe[:2]=b'MZ'; struct.pack_into('<I',pe,0x3c,64); pe[64:68]=b'PE\0\0'; struct.pack_into('<H',pe,68,0x8664)
         (folder/'rustdesk/rustdesk.exe').write_bytes(pe)
+        (folder/'rustdesk/librustdesk.dll').write_bytes(pe)
+        (folder/'packages').mkdir()
+        (folder/'packages'/('rustdesk-1.4.9'+('-sos' if variant == 'sos' else '')+'-windows-x86_64.exe')).write_bytes(pe)
+        (folder/'packages'/('rustdesk-1.4.9'+('-sos' if variant == 'sos' else '')+'-windows-x86_64.msi')).write_bytes(bytes.fromhex('D0CF11E0A1B11AE1'))
         info=dict(patchset='v1',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.4.9',
                   custom_repository_sha='b'*40, common_patch_hash=upstream.patch_hash('common'),
                   sos_patch_hash=upstream.patch_hash('sos') if variant=='sos' else None,
