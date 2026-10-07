@@ -327,6 +327,17 @@ def verify_ci(repo,custom_sha,upstream_sha,upstream_ref,patchset=None,workflow_r
                 break
     raise last_error or ValueError("No exact qualification artifact was found")
 
+def release_notes_body(upstream_tag):
+    """Use the official upstream release body, without the Pro promotion badge."""
+    from scripts.upstream.resolve import api
+    tag=upstream_tag or 'nightly'
+    release=api(f'repos/rustdesk/rustdesk/releases/tags/{tag}',missing=True)
+    if not release:
+        return ''
+    body=(release.get('body') or '').replace('\\r\\n','\\n').strip()
+    body=re.sub(r'\\n?\\[!\\[RustDesk Server Pro\\]\\([^)]*\\)\\]\\([^)]*\\)\\s*', '\\n', body)
+    return body.strip()
+
 def _release(root, publish, channel='stable', experimental=False):
     if channel == 'nightly' and publish:
         raise ValueError('Nightly release is forbidden; only draft publication is allowed')
@@ -354,14 +365,29 @@ def _release(root, publish, channel='stable', experimental=False):
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
-    notes='\n'.join(['Upstream: rustdesk/rustdesk',f'Upstream Tag: {standard["upstream_tag"]}',f'Upstream SHA: {standard["upstream_sha"]}',f'Patch Set: {standard["patchset"]}',f'Common Patch Hash: {standard["common_patch_hash"]}',f'SOS Patch Hash: {sos["sos_patch_hash"]}',f'Custom Repository SHA: {standard["custom_repository_sha"]}',f'Prepared Source Run: {standard["prepare_run"]}',f'Build Run: {standard["build_run"]}',
-        'Required Targets: '+','.join(sorted(report['targets'])),
-        'Asset Inventory: '+json.dumps(sorted(p.name for p in directory.iterdir())),
-        'Build / Package / Checksum / Architecture / Provenance: PASS',
-        'Runtime/UI Validation: SKIPPED BY USER','Real Remote Session Validation: NOT TESTED','Desktop Code Signing: NOT ENABLED',
-        'Android artifacts: '+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),'Password Security V2: DEFERRED',
-        'Embedded client configuration/password can be extracted by client owners.',
-        'Release policy: '+('PUBLISHED RELEASE.' if publish else 'DRAFT ONLY; publication is a manual user decision.')])+'\n'
+    notes=release_notes_body(standard['upstream_tag'] or ('nightly' if channel=='nightly' else standard['upstream_version']))
+    metadata=[
+        'upstream_repository=rustdesk/rustdesk',
+        f'upstream_tag={standard["upstream_tag"]}',
+        f'upstream_sha={standard["upstream_sha"]}',
+        f'patchset={standard["patchset"]}',
+        f'common_patch_hash={standard["common_patch_hash"]}',
+        f'sos_patch_hash={sos["sos_patch_hash"]}',
+        f'custom_repository_sha={standard["custom_repository_sha"]}',
+        f'prepare_run={standard["prepare_run"]}',
+        f'build_run={standard["build_run"]}',
+        'required_targets='+','.join(sorted(report['targets'])),
+        'asset_inventory='+json.dumps(sorted(p.name for p in directory.iterdir()),separators=(',',':')),
+        'build_package_checksum_architecture_provenance=PASS',
+        'runtime_ui_validation=SKIPPED BY USER',
+        'real_remote_session_validation=NOT TESTED',
+        'desktop_code_signing=NOT ENABLED',
+        'android_signing='+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),
+        'password_security_v2=DEFERRED',
+        'automation_state=complete',
+        'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
+    ]
+    notes=notes.rstrip()+'\\n\\n## Custom release metadata\\n\\n'+'\\n'.join(metadata)+'\\n'
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
