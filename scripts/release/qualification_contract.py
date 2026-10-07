@@ -6,6 +6,7 @@ from unittest.mock import patch
 import yaml
 ROOT = Path(__file__).resolve().parents[2]
 import scripts.release.qualification as qualification
+from scripts.release.naming import native_package_name, windows_installer_name
 import scripts.platform.platform_adapter as platform_adapter
 import scripts.platform.platform_package as platform_package
 
@@ -119,6 +120,13 @@ from pathlib import Path
 import unittest
 import yaml
 ROOT = Path(__file__).resolve().parents[2]
+
+class NamingContractTests(unittest.TestCase):
+    def test_standard_has_no_variant_token_and_sos_does(self):
+        self.assertEqual(windows_installer_name('1.4.9','standard','exe'), 'rustdesk-1.4.9-windows-x86_64.exe')
+        self.assertEqual(windows_installer_name('1.4.9','sos','exe'), 'rustdesk-1.4.9-sos-windows-x86_64.exe')
+        self.assertEqual(native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-linux-x86_64.deb')
+        self.assertEqual(native_package_name('1.4.9','sos','macos','aarch64','sos-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-sos-macos-aarch64-unsigned.dmg')
 
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
