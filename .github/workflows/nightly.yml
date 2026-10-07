@@ -56,7 +56,8 @@ jobs:
         UPSTREAM_TEST_REF: ${{ vars.UPSTREAM_TEST_REF || vars.UPSTREAM_TEST_BRANCH || 'test' }}
         CHANNEL: nightly
         FORCE: ${{ inputs.force_rebuild || false }}
-      run: 'args=()
+      run: |
+        args=()
 
         [[ "$FORCE" != true ]] || args+=(--force)
 
@@ -68,7 +69,7 @@ jobs:
         fi
 
         echo "Nightly official upstream ref: $REQUESTED_REF"
-        python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"'
+        python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" "${args[@]}"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
