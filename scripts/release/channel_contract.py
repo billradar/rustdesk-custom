@@ -215,7 +215,8 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotIn("source-'+name+'.zip",source)
         self.assertNotIn("build-info-'+name+'.json",source)
         self.assertNotIn("shutil.copy2(folder/'build-info.json',assets/metadata_name)",source)
-        self.assertIn("package.suffix.lower() == '.json'",source)
+        self.assertIn("package.suffix.lower() not in allowed_suffixes",source)
+        self.assertIn("allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}",source)
         self.assertIn("name.startswith('source-')",source)
         self.assertIn("name.startswith('build-info-')",source)
         names=['SHA256SUMS',
