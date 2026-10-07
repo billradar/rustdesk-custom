@@ -47,7 +47,11 @@ def discover(ref, force=False, dry_run=True):
                     windows_installer_name(data['version'], 'standard', 'msi'),
                     windows_installer_name(data['version'], 'sos', 'exe'),
                     windows_installer_name(data['version'], 'sos', 'msi')}
-        if existing['prerelease'] or not all(x in body for x in expected) or not required.issubset(asset_names):
+        legacy_required = {'SHA256SUMS',
+                           f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
+                           f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+        assets_complete = required.issubset(asset_names) or legacy_required.issubset(asset_names)
+        if existing['prerelease'] or not all(x in body for x in expected) or not assets_complete:
             raise ValueError('Existing release incomplete or different; never overwrite, review revision')
     else:
         # An existing tag without a matching complete release is also a hard stop.
