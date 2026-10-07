@@ -327,16 +327,24 @@ def verify_ci(repo,custom_sha,upstream_sha,upstream_ref,patchset=None,workflow_r
                 break
     raise last_error or ValueError("No exact qualification artifact was found")
 
+def normalize_release_body(body):
+    """Normalize the official release body and remove the Pro promotion badge."""
+    body=(body or '').replace('\\r\\n','\\n').strip()
+    body=re.sub(r'\\n?\\[!\\[RustDesk Server Pro\\]\\([^)]*\\)\\]\\([^)]*\\)\\s*', '\\n', body)
+    return body.strip()
+
 def release_notes_body(upstream_tag):
     """Use the official upstream release body, without the Pro promotion badge."""
     from scripts.upstream.resolve import api
     tag=upstream_tag or 'nightly'
     release=api(f'repos/rustdesk/rustdesk/releases/tags/{tag}',missing=True)
-    if not release:
-        return ''
-    body=(release.get('body') or '').replace('\\r\\n','\\n').strip()
-    body=re.sub(r'\\n?\\[!\\[RustDesk Server Pro\\]\\([^)]*\\)\\]\\([^)]*\\)\\s*', '\\n', body)
-    return body.strip()
+    return normalize_release_body(release.get('body') if release else '')
+
+def build_release_body(official_body, metadata):
+    body=normalize_release_body(official_body)
+    if not body:
+        raise ValueError('Official release body is unavailable')
+    return body+'\\n\\n## Custom release metadata\\n\\n'+'\\n'.join(metadata)+'\\n'
 
 def _release(root, publish, channel='stable', experimental=False):
     if channel == 'nightly' and publish:
@@ -365,7 +373,7 @@ def _release(root, publish, channel='stable', experimental=False):
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
-    notes=release_notes_body(standard['upstream_tag'] or ('nightly' if channel=='nightly' else standard['upstream_version']))
+    official_notes=release_notes_body(standard['upstream_tag'] or ('nightly' if channel=='nightly' else standard['upstream_version']))
     metadata=[
         'upstream_repository=rustdesk/rustdesk',
         f'upstream_tag={standard["upstream_tag"]}',
@@ -387,7 +395,7 @@ def _release(root, publish, channel='stable', experimental=False):
         'automation_state=complete',
         'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
     ]
-    notes=notes.rstrip()+'\\n\\n## Custom release metadata\\n\\n'+'\\n'.join(metadata)+'\\n'
+    notes=build_release_body(official_notes, metadata)
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
