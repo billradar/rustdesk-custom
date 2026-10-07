@@ -158,7 +158,7 @@ class ReleaseBodyContractTests(unittest.TestCase):
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
         text=(ROOT/'scripts/release/qualification.py').read_text()
-        self.assertNotIn(r"\\n", text)
+        self.assertNotIn(r"\n", text)
         self.assertIn("target-plan.json');target_plan.write_text(json.dumps(p,indent=2)+'\\n');json.loads(target_plan.read_text())", text)
         self.assertIn("f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\\ncount='", text)
 
