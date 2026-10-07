@@ -3,6 +3,7 @@
 import argparse, hashlib, json, os, re, shutil, subprocess, time
 from pathlib import Path
 from scripts.upstream.patchsets import patch_hash
+from scripts.release.naming import native_package_name, windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
 FORBIDDEN={'android','ios','web'}
 def target(e):return '-'.join((e['platform'],e['arch'],e['variant']))
@@ -102,7 +103,7 @@ def aggregate(root,channel,experimental):
                 if {p.suffix.lower() for p in packages} != {'.exe','.msi'}:
                     raise ValueError('PACKAGE: Windows release requires exactly one EXE and one MSI')
                 for package in packages:
-                    filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-windows-x86_64{package.suffix.lower()}'
+                    filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix)
                     shutil.copy2(package,assets/filename)
             else:
                 packages_dir=folder/'packages'
@@ -114,11 +115,7 @@ def aggregate(root,channel,experimental):
                         raise ValueError('PACKAGE: unexpected non-file package entry')
                     if package.suffix.lower() not in allowed_suffixes:
                         raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
-                    prefix=f'{info["variant"]}-rustdesk-{info["upstream_version"]}-'
-                    package_tail=package.name
-                    if package_tail.startswith(prefix):
-                        package_tail=package_tail[len(prefix):]
-                    filename=f'rustdesk-{info["upstream_version"]}-{info["variant"]}-{e["platform"]}-{e["arch"]}-{package_tail}'
+                    filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
                     shutil.copy2(package,assets/filename)
         from scripts.platform.platform_package import checksums
         checksums(assets)
