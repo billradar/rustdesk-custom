@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 
+from scripts.release.naming import windows_installer_name
+
 EXPECTED_SHA = os.environ.get('UPSTREAM_EXPECTED_SHA')
 BRIDGE_FILES = [
     'src/bridge_generated.rs', 'src/bridge_generated.io.rs',
@@ -46,7 +48,7 @@ def build_windows_installers(tree, release, packages, version):
     packed = tree / 'target/release/rustdesk-portable-packer.exe'
     if not packed.is_file() or packed.stat().st_size == 0:
         raise ValueError('Windows self-extracted EXE was not generated')
-    exe = packages / f'rustdesk-{version}-{os.environ.get("BUILD_VARIANT", "standard")}-windows-x86_64.exe'
+    exe = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'exe')
     shutil.copy2(packed, exe)
 
     # Upstream builds the MSI from res/msi using the reviewed WiX project.
@@ -64,7 +66,7 @@ def build_windows_installers(tree, release, packages, version):
     msi = candidates[0]
     if msi.stat().st_size == 0:
         raise ValueError('Generated Windows MSI is empty')
-    msi_out = packages / f'rustdesk-{version}-{os.environ.get("BUILD_VARIANT", "standard")}-windows-x86_64.msi'
+    msi_out = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'msi')
     shutil.copy2(msi, msi_out)
     return exe, msi_out
 
