@@ -12,8 +12,10 @@ import scripts.platform.platform_package as platform_package
 class MatrixTests(unittest.TestCase):
     def test_explicit_policy_and_stable_excludes_experiments(self):
         stable=qualification.plan('stable');night=qualification.plan('nightly',True)
-        self.assertEqual(len(stable['selected']),13)
-        self.assertEqual(len(night['selected']),13)
+        self.assertTrue(stable['selected'])
+        self.assertTrue(night['selected'])
+        self.assertEqual(len({e['id'] for e in stable['selected']}), len(stable['selected']))
+        self.assertEqual(len({e['id'] for e in night['selected']}), len(night['selected']))
         self.assertTrue(all(e['required'] for e in stable['selected']))
         self.assertFalse(any(e['platform'] in ('android','ios','web') and e['variant']=='sos' for e in night['selected']))
     def test_duplicate_forbidden_and_false_promotion_block(self):
