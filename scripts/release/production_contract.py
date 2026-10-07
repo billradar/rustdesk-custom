@@ -290,3 +290,23 @@ class JobLogScanTests(unittest.TestCase):
             production.scan_job_log(12)
 
 if __name__ == "__main__": unittest.main()
+
+class StaticPatchsetSelectionTests(unittest.TestCase):
+    def test_version_boundary_is_the_only_selection_rule(self):
+        from scripts.upstream.patchsets import patchset_for_version, select
+        self.assertEqual(patchset_for_version('1.4.9'), 'v1')
+        self.assertEqual(patchset_for_version('1.5.0'), 'v2')
+        self.assertEqual(patchset_for_version('1.6.0'), 'v2')
+        self.assertEqual(select('0' * 40, Path('/does/not/exist'), upstream_ref='1.5.0'), 'v2')
+
+    def test_selection_does_not_call_hash_or_verify(self):
+        from scripts.upstream import patchsets
+        with patch.object(patchsets, 'patch_hash', side_effect=AssertionError('hash must not select patchset')), patch.object(patchsets, 'verify', side_effect=AssertionError('verify must not select patchset')):
+            self.assertEqual(patchsets.select('f' * 40, Path('/missing'), upstream_ref='1.5.0'), 'v2')
+
+    def test_missing_selected_directory_fails_closed(self):
+        from scripts.upstream import patchsets
+        with tempfile.TemporaryDirectory() as tmp, patch.object(patchsets, 'ROOT', Path(tmp)):
+            (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
+            with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+                patchsets.patchset_for_version('1.5.0')
