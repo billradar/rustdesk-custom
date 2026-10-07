@@ -222,6 +222,14 @@ class ProductionDiscoveryTests(unittest.TestCase):
         public_assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         self.assertFalse(any(name.lower().endswith('.json') for name in public_assets))
 
+    def test_sha256sums_contract_excludes_json_metadata(self):
+        import scripts.release.production as production
+        source=Path(production.__file__).read_text()
+        sums_block=source[source.index("release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')"):source.index("release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')", source.index("release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')")+1)]
+        self.assertIn("p.suffix.lower() != '.json'", sums_block)
+        self.assertIn("hashlib.sha256(p.read_bytes())", sums_block)
+        self.assertNotIn("build-info-", sums_block)
+
     def test_existing_complete_release_skips_build(self):
         d=self.discovery(existing=True);self.assertFalse(d['build_needed']);self.assertFalse(d['publish_needed'])
     def test_force_never_overwrites(self):
