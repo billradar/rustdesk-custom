@@ -18,10 +18,10 @@ import scripts.release.github as release
 
 class DiscoveryTests(unittest.TestCase):
     def test_official_release_metadata_controls_stability(self):
-        rows = [dict(id=1, tag_name='1.4.9', draft=False, prerelease=False),
-                dict(id=2, tag_name='1.5.0', draft=False, prerelease=True),
-                dict(id=3, tag_name='nightly', draft=False, prerelease=False),
-                dict(id=4, tag_name='1.6.0', draft=True, prerelease=False)]
+        rows = [dict(id=1, tag_name='1.4.9', draft=False, prerelease=False, body='# Changelog\n\n- test change'),
+                dict(id=2, tag_name='1.5.0', draft=False, prerelease=True, body='# Changelog\n\n- prerelease'),
+                dict(id=3, tag_name='nightly', draft=False, prerelease=False, body='# Changelog'),
+                dict(id=4, tag_name='1.6.0', draft=True, prerelease=False, body='# Changelog')]
         with patch.object(upstream, 'api', return_value=rows), patch.object(upstream, 'resolve_ref', return_value='a'*40):
             self.assertEqual(upstream.choose_stable()['upstream_tag'], '1.4.9')
             with self.assertRaises(ValueError): upstream.choose_stable('1.5.0')
