@@ -55,6 +55,11 @@ class DiscoveryTests(unittest.TestCase):
         data=self.discovery(force=True); self.assertTrue(data['build_needed']); self.assertFalse(data['publish_needed'])
 
 class ReleaseGateTests(unittest.TestCase):
+    def setUp(self):
+        self._verify=patch('scripts.upstream.patchsets.verify',return_value=True);self._verify.start()
+        self._patch_hash=patch.object(release,'patch_hash',return_value='c'*64);self._patch_hash.start()
+        self.addCleanup(self._verify.stop);self.addCleanup(self._patch_hash.stop)
+
     def payload(self, folder, variant):
         (folder/'rustdesk').mkdir(parents=True)
         pe=bytearray(128); pe[:2]=b'MZ'; struct.pack_into('<I',pe,0x3c,64); pe[64:68]=b'PE\0\0'; struct.pack_into('<H',pe,68,0x8664)
@@ -64,8 +69,8 @@ class ReleaseGateTests(unittest.TestCase):
         (folder/'packages'/('rustdesk-1.4.9'+('-sos' if variant == 'sos' else '')+'-windows-x86_64.exe')).write_bytes(pe)
         (folder/'packages'/('rustdesk-1.4.9'+('-sos' if variant == 'sos' else '')+'-windows-x86_64.msi')).write_bytes(bytes.fromhex('D0CF11E0A1B11AE1'))
         info=dict(patchset='v999999',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.4.9',
-                  custom_repository_sha='b'*40, common_patch_hash=upstream.patch_hash('common'),
-                  sos_patch_hash=upstream.patch_hash('sos') if variant=='sos' else None,
+                  custom_repository_sha='b'*40, common_patch_hash='c'*64,
+                  sos_patch_hash='c'*64 if variant=='sos' else None,
                   workflow_run='42', patch_revision='1', signed=False, configuration='TEST ONLY',
                   runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED')
         (folder/'build-info.json').write_text(json.dumps(info))
@@ -196,7 +201,7 @@ class ProductionGateTests(ReleaseGateTests):
         return info
 
     def test_production_payload_and_shared_server_gate(self):
-        env = {'BUILD_CONFIGURATION':'PRODUCTION','PATCHSET':'v1','GITHUB_RUN_ID':'',
+        env = {'BUILD_CONFIGURATION':'PRODUCTION','PATCHSET':'v999999','GITHUB_RUN_ID':'',
                'UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env):
             root=Path(tmp); self.payload(root/'standard','standard'); info=self.payload(root/'sos','sos')
@@ -221,10 +226,11 @@ class ProductionDiscoveryTests(unittest.TestCase):
             names=['SHA256SUMS',
                    'rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
             if partial:names.pop()
-            return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: NaN\nSOS Patch Hash: NaN\nAutomation-State: complete',
+            return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nSOS Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nAutomation-State: complete',
                     'assets':[{'name':x,'state':'uploaded'} for x in names]}
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{'GITHUB_REPOSITORY':production.REPOSITORY,'GITHUB_OUTPUT':''}), \
              patch.object(production,'choose_stable',return_value={'upstream_tag':'1.4.9','version':'1.4.9','upstream_sha':sha}), \
+             patch.object(production,'mapped',return_value='v999999'), patch.object(production,'patch_hash',return_value='c'*64), \
              patch.object(production,'api',side_effect=api),contextlib.redirect_stdout(io.StringIO()):
             prev=Path.cwd()
             try:
