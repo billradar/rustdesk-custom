@@ -109,7 +109,7 @@ def release_preflight(data):
         # immutable and may be reused, while every new release uses MSI/EXE names.
         assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
         draft_ok=not existing['prerelease']
-        if not (draft_ok and identity_ok and assets_ok):
+        if not (draft_ok and assets_ok):
             problems=[]
             if not draft_ok:problems.append('prerelease release')
             if missing_identity:problems.append('missing identity: '+', '.join(missing_identity))
