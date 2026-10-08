@@ -34,12 +34,18 @@ def release_rows(version):
         if len(batch)<100: break
     return rows
 
+def release_tag_name(row, version):
+    for value in (row.get('tag_name'), row.get('name')):
+        if value and CUSTOM_REVISION_RE.fullmatch(value) and value.startswith(f'v{version}-custom.'):
+            return value
+    return None
+
 def next_patch_revision(version, patchset):
     match=PATCH_REVISION_RE.fullmatch(patchset)
     if not match: raise ValueError('Invalid patchset revision')
     patch_number=match.group(1)
     pattern=re.compile(r'^v'+re.escape(version)+r'-custom\.v'+re.escape(patch_number)+r'\.([1-9][0-9]{0,5})$')
-    nums=[int(m.group(1)) for row in release_rows(version) if (m:=pattern.fullmatch(row.get('tag_name') or row.get('name') or ''))]
+    nums=[int(m.group(1)) for row in release_rows(version) if (tag:=release_tag_name(row,version)) and (m:=pattern.fullmatch(tag))]
     return f'v{patch_number}.{max(nums or [0])+1}'
 
 def parse_patch_revision(tag, version):
@@ -73,7 +79,7 @@ def release_preflight(data):
     current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
     same=same_identity_release(data['version'],current_identity)
     if same:
-        data['release_tag']=same.get('tag_name') or same.get('name')
+        data['release_tag']=release_tag_name(same,data['version']) or (_ for _ in ()).throw(ValueError('Existing Build Identity has invalid revision tag'))
         data['patch_revision']=parse_patch_revision(data['release_tag'],data['version'])
         data['revision']=data['patch_revision']
     else:
