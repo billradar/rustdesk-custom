@@ -16,6 +16,7 @@ jobs:
     outputs:
       nightly_run_id: ${{ steps.detect.outputs.nightly_run_id }}
       nightly_sha: ${{ steps.detect.outputs.nightly_sha }}
+      nightly_release_updated_at: ${{ steps.detect.outputs.nightly_release_updated_at }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -40,6 +41,7 @@ jobs:
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:
             f.write('nightly_run_id='+str(run['id'])+'\n')
             f.write('nightly_sha='+run['head_sha']+'\n')
+            f.write('nightly_release_updated_at='+release['updated_at']+'\n')
         print('Official Nightly run='+str(run['id'])+' sha='+run['head_sha'])
         PY
 
@@ -73,6 +75,8 @@ jobs:
         set -euo pipefail
         gh workflow run nightly.yml --repo '${{ github.repository }}' --ref main \
           -f upstream_ref='${{ needs.detect.outputs.nightly_sha }}' \
+          -f upstream_nightly_run_id='${{ needs.detect.outputs.nightly_run_id }}' \
+          -f upstream_nightly_release_updated_at='${{ needs.detect.outputs.nightly_release_updated_at }}' \
           -f include_experimental=true \
           -f release_mode=build \
           -f automation_source=upstream-nightly-router
