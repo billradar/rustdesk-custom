@@ -117,7 +117,7 @@ class AggregateTests(unittest.TestCase):
         name='v1.4.9-custom.v999999.1'
         assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
-               'body':'\\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Patch Revision: v999999.1','Build Identity: '+identity,'Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
+               'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Patch Revision: v999999.1','Build Identity: '+identity,'Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
                'assets':[{'name':n,'state':'uploaded'} for n in assets]}
         def api(path,**kwargs):
             if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
