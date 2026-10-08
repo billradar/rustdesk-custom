@@ -33,7 +33,7 @@ jobs:
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       upstream_version: ${{ steps.resolve.outputs.version }}
       patchset: ${{ steps.patchset.outputs.patchset }}
-      revision: ${{ steps.resolve.outputs.revision }}
+      patch_revision: ${{ steps.resolve.outputs.patch_revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -85,6 +85,7 @@ jobs:
       revision: ${{ steps.gate.outputs.revision }}
       release_tag: ${{ steps.gate.outputs.release_tag }}
       build_identity: ${{ steps.gate.outputs.build_identity }}
+      patch_revision: ${{ steps.gate.outputs.patch_revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -248,7 +249,8 @@ jobs:
       publish_existing: ${{ needs.draft-preflight.outputs.publish_existing }}
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-      revision: ${{ needs.resolve.outputs.revision }}
+      revision: ${{ needs.draft-preflight.outputs.patch_revision }}
+      patch_revision: ${{ needs.draft-preflight.outputs.patch_revision }}
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       patchset: ${{ needs.resolve.outputs.patchset }}
     if: >-
@@ -261,6 +263,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      PATCH_REVISION: ${{ needs.draft-preflight.outputs.patch_revision }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
@@ -303,7 +306,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.draft-preflight.outputs.revision }}
+      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.draft-preflight.outputs.patch_revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
