@@ -118,10 +118,10 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertFalse(tag['concurrency']['cancel-in-progress'])
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         concurrency=ci['concurrency']
-        self.assertIn("inputs.automation_source == 'upstream-event-router'",concurrency['group'])
+        self.assertIn("inputs.automation_source == 'upstream-stable-router'",concurrency['group'])
         self.assertIn("'action-created-ci'",concurrency['group'])
         self.assertIn("format('normal-ci-{0}', github.ref)",concurrency['group'])
-        self.assertIn("inputs.automation_source != 'upstream-event-router'",concurrency['cancel-in-progress'])
+        self.assertIn("inputs.automation_source != 'upstream-stable-router'",concurrency['cancel-in-progress'])
         self.assertIn('workflow_dispatch',ci['on'])
         self.assertIn('automation_source',ci['on']['workflow_dispatch']['inputs'])
         self.assertNotIn('qualification_mode',ci['on']['workflow_dispatch']['inputs'])
