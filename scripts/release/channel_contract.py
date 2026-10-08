@@ -291,11 +291,23 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertFalse(out.call_args.args[0]['build_needed'])
             self.assertFalse(out.call_args.args[0]['draft_needed'])
 
-    def test_existing_draft_skips_costly_build_and_never_overwrites(self):
-        sha='a'*40;existing={'body':f'Automation-State: complete\nUpstream SHA: {sha}\nPatch Set: v999999\nCommon Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nSOS Patch Hash: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'draft':True,'prerelease':False, 'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
-        with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
-            channel.resolve('stable');data=out.call_args.args[0];self.assertFalse(data['build_needed']);self.assertFalse(data['draft_needed'])
-            channel.resolve('stable',force=True);data=out.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
+    def test_changed_patch_automatically_creates_new_immutable_revision(self):
+        sha='a'*40;old='c'*64;new='d'*64
+        existing={'body':f'Automation-State: complete\\nUpstream SHA: {sha}\\nPatch Set: v999999\\nCommon Patch Hash: {old}\\nSOS Patch Hash: {old}\\nBuild Identity: '+channel.build_identity(sha,'v999999',old,old),
+                  'draft':True,'prerelease':False,
+                  'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos-windows-x86_64.zip','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
+        with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}), \
+             patch.object(channel,'patch_hash',side_effect=[new,new]), \
+             patch.object(channel,'api',side_effect=[existing,[{'tag_name':'v1.4.9-custom.1'}]]), \
+             patch.object(channel,'outputs') as out:
+            channel.resolve('stable')
+            data=out.call_args.args[0]
+            self.assertTrue(data['build_needed'])
+            self.assertTrue(data['draft_needed'])
+            self.assertEqual(data['revision'],'2')
+            self.assertEqual(data['release_tag'],'v1.4.9-custom.2')
+            self.assertEqual(data['rebuild_reason'],'PATCH_OR_BUILD_IDENTITY_CHANGED')
+
     def test_upstream_main_compatibility_workflow_is_the_single_main_probe(self):
         path=ROOT/'.github/workflows/upstream-main-compatibility.yml'
         self.assertTrue(path.is_file())
