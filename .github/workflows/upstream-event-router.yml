@@ -113,7 +113,7 @@ jobs:
       NIGHTLY_RUN_ID: ${{ needs.detect.outputs.nightly_run_id }}
       NIGHTLY_SHA: ${{ needs.detect.outputs.nightly_sha }}
       NIGHTLY_RELEASE_UPDATED_AT: ${{ needs.detect.outputs.nightly_release_updated_at }}
-      RUN_NAME: Nightly upstream #${{ needs.detect.outputs.nightly_run_id }} / ${{ needs.detect.outputs.nightly_sha }} / build
+      RUN_NAME: "Nightly upstream #${{ needs.detect.outputs.nightly_run_id }} / ${{ needs.detect.outputs.nightly_sha }} / build"
       GH_TOKEN: ${{ github.token }}
     steps:
     - name: Check latest routed Nightly state
