@@ -121,6 +121,7 @@ jobs:
     name: '04A · Build Stable Windows targets'
     needs:
     - resolve
+    - draft-preflight
     - prepare
     uses: ./.github/workflows/build-stable-windows.yml
     with:
