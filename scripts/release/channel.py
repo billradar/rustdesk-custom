@@ -208,8 +208,9 @@ def draft(root):
     print('Draft created; automatic publication disabled.')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--patchset',default='');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
     if a.mode=='resolve':resolve(a.channel,a.ref,a.discovery_only)
-    elif a.mode=='release-preflight':outputs(release_preflight(json.loads(a.discovery.read_text())))
+    elif a.mode=='release-preflight':
+        data=json.loads(a.discovery.read_text());data['patchset']=a.patchset or data.get('patchset','');outputs(release_preflight(data))
     elif a.mode=='validate':validate(a.root,a.channel)
     else:draft(a.root)
