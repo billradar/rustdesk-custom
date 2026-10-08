@@ -72,6 +72,7 @@ def release_preflight(data):
         generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
         if generation is None:raise ValueError('Existing release missing generation identity')
         name=generation.group(1);verify(name)
+        historical_identity=build_identity(data['upstream_sha'],name,patch_hash('common',name),patch_hash('sos',name))
         expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
                           f'SOS Patch Hash: {patch_hash("sos",name)}']
         current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
@@ -118,7 +119,7 @@ def release_preflight(data):
             # Older drafts predate Automation-State. They remain immutable and
             # are accepted only after the same identity and asset checks pass.
             print('Existing release is legacy-complete: Automation-State marker missing; no overwrite will occur.')
-        if identity_ok:
+        if identity_ok or (recorded is None and historical_identity==current_identity):
             data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
         else:
             same=same_identity_release(data['version'],current_identity)
