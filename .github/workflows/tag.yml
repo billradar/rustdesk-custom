@@ -86,6 +86,9 @@ jobs:
       build_needed: ${{ steps.gate.outputs.build_needed }}
       draft_needed: ${{ steps.gate.outputs.draft_needed }}
       publish_existing: ${{ steps.gate.outputs.publish_existing }}
+      revision: ${{ steps.gate.outputs.revision }}
+      release_tag: ${{ steps.gate.outputs.release_tag }}
+      build_identity: ${{ steps.gate.outputs.build_identity }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -135,7 +138,7 @@ jobs:
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
-      revision: ${{ needs.resolve.outputs.revision }}
+      revision: ${{ needs.draft-preflight.outputs.revision }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -306,7 +309,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.resolve.outputs.revision }}
+      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.draft-preflight.outputs.revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
