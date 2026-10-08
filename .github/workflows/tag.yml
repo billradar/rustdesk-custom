@@ -33,7 +33,6 @@ jobs:
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       upstream_version: ${{ steps.resolve.outputs.version }}
       patchset: ${{ steps.patchset.outputs.patchset }}
-      patch_revision: ${{ steps.resolve.outputs.patch_revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
