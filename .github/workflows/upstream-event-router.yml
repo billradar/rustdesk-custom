@@ -14,8 +14,9 @@ jobs:
   detect:
     runs-on: ubuntu-22.04
     outputs:
-      production_sha: ${{ steps.detect.outputs.production_sha }}
-      production_ref: ${{ steps.detect.outputs.production_ref }}
+      nightly_run_id: ${{ steps.detect.outputs.nightly_run_id }}
+      nightly_sha: ${{ steps.detect.outputs.nightly_sha }}
+      nightly_release_updated_at: ${{ steps.detect.outputs.nightly_release_updated_at }}
       stable_tag: ${{ steps.detect.outputs.stable_tag }}
       stable_sha: ${{ steps.detect.outputs.stable_sha }}
     steps:
@@ -28,75 +29,123 @@ jobs:
       run: |
         set -euo pipefail
         python3 - <<'PY'
-        import json, os, urllib.parse, urllib.request, urllib.error
+        import json
+        import os
+        import urllib.parse
+        import urllib.request
+        import urllib.error
+        from datetime import datetime, timezone
+
         def api(path, missing=False):
-            h={'Accept':'application/vnd.github+json','User-Agent':'rustdesk-custom-upstream-router'}
-            if os.environ.get('GH_TOKEN'): h['Authorization']='Bearer '+os.environ['GH_TOKEN']
+            headers = {'Accept': 'application/vnd.github+json', 'User-Agent': 'rustdesk-custom-upstream-router'}
+            if os.environ.get('GH_TOKEN'):
+                headers['Authorization'] = 'Bearer ' + os.environ['GH_TOKEN']
             try:
-                with urllib.request.urlopen(urllib.request.Request('https://api.github.com/'+path,headers=h),timeout=30) as r:
-                    return json.load(r)
-            except urllib.error.HTTPError as e:
-                if missing and e.code==404: return None
+                with urllib.request.urlopen(
+                    urllib.request.Request('https://api.github.com/' + path, headers=headers),
+                    timeout=30,
+                ) as response:
+                    return json.load(response)
+            except urllib.error.HTTPError as exc:
+                if missing and exc.code == 404:
+                    return None
                 raise
-        repo='rustdesk/rustdesk'
-        production=api(f'repos/{repo}')['default_branch']
-        prod_sha=api(f'repos/{repo}/commits/{urllib.parse.quote(production,safe="")}')['sha']
-        releases=api(f'repos/{repo}/releases?per_page=20')
-        stable=next((x for x in releases if not x['draft'] and not x['prerelease']),None)
-        with open(os.environ['GITHUB_OUTPUT'],'a') as o:
-            o.write(f'production_sha={prod_sha}\nproduction_ref={production}\n')
-            o.write(f'stable_tag={stable["tag_name"] if stable else ""}\n')
-            if stable:
-                stable_sha=api(f'repos/{repo}/commits/{urllib.parse.quote(stable["tag_name"],safe="")}')['sha']
-                o.write(f'stable_sha={stable_sha}\n')
-        print(f'production={production} {prod_sha}')
-        if stable: print(f'stable_tag={stable["tag_name"]}')
+
+        def parse_time(value):
+            return datetime.fromisoformat(value.replace('Z', '+00:00')).astimezone(timezone.utc)
+
+        upstream = 'rustdesk/rustdesk'
+        runs = api(
+            f'repos/{upstream}/actions/workflows/flutter-nightly.yml/runs'
+            '?event=schedule&status=success&per_page=20'
+        ).get('workflow_runs', [])
+        nightly = next(
+            (
+                r for r in runs
+                if r.get('event') == 'schedule'
+                and r.get('status') == 'completed'
+                and r.get('conclusion') == 'success'
+                and len(r.get('head_sha', '')) == 40
+            ),
+            None,
+        )
+        release = api(f'repos/{upstream}/releases/tags/nightly', missing=True)
+        nightly_run_id = ''
+        nightly_sha = ''
+        nightly_release_updated_at = ''
+        if nightly and release:
+            if (
+                release.get('prerelease') is True
+                and parse_time(release['updated_at']) >=
+                    parse_time(nightly.get('run_started_at') or nightly['created_at'])
+            ):
+                nightly_run_id = str(nightly['id'])
+                nightly_sha = nightly['head_sha']
+                nightly_release_updated_at = release['updated_at']
+                print(f'official nightly run={nightly_run_id} sha={nightly_sha}')
+            else:
+                print('nightly release has not caught up with latest successful official Nightly run')
+        else:
+            print('no successful official Nightly run or nightly release found')
+
+        releases = api(f'repos/{upstream}/releases?per_page=20')
+        stable = next((r for r in releases if not r['draft'] and not r['prerelease']), None)
+        stable_tag = stable['tag_name'] if stable else ''
+        stable_sha = ''
+        if stable:
+            stable_sha = api(
+                f'repos/{upstream}/commits/{urllib.parse.quote(stable_tag, safe="")}'
+            )['sha']
+
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write(f'nightly_run_id={nightly_run_id}\n')
+            output.write(f'nightly_sha={nightly_sha}\n')
+            output.write(f'nightly_release_updated_at={nightly_release_updated_at}\n')
+            output.write(f'stable_tag={stable_tag}\n')
+            output.write(f'stable_sha={stable_sha}\n')
         PY
 
-  default-branch-debounce:
+  nightly-release:
     needs: detect
+    if: needs.detect.outputs.nightly_run_id != ''
     runs-on: ubuntu-22.04
     env:
-      RUN_NAME: Nightly ${{ needs.detect.outputs.production_ref || 'configured-test-ref' }} / build
+      NIGHTLY_RUN_ID: ${{ needs.detect.outputs.nightly_run_id }}
+      NIGHTLY_SHA: ${{ needs.detect.outputs.nightly_sha }}
+      NIGHTLY_RELEASE_UPDATED_AT: ${{ needs.detect.outputs.nightly_release_updated_at }}
+      RUN_NAME: Nightly upstream #${{ needs.detect.outputs.nightly_run_id }} / ${{ needs.detect.outputs.nightly_sha }} / build
       GH_TOKEN: ${{ github.token }}
     steps:
     - name: Check latest routed Nightly state
       id: state
       run: |
         set -euo pipefail
-        runs="$(gh run list --repo '${{ github.repository }}' --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json databaseId,status,conclusion,displayTitle)"
+        runs="$(gh run list --repo '${{ github.repository }}' --workflow nightly.yml --event workflow_dispatch --branch main --limit 100 --json databaseId,status,conclusion,displayTitle)"
         export RUNS="$runs"
         state="$(python3 - <<'PY'
         import json, os
         rows=json.loads(os.environ["RUNS"])
         name=os.environ["RUN_NAME"]
         for row in rows:
-            if row.get("displayTitle")==name:
-                status=row.get("status")
-                conclusion=row.get("conclusion")
-                if status in {"queued","in_progress","waiting","pending","requested"}:
-                    print("ACTIVE"); break
-                if conclusion=="success":
-                    print("SUCCESS"); break
-                print("RETRY"); break
+            if row.get("displayTitle") == name:
+                if row.get("status") in {"queued","in_progress","waiting","pending","requested"}:
+                    print("ACTIVE")
+                elif row.get("conclusion") == "success":
+                    print("SUCCESS")
+                else:
+                    print("RETRY")
+                break
         else:
             print("RETRY")
         PY
         )"
         echo "state=$state" >> "$GITHUB_OUTPUT"
-    - name: Route default-branch change to Nightly
+    - name: Route official Nightly Release to Nightly build
       if: steps.state.outputs.state == 'RETRY'
       run: |
         set -euo pipefail
-        gh workflow run nightly.yml \
-          --repo '${{ github.repository }}' \
-          --ref main \
-          -f upstream_ref='${{ needs.detect.outputs.production_ref }}' \
-          -f force_rebuild=false \
-          -f include_experimental=true \
-          -f release_mode=build \
-          -f automation_source=upstream-event-router
-        echo "Nightly dispatch requested for $RUN_NAME"
+        gh workflow run nightly.yml --repo '${{ github.repository }}' --ref main -f upstream_ref="$NIGHTLY_SHA" -f upstream_nightly_run_id="$NIGHTLY_RUN_ID" -f upstream_nightly_release_updated_at="$NIGHTLY_RELEASE_UPDATED_AT" -f include_experimental=true -f release_mode=build -f automation_source=upstream-event-router
+        echo "Nightly dispatch requested for upstream run #$NIGHTLY_RUN_ID ($NIGHTLY_SHA)"
 
   stable-tag:
     needs: detect
