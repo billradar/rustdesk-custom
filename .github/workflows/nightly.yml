@@ -1,5 +1,5 @@
 name: Nightly - Development artifacts
-run-name: Nightly upstream #${{ inputs.upstream_nightly_run_id || 'manual' }} / ${{ inputs.upstream_ref }} / ${{ inputs.release_mode }}
+run-name: "Nightly upstream #${{ inputs.upstream_nightly_run_id || 'manual' }} / ${{ inputs.upstream_ref }} / ${{ inputs.release_mode }}"
 env:
   PYTHONPATH: .
 'on':
