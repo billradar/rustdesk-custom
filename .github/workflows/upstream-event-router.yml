@@ -77,7 +77,7 @@ jobs:
             if (
                 release.get('prerelease') is True
                 and parse_time(release['updated_at']) >=
-                    parse_time(nightly.get('run_started_at') or nightly['created_at'])
+                    parse_time(nightly.get('updated_at') or nightly.get('run_started_at') or nightly['created_at'])
             ):
                 nightly_run_id = str(nightly['id'])
                 nightly_sha = nightly['head_sha']
