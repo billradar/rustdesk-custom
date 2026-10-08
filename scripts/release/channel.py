@@ -40,6 +40,11 @@ def release_tag_name(row, version):
             return value
     return None
 
+def require_release_tag(row, version):
+    tag=release_tag_name(row,version)
+    if not tag: raise ValueError('Existing Build Identity has invalid revision tag')
+    return tag
+
 def next_patch_revision(version, patchset):
     match=PATCH_REVISION_RE.fullmatch(patchset)
     if not match: raise ValueError('Invalid patchset revision')
@@ -79,7 +84,7 @@ def release_preflight(data):
     current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
     same=same_identity_release(data['version'],current_identity)
     if same:
-        data['release_tag']=release_tag_name(same,data['version']) or (_ for _ in ()).throw(ValueError('Existing Build Identity has invalid revision tag'))
+        data['release_tag']=require_release_tag(same,data['version'])
         data['patch_revision']=parse_patch_revision(data['release_tag'],data['version'])
         data['revision']=data['patch_revision']
     else:
