@@ -1,0 +1,21 @@
+{
+  "schema": "patch-revision-record-v1",
+  "purpose": "Immutable Stable release revision ledger contract",
+  "format": "v{patch_set_number}.{revision}",
+  "release_tag": "v{upstream_version}-custom.v{patch_set_number}.{revision}",
+  "scope": "Per upstream Stable version and Patch Set",
+  "allocation": "Each Patch Set starts at .1 and increments independently; existing Build Identity reuses its recorded revision.",
+  "identity": [
+    "upstream_sha",
+    "patchset",
+    "common_patch_hash",
+    "sos_patch_hash"
+  ],
+  "examples": [
+    "v1.5.0-custom.v1.1",
+    "v1.5.0-custom.v1.2",
+    "v1.5.0-custom.v2.1",
+    "v1.5.0-custom.v1.3"
+  ],
+  "immutability": "A consumed patch revision is never overwritten or renumbered."
+}

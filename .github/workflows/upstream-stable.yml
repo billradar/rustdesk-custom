@@ -69,5 +69,4 @@ jobs:
         set -euo pipefail
         gh workflow run tag.yml --repo '${{ github.repository }}' --ref main \
           -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' \
-          -f force_rebuild=false \
           -f release_mode=dry-run

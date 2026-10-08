@@ -9,10 +9,6 @@ env:
         type: string
         description: Official stable tag; empty = latest stable
         default: ''
-      force_rebuild:
-        type: boolean
-        description: Rebuild an existing revision
-        default: false
       release_mode:
         type: choice
         description: Release mode
@@ -37,7 +33,6 @@ jobs:
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       upstream_version: ${{ steps.resolve.outputs.version }}
       patchset: ${{ steps.patchset.outputs.patchset }}
-      revision: ${{ steps.resolve.outputs.revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -86,6 +81,10 @@ jobs:
       build_needed: ${{ steps.gate.outputs.build_needed }}
       draft_needed: ${{ steps.gate.outputs.draft_needed }}
       publish_existing: ${{ steps.gate.outputs.publish_existing }}
+      revision: ${{ steps.gate.outputs.revision }}
+      release_tag: ${{ steps.gate.outputs.release_tag }}
+      build_identity: ${{ steps.gate.outputs.build_identity }}
+      patch_revision: ${{ steps.gate.outputs.patch_revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -98,11 +97,8 @@ jobs:
       name: Validate existing revision before any build
       env:
         GH_TOKEN: ${{ github.token }}
-        FORCE: ${{ inputs.force_rebuild || false }}
       run: |
-        args=()
-        [[ "$FORCE" != true ]] || args+=(--force)
-        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
+        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -125,6 +121,7 @@ jobs:
     name: '04A · Build Stable Windows targets'
     needs:
     - resolve
+    - draft-preflight
     - prepare
     uses: ./.github/workflows/build-stable-windows.yml
     with:
@@ -135,7 +132,7 @@ jobs:
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
-      revision: ${{ needs.resolve.outputs.revision }}
+      revision: ${{ needs.draft-preflight.outputs.revision }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -251,7 +248,8 @@ jobs:
       publish_existing: ${{ needs.draft-preflight.outputs.publish_existing }}
       upstream_version: ${{ needs.resolve.outputs.upstream_version }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-      revision: ${{ needs.resolve.outputs.revision }}
+      revision: ${{ needs.draft-preflight.outputs.patch_revision }}
+      patch_revision: ${{ needs.draft-preflight.outputs.patch_revision }}
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       patchset: ${{ needs.resolve.outputs.patchset }}
     if: >-
@@ -264,6 +262,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      PATCH_REVISION: ${{ needs.draft-preflight.outputs.patch_revision }}
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
@@ -306,7 +305,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.resolve.outputs.revision }}
+      RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.draft-preflight.outputs.patch_revision }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
