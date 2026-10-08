@@ -283,48 +283,26 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(native_package_name('1.4.9','standard','macos','aarch64','standard-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-macos-aarch64-unsigned.dmg')
 
     def test_new_metadata_automation_state_is_accepted(self):
-        sha='a'*40
-        common='c'*64
+        sha='a'*40; common='c'*64
         existing={
-            'body':chr(10).join([
-                'Patch Set: v999999',
-                f'Upstream SHA: {sha}',
-                f'Common Patch Hash: {common}',
-                f'SOS Patch Hash: {common}',
-                '## Custom release metadata',
-                '',
-                'automation_state=complete',
-            ]),
-            'draft':True,'prerelease':False,
-            'assets':[{'name':n,'state':'uploaded'} for n in [
-                'SHA256SUMS',
-                'build-info-standard.json',
-                'build-info-sos.json',
-                'rustdesk-1.4.9-standard-windows-x86_64.zip',
-                'rustdesk-1.4.9-sos-windows-x86_64.zip',
-            ]]
+            'name':'v1.4.9-custom.v999999.1','tag_name':'v1.4.9-custom.v999999.1','draft':True,'prerelease':False,
+            'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}','automation_state=complete']),
+            'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
         }
-        with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
-            channel.resolve('stable')
-            self.assertFalse(out.call_args.args[0]['build_needed'])
-            self.assertFalse(out.call_args.args[0]['draft_needed'])
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            data=channel.release_preflight(self.discovery())
+            self.assertFalse(data['build_needed'])
+            self.assertTrue(data['publish_existing'])
 
-    def test_changed_patch_automatically_creates_new_immutable_revision(self):
-        sha='a'*40;old='c'*64;new='d'*64
-        existing={'body':f'Automation-State: complete\\nUpstream SHA: {sha}\\nPatch Set: v999999\\nCommon Patch Hash: {old}\\nSOS Patch Hash: {old}\\nBuild Identity: '+channel.build_identity(sha,'v999999',old,old),
-                  'draft':True,'prerelease':False,
-                  'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','build-info-standard.json','build-info-sos-windows-x86_64.zip','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]}
-        with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}), \
-             patch.object(channel,'patch_hash',side_effect=[new,new]), \
-             patch.object(channel,'api',side_effect=[existing,[{'tag_name':'v1.4.9-custom.1'}]]), \
-             patch.object(channel,'outputs') as out:
-            channel.resolve('stable')
-            data=out.call_args.args[0]
+    def test_changed_patch_allocates_new_scoped_revision(self):
+        sha='a'*40
+        with patch.object(channel,'release_rows',return_value=[{'name':'v1.4.9-custom.v999999.1'}]),patch.object(channel,'api',return_value=None):
+            data=channel.release_preflight(self.discovery('v888888'))
             self.assertTrue(data['build_needed'])
             self.assertTrue(data['draft_needed'])
-            self.assertEqual(data['revision'],'2')
-            self.assertEqual(data['release_tag'],'v1.4.9-custom.2')
-            self.assertEqual(data['rebuild_reason'],'PATCH_OR_BUILD_IDENTITY_CHANGED')
+            self.assertEqual(data['patch_revision'],'v888888.1')
+            self.assertEqual(data['release_tag'],'v1.4.9-custom.v888888.1')
+            self.assertEqual(data['rebuild_reason'],'NEW_PATCH_REVISION')
 
     def test_upstream_main_compatibility_workflow_is_the_single_main_probe(self):
         path=ROOT/'.github/workflows/upstream-main-compatibility.yml'
