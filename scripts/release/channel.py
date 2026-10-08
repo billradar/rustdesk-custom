@@ -22,6 +22,29 @@ def outputs(data):
                 f.write(f'{k}={s}\n')
     print(json.dumps(data,indent=2))
 
+def build_identity(upstream_sha, patchset, common_hash, sos_hash):
+    return hashlib.sha256('\\0'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
+
+def release_rows(version):
+    rows=[]
+    for page in range(1,101):
+        batch=api(f'repos/{REPOSITORY}/releases?per_page=100&page={page}') or []
+        rows += batch
+        if len(batch)<100: break
+    return rows
+
+def next_revision(version):
+    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\\.([1-9][0-9]{0,5})$')
+    nums=[int(m.group(1)) for row in release_rows(version) if (m:=pattern.fullmatch(row.get('tag_name') or row.get('name') or ''))]
+    return str(max(nums or [0])+1)
+
+def same_identity_release(version, identity):
+    for row in release_rows(version):
+        body=row.get('body') or ''
+        match=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
+        if match and match.group(1)==identity: return row
+    return None
+
 def matching_drafts(tag):
     drafts=[]
     for page in range(1,101):
@@ -30,7 +53,7 @@ def matching_drafts(tag):
         if len(rows)<100:return drafts
     raise ValueError('Release pagination exhausted; manual review required')
 
-def release_preflight(data,force=False):
+def release_preflight(data):
     if data.get("channel")!="stable":raise ValueError("Release preflight requires stable discovery")
     if not re.fullmatch(r"[0-9a-f]{40}",data.get("upstream_sha","")):raise ValueError("Invalid locked upstream SHA")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",data.get("version","")):raise ValueError("Invalid stable version")
@@ -51,6 +74,7 @@ def release_preflight(data,force=False):
         name=generation.group(1);verify(name)
         expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
                           f'SOS Patch Hash: {patch_hash("sos",name)}']
+        current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
         automation_marker='Automation-State: complete'
         legacy_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
         metadata_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('automation_state=')]
@@ -78,7 +102,8 @@ def release_preflight(data,force=False):
             required=set(supplied)
         uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
         missing_identity=[x for x in expected_identity if x not in body]
-        identity_ok=not missing_identity
+        recorded=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
+        identity_ok=not missing_identity and recorded is not None and recorded.group(1)==current_identity
         # Historical drafts/releases may contain the legacy Windows ZIP set. They are
         # immutable and may be reused, while every new release uses MSI/EXE names.
         assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
@@ -93,9 +118,14 @@ def release_preflight(data,force=False):
             # Older drafts predate Automation-State. They remain immutable and
             # are accepted only after the same identity and asset checks pass.
             print('Existing release is legacy-complete: Automation-State marker missing; no overwrite will occur.')
-        data['build_needed']=force
-        data['draft_needed']=False
-        data['publish_existing']=bool(existing.get('draft'))
+        if identity_ok:
+            data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
+        else:
+            same=same_identity_release(data['version'],current_identity)
+            if same:
+                tag=same.get('tag_name') or same.get('name');data['revision']=tag.rsplit('-custom.',1)[-1];data['release_tag']=tag;data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(same.get('draft'));data['build_identity']=current_identity
+            else:
+                data['revision']=next_revision(data['version']);data['release_tag']=f'v{data["version"]}-custom.{data["revision"]}';data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='PATCH_OR_BUILD_IDENTITY_CHANGED'
     else:
         if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True):raise ValueError('Existing tag without completed release; review revision')
         data['build_needed']=True
@@ -103,7 +133,7 @@ def release_preflight(data,force=False):
         data['publish_existing']=False
     return data
 
-def resolve(channel,ref='',force=False,discovery_only=False):
+def resolve(channel,ref='',discovery_only=False):
     if channel=='stable':
         data=choose_stable(ref)
         revision=str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
@@ -112,7 +142,7 @@ def resolve(channel,ref='',force=False,discovery_only=False):
         data['upstream_ref']=data['upstream_tag']
         if not discovery_only:
             data['channel']='stable'
-            release_preflight(data,force)
+            release_preflight(data)
     else:
         repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
         chosen=ref or branch
@@ -179,6 +209,7 @@ def draft(root):
         f'Patch Set: {info["patchset"]}',
         f'Common Patch Hash: {info["common_patch_hash"]}',
         f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',
+        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"])}',
         f'Asset Inventory: {inventory}',
         '-->'
     ])
@@ -194,8 +225,8 @@ def draft(root):
     print('Draft created; automatic publication disabled.')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--force',action='store_true');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
-    if a.mode=='resolve':resolve(a.channel,a.ref,a.force,a.discovery_only)
-    elif a.mode=='release-preflight':outputs(release_preflight(json.loads(a.discovery.read_text()),a.force))
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
+    if a.mode=='resolve':resolve(a.channel,a.ref,a.discovery_only)
+    elif a.mode=='release-preflight':outputs(release_preflight(json.loads(a.discovery.read_text())))
     elif a.mode=='validate':validate(a.root,a.channel)
     else:draft(a.root)
