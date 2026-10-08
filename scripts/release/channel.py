@@ -23,8 +23,8 @@ def outputs(data):
 def build_identity(upstream_sha, patchset, common_hash, sos_hash):
     return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
 
-PATCH_REVISION_RE = re.compile(r'^v([1-9][0-9]*)\\.([1-9][0-9]{0,5})$')
-CUSTOM_REVISION_RE = re.compile(r'^v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)-custom\\.v(?P<patch>[1-9][0-9]*)\\.(?P<revision>[1-9][0-9]{0,5})$')
+PATCH_REVISION_RE = re.compile(r'^v([1-9][0-9]*)\.([1-9][0-9]{0,5})$')
+CUSTOM_REVISION_RE = re.compile(r'^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-custom\.v(?P<patch>[1-9][0-9]*)\.(?P<revision>[1-9][0-9]{0,5})$')
 
 def release_rows(version):
     rows=[]
@@ -38,7 +38,7 @@ def next_patch_revision(version, patchset):
     match=PATCH_REVISION_RE.fullmatch(patchset)
     if not match: raise ValueError('Invalid patchset revision')
     patch_number=match.group(1)
-    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\\.v'+re.escape(patch_number)+r'\\.([1-9][0-9]{0,5})$')
+    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\.v'+re.escape(patch_number)+r'\.([1-9][0-9]{0,5})$')
     nums=[int(m.group(1)) for row in release_rows(version) if (m:=pattern.fullmatch(row.get('tag_name') or row.get('name') or ''))]
     return f'v{patch_number}.{max(nums or [0])+1}'
 
@@ -66,7 +66,7 @@ def matching_drafts(tag):
 def release_preflight(data):
     if data.get("channel")!="stable": raise ValueError("Release preflight requires stable discovery")
     if not re.fullmatch(r"[0-9a-f]{40}",data.get("upstream_sha","")): raise ValueError("Invalid locked upstream SHA")
-    if not re.fullmatch(r"[0-9]+\\.[0-9]+\\.[0-9]+",data.get("version","")): raise ValueError("Invalid stable version")
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",data.get("version","")): raise ValueError("Invalid stable version")
     if not PATCH_REVISION_RE.fullmatch(data.get("patchset","")): raise ValueError("Invalid patchset")
     if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
         raise ValueError('Locked stable ref mismatch')
