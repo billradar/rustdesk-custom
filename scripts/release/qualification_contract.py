@@ -109,15 +109,27 @@ class AggregateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v999999','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)
             self.assertEqual(json.loads((Path(tmp)/'.work/qualification-aggregate/aggregate.json').read_text())['required_gate'],'FAIL')
-    def test_untagged_draft_deduplicates_without_overwrite(self):
+    def test_untagged_draft_is_handled_by_release_preflight(self):
         import scripts.release.channel as channel
-        name='v1.4.9-custom.1';sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
-        names=['SHA256SUMS','build-info-standard.json','build-info-sos.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
-        draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example','body':'\n'.join(['Patch Set: v999999','Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Automation-State: complete']),'assets':[{'name':n,'state':'uploaded'} for n in names]}
-        def api(path,**kwargs):return [draft] if path.endswith('releases?per_page=100&page=1') else None
-        with patch.object(channel,'api',side_effect=api),patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9'}),patch.object(channel,'verify'),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'outputs') as outputs:
-            channel.resolve('stable','1.4.9',True)
-            data=outputs.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
+        sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
+        patchset='v999999'
+        identity=channel.build_identity(sha,patchset,'c'*64,'d'*64)
+        name='v1.4.9-custom.v999999.1'
+        assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+        draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
+               'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Patch Revision: v999999.1','Build Identity: '+identity,'Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
+               'assets':[{'name':n,'state':'uploaded'} for n in assets]}
+        def api(path,**kwargs):
+            if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
+            if path.endswith('releases?per_page=100&page=1'): return [draft]
+            return None
+        with patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'matching_drafts',return_value=[draft]):
+            data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
+            self.assertFalse(data['build_needed'])
+            self.assertFalse(data['draft_needed'])
+            self.assertEqual(data['release_tag'],name)
+            self.assertEqual(data['patch_revision'],'v999999.1')
+
 
 """Release qualification and workflow dependency contracts."""
 from pathlib import Path
