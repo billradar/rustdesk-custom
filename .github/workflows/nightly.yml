@@ -3,14 +3,23 @@ run-name: Nightly ${{ inputs.upstream_ref || 'configured-test-ref' }} / ${{ inpu
 env:
   PYTHONPATH: .
 'on':
-  schedule:
-    - cron: '0 16 * * *'
   workflow_dispatch:
     inputs:
       upstream_ref:
         type: string
-        description: Official upstream ref; empty = configured official test ref
+        required: true
+        description: Locked official upstream Nightly commit SHA or explicit manual ref
         default: ''
+      upstream_nightly_run_id:
+        type: string
+        required: false
+        default: ''
+        description: Official RustDesk Flutter Nightly workflow run ID
+      upstream_nightly_release_updated_at:
+        type: string
+        required: false
+        default: ''
+        description: Official RustDesk Nightly release update timestamp
       include_experimental:
         type: boolean
         default: true
@@ -30,8 +39,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: ${{ inputs.automation_source == 'upstream-event-router' && 'action-created-ci-nightly' || format('normal-nightly-{0}', github.ref) }}
-  cancel-in-progress: ${{ inputs.automation_source != 'upstream-event-router' }}
+  group: ${{ inputs.automation_source == 'upstream-nightly-router' && format('action-created-nightly-{0}', inputs.upstream_nightly_run_id) || format('normal-nightly-{0}', inputs.upstream_ref) }}
+  cancel-in-progress: ${{ inputs.automation_source != 'upstream-nightly-router' }}
 
 jobs:
   resolve:
@@ -51,14 +60,46 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         UPSTREAM_TEST_REF: ${{ vars.UPSTREAM_TEST_REF || vars.UPSTREAM_TEST_BRANCH || 'test' }}
         CHANNEL: nightly
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REQUESTED_REF: ${{ inputs.upstream_ref }}
+        NIGHTLY_RUN_ID: ${{ inputs.upstream_nightly_run_id }}
+        NIGHTLY_RELEASE_UPDATED_AT: ${{ inputs.upstream_nightly_release_updated_at }}
+        AUTOMATION_SOURCE: ${{ inputs.automation_source }}
       run: |
-        if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
-          REQUESTED_REF="$UPSTREAM_TEST_REF"
-        else
-          REQUESTED_REF="${{ inputs.upstream_ref }}"
-          REQUESTED_REF="${REQUESTED_REF:-$UPSTREAM_TEST_REF}"
+        set -euo pipefail
+        if [[ "$AUTOMATION_SOURCE" == "upstream-nightly-router" ]]; then
+          if [[ ! "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Automated Nightly requires an exact upstream SHA"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+          def api(path):
+              req=urllib.request.Request("https://api.github.com/"+path,headers={"Accept":"application/vnd.github+json","User-Agent":"rustdesk-custom-nightly-validator","Authorization":"Bearer "+os.environ["GH_TOKEN"]})
+              with urllib.request.urlopen(req,timeout=30) as response:
+                  return json.load(response)
+          run_id=os.environ["NIGHTLY_RUN_ID"]
+          expected_sha=os.environ["REQUESTED_REF"]
+          if not run_id.isdigit():
+              raise SystemExit("Invalid upstream Nightly run ID")
+          run=api(f"repos/rustdesk/rustdesk/actions/runs/{run_id}")
+          if run.get("event")!="schedule" or run.get("status")!="completed" or run.get("conclusion")!="success":
+              raise SystemExit("Upstream Nightly run is not a successful scheduled run")
+          if run.get("head_sha")!=expected_sha:
+              raise SystemExit("Upstream Nightly run SHA does not match upstream_ref")
+          release=api("repos/rustdesk/rustdesk/releases/tags/nightly")
+          if release.get("prerelease") is not True:
+              raise SystemExit("Official nightly release is not a prerelease")
+          selected_time=run.get("updated_at") or run.get("run_started_at") or run.get("created_at","")
+          if release.get("updated_at","") < selected_time:
+              raise SystemExit("Official nightly release predates selected Nightly run")
+          expected_release_updated=os.environ["NIGHTLY_RELEASE_UPDATED_AT"]
+          if expected_release_updated and release.get("updated_at") != expected_release_updated:
+              raise SystemExit("Official nightly release changed after routing; retry the router")
+          print("Validated official Nightly:",run_id,expected_sha,release.get("updated_at"))
+          PY
         fi
-
         echo "Nightly official upstream ref: $REQUESTED_REF"
         python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -1,0 +1,73 @@
+name: Upstream Stable Router
+'on':
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: upstream-stable-router
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-22.04
+    outputs:
+      stable_tag: ${{ steps.detect.outputs.stable_tag }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: detect
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, urllib.request
+        def api(path):
+            h={'Accept':'application/vnd.github+json','User-Agent':'rustdesk-custom-upstream-stable','Authorization':'Bearer '+os.environ['GH_TOKEN']}
+            with urllib.request.urlopen(urllib.request.Request('https://api.github.com/'+path,headers=h),timeout=30) as r:
+                return json.load(r)
+        rows=api('repos/rustdesk/rustdesk/releases?per_page=20')
+        stable=next((r for r in rows if not r.get('draft') and not r.get('prerelease')),None)
+        tag=stable.get('tag_name','') if stable else ''
+        if not tag: raise SystemExit('No official Stable release found')
+        with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('stable_tag='+tag+'\n')
+        print('Official Stable: '+tag)
+        PY
+
+  route:
+    needs: detect
+    if: needs.detect.outputs.stable_tag != ''
+    runs-on: ubuntu-22.04
+    env:
+      RUN_NAME: "Stable ${{ needs.detect.outputs.stable_tag }} / dry-run"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - name: Check existing Stable route
+      id: state
+      run: |
+        set -euo pipefail
+        runs="$(gh run list --repo '${{ github.repository }}' --workflow tag.yml --event workflow_dispatch --branch main --limit 50 --json status,conclusion,displayTitle)"
+        export RUNS="$runs"
+        python3 - <<'PY' > "$RUNNER_TEMP/state"
+        import json, os
+        rows=json.loads(os.environ['RUNS']); name=os.environ['RUN_NAME']
+        for row in rows:
+            if row.get('displayTitle') == name:
+                if row.get('status') in {'queued','in_progress','waiting','pending','requested'}: print('ACTIVE'); break
+                if row.get('conclusion') == 'success': print('SUCCESS'); break
+                print('RETRY'); break
+        else: print('RETRY')
+        PY
+        echo "state=$(cat "$RUNNER_TEMP/state")" >> "$GITHUB_OUTPUT"
+    - name: Dispatch Stable pipeline
+      if: steps.state.outputs.state == 'RETRY'
+      run: |
+        set -euo pipefail
+        gh workflow run tag.yml --repo '${{ github.repository }}' --ref main \
+          -f upstream_ref='${{ needs.detect.outputs.stable_tag }}' \
+          -f force_rebuild=false \
+          -f release_mode=dry-run

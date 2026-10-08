@@ -24,8 +24,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: ${{ inputs.automation_source == 'upstream-event-router' && 'action-created-ci' || format('normal-ci-{0}', github.ref) }}
-  cancel-in-progress: ${{ inputs.automation_source != 'upstream-event-router' }}
+  group: ${{ inputs.automation_source == 'upstream-stable-router' && 'action-created-ci' || format('normal-ci-{0}', github.ref) }}
+  cancel-in-progress: ${{ inputs.automation_source != 'upstream-stable-router' }}
 
 jobs:
   classify:
