@@ -89,7 +89,7 @@ jobs:
           release = api("repos/rustdesk/rustdesk/releases/tags/nightly")
           if release.get("prerelease") is not True:
               raise SystemExit("Official nightly release is not a prerelease")
-          if release.get("updated_at","") < (run.get("run_started_at") or run.get("created_at","")):
+          if release.get("updated_at","") < (run.get("updated_at") or run.get("run_started_at") or run.get("created_at","")):
               raise SystemExit("Official nightly release predates selected Nightly run")
           expected_release_updated = os.environ["NIGHTLY_RELEASE_UPDATED_AT"]
           if expected_release_updated and release.get("updated_at") != expected_release_updated:
