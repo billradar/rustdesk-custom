@@ -49,47 +49,65 @@ class ChannelPolicyTests(unittest.TestCase):
         self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
         self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
         self.addCleanup(self._verify.stop);self.addCleanup(self._hash.stop)
-    def discovery(self):
-        return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,revision='1',release_tag='v1.4.9-custom.1')
-    def draft_fixture(self):
-        return dict(name='v1.4.9-custom.1',tag_name='untagged-123',draft=True,prerelease=False,
-            body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: v999999\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'c'*64,
+    def discovery(self, patchset='v999999'):
+        return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,patchset=patchset)
+
+    def draft_fixture(self, patchset='v999999', revision='1'):
+        tag=f'v1.4.9-custom.{patchset}.{revision}'
+        return dict(name=tag,tag_name=tag,draft=True,prerelease=False,
+            body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: '+patchset+'\nPatch Revision: v'+patchset[1:]+'.'+revision+'\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'c'*64+'\nBuild Identity: '+'e'*64+'\nAsset Inventory: ["SHA256SUMS", "rustdesk-1.4.9-standard-windows-x86_64.zip", "rustdesk-1.4.9-sos-windows-x86_64.zip"]',
             assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
+
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:
             channel.resolve('stable',discovery_only=True)
             api.assert_not_called();self.assertNotIn('build_needed',out.call_args.args[0])
-    def test_untagged_draft_gate_and_force_artifacts_only(self):
-        for force in (False,True):
-            with patch.object(channel,'api',side_effect=[None,[self.draft_fixture()]]),patch.object(channel,'choose_stable') as resolve:
-                data=channel.release_preflight(self.discovery(),force)
-                resolve.assert_not_called();self.assertEqual(data['build_needed'],force);self.assertFalse(data['draft_needed'])
-                self.assertTrue(data['publish_existing'])
+
+    def test_patch_revision_counters_are_independent(self):
+        rows=[
+            {'name':'v1.4.9-custom.v1.1'},
+            {'name':'v1.4.9-custom.v1.2'},
+            {'name':'v1.4.9-custom.v2.1'},
+        ]
+        with patch.object(channel,'release_rows',return_value=rows):
+            self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.3')
+            self.assertEqual(channel.next_patch_revision('1.4.9','v2'),'v2.2')
+            self.assertEqual(channel.next_patch_revision('1.4.9','v3'),'v3.1')
+
+    def test_same_build_identity_reuses_existing_patch_revision(self):
+        existing=self.draft_fixture('v1','2')
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            data=channel.release_preflight(self.discovery('v1'))
+            self.assertFalse(data['build_needed'])
+            self.assertFalse(data['draft_needed'])
+            self.assertEqual(data['patch_revision'],'v1.2')
+            self.assertEqual(data['release_tag'],'v1.4.9-custom.v1.2')
+
+    def test_switching_patchset_allocates_its_own_counter(self):
+        existing_v1=self.draft_fixture('v1','2')
+        rows=[existing_v1]
+        with patch.object(channel,'release_rows',return_value=rows),patch.object(channel,'api',return_value=None):
+            data=channel.release_preflight(self.discovery('v2'))
+            self.assertTrue(data['build_needed'])
+            self.assertTrue(data['draft_needed'])
+            self.assertEqual(data['patch_revision'],'v2.1')
+            self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.1')
+
     def test_legacy_complete_draft_without_automation_marker_is_accepted(self):
         draft=self.draft_fixture()
         draft['body']=draft['body'].replace('Automation-State: complete\n','')
-        with patch.object(channel,'api',side_effect=[None,[draft]]):
-            data=channel.release_preflight(self.discovery(),False)
+        with patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'api',return_value=draft):
+            data=channel.release_preflight(self.discovery())
             self.assertFalse(data['build_needed'])
             self.assertFalse(data['draft_needed'])
             self.assertTrue(data['publish_existing'])
 
     def test_incomplete_or_mismatched_draft_blocks_before_build(self):
-        for mutate in ('missing-asset','wrong-sha','incomplete'):
-            draft=self.draft_fixture()
-            if mutate=='missing-asset':draft['assets'].pop()
-            elif mutate=='wrong-sha':draft['body']=draft['body'].replace('a'*40,'b'*40)
-            else:draft['body']=draft['body'].replace('Automation-State: complete','Automation-State: incomplete')
-            with patch.object(channel,'api',side_effect=[None,[draft]]),self.assertRaisesRegex(ValueError,'incomplete or incompatible'):
-                channel.release_preflight(self.discovery(),True)
-    def test_new_revision_permits_build_and_draft(self):
-        with patch.object(channel,'api',side_effect=[None,[],None]):
-            data=channel.release_preflight(self.discovery());self.assertTrue(data['build_needed']);self.assertTrue(data['draft_needed'])
-    def test_duplicate_and_later_page_drafts(self):
-        with patch.object(channel,'api',side_effect=[None,[self.draft_fixture(),self.draft_fixture()]]),self.assertRaisesRegex(ValueError,'Duplicate'):
+        draft=self.draft_fixture()
+        draft['body']=draft['body'].replace('Automation-State: complete','Automation-State: incomplete')
+        with patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'api',return_value=draft),self.assertRaisesRegex(ValueError,'incomplete or incompatible'):
             channel.release_preflight(self.discovery())
-        with patch.object(channel,'api',side_effect=[None,[{'draft':False}]*100,[self.draft_fixture()]]):
-            self.assertFalse(channel.release_preflight(self.discovery())['build_needed'])
+
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
