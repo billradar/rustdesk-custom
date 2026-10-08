@@ -138,7 +138,7 @@ jobs:
       standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
       sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
       revision: ${{ needs.resolve.outputs.revision }}
-      include_experimental: ${{ github.event_name == 'schedule' || inputs.include_experimental }}
+      include_experimental: ${{ inputs.include_experimental }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -156,7 +156,7 @@ jobs:
       PATCHSET: ${{ needs.compatibility.outputs.patchset }}
       BUILD_CONFIGURATION: NIGHTLY
       CHANNEL: nightly
-      EXPERIMENTAL: ${{ github.event_name == 'schedule' || inputs.include_experimental }}
+      EXPERIMENTAL: ${{ inputs.include_experimental }}
       REQUIRE_ANDROID_PRODUCTION_SIGNING: 'false'
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
