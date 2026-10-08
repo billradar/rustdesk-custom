@@ -1,0 +1,78 @@
+name: Upstream Nightly Router
+'on':
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: upstream-nightly-router
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-22.04
+    outputs:
+      nightly_run_id: ${{ steps.detect.outputs.nightly_run_id }}
+      nightly_sha: ${{ steps.detect.outputs.nightly_sha }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: detect
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, urllib.request
+        def api(path):
+            h={'Accept':'application/vnd.github+json','User-Agent':'rustdesk-custom-upstream-nightly','Authorization':'Bearer '+os.environ['GH_TOKEN']}
+            with urllib.request.urlopen(urllib.request.Request('https://api.github.com/'+path,headers=h),timeout=30) as r:
+                return json.load(r)
+        runs=api('repos/rustdesk/rustdesk/actions/workflows/flutter-nightly.yml/runs?event=schedule&status=success&per_page=20').get('workflow_runs',[])
+        run=next((r for r in runs if len(r.get('head_sha',''))==40),None)
+        if not run: raise SystemExit('No successful official Nightly run found')
+        release=api('repos/rustdesk/rustdesk/releases/tags/nightly')
+        if not release.get('prerelease'): raise SystemExit('Official nightly release is not prerelease')
+        if release.get('updated_at','') < run.get('updated_at',''): raise SystemExit('Official nightly release has not been updated after the successful Nightly run')
+        with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+            f.write('nightly_run_id='+str(run['id'])+'\n')
+            f.write('nightly_sha='+run['head_sha']+'\n')
+        print('Official Nightly run='+str(run['id'])+' sha='+run['head_sha'])
+        PY
+
+  route:
+    needs: detect
+    runs-on: ubuntu-22.04
+    env:
+      RUN_NAME: "Nightly ${{ needs.detect.outputs.nightly_sha }} / build"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - name: Check existing Nightly route
+      id: state
+      run: |
+        set -euo pipefail
+        runs="$(gh run list --repo '${{ github.repository }}' --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json status,conclusion,displayTitle)"
+        export RUNS="$runs"
+        python3 - <<'PY' > "$RUNNER_TEMP/state"
+        import json, os
+        rows=json.loads(os.environ['RUNS']); name=os.environ['RUN_NAME']
+        for row in rows:
+            if row.get('displayTitle') == name:
+                if row.get('status') in {'queued','in_progress','waiting','pending','requested'}: print('ACTIVE'); break
+                if row.get('conclusion') == 'success': print('SUCCESS'); break
+                print('RETRY'); break
+        else: print('RETRY')
+        PY
+        echo "state=$(cat "$RUNNER_TEMP/state")" >> "$GITHUB_OUTPUT"
+    - name: Dispatch Nightly pipeline
+      if: steps.state.outputs.state == 'RETRY'
+      run: |
+        set -euo pipefail
+        gh workflow run nightly.yml --repo '${{ github.repository }}' --ref main \
+          -f upstream_ref='${{ needs.detect.outputs.nightly_sha }}' \
+          -f include_experimental=true \
+          -f release_mode=build \
+          -f automation_source=upstream-nightly-router
