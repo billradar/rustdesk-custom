@@ -98,7 +98,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json
+        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
