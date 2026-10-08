@@ -296,6 +296,27 @@ class ChannelPolicyTests(unittest.TestCase):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':sha}),patch.object(channel,'api',return_value=existing),patch.object(channel,'outputs') as out:
             channel.resolve('stable');data=out.call_args.args[0];self.assertFalse(data['build_needed']);self.assertFalse(data['draft_needed'])
             channel.resolve('stable',force=True);data=out.call_args.args[0];self.assertTrue(data['build_needed']);self.assertFalse(data['draft_needed'])
+    def test_upstream_main_compatibility_workflow_is_the_single_main_probe(self):
+        path=ROOT/'.github/workflows/upstream-main-compatibility.yml'
+        self.assertTrue(path.is_file())
+        workflow=yaml.safe_load(path.read_text())
+        self.assertIn('schedule',workflow['on'])
+        self.assertIn('workflow_dispatch',workflow['on'])
+        self.assertEqual(workflow['concurrency']['group'],'upstream-main-compatibility')
+        jobs=workflow['jobs']
+        self.assertEqual(jobs['compatibility']['uses'],'./.github/workflows/compat-check.yml')
+        self.assertEqual(jobs['compatibility']['with']['upstream_repository'],'rustdesk/rustdesk')
+        self.assertEqual(jobs['compatibility']['with']['channel'],'ci')
+        resolve=jobs['resolve']
+        resolve_text=str(resolve)
+        self.assertIn('repos/rustdesk/rustdesk',resolve_text)
+        self.assertIn('default_branch',resolve_text)
+        self.assertIn('commits/',resolve_text)
+        self.assertIn('40',resolve_text)
+        self.assertNotIn('gh workflow run tag.yml',path.read_text())
+        self.assertNotIn('gh workflow run nightly.yml',path.read_text())
+        self.assertFalse((ROOT/'.github/workflows/upstream-main-sync.yml').exists())
+
     def test_entry_and_release_permissions(self):
         docs={p.name:yaml.safe_load(p.read_text()) for p in (ROOT/'.github/workflows').glob('*.yml')}
         self.assertNotIn('schedule',docs['nightly.yml']['on'])

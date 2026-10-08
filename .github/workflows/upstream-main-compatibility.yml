@@ -1,0 +1,77 @@
+name: Upstream Main Compatibility
+
+'on':
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: upstream-main-compatibility
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Resolve official upstream main
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_branch: ${{ steps.resolve.outputs.upstream_branch }}
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - id: resolve
+      name: Resolve default branch and exact HEAD
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, pathlib, re, urllib.request
+        token = os.environ['GH_TOKEN']
+        def api(path):
+            req = urllib.request.Request('https://api.github.com/' + path, headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,'User-Agent':'rustdesk-custom-upstream-main-compatibility'})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return json.load(response)
+        repo = api('repos/rustdesk/rustdesk')
+        branch = repo['default_branch']
+        sha = api('repos/rustdesk/rustdesk/commits/' + branch)['sha']
+        if not re.fullmatch(r'[0-9a-f]{40}', sha):
+            raise SystemExit('Invalid upstream main SHA')
+        record = {'repository':'rustdesk/rustdesk','default_branch':branch,'head_sha':sha,'source':'official-upstream-default-branch','workflow_run_id':os.environ['GITHUB_RUN_ID']}
+        pathlib.Path('.work').mkdir(exist_ok=True)
+        pathlib.Path('.work/upstream-main.json').write_text(json.dumps(record, indent=2) + '\n')
+        print(json.dumps(record, indent=2))
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+            out.write(f'upstream_branch={branch}\n')
+            out.write(f'upstream_sha={sha}\n')
+        PY
+    - name: Validate CI channel identity
+      env:
+        UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+      run: |
+        set -euo pipefail
+        python3 scripts/release/channel.py resolve --channel ci --ref "$UPSTREAM_SHA"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: upstream-main-${{ github.run_id }}
+        path: |
+          .work/upstream-main.json
+          .work/channel.json
+        if-no-files-found: warn
+        retention-days: 14
+
+  compatibility:
+    name: Validate upstream main API and patch compatibility
+    needs: resolve
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: ${{ needs.resolve.outputs.upstream_branch }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: ci
