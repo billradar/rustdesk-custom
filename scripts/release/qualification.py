@@ -381,7 +381,7 @@ def _release(root, publish, channel='stable', experimental=False):
         f'patchset={standard["patchset"]}',
         f'common_patch_hash={standard["common_patch_hash"]}',
         f'sos_patch_hash={sos["sos_patch_hash"]}',
-        f'build_identity={hashlib.sha256("\\0".join((standard["upstream_sha"],standard["patchset"],standard["common_patch_hash"],sos["sos_patch_hash"])).encode()).hexdigest()}',
+        f'build_identity={hashlib.sha256("|".join((standard["upstream_sha"],standard["patchset"],standard["common_patch_hash"],sos["sos_patch_hash"])).encode()).hexdigest()}',
         f'custom_release_revision={standard["patch_revision"]}',
         f'custom_repository_sha={standard["custom_repository_sha"]}',
         f'prepare_run={standard["prepare_run"]}',
