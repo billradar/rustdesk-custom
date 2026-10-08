@@ -54,7 +54,7 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def draft_fixture(self, patchset='v999999', revision='1'):
         tag=f'v1.4.9-custom.{patchset}.{revision}'
-        return dict(name=tag,tag_name=tag,draft=True,prerelease=False,
+        return dict(name=tag,tag_name='untagged-123',draft=True,prerelease=False,
             body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: '+patchset+'\nPatch Revision: v'+patchset[1:]+'.'+revision+'\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'c'*64+'\nBuild Identity: '+channel.build_identity('a'*40,patchset,'c'*64,'c'*64)+'\nAsset Inventory: ["SHA256SUMS", "rustdesk-1.4.9-standard-windows-x86_64.zip", "rustdesk-1.4.9-sos-windows-x86_64.zip"]',
             assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
 
