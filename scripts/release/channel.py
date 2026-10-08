@@ -8,8 +8,6 @@ from scripts.upstream.patchsets import verify, patch_hash
 from scripts.release.production import assets, REPOSITORY
 from scripts.release.naming import windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
-RELEASE_IDENTITY=ROOT/'metadata/release/identity.json'
-# Canonical release revision lives under metadata/release/identity.json.
 
 def outputs(data):
     Path('.work').mkdir(exist_ok=True)
@@ -25,6 +23,9 @@ def outputs(data):
 def build_identity(upstream_sha, patchset, common_hash, sos_hash):
     return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
 
+PATCH_REVISION_RE = re.compile(r'^v([1-9][0-9]*)\\.([1-9][0-9]{0,5})$')
+CUSTOM_REVISION_RE = re.compile(r'^v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)-custom\\.v(?P<patch>[1-9][0-9]*)\\.(?P<revision>[1-9][0-9]{0,5})$')
+
 def release_rows(version):
     rows=[]
     for page in range(1,101):
@@ -33,10 +34,19 @@ def release_rows(version):
         if len(batch)<100: break
     return rows
 
-def next_revision(version):
-    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\\.([1-9][0-9]{0,5})$')
+def next_patch_revision(version, patchset):
+    match=PATCH_REVISION_RE.fullmatch(patchset)
+    if not match: raise ValueError('Invalid patchset revision')
+    patch_number=match.group(1)
+    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\\.v'+re.escape(patch_number)+r'\\.([1-9][0-9]{0,5})$')
     nums=[int(m.group(1)) for row in release_rows(version) if (m:=pattern.fullmatch(row.get('tag_name') or row.get('name') or ''))]
-    return str(max(nums or [0])+1)
+    return f'v{patch_number}.{max(nums or [0])+1}'
+
+def parse_patch_revision(tag, version):
+    match=CUSTOM_REVISION_RE.fullmatch(tag)
+    if not match or match.group('version') != version:
+        raise ValueError('Invalid custom patch revision')
+    return f'v{match.group("patch")}.{match.group("revision")}'
 
 def same_identity_release(version, identity):
     for row in release_rows(version):
@@ -54,101 +64,72 @@ def matching_drafts(tag):
     raise ValueError('Release pagination exhausted; manual review required')
 
 def release_preflight(data):
-    if data.get("channel")!="stable":raise ValueError("Release preflight requires stable discovery")
-    if not re.fullmatch(r"[0-9a-f]{40}",data.get("upstream_sha","")):raise ValueError("Invalid locked upstream SHA")
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",data.get("version","")):raise ValueError("Invalid stable version")
-    if not re.fullmatch(r"[1-9][0-9]{0,5}",data.get("revision","")):raise ValueError("Invalid revision")
-    if data.get("release_tag")!=f'v{data["version"]}-custom.{data["revision"]}':raise ValueError("Release identity mismatch")
+    if data.get("channel")!="stable": raise ValueError("Release preflight requires stable discovery")
+    if not re.fullmatch(r"[0-9a-f]{40}",data.get("upstream_sha","")): raise ValueError("Invalid locked upstream SHA")
+    if not re.fullmatch(r"[0-9]+\\.[0-9]+\\.[0-9]+",data.get("version","")): raise ValueError("Invalid stable version")
+    if not PATCH_REVISION_RE.fullmatch(data.get("patchset","")): raise ValueError("Invalid patchset")
     if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
         raise ValueError('Locked stable ref mismatch')
+    current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
+    same=same_identity_release(data['version'],current_identity)
+    if same:
+        data['release_tag']=same.get('tag_name') or same.get('name')
+        data['patch_revision']=parse_patch_revision(data['release_tag'],data['version'])
+        data['revision']=data['patch_revision']
+    else:
+        data['patch_revision']=next_patch_revision(data['version'],data['patchset'])
+        data['revision']=data['patch_revision']
+        data['release_tag']=f'v{data["version"]}-custom.{data["patch_revision"]}'
     existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
     if not existing:
-        # GitHub may expose an unpublished draft under a temporary untagged ID.
         drafts=matching_drafts(data['release_tag'])
-        if len(drafts)>1:raise ValueError('Duplicate revision drafts; manual review required')
+        if len(drafts)>1: raise ValueError('Duplicate revision drafts; manual review required')
         existing=drafts[0] if drafts else None
-    if existing:
-        body=existing.get('body') or ''
-        generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
-        if generation is None:raise ValueError('Existing release missing generation identity')
-        name=generation.group(1);verify(name)
-        historical_identity=build_identity(data['upstream_sha'],name,patch_hash('common',name),patch_hash('sos',name))
-        expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',
-                          f'SOS Patch Hash: {patch_hash("sos",name)}']
-        current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
-        automation_marker='Automation-State: complete'
-        legacy_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
-        metadata_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('automation_state=')]
-        if legacy_lines and legacy_lines != [automation_marker]:
-            raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-        if metadata_lines and metadata_lines != ['automation_state=complete']:
-            raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-        if legacy_lines and metadata_lines:
-            raise ValueError('Existing release has duplicate automation state markers')
-        required={'SHA256SUMS',
-                  windows_installer_name(data['version'], 'standard', 'exe'),
-                  windows_installer_name(data['version'], 'standard', 'msi'),
-                  windows_installer_name(data['version'], 'sos', 'exe'),
-                  windows_installer_name(data['version'], 'sos', 'msi')}
-        legacy_required={'SHA256SUMS',
-                         f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',
-                         f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-        inventory=re.search(r'Asset Inventory: (.+)',body)
-        has_inventory=bool(inventory)
-        if inventory:
-            supplied=json.loads(inventory.group(1))
-            if not required.issubset(set(supplied)) and not legacy_required.issubset(set(supplied)):
-                raise ValueError('Invalid historical asset inventory')
-            if len(set(supplied))!=len(supplied):raise ValueError('Invalid historical asset inventory')
-            required=set(supplied)
-        uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
-        missing_identity=[x for x in expected_identity if x not in body]
-        recorded=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
-        identity_ok=not missing_identity and recorded is not None and recorded.group(1)==current_identity
-        # Historical drafts/releases may contain the legacy Windows ZIP set. They are
-        # immutable and may be reused, while every new release uses MSI/EXE names.
-        assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
-        draft_ok=not existing['prerelease']
-        if not (draft_ok and assets_ok):
-            problems=[]
-            if not draft_ok:problems.append('prerelease release')
-            if missing_identity:problems.append('missing identity: '+', '.join(missing_identity))
-            if not assets_ok:problems.append('asset inventory mismatch')
-            raise ValueError('Existing release incomplete or incompatible; never overwrite ('+'; '.join(problems)+')')
-        if automation_marker not in body:
-            # Older drafts predate Automation-State. They remain immutable and
-            # are accepted only after the same identity and asset checks pass.
-            print('Existing release is legacy-complete: Automation-State marker missing; no overwrite will occur.')
-        if identity_ok or (recorded is None and historical_identity==current_identity):
-            data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
-        else:
-            same=same_identity_release(data['version'],current_identity)
-            if same:
-                tag=same.get('tag_name') or same.get('name');data['revision']=tag.rsplit('-custom.',1)[-1];data['release_tag']=tag;data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(same.get('draft'));data['build_identity']=current_identity
-            else:
-                data['revision']=next_revision(data['version']);data['release_tag']=f'v{data["version"]}-custom.{data["revision"]}';data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='PATCH_OR_BUILD_IDENTITY_CHANGED'
-    else:
-        if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True):raise ValueError('Existing tag without completed release; review revision')
-        data['build_needed']=True
-        data['draft_needed']=True
-        data['publish_existing']=False
-    return data
+    if not existing:
+        if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True): raise ValueError('Existing tag without completed release; review revision')
+        data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
+        return data
+    body=existing.get('body') or ''
+    generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
+    if generation is None: raise ValueError('Existing release missing generation identity')
+    name=generation.group(1);verify(name)
+    historical_identity=build_identity(data['upstream_sha'],name,patch_hash('common',name),patch_hash('sos',name))
+    expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',f'SOS Patch Hash: {patch_hash("sos",name)}']
+    automation_marker='Automation-State: complete'
+    legacy_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
+    metadata_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('automation_state=')]
+    if legacy_lines and legacy_lines != [automation_marker]: raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
+    if metadata_lines and metadata_lines != ['automation_state=complete']: raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
+    if legacy_lines and metadata_lines: raise ValueError('Existing release has duplicate automation state markers')
+    required={'SHA256SUMS',windows_installer_name(data['version'],'standard','exe'),windows_installer_name(data['version'],'standard','msi'),windows_installer_name(data['version'],'sos','exe'),windows_installer_name(data['version'],'sos','msi')}
+    legacy_required={'SHA256SUMS',f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+    inventory=re.search(r'Asset Inventory: (.+)',body)
+    has_inventory=bool(inventory)
+    if inventory:
+        supplied=json.loads(inventory.group(1))
+        if not required.issubset(set(supplied)) and not legacy_required.issubset(set(supplied)): raise ValueError('Invalid historical asset inventory')
+        if len(set(supplied))!=len(supplied): raise ValueError('Invalid historical asset inventory')
+        required=set(supplied)
+    uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
+    missing_identity=[x for x in expected_identity if x not in body]
+    recorded=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
+    identity_ok=not missing_identity and recorded is not None and recorded.group(1)==current_identity
+    assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
+    if existing.get('prerelease') or not assets_ok: raise ValueError('Existing release incomplete or incompatible; never overwrite')
+    if identity_ok or (recorded is None and historical_identity==current_identity):
+        data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
+        return data
+    raise ValueError('Existing revision tag has a different Build Identity; immutable revision collision')
 
 def resolve(channel,ref='',discovery_only=False):
     if channel=='stable':
         data=choose_stable(ref)
-        revision=str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
-        if not re.fullmatch('[1-9][0-9]{0,5}',revision):raise ValueError('Invalid revision')
-        data['revision']=revision;data['release_tag']=f'v{data["version"]}-custom.{revision}'
         data['upstream_ref']=data['upstream_tag']
-        if not discovery_only:
-            data['channel']='stable'
-            release_preflight(data)
     else:
         repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
         chosen=ref or branch
         data={'upstream_sha':resolve_ref(chosen),'upstream_branch':chosen,'upstream_ref':chosen,
-              'upstream_tag':'','build_needed':True,'draft_needed':False,'revision':str(json.loads(RELEASE_IDENTITY.read_text())['revision'])}
+              'upstream_tag':'','build_needed':True,'draft_needed':False}
     data['channel']=channel;outputs(data)
 
 def validate_prepared(infos,folders):
@@ -210,6 +191,7 @@ def draft(root):
         f'Patch Set: {info["patchset"]}',
         f'Common Patch Hash: {info["common_patch_hash"]}',
         f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',
+        f'Patch Revision: {info["patch_revision"]}',
         f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"])}',
         f'Asset Inventory: {inventory}',
         '-->'
