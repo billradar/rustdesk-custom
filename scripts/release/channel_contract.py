@@ -217,7 +217,7 @@ class ChannelPolicyTests(unittest.TestCase):
         router_text=(ROOT/'.github/workflows/upstream-nightly.yml').read_text()
         self.assertIn('UPSTREAM_TEST_REF:',nightly_text)
         self.assertNotIn('schedule',nightly['on'])
-        self.assertIn("repo='rustdesk/rustdesk'",router_text)
+        self.assertIn("repos/rustdesk/rustdesk/actions/workflows/flutter-nightly.yml",router_text)
         self.assertIn('actions/workflows/flutter-nightly.yml/runs?event=schedule&status=success',router_text)
         self.assertIn('releases/tags/nightly',router_text)
         self.assertIn("release.get('updated_at','') < run.get('updated_at','')",router_text)
