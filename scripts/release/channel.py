@@ -23,7 +23,8 @@ def outputs(data):
 def build_identity(upstream_sha, patchset, common_hash, sos_hash):
     return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
 
-PATCHSET_RE = re.compile(r'^v([1-9][0-9]*)
+PATCHSET_RE = re.compile(r'^v([1-9][0-9]*)$')
+CUSTOM_REVISION_RE = re.compile(r'^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-custom\.v(?P<patch>[1-9][0-9]*)\.(?P<revision>[1-9][0-9]{0,5})$')
 def release_rows(version):
     rows=[]
     for page in range(1,101):
