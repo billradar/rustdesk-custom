@@ -9,10 +9,6 @@ env:
         type: string
         description: Official stable tag; empty = latest stable
         default: ''
-      force_rebuild:
-        type: boolean
-        description: Rebuild an existing revision
-        default: false
       release_mode:
         type: choice
         description: Release mode
@@ -101,11 +97,8 @@ jobs:
       name: Validate existing revision before any build
       env:
         GH_TOKEN: ${{ github.token }}
-        FORCE: ${{ inputs.force_rebuild || false }}
       run: |
-        args=()
-        [[ "$FORCE" != true ]] || args+=(--force)
-        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json "${args[@]}"
+        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
