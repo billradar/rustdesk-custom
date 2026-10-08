@@ -23,7 +23,7 @@ def outputs(data):
     print(json.dumps(data,indent=2))
 
 def build_identity(upstream_sha, patchset, common_hash, sos_hash):
-    return hashlib.sha256('\\0'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
+    return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
 
 def release_rows(version):
     rows=[]
