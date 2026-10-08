@@ -28,8 +28,8 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: ${{ inputs.automation_source == 'upstream-event-router' && 'action-created-ci-nightly' || format('normal-nightly-{0}', github.ref) }}
-  cancel-in-progress: ${{ inputs.automation_source != 'upstream-event-router' }}
+  group: ${{ inputs.automation_source == 'upstream-nightly-router' && 'action-created-ci-nightly' || format('normal-nightly-{0}', github.ref) }}
+  cancel-in-progress: ${{ inputs.automation_source != 'upstream-nightly-router' }}
 
 jobs:
   resolve:
