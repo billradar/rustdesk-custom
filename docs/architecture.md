@@ -35,18 +35,18 @@ RustDesk Custom 是上游 RustDesk 的维护、构建、验证和发行仓库，
 
 | 路径 | 职责 |
 | --- | --- |
-| \`.github/workflows/\` | 工作流编排、条件、权限、依赖关系和产物传递 |
-| \`.github/actions/\` | 可复用的具体 Action 实现 |
-| \`scripts/upstream/\` | 上游解析、补丁集选择及补丁身份校验 |
-| \`scripts/source/\` | 获取源码、应用补丁、准备并验证源码树 |
-| \`scripts/build/\` | 各平台/变体的构建入口和配置 |
-| \`scripts/platform/\` | 平台适配、构建执行、打包与产物验证 |
-| \`scripts/release/\` | Channel 身份、资格验证、产物聚合和发布门禁 |
-| \`scripts/signing/\` | Android 身份检查、签名配置及生产签名辅助逻辑 |
-| \`scripts/validation/\` | 仓库结构、兼容性和配置契约 |
-| \`metadata/\` | 平台、发布、上游和签名等机器可读事实来源 |
-| \`patchsets/\` | 经审核的自定义补丁集 |
-| \`tools/\` | 开发与维护辅助工具 |
+| `.github/workflows/` | 工作流编排、条件、权限、依赖关系和产物传递 |
+| `.github/actions/` | 可复用的具体 Action 实现 |
+| `scripts/upstream/` | 上游解析、补丁集选择及补丁身份校验 |
+| `scripts/source/` | 获取源码、应用补丁、准备并验证源码树 |
+| `scripts/build/` | 各平台/变体的构建入口和配置 |
+| `scripts/platform/` | 平台适配、构建执行、打包与产物验证 |
+| `scripts/release/` | Channel 身份、资格验证、产物聚合和发布门禁 |
+| `scripts/signing/` | Android 身份检查、签名配置及生产签名辅助逻辑 |
+| `scripts/validation/` | 仓库结构、兼容性和配置契约 |
+| `metadata/` | 平台、发布、上游和签名等机器可读事实来源 |
+| `patchsets/` | 经审核的自定义补丁集 |
+| `tools/` | 开发与维护辅助工具 |
 
 ## 4. 身份与可追溯性
 
@@ -62,10 +62,10 @@ RustDesk Custom 是上游 RustDesk 的维护、构建、验证和发行仓库，
 
 ## 5. 事实来源优先级
 
-- 平台是否启用、是否必需、支持状态：\`metadata/platform/matrix.json\`。
-- 上游平台构建参数的审查记录：\`metadata/platform/adapter-profiles.json\`。
-- Android 包名和证书身份记录：\`metadata/signing/android-standard.json\`；执行时还要检查签名工作流实际引用的 YubiKey 身份元数据。
-- 发布身份：以当前代码实际读取的 \`metadata/release/identity.json\` 为准。
+- 平台是否启用、是否必需、支持状态：`metadata/platform/matrix.json`。
+- 上游平台构建参数的审查记录：`metadata/platform/adapter-profiles.json`。
+- Android 包名和证书身份记录：`metadata/signing/android-standard.json`；执行时还要检查签名工作流实际引用的 YubiKey 身份元数据。
+- 发布身份：以当前代码实际读取的 `metadata/release/identity.json` 为准。
 - 运行行为：以对应脚本、Reusable Workflow 和调用方条件为准。
 
 文档不得复制一份容易过期的配置当作第二个事实来源。

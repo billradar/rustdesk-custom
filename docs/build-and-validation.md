@@ -2,9 +2,9 @@
 
 ## 1. 平台矩阵是唯一平台清单
 
-\`metadata/platform/matrix.json\` 定义平台、架构、变体、Runner、启用状态、支持状态和是否为必需目标。不要仅凭 README 中的表格判断目标是否会参与构建。
+`metadata/platform/matrix.json` 定义平台、架构、变体、Runner、启用状态、支持状态和是否为必需目标。不要仅凭 README 中的表格判断目标是否会参与构建。
 
-\`metadata/platform/adapter-profiles.json\` 保存经过审查的上游构建参数/适配器配置。资格验证会检查启用目标与审查配置之间的一致性。
+`metadata/platform/adapter-profiles.json` 保存经过审查的上游构建参数/适配器配置。资格验证会检查启用目标与审查配置之间的一致性。
 
 支持状态的含义：
 
@@ -15,9 +15,9 @@
 
 ## 2. 构建分层
 
-1. \`scripts/release/qualification.py\` 根据矩阵生成目标计划。
-2. \`scripts/build/\` 的平台脚本负责调用对应工具链。
-3. \`scripts/platform/\` 执行构建、采集脱敏诊断信息并处理打包。
+1. `scripts/release/qualification.py` 根据矩阵生成目标计划。
+2. `scripts/build/` 的平台脚本负责调用对应工具链。
+3. `scripts/platform/` 执行构建、采集脱敏诊断信息并处理打包。
 4. 产物验证检查 target、架构、校验和、构建信息、来源身份及配置。
 5. 聚合步骤核对所需目标是否齐全，以及产物是否属于同一组上游/补丁/构建身份。
 6. CI Qualification 把成功结果与准确的自定义提交和上游版本关联，供 Stable 流程消费。
