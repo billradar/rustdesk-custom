@@ -87,7 +87,7 @@ def leakage_scan(folder):
                         chunks.append(z.read(n))
         for data in chunks:
             scan_bytes(data)
-            if data.startswith(b'\\xfe\\xed\\xfe\\xed') or re.search(rb'/u3\\+7Q[A-Za-z0-9+/=\\r\\n]{80,}', data):
+            if data.startswith(b'\xfe\xed\xfe\xed') or re.search(rb'/u3\+7Q[A-Za-z0-9+/=\r\n]{80,}', data):
                 raise ValueError('SIGNING: unexpected keystore material')
     print('Android credential leakage scan: PASS')
 
