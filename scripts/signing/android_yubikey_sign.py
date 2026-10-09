@@ -123,8 +123,8 @@ for arch in arches:
         fail(f"SIGNING[{arch}]: signer certificate fingerprint mismatch")
     schemes = [int(value) for value in re.findall(
         r"^Verified using v([123]) scheme.*: true$", result.stdout, re.M)]
-    if not any(scheme in (2, 3) for scheme in schemes):
-        fail(f"SIGNING[{arch}]: APK lacks a verified v2 or v3 signature")
+    if not {2, 3}.issubset(set(schemes)):
+        fail(f"SIGNING[{arch}]: APK must have both v2 and v3 signatures verified")
     badging = subprocess.run(["aapt", "dump", "badging", str(signed)],
                              check=True, capture_output=True, text=True).stdout
     match = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'", badging, re.M)
