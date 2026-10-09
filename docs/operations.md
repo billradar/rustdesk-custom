@@ -11,11 +11,11 @@ git checkout test/development
 python3 -m pip install -r requirements.txt
 ~~~
 
-如需参与协作，请从开发分支创建个人功能分支；不要直接推送到 \`main\`，不要擅自改写共享分支历史。
+如需参与协作，请从开发分支创建个人功能分支；不要直接推送到 `main`，不要擅自改写共享分支历史。
 
 ## 2. 修改前先理解边界
 
-1. 找到实现所在的 \`scripts/\`、\`.github/workflows/\` 或 \`metadata/\`。
+1. 找到实现所在的 `scripts/`、`.github/workflows/` 或 `metadata/`。
 2. 找到调用它的工作流和契约测试。
 3. 确认当前权威配置，而不是先改 README 或复制一份配置。
 4. 判断变更是纯文档还是功能变更。

@@ -8,22 +8,22 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 
 ## 2. 当前记录的身份
 
-机器可读身份记录位于 \`metadata/signing/android-standard.json\`。当前文件记录：
+机器可读身份记录位于 `metadata/signing/android-standard.json`。当前文件记录：
 
-- Android 包名：\`com.carriez.flutter_hbb\`
-- 生产硬件身份：YubiKey PIV slot \`9C\`
-- PKCS#11 object ID：\`02\`
-- 生产证书 SHA-256：\`559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5\`
+- Android 包名：`com.carriez.flutter_hbb`
+- 生产硬件身份：YubiKey PIV slot `9C`
+- PKCS#11 object ID：`02`
+- 生产证书 SHA-256：`559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`
 
 **重要：生产证书与记录中的 legacy 证书指纹不同。** 当前元数据将 legacy Android 签名身份标记为未恢复/未验证，升级兼容性也不能据此推断为通过。除非专门验证并更新证据，否则不能宣称新身份可无缝覆盖安装旧签名 APK。
 
 ## 3. 执行结构
 
 1. 普通 Android build Job 生成待签名产物。
-2. 独立的 \`android-sign\` Job 只在工作流定义的受限条件下运行。
-3. Job 使用专用 self-hosted ARM64 Runner 标签组：\`self-hosted\`、\`linux\`、\`arm64\`、\`rustdesk-signing\`、\`android-signing\`、\`yubikey\`。
-4. Job 进入 GitHub Environment：\`android-production-signing\`。
-5. Environment Secret \`YUBIKEY_PIV_PIN\` 只注入需要它的预检/签名步骤，不应打印或传递给普通构建。
+2. 独立的 `android-sign` Job 只在工作流定义的受限条件下运行。
+3. Job 使用专用 self-hosted ARM64 Runner 标签组：`self-hosted`、`linux`、`arm64`、`rustdesk-signing`、`android-signing`、`yubikey`。
+4. Job 进入 GitHub Environment：`android-production-signing`。
+5. Environment Secret `YUBIKEY_PIV_PIN` 只注入需要它的预检/签名步骤，不应打印或传递给普通构建。
 6. 签名辅助逻辑校验输入产物来源、包名、ABI、身份指纹和签名结果；任何不匹配都应失败关闭。
 7. 签名完成后，结果进入后续聚合验证，不应绕过最终产物验证。
 
@@ -50,7 +50,7 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 
 ## 6. 安全禁止事项
 
-- 不得将 \`YUBIKEY_PIV_PIN\` 放入仓库文件、命令行参数、日志、PR 评论或文档。
+- 不得将 `YUBIKEY_PIV_PIN` 放入仓库文件、命令行参数、日志、PR 评论或文档。
 - 不得把生产 Secret 暴露给普通 build、Nightly 或不受信任的 PR。
 - 不得使用软件密钥替代硬件身份以绕过失败门禁。
 - 不得在身份、来源或 Runner 有疑问时继续签名。

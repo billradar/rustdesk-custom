@@ -4,12 +4,12 @@
 
 ## 1. Python 找不到仓库模块
 
-**现象：** \`ModuleNotFoundError: No module named 'scripts'\`。
+**现象：** `ModuleNotFoundError: No module named 'scripts'`。
 
 **检查：**
 - 是否从仓库根目录运行；
-- Workflow 顶层或对应步骤是否需要 \`PYTHONPATH: .\`；
-- 是否用文件路径直接执行依赖 \`scripts.*\` 包导入的脚本。
+- Workflow 顶层或对应步骤是否需要 `PYTHONPATH: .`；
+- 是否用文件路径直接执行依赖 `scripts.*` 包导入的脚本。
 
 **处理：** 修复执行上下文或模块路径配置，并增加相应验证；不要把缺失模块误判为依赖包未安装。
 
@@ -33,9 +33,9 @@
 
 **现象：** 某个平台没有对应 Job，或计划阶段拒绝目标。
 
-**检查：** \`metadata/platform/matrix.json\` 中的 \`enabled\`、\`support_status\`、\`required\` 和 Runner；再核对 \`metadata/platform/adapter-profiles.json\` 是否有匹配的审查配置。
+**检查：** `metadata/platform/matrix.json` 中的 `enabled`、`support_status`、`required` 和 Runner；再核对 `metadata/platform/adapter-profiles.json` 是否有匹配的审查配置。
 
-**处理：** 只有完成平台适配、上游定义审查和相应证据验证后才能更新矩阵。不要仅改 \`enabled: true\`。
+**处理：** 只有完成平台适配、上游定义审查和相应证据验证后才能更新矩阵。不要仅改 `enabled: true`。
 
 ## 5. 构建通过但 Qualification 失败
 
@@ -55,7 +55,7 @@
 
 ## 7. Android 生产签名未启动或失败
 
-**现象：** \`android-sign\` 被跳过、找不到 Runner、PIN 预检失败或证书身份不匹配。
+**现象：** `android-sign` 被跳过、找不到 Runner、PIN 预检失败或证书身份不匹配。
 
 **检查：** Workflow 是否运行在允许的仓库/分支/事件上下文；前置构建与 Qualification 是否成功；Runner 标签、Environment 和 Secret 是否配置正确；身份元数据与真实硬件是否一致。
 

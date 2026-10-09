@@ -4,14 +4,14 @@
 
 | Workflow | 主要职责 |
 | --- | --- |
-| \`.github/workflows/ci.yml\` | 对变更分类；文档专属变更走轻量路径，功能变更进入兼容性、构建和资格验证 |
-| \`.github/workflows/compat-check.yml\` | 验证指定上游提交与当前补丁集的兼容性 |
-| \`.github/workflows/prepare-source.yml\` | 生成可复用、带来源身份的 Standard / SOS 准备源码 |
-| \`.github/workflows/build.yml\` | 计划目标、调用平台构建并汇总产物 |
-| \`.github/workflows/build-platform.yml\` | 执行单平台/目标构建入口 |
-| \`.github/workflows/nightly.yml\` | 对配置的上游测试 ref 执行 Nightly 构建和开发产物流程 |
-| \`.github/workflows/tag.yml\` | Stable 的解析、预检、资格验证、构建、生产签名和发布流程 |
-| \`.github/workflows/upstream-event-router.yml\` | 处理上游事件并路由到相应验证/构建工作流 |
+| `.github/workflows/ci.yml` | 对变更分类；文档专属变更走轻量路径，功能变更进入兼容性、构建和资格验证 |
+| `.github/workflows/compat-check.yml` | 验证指定上游提交与当前补丁集的兼容性 |
+| `.github/workflows/prepare-source.yml` | 生成可复用、带来源身份的 Standard / SOS 准备源码 |
+| `.github/workflows/build.yml` | 计划目标、调用平台构建并汇总产物 |
+| `.github/workflows/build-platform.yml` | 执行单平台/目标构建入口 |
+| `.github/workflows/nightly.yml` | 对配置的上游测试 ref 执行 Nightly 构建和开发产物流程 |
+| `.github/workflows/tag.yml` | Stable 的解析、预检、资格验证、构建、生产签名和发布流程 |
+| `.github/workflows/upstream-event-router.yml` | 处理上游事件并路由到相应验证/构建工作流 |
 
 具体触发器、输入名、权限、条件表达式和 Job 依赖以工作流文件本身为准；不要仅依靠本表推断某个事件一定会触发。
 
@@ -72,4 +72,4 @@ Dry-run / Draft / Release
 6. 如涉及 Android 生产签名，额外确认专用 Runner、Environment、授权输入和证书身份门禁。
 7. 记录最终 Workflow URL、commit SHA、上游 SHA、patchset 和发布结果。
 
-若工作流输入或触发方式发生变化，先阅读 \`ci.yml\` / \`tag.yml\` 中的当前 inputs，再按实际界面操作。
+若工作流输入或触发方式发生变化，先阅读 `ci.yml` / `tag.yml` 中的当前 inputs，再按实际界面操作。
