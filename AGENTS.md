@@ -1,193 +1,352 @@
-# AGENTS.md
+# AGENTS.md — RustDesk Custom Project Guide and Agent Contract
 
-# RustDesk Custom — AI Agent Operating Contract
+This file is the first-stop guide for AI agents working in `billradar/rustdesk-custom`. It must explain both **what this repository actually is** and **how an agent is allowed to change it**. Read it before editing code, metadata, patches, workflows, release logic, or documentation.
 
-This file is the repository-wide operating contract for AI coding agents working in `billradar/rustdesk-custom`. Read it before making changes. Treat current source code, workflow definitions, machine-readable metadata, and executable contracts as authoritative; prose documentation and conversation history are not substitutes for inspecting the current repository.
+Treat this as a project map, not a substitute for source inspection. If a detail here disagrees with the live workflow, script, contract, or canonical metadata, verify the implementation and update this guide in the same scoped change.
 
-## 1. Project purpose and non-goals
+## 1. Project identity: what this repository is
 
-`billradar/rustdesk-custom` maintains an auditable customization, compatibility, build, qualification, and release system for the official `rustdesk/rustdesk` upstream. Customizations are maintained as controlled patchsets rather than by silently replacing upstream source.
+`billradar/rustdesk-custom` is a **maintenance, patching, build, qualification, signing, and release-automation repository** for customized distributions of the official `rustdesk/rustdesk` project.
 
-The repository produces Standard and SOS variants, prepares source trees, validates compatibility, builds configured targets, verifies artifact provenance, records qualification, and supports a separately protected Android production-signing path.
+It is intentionally **not a full copy of the RustDesk upstream source tree** and should not evolve into an independently maintained source fork. The official upstream source is fetched at a specific revision when a workflow runs. Custom behavior is carried as reviewed patchsets in this repository. Build and release automation then prepares source trees, builds configured targets, validates artifacts and provenance, records qualification evidence, and optionally performs a separately gated Android production-signing operation.
 
-This is not a disposable source fork. Preserve reproducibility, traceability, fail-closed validation, release safety, and the separation between ordinary CI and privileged production operations.
+The project optimizes for:
+- explicit upstream and custom-repository revision identity;
+- small, reviewable, version-bounded customization patches;
+- repeatable source preparation and build configuration;
+- platform/variant policy defined in machine-readable metadata;
+- artifact integrity and provenance validation;
+- executable architecture and security contracts;
+- a strict separation between ordinary CI and privileged production signing;
+- release gates that fail closed instead of silently bypassing missing evidence.
 
-## 2. Authority and sources of truth
+A green compile is only one stage. It does not by itself prove a valid artifact, a qualified release, a production signature, a published release, or working remote sessions on real devices.
 
-When information disagrees, use this order and investigate the mismatch instead of guessing:
+## 2. Product and customization model
 
-1. Current workflow definitions and reusable workflow/action implementations for triggers, inputs, permissions, job conditions, dependencies, and artifact flow.
-2. Executable contracts and scripts for validation and release/signing behavior.
-3. Canonical machine-readable metadata for platform policy, build profiles, release identity, and signing identity.
-4. Documentation for explanation and navigation only.
-5. Historical CI runs, PR descriptions, old commits, and conversation history as historical evidence only—not proof of current behavior.
+### Variants
 
-Important canonical locations include:
+- **Standard** uses the shared/common customization patchset.
+- **SOS** uses the same shared/common patchset plus the SOS-specific patchset.
+- Standard and SOS must be prepared from the same locked upstream source identity for a comparable build batch, but each variant must use an independent prepared source tree so variant-specific changes cannot leak into the other variant.
+- Do not assume SOS exists for every platform. The platform matrix, not the variant name or README table alone, determines enabled/required targets.
 
-- `.github/workflows/` and `.github/actions/`: orchestration, permissions, gates, and reusable execution.
-- `scripts/upstream/`, `scripts/source/`, `scripts/build/`, and `scripts/platform/`: upstream resolution, source preparation, build adapters, platform execution, packaging, and artifact validation.
-- `scripts/release/`: channel identity, preflight, qualification, aggregation, naming, and publication gates.
-- `scripts/validation/`: repository contracts, change classification, compatibility validation, configuration checks, and repository scanning.
-- `scripts/signing/` and `tools/android-signing-bridge/`: Android signing policy and hardware-signing bridge.
-- `metadata/platform/matrix.json`: configured platform/target policy.
-- `metadata/platform/adapter-profiles.json` and `metadata/build/adapter-profiles.json`: reviewed build/adapter profiles.
-- `metadata/release/identity.json` and related release metadata: canonical release identity and revision data.
-- `metadata/signing/android-standard.json` plus the identity metadata actually consumed by the signing workflow: Android signing identity.
-- `patchsets/`: reviewed customization inputs.
-- `requirements.txt`: Python dependencies for repository tooling.
+Current patchset layout:
+- `patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`.
+- `patchsets/v1/sos/`: `0001-sos-mode.patch`, `0002-sos-home.patch`, `0003-sos-settings.patch`.
+- `patchsets/v2/` contains the corresponding common and SOS customization generation for the newer upstream API boundary.
 
-Do not create a second configuration source by copying mutable metadata into scripts or documentation. Verify exact paths in the current tree before referring to them; legacy names may have been removed.
+These filenames are useful orientation, not a complete semantic specification. Read the patch before changing or describing its behavior.
 
-## 3. Current workflow responsibilities
+### Patchset selection is version-bounded
 
-This is a responsibility map, not a replacement for reading each workflow. Inputs and implementation may change; inspect the current file before invoking or modifying it.
+The current selector is `scripts/upstream/patchsets.py`:
+- upstream versions below `1.5.0` select `patchsets/v1`;
+- upstream versions `1.5.0` and later select `patchsets/v2`.
 
-- `.github/workflows/ci.yml`: classifies changes. Documentation-only changes take a lightweight path; functional or ambiguous changes go through source resolution, compatibility checks, and qualification.
-- `.github/workflows/compat-check.yml`: reusable compatibility/contracts pipeline for an explicitly supplied upstream repository/ref/SHA and channel.
-- `.github/workflows/prepare-source.yml`, `build.yml`, and `build-platform.yml`: prepare source, plan/build configured targets, and pass artifact identity between stages.
-- `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target build entry points used by the release pipeline.
-- `.github/workflows/tag.yml`: Stable pipeline, including upstream resolution, release/revision preflight, build, artifact aggregation, gated Android signing, and Dry-run/Draft/Release decisions.
-- `.github/workflows/nightly.yml`: dispatch-driven Nightly build/artifact pipeline. It is not itself the upstream polling router and must not publish a Stable release or perform Android production signing.
-- `.github/workflows/upstream-stable.yml`: periodically detects the official upstream Stable release and routes a deduplicated Stable dry-run; the router is not authorization to publish a release.
-- `.github/workflows/upstream-nightly.yml`: periodically discovers and validates an official scheduled upstream Flutter Nightly run and its published Nightly assets, then routes the locked SHA to the downstream Nightly build workflow.
-- `.github/workflows/upstream-main-compatibility.yml`: periodically checks compatibility against the official upstream default branch. This signal is separate from Stable release and Nightly artifact routing.
-- `.github/workflows/android-yubikey-signing-test.yml`: manually invoked, explicitly authorized signing smoke test. It is not a Stable release and must not publish one.
+Selection is based on the explicit numeric upstream version boundary. Patch contents, hashes, source SHA, or whether a patch happens to apply must not silently influence selection. Integrity and applicability are separate validation gates. When a new upstream API migration requires another patch generation, add an explicit reviewed version boundary and the corresponding metadata/contracts; do not add heuristics to the selector.
 
-Do not assume a workflow exists based on an old document or a familiar name. For example, do not refer to an `upstream-event-router.yml` unless it exists in the current tree.
+The patchset manifests currently record:
+- `v1`: validated against upstream `1.4.9` / `6c578292e8ebbbec708b76986ba8c4bc7c509747`;
+- `v2`: compatibility-validated against upstream `1.5.0` / `fada664df7a294d1d1a9ca3e7cd3637069122f17`.
 
-## 4. Upstream identity, routing, and reproducibility
+These are baseline records, not a promise that every current upstream commit or target is fully validated. Always inspect the manifest and fresh CI evidence for the exact revision being changed.
 
-The only supported upstream identity for normal project flows is the official `rustdesk/rustdesk` repository unless a reviewed workflow explicitly says otherwise.
+## 3. Repository map: where to look first
 
-- Resolve an upstream tag/ref/branch to one exact commit SHA before building. Propagate that SHA through preparation, compatibility checks, build jobs, artifact manifests, qualification, and release metadata.
-- A branch name or moving tag is not a durable source identity. Never infer the built commit from a display name or filename.
-- Stable, Nightly, and upstream-default-branch compatibility are separate channels with separate intent. Do not let a change to upstream `main` implicitly trigger a Nightly release, and do not treat Nightly artifacts as Stable.
-- The Nightly router must fail closed unless it can validate the official scheduled Flutter Nightly workflow run, its successful completed status, the matching 40-character upstream `head_sha`, and the official published Nightly prerelease/assets required by the router. It also checks that release assets are fresh relative to the run and guards against the release changing during routing.
-- The downstream Nightly workflow must validate routed provenance again. Do not weaken or remove this second validation merely because the router already checked it.
-- The Stable router's automatic route is a dry-run. Router success is not publication authorization.
-- Preserve duplicate suppression and safe retry behavior. A matching active run must not be duplicated; a prior failed or absent run may be retried according to the workflow's current logic.
-- Do not hard-code a moving upstream revision to make CI green. Test fixtures must never be accepted as production source or payload.
-- When modifying patchsets, identify the affected upstream version boundary, verify the intended patchset is selected, apply the patches to the exact source, inspect the resulting diff, and run the relevant compatibility checks.
+| Path | What it owns | Start here when... |
+| --- | --- | --- |
+| `.github/workflows/` | Workflow triggers, inputs, permissions, job graph, conditions, artifact handoff | CI/CD routing or a skipped/failed job is in question |
+| `.github/actions/` | Reusable action implementation | A workflow delegates behavior to a local action |
+| `patchsets/vN/common/` | Customizations shared by Standard and SOS | Shared UI/default/server behavior changes |
+| `patchsets/vN/sos/` | SOS-only customizations | SOS-specific behavior changes |
+| `patchsets/vN/patchset.json` | Patchset baseline, hashes, variant mapping, validation record | Patch selection or patch integrity changes |
+| `scripts/upstream/` | Upstream/patchset policy and selection | Version boundary or patchset identity changes |
+| `scripts/source/` | Fetch, prepare, patch, and verify clean upstream source | Prepared source, submodules, or patch application fails |
+| `scripts/build/` | Platform build entrypoints and build configuration | Toolchain invocation or build flags change |
+| `scripts/platform/` | Adapter checks, target execution, packaging and artifact validation | Platform matrix/build adapter/package behavior changes |
+| `scripts/release/` | Channel identity, naming, preflight, aggregation, qualification and publication | CI qualification or Stable/Nightly release behavior changes |
+| `scripts/signing/` | Android signing identity/configuration and signing workflow helpers | Android signing policy or certificate validation changes |
+| `tools/android-signing-bridge/` | Java bridge for hardware-backed Android signing; includes mock and production interfaces/tests | PKCS#11, PIN handling, ECDSA encoding or signing flow changes |
+| `scripts/validation/` | Repository, compatibility, change-classification and native configuration contracts | Architecture policy or change classification changes |
+| `metadata/platform/matrix.json` | Canonical enabled/required/support-status target matrix | Whether a target participates in a build |
+| `metadata/platform/adapter-profiles.json` | Approved signatures for official upstream platform build definitions | An upstream build interface/profile changes |
+| `metadata/build/adapter-profiles.json` | Reviewed build adapter profiles and critical input fingerprints | Toolchain/build configuration drift is detected |
+| `metadata/release/identity.json` | Canonical release revision identity (currently a small JSON record) | Release revision identity changes |
+| `metadata/release/patch-revision-record.json` | Patch/revision record used by release logic | Patch revision tracking changes |
+| `metadata/signing/android-standard.json` | Android Standard package and signing identity evidence | Package/certificate/legacy-identity claims change |
+| `metadata/baselines/` | Known build/source/UI baselines used by checks | A regression baseline changes |
+| `requirements.txt` | Python tooling dependencies | Python dependency/import failures occur |
+| `docs/README.md` | Documentation index | You need the detailed explanation of a subsystem |
 
-## 5. Change classification and CI
+The tree may evolve. Check whether a path exists at the target revision before relying on it. Do not resurrect removed files or old workflow names just because an older document mentions them.
 
-Change classification is fail-closed:
+## 4. Source-to-artifact data flow
 
-- If every changed file is confidently documentation-only, classify as `DOCS_ONLY`.
-- If any changed file is functional or ambiguous, classify as `FUNCTIONAL`.
+The intended conceptual pipeline is:
 
-Functional changes include, at minimum, workflows/actions, scripts, metadata, patchsets, build/platform configuration, dependency declarations, packaging inputs, and signing/qualification code. A mixed documentation/functional change is functional.
+```text
+Official rustdesk/rustdesk
+  │ resolve ref/tag and lock exact 40-character commit SHA
+  ▼
+Upstream compatibility and reviewed build-interface checks
+  │ select patchset by explicit upstream version boundary
+  ▼
+Clean prepared source + recursive submodules + verified patch hashes
+  │ prepare Standard and SOS in separate source trees
+  ▼
+Platform matrix + reviewed adapter profile
+  │ build target-specific artifacts
+  ▼
+Package / ABI / checksum / build-info / configuration / provenance checks
+  ▼
+Aggregate required target set + CI qualification record
+  │
+  ├── optional, separately authorized Android production signing
+  ▼
+Stable dry-run / draft / explicitly authorized publication
+```
 
-Documentation-only work should receive appropriate lightweight validation. Do not run expensive builds, production signing, or release jobs unnecessarily for prose-only changes. Conversely, do not classify functional changes as documentation-only to save CI time. Avoid path filters that leave required checks permanently pending.
+Each stage has its own inputs, outputs, and gates. Do not skip stages by hand-editing a manifest or reusing an artifact from a different build batch.
 
-`force_rebuild` is a current input of `.github/workflows/ci.yml` and explicitly requests the functional/full CI path. Input names and semantics are workflow-specific; do not assume this input exists on other workflows. `promote_stable` is not a current interface contract: do not reintroduce it or document it as an active input without an explicit design change.
+### Source preparation invariants
 
-Treat CI as an executable policy boundary, not a status badge. Do not bypass a failing architecture, source-identity, patch, compatibility, artifact, qualification, provenance, or signing gate to obtain a green run.
+The core source preparation lives under `scripts/source/`:
+1. Fetch the official upstream repository at the requested ref.
+2. Resolve the actual commit SHA and compare it to `UPSTREAM_EXPECTED_SHA` when supplied.
+3. Check out the exact SHA detached from a moving branch/tag.
+4. Initialize recursive submodules and verify their checked-out commits match the parent repository's gitlinks.
+5. Require a clean source tree.
+6. Select and verify the expected patchset; apply patches to the intended upstream tree.
+7. Generate source identity/provenance from actual inputs.
 
-## 6. Branch and pull-request model
+Important: `scripts/source/prepare.sh` requires an **empty destination directory** and deliberately refuses to reset/delete files already there. Never “fix” this safety behavior by adding a destructive clean/reset. Never claim the source SHA from a tag name alone.
 
-The only intended long-lived branches are:
+### Provenance identity
 
-- `main`: protected stable integration and release baseline.
-- `test/development`: shared development and integration branch.
-
-The normal workflow is to make scoped changes on `test/development`, validate them, then open a pull request from `test/development` to `main`. Do not create `feature/*`, `fix/*`, or other temporary branches unless the user explicitly requests them or a platform constraint makes one necessary. Do not commit directly to protected `main`.
-
-At the start of a cycle, inspect both branch heads and their ancestry. Prefer synchronized branch tips before starting new work, but never assume that matching trees prove matching history. Check the merge base, ahead/behind counts, unique commits, and changed files.
-
-Git history is audit data. For the long-lived development-to-main integration, prefer a normal merge commit; do not routinely squash or rebase away the development history. Do not rewrite a shared branch merely to make its graph look cleaner.
-
-Never reset, force-push, rebase, replace a branch ref, delete a shared branch, or rewrite history on `main` or `test/development` without explicit user authorization. Before any authorized destructive branch operation, inspect both heads, ancestry, unique commits, tree equality, shared-branch impact, and the exact expected target SHA. Use an expected-old-SHA guard when the available API supports it.
-
-A created PR is not a merged PR. A matching file tree is not proof that commits were merged. Verify the resulting commit, merge state, and branch comparison after integration.
-
-## 7. Stable release and qualification boundaries
-
-Stable release flow must preserve the association among:
-
+A build/qualification must preserve the association among:
 - custom repository commit SHA;
-- official upstream ref and resolved SHA;
-- selected patchset and its content identity;
-- patch revision/release identity;
-- target/variant and build configuration;
-- artifact hashes, verification reports, and qualification evidence.
+- official upstream repository, ref/version, and resolved SHA;
+- patchset ID and common/SOS patch hashes;
+- Standard/SOS variant;
+- target platform and architecture;
+- reviewed build profile/toolchain inputs;
+- build run identity;
+- artifact checksums, build-info, and validation reports.
 
-Do not reuse a qualification record across a different custom commit, upstream SHA, patchset, revision, target, or build configuration. Preflight and duplicate-release protections are mandatory, not optional cleanup.
+A filename, release label, branch name, or manually edited JSON field is not sufficient evidence of artifact identity.
 
-The Stable pipeline currently distinguishes Dry-run, Draft, and Release modes. Read the actual `tag.yml` input choices and job conditions before dispatching. Dry-run is not a published release; Draft is not a published release; Release publication must pass the full aggregate gate and be explicitly requested by the user. Do not infer authorization from a scheduled router run, a green build, or the existence of an older draft.
+## 5. Platform support: how to interpret it correctly
 
-Never silently delete, overwrite, or bypass an existing release/revision to get past preflight. If release identity or prior artifacts conflict, stop and investigate.
+`metadata/platform/matrix.json` is the authority for enabled targets, required targets, support status, runner, and experimental eligibility. `metadata/platform/adapter-profiles.json` and `metadata/build/adapter-profiles.json` hold separate reviewed build-interface/profile data; they are not interchangeable with the target matrix.
 
-Configured target support is determined by canonical platform metadata and the current workflow matrix. Do not make blanket claims that every historical target is currently supported, required, built, or release-qualified. Build support, artifact validation, production signing, and real-device/runtime validation are different states.
+The README currently summarizes these intended platform/variant families:
+- Windows x86_64: Standard and SOS;
+- Linux x86_64 and ARM64: Standard and SOS;
+- macOS x86_64 and ARM64: Standard and SOS;
+- Android ARM64, ARMv7, and x86_64: Standard;
+- Windows ARM64 is planned; Web is blocked by the reviewed upstream build definition; iOS is not a normal supported release target unless the live matrix says otherwise.
 
-## 8. Android production signing and secret handling
+Always confirm these summaries against the current matrix before changing support claims or workflow behavior.
 
-Android production signing is a privileged operation, isolated from ordinary CI and Nightly builds.
+Support status meanings:
+- `SUPPORTED`: meets the repository's configured build/validation requirements for that target; does **not** imply runtime UI, real remote-session, upgrade, or production-signing validation.
+- `EXPERIMENTAL`: only eligible through the explicit experimental path; never silently promote it to a required Stable target.
+- `PLANNED`: not enabled for normal builds.
+- `BLOCKED`, `UNSUPPORTED`, or `DISABLED`: do not treat as a normal available target.
 
-- Production signing must occur only through the intended Stable workflow, on the required dedicated self-hosted runner, on `main`, with the expected GitHub Environment and explicit workflow conditions satisfied.
-- Current signing boundary: GitHub Environment `android-production-signing`; Environment Secret `YUBIKEY_PIV_PIN`; dedicated runner labels `self-hosted`, `linux`, `arm64`, `rustdesk-signing`, `android-signing`, `yubikey`; YubiKey PIV slot `9C`; PKCS#11 object ID `02`. Verify these against the live workflow and identity metadata before changing them.
-- Normal CI, Nightly, compatibility checks, and ordinary build jobs must not access the production signing Environment, PIN, YubiKey, PKCS#11 device, or production signing action.
-- The smoke-test workflow is separately gated by a manual, explicit authorization input and must not publish or promote artifacts.
-- Never commit keystores, private keys, PINs, passwords, tokens, PKCS#11 credentials, or sensitive signing output. Never put a PIN in command-line arguments, logs, PRs, issue comments, artifacts, or documentation. Bind secrets only to the narrow steps that need them.
-- Do not replace hardware signing with an undisclosed software key, add a repository-secret fallback for the production PIN, weaken preflight, or bypass the dedicated runner/Environment gates.
-- The production path requires APK Signature Scheme v2 and v3 to both be enabled and independently verified for every required signed APK. Do not weaken this to “v2 or v3”.
-- Validate package identity, certificate fingerprint, version, ABI, APK hash, signature schemes, and provenance using the current metadata and verification reports.
-- A successful Android build does not prove a production signature. A successful signature operation does not prove legacy signing-identity continuity, device installation, upgrade compatibility, or key rotation. Never claim legacy identity migration or v3 proof-of-rotation unless the relevant certificate and device-level evidence actually establishes it.
+Do not set `enabled: true`, `required: true`, or `support_status: SUPPORTED` by itself to make a platform “supported.” The adapter/profile must match the reviewed official upstream build interface, required validation must pass, and the evidence scope must be accurately recorded. Do not copy historical run IDs or PASS labels forward as if they validate a new source SHA.
 
-## 9. Repository contracts, tests, and dependencies
+Keep these evidence levels separate:
+1. configured in metadata;
+2. selected by the target planner;
+3. successfully built in a specific run;
+4. artifact validated for package/architecture/checksum/provenance;
+5. UI/runtime or real remote-session tested;
+6. production-signed with the intended identity;
+7. published and, where relevant, installed/upgraded on a real device.
 
-For repository structure/policy changes, inspect and run the repository architecture contract:
+Only state the level that evidence supports. The current patchset records say runtime UI validation was skipped by the user and real remote sessions were not tested; do not turn build evidence into runtime claims.
 
+## 6. Workflow map and channel boundaries
+
+Workflow names and interfaces are live contracts. Read the YAML and the scripts it calls before changing an input, dispatching a workflow, or explaining a failure.
+
+- `.github/workflows/ci.yml`: classifies changes. Documentation-only changes take a lightweight path; functional or ambiguous changes take the full source/compatibility/qualification path. Its current `workflow_dispatch` inputs include `upstream_ref`, `force_rebuild`, and internal `automation_source`.
+- `.github/workflows/compat-check.yml`: reusable compatibility/contracts path for explicit upstream identity and channel.
+- `.github/workflows/prepare-source.yml`: prepares the locked patched source artifact for downstream builds.
+- `.github/workflows/build.yml` and `.github/workflows/build-platform.yml`: build orchestration and target-level platform execution.
+- `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target-build entry points.
+- `.github/workflows/tag.yml`: Stable resolve/preflight/build/aggregate/qualification and release-mode routing. Current manual release modes are `dry-run`, `draft`, and `release`. Default is `dry-run`.
+- `.github/workflows/nightly.yml`: dispatch-driven Nightly build/artifact pipeline. Current modes are `build` and `draft`; it must not publish Stable and must not access Android production signing.
+- `.github/workflows/upstream-stable.yml`: polls/detects official Stable release and routes a deduplicated Stable dry-run only. It is not publication authorization.
+- `.github/workflows/upstream-nightly.yml`: validates the official upstream scheduled Flutter Nightly run, successful completion, exact `head_sha`, published prerelease/assets and freshness, then routes the locked SHA to the downstream Nightly workflow.
+- `.github/workflows/upstream-main-compatibility.yml`: periodic compatibility signal for the official upstream default branch; separate from Stable and Nightly release routing.
+- `.github/workflows/android-yubikey-signing-test.yml`: manually and explicitly authorized signing smoke test; it is not a Stable release and must not publish one.
+- `.github/actions/android-yubikey-sign/`: local reusable signing action implementation.
+
+Never assume a file exists because an old guide mentions it. In particular, `.github/workflows/upstream-event-router.yml` is not the current router. Do not reintroduce it as a supposed source of truth.
+
+### Channel rules
+
+- **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
+- **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, performs preflight and required builds/validation, and follows the explicit release mode.
+- **Nightly** is a development artifact path. Automated routing must be based on the validated official upstream Nightly run and exact SHA; the downstream workflow revalidates the provenance. Manual refs are a separate explicit use case and must not be misrepresented as official automated Nightly provenance.
+- **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable or Nightly publication.
+- A router-triggered dry-run is not release authorization. A successful build or qualification is not publication authorization.
+- Preserve duplicate suppression and safe retry behavior. Do not weaken freshness checks, SHA revalidation, run matching, or downstream provenance checks just because the upstream router already performed validation.
+
+`force_rebuild` is a current input of `ci.yml`; do not assume it exists in `nightly.yml` or `tag.yml`. `promote_stable` is not a current workflow interface. Never document or add an input based on memory rather than the live YAML.
+
+## 7. CI classification and contracts
+
+`scripts/validation/change_classification.py` classifies a change as:
+- `DOCS_ONLY` only when every changed path is recognized as documentation/non-functional;
+- `FUNCTIONAL` for functional or ambiguous changes, manual CI dispatch, or a push without a usable previous revision.
+
+The current classifier recognizes Markdown files and the configured documentation/non-functional paths. Changes to scripts, workflows, actions, metadata, patchsets, dependencies, build logic, release logic, or signing logic are functional. A mixed docs + code change is functional. Do not manipulate path names or add broad ignore rules to evade functional CI.
+
+Repository architecture contract:
 ```bash
 python3 scripts/validation/repository_contract.py
 ```
 
-Then run the relevant domain contracts and tests identified by the changed workflow, including release qualification, signing, source preparation, patch selection, or platform configuration contracts as applicable. Install only declared dependencies using `requirements.txt`; do not create temporary or duplicate dependency manifests.
+Relevant domain contracts include (confirm each path exists and inspect its CLI before use):
+```text
+scripts/release/channel_contract.py
+scripts/release/qualification_contract.py
+scripts/release/production_contract.py
+scripts/build/config_mir_contract.py
+scripts/validation/native_config_contract.py
+scripts/signing/android_signing_contract.py
+```
 
-Workflow YAML changes must be validated with the repository's configured workflow parser/linter and relevant CI contract tests. A YAML parse alone does not prove correct job dependencies, permissions, expressions, provenance, or release behavior.
+Run the repository contract and the tests/contracts for every affected domain. Workflow YAML parsing alone does not validate permissions, expression semantics, job dependencies, provenance, release gating, or hardware isolation. A skipped job is not a passed job; determine whether the skip is expected from the workflow conditions.
 
-For changes affecting source, patchsets, builds, artifact identity, or release behavior, use the actual compatibility/build/qualification path and inspect its reports. A unit test or simulated fixture is not a substitute for the production path where the production path is the behavior being claimed.
+Use dependencies declared in `requirements.txt`. Do not introduce duplicate dependency files or “fix” missing imports by guessing a package name without checking the declared dependency and module path.
 
-For documentation-only changes, check links, paths, headings, and language-switch navigation as relevant. Do not modify functional contracts merely to accommodate documentation.
+## 8. Android Standard production signing — critical security boundary
 
-## 10. Documentation and naming
+Android Standard package identity currently recorded in `metadata/signing/android-standard.json` is `com.carriez.flutter_hbb`. The signing path uses a hardware-backed YubiKey PIV identity and a dedicated bridge. Treat all signing inputs and the identity metadata as security-sensitive.
 
-`README.md` and `README.zh-CN.md` are separate English and Chinese landing pages and should provide a working language switch to each other. They are valid root documentation and must not be moved into `docs/` to satisfy an artificial architecture rule.
+Current intended configuration, which must be rechecked against live workflow and metadata before any change:
+- GitHub Environment: `android-production-signing`;
+- Environment Secret: `YUBIKEY_PIV_PIN`;
+- dedicated runner labels: `self-hosted`, `linux`, `arm64`, `rustdesk-signing`, `android-signing`, `yubikey`;
+- PIV slot: `9C`;
+- PKCS#11 object ID: `02`;
+- required Android APK signature schemes: v2 **and** v3, each independently verified.
 
-Documentation should explain the implementation rather than invent a second implementation. Workflow tables are navigational aids only. When a workflow changes, update relevant documentation in the same scoped change if it has become inaccurate. Remove stale workflow names, input names, paths, and claims rather than preserving them for historical continuity.
+### Non-negotiable isolation
 
-Distinguish clearly among:
-- implemented/configured;
-- CI-tested;
-- successfully executed in a real run;
-- artifact produced and verified;
-- production-signed;
-- published;
-- installed or tested on a real device.
+- Ordinary CI, compatibility checks, Nightly, and ordinary build jobs must not access the production signing Environment, production PIN, YubiKey, PKCS#11 device, or production signing step.
+- Production signing must remain behind the intended Stable workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
+- The manual signing smoke test is separately gated and must never publish/promote a release.
+- Never commit a keystore, private key, PIN, password, token, PKCS#11 credential, or sensitive signing output.
+- Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.
+- Do not replace hardware signing with an undisclosed software key or weaken gates to make a run pass.
+- A failed PIN preflight, missing device, unavailable key, unexpected certificate, or invalid APK is a stop condition. Do not retry by weakening checks.
 
-Do not use historical phase labels or temporary fix names as permanent architecture when a clear functional name is available. Prefer existing canonical names and avoid gratuitous renames.
+### Legacy identity status is not the same as current signing success
 
-## 11. Required agent procedure
+The current `metadata/signing/android-standard.json` records:
+- legacy APK certificate SHA-256: `a53de75c536ba1431f5e1c0ecaee120a63b5107b563fcdd311efd38297be103c`;
+- current production YubiKey certificate SHA-256: `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`;
+- `legacy_android_signing_identity`: `NOT RECOVERED / NOT VALIDATED`;
+- legacy APK runtime upgrade: `NOT TESTED`.
 
-Before making a change:
+The recorded legacy and current production certificate fingerprints differ. Do **not** claim that the new signing identity preserves the legacy identity or that an in-place upgrade is compatible. A successful hardware-signing operation proves only that the operation succeeded for that input; it does not prove legacy certificate continuity, v3 proof-of-rotation, Play/update compatibility, or successful device upgrade. Those claims require the relevant certificate-chain/signing-lineage and device-level evidence.
 
-1. Inspect current `main` and `test/development` heads, status, and ancestry when branch state matters.
-2. Read this file and the relevant workflow, implementation, metadata, documentation, and contract tests.
-3. Confirm the requested scope and classify it as documentation-only or functional.
-4. Identify security, source identity, release, signing, and CI interfaces that could be affected.
-5. Make the smallest coherent change on `test/development` unless the user explicitly specifies another target.
-6. Run the appropriate local checks and inspect their exit codes.
-7. Review the full diff for accidental changes, stale names, secret leakage, and weakened gates.
-8. Open a PR from `test/development` to `main` when integration is requested or expected; do not merge it unless authorized.
-9. After merge or branch synchronization, verify the actual commit and compare the branch tips.
-10. Report the exact files/commits/PRs, checks performed, check results, and remaining unverified claims.
+For each signed APK, validate package name, certificate fingerprint, version/version code, ABI, hash, signature schemes, and source/artifact provenance. Never weaken the requirement from “v2 and v3” to “either v2 or v3”.
 
-Never claim CI passed, a PR merged, branches synchronized, a release published, an artifact uploaded, or a signature/identity validated unless the current repository or run evidence proves it. Report historical evidence as historical. If a run is queued or in progress, say so.
+## 9. Release qualification and publication safety
 
-## 12. Scope control and core principles
+A valid qualification must match the exact:
+- custom repository commit;
+- upstream version/ref and resolved SHA;
+- selected patchset and patch hashes;
+- channel and revision;
+- required target/variant set;
+- build identity and artifact evidence.
 
-When asked to fix one issue or improve one document, do not automatically refactor unrelated workflows, change release semantics, rename unrelated files, change upstream resolution, alter signing behavior, or remove functionality. Broad audit findings should be reported separately and converted into scoped follow-up work rather than silently bundled.
+Never reuse a qualification record for a different commit, upstream SHA, patchset, revision, target set, or build configuration. Do not manually edit qualification evidence to force a match.
 
-Preserve behavior unless a change is explicitly intended. Preserve auditability, exact source identity, security boundaries, and fail-closed behavior. Prefer explicit evidence over assumptions. Ask before destructive operations. Never invent repository state.
+Stable mode semantics:
+- `dry-run`: exercise resolution/preflight/build/validation without claiming publication;
+- `draft`: create/update only according to the workflow's explicit existing-draft/preflight rules;
+- `release`: publication path, requiring the full aggregate gate and explicit user authorization.
 
-This file is an operating contract, not a suggestion.
+Before any release action, inspect the live `tag.yml` inputs, conditions, existing draft/release state, and qualification record. Never silently delete/overwrite an existing release, fabricate a revision, bypass preflight, or infer permission to publish from a scheduled router run.
+
+Report separately whether a source revision was prepared, an artifact built, artifact validation passed, qualification passed, signing passed, a draft exists, a release was published, and runtime/device testing occurred.
+
+## 10. Branch, PR, and history rules
+
+The intended long-lived branches are only:
+- `main`: protected stable integration/release baseline;
+- `test/development`: shared development/integration branch.
+
+Normal work is done directly on `test/development`, validated, and proposed to `main` through a PR. Do not create `feature/*`, `fix/*`, `docs/*`, or other temporary branches unless the user explicitly asks or a platform constraint makes one necessary. Do not commit directly to protected `main`.
+
+Before branch-sensitive operations, inspect both branch heads, merge base, ahead/behind counts, unique commits, and changed files. Tree equality does not prove ancestry. Git history is audit evidence: do not routinely squash/rebase away the shared development history.
+
+Never reset, force-push, rebase, replace a ref, delete a shared branch, or rewrite history without explicit authorization. For any authorized destructive operation, inspect the exact expected target SHA and use an expected-old-SHA guard where available.
+
+Creating a PR does not merge it. A green PR check does not merge it. A merged PR does not prove every desired workflow ran. Verify the actual merge state, resulting commit, CI run, and branch comparison. Do not merge a PR unless the user explicitly authorizes merging.
+
+## 11. Documentation rules and project terminology
+
+- `README.md` and `README.zh-CN.md` are separate English/Chinese landing pages with working language links. Do not merge them into one page or move them into `docs/`.
+- `docs/README.md` is the documentation index. Update the relevant guide when implementation behavior changes.
+- Documentation-only changes should not alter runtime or workflow behavior.
+- Describe current behavior from live source. Remove stale paths, inputs, and assumptions rather than preserving obsolete workflow names.
+- Distinguish configured support, CI-tested behavior, a real successful run, validated artifacts, production signing, publication, and device/runtime validation.
+- Do not make README tables, old phase summaries, old run IDs, or conversation notes a second source of truth for mutable support/configuration data.
+
+## 12. Debugging workflow failures: minimum evidence to collect
+
+When investigating a failed Actions run:
+1. Capture the run URL/ID, workflow name, event, branch, head SHA, and status.
+2. Identify the first failing job/step, not just the final summary line.
+3. Record the exact custom SHA, upstream SHA/version, patchset, target/variant, and artifact/build identity relevant to the failure.
+4. Read the workflow conditions and the called script/action before deciding why a job was skipped or failed.
+5. Check whether the failure is an infrastructure/transient error or a reproducible project error; rerun only when appropriate.
+6. Fix the underlying contract or implementation. Do not hide failures with `continue-on-error`, broad condition changes, skipped required jobs, relaxed assertions, fake manifests, or stale artifact reuse.
+7. Re-run the narrow relevant contract first, then the affected workflow/qualification path.
+8. Report evidence and remaining uncertainty. Do not claim a fix until a run on the intended commit verifies it.
+
+Useful first checks:
+- Repository structure/policy: `python3 scripts/validation/repository_contract.py`
+- Change-classification behavior: `scripts/validation/change_classification.py`
+- Patch generation/selection/integrity: `scripts/upstream/patchsets.py`
+- Source preparation/submodule/patch application: `scripts/source/`
+- Target planning/aggregation: `scripts/release/qualification.py`
+- Android identity and signing contract: `scripts/signing/`, `tools/android-signing-bridge/`, `metadata/signing/android-standard.json`
+
+Inspect each script's CLI and required environment before running it. Never invoke a release/publish/signing path casually just because it can be run manually.
+
+## 13. Required agent procedure
+
+Before changing anything:
+1. Read this guide and inspect the current repository state and target branch.
+2. Trace the requested behavior from workflow → script/action → metadata/contract → documentation as applicable.
+3. Confirm the actual implementation and affected interfaces; do not guess from filenames.
+4. Classify the change as documentation-only or functional.
+5. Identify impact on upstream identity, patchset selection, target matrix, qualification, artifact provenance, signing isolation, and release behavior.
+6. Make the smallest coherent change on `test/development` unless explicitly instructed otherwise.
+7. Run relevant local contracts/tests and inspect exit codes.
+8. Review the full diff for unrelated changes, stale references, leaked secrets, and weakened gates.
+9. Open/update a PR to `main` when integration is expected; do not merge without explicit authorization.
+10. Verify CI on the exact resulting commit and report the files, commit, PR, checks, and remaining unverified claims.
+
+Never claim that CI passed, a PR merged, branches synchronized, a release published, an artifact uploaded, a production signature succeeded, or identity continuity was proven unless current evidence establishes that exact claim. Label historical evidence as historical.
+
+## 14. Core non-negotiable principles
+
+- Inspect the live repository; do not invent files, inputs, target support, or workflow behavior.
+- Preserve exact source identity, patch integrity, provenance, qualification, and fail-closed validation.
+- Preserve the boundary between ordinary CI/Nightly and production Android signing.
+- Do not turn build evidence into runtime, upgrade, or release evidence.
+- Do not perform destructive Git operations or merge/publish/sign without the required explicit authorization.
+- Keep changes scoped. Report broader audit findings separately instead of bundling unrelated refactors.
+- When documentation and implementation disagree, establish the actual behavior first, fix the scoped issue, and update the documentation so future agents do not repeat the mistake.
