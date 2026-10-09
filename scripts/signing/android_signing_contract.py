@@ -108,6 +108,30 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn("ROOT = Path(__file__).resolve().parents[2]", source)
         self.assertTrue((ROOT / "metadata/signing/android-standard.json").is_file())
 
+    def test_only_canonical_yubikey_signing_identity_is_recorded(self):
+        metadata = json.loads((ROOT / "metadata/signing/android-standard.json").read_text())
+        self.assertNotIn("legacy", metadata)
+        self.assertNotIn("legacy_android_signing_identity", metadata["production"])
+        self.assertEqual(
+            metadata["production"]["certificate_sha256"],
+            "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5",
+        )
+        source = (ROOT / "scripts/signing/android_identity.py").read_text()
+        for marker in (
+            "ANDROID_SIGNING_KEY",
+            "ANDROID_KEY_STORE_PASSWORD",
+            "ANDROID_KEY_PASSWORD",
+            "ANDROID_ALIAS",
+            "legacy-production-apk",
+            "legacy_apk",
+            "legacy_android_signing_identity",
+            "def expected(",
+            "def preflight(",
+            "def stage(",
+            "def finalize(",
+        ):
+            self.assertNotIn(marker, source)
+
     def test_old_reusable_signer_is_gone(self):
         self.assertFalse((ROOT / ".github/workflows/sign-android.yml").exists())
 
