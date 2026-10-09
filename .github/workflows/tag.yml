@@ -192,7 +192,6 @@ jobs:
     concurrency:
       group: rustdesk-android-yubikey-signing
       cancel-in-progress: false
-      queue: max
     timeout-minutes: 45
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09

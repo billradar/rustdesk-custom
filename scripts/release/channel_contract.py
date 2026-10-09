@@ -110,6 +110,7 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
+        self.assertNotIn('queue', jobs['android-sign'].get('concurrency', {}))
         self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
