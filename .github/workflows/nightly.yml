@@ -84,7 +84,7 @@ jobs:
           if not run_id.isdigit():
               raise SystemExit("Invalid upstream Nightly run ID")
           run=api(f"repos/rustdesk/rustdesk/actions/runs/{run_id}")
-          if run.get("path") != ".github/workflows/flutter-nightly.yml":
+          if run.get("path", "").split("@", 1)[0] != ".github/workflows/flutter-nightly.yml":
               raise SystemExit("Run ID does not belong to the official Flutter Nightly workflow")
           if run.get("event")!="schedule" or run.get("status")!="completed" or run.get("conclusion")!="success":
               raise SystemExit("Upstream Nightly run is not a successful scheduled run")
