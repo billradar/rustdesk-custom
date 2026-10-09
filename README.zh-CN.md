@@ -56,13 +56,13 @@ Windows ARM64 和 iOS 当前计划支持；Web 目前暂不支持。
 metadata/      机器可读的构建、平台、发布、签名和上游元数据
 patchsets/     经过审核的自定义补丁集
 scripts/       构建、平台、发布、签名、源码、上游和验证逻辑
-docs/          当前文档及历史记录
+docs/          实现原理、操作步骤与故障排查文档
 tools/         开发和维护工具
 requirements.txt
 README.md
 ```
 
-详细架构：[docs/architecture/current.md](docs/architecture/current.md)。
+详细架构：[docs/README.md](docs/README.md)。
 
 ## 环境要求
 
@@ -119,7 +119,7 @@ Android Standard 生产签名与普通 CI 完全隔离，需要明确授权、�
 
 普通 CI 不需要访问 YubiKey、PKCS#11 凭据或生产 PIN。
 
-权威签名元数据：[metadata/signing/android-standard.json](metadata/signing/android-standard.json)。
+权威签名元数据：[metadata/signing/android-standard.json](metadata/signing/android-standard.json)。详细实现原理和操作步骤见 [Android 生产签名文档](docs/android-production-signing.md)。
 
 ## 验证
 
@@ -133,15 +133,7 @@ python3 scripts/validation/repository_contract.py
 
 ## 文档
 
-- [架构](docs/architecture/) — 仓库架构
-- [构建](docs/build/) — 构建系统和依赖
-- [平台](docs/platform/) — 平台信息
-- [发布](docs/release/) — 发布和资格验证
-- [签名](docs/signing/) — Android 生产签名
-- [上游](docs/upstream/) — 上游源码和补丁管理
-- [历史记录](docs/archive/) — 历史迁移和验收记录
-
-历史文档用于追溯，不属于当前运行架构。
+从 [文档总目录](docs/README.md) 开始，按实现原理、源码与补丁、构建验证、工作流与发布、Android 生产签名和故障排查组织。
 
 ## 上游项目
 
