@@ -1,14 +1,14 @@
 name: Upstream Nightly Router
 'on':
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '17 * * * *'
   workflow_dispatch: {}
 permissions:
   contents: read
   actions: write
 concurrency:
   group: upstream-nightly-router
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   detect:
@@ -27,22 +27,88 @@ jobs:
       run: |
         set -euo pipefail
         python3 - <<'PY'
-        import json, os, urllib.request
+        import datetime
+        import json
+        import os
+        import re
+        import urllib.request
+
         def api(path):
-            h={'Accept':'application/vnd.github+json','User-Agent':'rustdesk-custom-upstream-nightly','Authorization':'Bearer '+os.environ['GH_TOKEN']}
-            with urllib.request.urlopen(urllib.request.Request('https://api.github.com/'+path,headers=h),timeout=30) as r:
-                return json.load(r)
-        runs=api('repos/rustdesk/rustdesk/actions/workflows/flutter-nightly.yml/runs?event=schedule&status=success&per_page=20').get('workflow_runs',[])
-        run=next((r for r in runs if len(r.get('head_sha',''))==40),None)
-        if not run: raise SystemExit('No successful official Nightly run found')
-        release=api('repos/rustdesk/rustdesk/releases/tags/nightly')
-        if not release.get('prerelease'): raise SystemExit('Official nightly release is not prerelease')
-        if release.get('updated_at','') < run.get('updated_at',''): raise SystemExit('Official nightly release has not been updated after the successful Nightly run')
-        with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-            f.write('nightly_run_id='+str(run['id'])+'\n')
-            f.write('nightly_sha='+run['head_sha']+'\n')
-            f.write('nightly_release_updated_at='+release['updated_at']+'\n')
-        print('Official Nightly run='+str(run['id'])+' sha='+run['head_sha'])
+            headers = {
+                'Accept': 'application/vnd.github+json',
+                'User-Agent': 'rustdesk-custom-upstream-nightly',
+                'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+            }
+            request = urllib.request.Request('https://api.github.com/' + path, headers=headers)
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.load(response)
+
+        def timestamp(value):
+            if not value:
+                return None
+            return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+        runs = api(
+            'repos/rustdesk/rustdesk/actions/workflows/flutter-nightly.yml/runs'
+            '?event=schedule&status=success&per_page=20'
+        ).get('workflow_runs', [])
+        run = next(
+            (
+                item for item in runs
+                if re.fullmatch(r'[0-9a-f]{40}', item.get('head_sha', ''))
+                and item.get('status') == 'completed'
+                and item.get('conclusion') == 'success'
+                and item.get('event') == 'schedule'
+            ),
+            None,
+        )
+        if not run:
+            raise SystemExit('No successful official scheduled Nightly run with a valid SHA found')
+
+        release = api('repos/rustdesk/rustdesk/releases/tags/nightly')
+        if release.get('draft') or release.get('prerelease') is not True:
+            raise SystemExit('Official nightly release is not a published prerelease')
+
+        assets = release.get('assets') or []
+        if not assets:
+            raise SystemExit('Official nightly release has no assets')
+        invalid = [
+            asset.get('name', '<unnamed>')
+            for asset in assets
+            if asset.get('state') != 'uploaded' or not isinstance(asset.get('size'), int) or asset['size'] <= 0
+        ]
+        if invalid:
+            raise SystemExit('Official nightly release has invalid/unuploaded assets: ' + ', '.join(invalid[:10]))
+
+        started_at = timestamp(run.get('run_started_at') or run.get('created_at'))
+        if not started_at:
+            raise SystemExit('Official Nightly run has no valid start timestamp')
+        fresh_assets = [
+            asset for asset in assets
+            if timestamp(asset.get('updated_at') or asset.get('created_at')) is not None
+            and timestamp(asset.get('updated_at') or asset.get('created_at')) >= started_at
+        ]
+        if not fresh_assets:
+            raise SystemExit(
+                'Official Nightly run succeeded, but no Nightly release asset was updated '
+                'since that run started; wait for release assets to become ready'
+            )
+
+        release_updated_at = release.get('updated_at')
+        if not release_updated_at:
+            raise SystemExit('Official nightly release has no updated_at timestamp')
+
+        with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+            output.write('nightly_run_id=' + str(run['id']) + '\n')
+            output.write('nightly_sha=' + run['head_sha'] + '\n')
+            output.write('nightly_release_updated_at=' + release_updated_at + '\n')
+
+        print(
+            'Validated official Nightly run=' + str(run['id'])
+            + ' sha=' + run['head_sha']
+            + ' assets=' + str(len(assets))
+            + ' fresh_assets=' + str(len(fresh_assets))
+        )
         PY
 
   route:
@@ -56,17 +122,20 @@ jobs:
       id: state
       run: |
         set -euo pipefail
-        runs="$(gh run list --repo '${{ github.repository }}' --workflow nightly.yml --event workflow_dispatch --branch main --limit 50 --json status,conclusion,displayTitle)"
+        runs="$(gh run list --repo '${{ github.repository }}' --workflow nightly.yml --event workflow_dispatch --branch main --limit 100 --json status,conclusion,displayTitle)"
         export RUNS="$runs"
         python3 - <<'PY' > "$RUNNER_TEMP/state"
         import json, os
-        rows=json.loads(os.environ['RUNS']); name=os.environ['RUN_NAME']
-        for row in rows:
-            if row.get('displayTitle') == name:
-                if row.get('status') in {'queued','in_progress','waiting','pending','requested'}: print('ACTIVE'); break
-                if row.get('conclusion') == 'success': print('SUCCESS'); break
-                print('RETRY'); break
-        else: print('RETRY')
+        rows = json.loads(os.environ['RUNS'])
+        name = os.environ['RUN_NAME']
+        matching = [row for row in rows if row.get('displayTitle') == name]
+        active = {'queued', 'in_progress', 'waiting', 'pending', 'requested'}
+        if any(row.get('status') in active for row in matching):
+            print('ACTIVE')
+        elif any(row.get('conclusion') == 'success' for row in matching):
+            print('SUCCESS')
+        else:
+            print('RETRY')
         PY
         echo "state=$(cat "$RUNNER_TEMP/state")" >> "$GITHUB_OUTPUT"
     - name: Dispatch Nightly pipeline
