@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public APK identity gates and isolated legacy-compatible signing staging."""
+"""Public APK identity gates for the canonical YubiKey production identity."""
 import argparse
 import base64
 import json
