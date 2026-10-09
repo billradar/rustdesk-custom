@@ -21,7 +21,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(signing["environment"]["name"], "android-production-signing")
         self.assertEqual(signing["concurrency"]["group"], "rustdesk-android-yubikey-signing")
         self.assertFalse(signing["concurrency"]["cancel-in-progress"])
-        self.assertEqual(signing["concurrency"]["queue"], "max")
+        self.assertNotIn("queue", signing["concurrency"])
         for marker in ("github.event_name == 'workflow_dispatch'",
                        "needs.android-build.result == 'success'"):
             self.assertIn(marker, signing["if"])
