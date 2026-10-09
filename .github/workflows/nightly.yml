@@ -109,7 +109,7 @@ jobs:
           if not expected_release_updated or release.get("updated_at") != expected_release_updated:
               raise SystemExit("Official nightly release changed after routing; retry the router")
           print("Validated official Nightly:",run_id,expected_sha,"assets=",len(assets),"fresh=",len(fresh))
-          PY
+      PY
         fi
         echo "Nightly official upstream ref: $REQUESTED_REF"
         python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF"
