@@ -91,21 +91,14 @@ scripts/
 ├── upstream/             Upstream resolution and patch selection
 └── validation/           Repository and domain validation
 
-docs/
-├── architecture/         Current architecture documentation
-├── build/                Build documentation
-├── platform/             Platform documentation
-├── release/              Release documentation
-├── signing/              Signing documentation
-├── upstream/             Upstream documentation
-└── archive/              Historical records and evidence
+docs/                    Implementation principles and operating procedures
 
 tools/                    Development and maintenance utilities
 requirements.txt          Python dependencies
 README.md                 Project overview
 ~~~
 
-For detailed architecture information, see [docs/architecture/current.md](docs/architecture/current.md).
+For detailed architecture information, see [docs/README.md](docs/README.md).
 
 ## Requirements
 
@@ -208,7 +201,7 @@ Normal CI does **not** need access to the production signing environment, YubiKe
 
 The canonical Android signing metadata is [metadata/signing/android-standard.json](metadata/signing/android-standard.json).
 
-For detailed signing architecture and operational requirements, see [docs/signing/](docs/signing/).
+For implementation details and operational steps, see [the documentation index](docs/README.md), especially [Android production signing](docs/android-production-signing.md).
 
 ## Validation and contracts
 
@@ -235,17 +228,7 @@ Run the contracts relevant to an area when changing that area.
 
 ## Documentation
 
-Start with:
-
-- [docs/architecture/](docs/architecture/) — repository architecture
-- [docs/build/](docs/build/) — build system and dependencies
-- [docs/platform/](docs/platform/) — platform-specific information
-- [docs/release/](docs/release/) — release and qualification procedures
-- [docs/signing/](docs/signing/) — Android production signing
-- [docs/upstream/](docs/upstream/) — upstream source and patch handling
-- [docs/archive/](docs/archive/) — historical migration and acceptance records
-
-Historical documents are retained for traceability. They are not the current operational architecture.
+Start at [docs/README.md](docs/README.md). The documentation is organized around implementation principles, source and patch handling, build validation, workflow/release operations, Android production signing, and troubleshooting.
 
 ## Upstream
 

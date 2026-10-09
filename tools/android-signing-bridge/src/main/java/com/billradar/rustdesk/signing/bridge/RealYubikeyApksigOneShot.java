@@ -19,7 +19,7 @@ import java.util.Set;
 
 /** One isolated real apksig signing process; this class never exports private key material. */
 public final class RealYubikeyApksigOneShot {
-    private static final int EXPECTED_HARDWARE_SIGNATURE_COUNT = 2;
+    private static final int EXPECTED_HARDWARE_SIGNATURE_COUNT = 3;
     private record Options(Path input, Path output, String pinSource) { }
 
     private RealYubikeyApksigOneShot() { }
@@ -67,7 +67,7 @@ public final class RealYubikeyApksigOneShot {
             System.out.println("RUN AS: github-runner");
             System.out.println("INPUT SHA256: " + beforeHash);
             System.out.println("PRODUCTION CERTIFICATE IDENTITY: PASS");
-            System.out.println("SIGNING SCHEMES: v1=YES, v2=YES, v3=NO, v3.1=NO, v4=NO");
+            System.out.println("SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO");
             System.out.println("EXPECTED HARDWARE SIGNATURE COUNT: " + EXPECTED_HARDWARE_SIGNATURE_COUNT);
             stagedOutput = Files.createTempFile(output.getParent(), ".rustdesk-signing-", ".apk");
             Files.setPosixFilePermissions(stagedOutput,
@@ -187,7 +187,7 @@ public final class RealYubikeyApksigOneShot {
         invoke(builderClass, builder, "setMinSdkVersion", int.class, 22);
         invoke(builderClass, builder, "setV1SigningEnabled", boolean.class, true);
         invoke(builderClass, builder, "setV2SigningEnabled", boolean.class, true);
-        invoke(builderClass, builder, "setV3SigningEnabled", boolean.class, false);
+        invoke(builderClass, builder, "setV3SigningEnabled", boolean.class, true);
         invoke(builderClass, builder, "setV4SigningEnabled", boolean.class, false);
         Object signer = builderClass.getMethod("build").invoke(builder);
         try {

@@ -13,6 +13,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         self.action = (ROOT / ".github/actions/android-yubikey-sign/action.yml").read_text()
         self.script = (ROOT / "scripts/signing/android_yubikey_sign.py").read_text()
+        self.hardware_signer = (ROOT / "tools/android-signing-bridge/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java").read_text()
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]
@@ -50,6 +51,15 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn('if not os.environ.get("YUBIKEY_PIV_PIN")', self.script)
         self.assertIn(r'r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
         self.assertNotIn(r'r"^Signer #d+ certificate SHA-256 digest:', self.script)
+
+    def test_production_signer_enables_and_requires_both_v2_v3(self):
+        self.assertIn("EXPECTED_HARDWARE_SIGNATURE_COUNT = 3", self.hardware_signer)
+        self.assertIn("SIGNING SCHEMES: v1=YES, v2=YES, v3=YES", self.hardware_signer)
+        self.assertIn('"setV2SigningEnabled", boolean.class, true', self.hardware_signer)
+        self.assertIn('"setV3SigningEnabled", boolean.class, true', self.hardware_signer)
+        self.assertNotIn('"setV3SigningEnabled", boolean.class, false', self.hardware_signer)
+        self.assertIn("if not {2, 3}.issubset(set(schemes)):", self.script)
+        self.assertIn("both v2 and v3 signatures verified", self.script)
 
     def test_build_does_not_own_production_signer(self):
         self.assertNotIn("android-sign:", self.build["jobs"])
