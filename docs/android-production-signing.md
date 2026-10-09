@@ -87,11 +87,11 @@ APK 签名不是对文件名或版本号盖章，而是用签名私钥对 APK �
 
 | 方案 | 主要机制 | 本项目脚本中的判定 |
 | --- | --- | --- |
-| v1（JAR 签名） | 对 APK 中的条目进行 JAR 签名；旧版 Android 兼容性相关 | 当前生产签名脚本要求至少验证到 v2 或 v3，并未把 v1 单独视为足够 |
+| v1（JAR 签名） | 对 APK 中的条目进行 JAR 签名；旧版 Android 兼容性相关 | 当前生产签名流程要求 v2 与 v3 均验证通过；v1 不能单独满足生产签名门槛 |
 | v2 | 将签名数据放入 APK Signing Block，并验证受保护 APK 内容的完整性 | 满足当前脚本的最低生产签名方案门槛 |
 | v3 | 在 v2 基础上增加 SDK 范围等信息，并定义签名密钥轮换证明结构 | 满足当前脚本的最低生产签名方案门槛；存在 v3 签名本身不代表已完成旧密钥轮换授权 |
 
-签名方案的支持情况与目标设备 Android 版本有关。当前脚本验证签名工具报告的 v2/v3 结果，但没有据此证明所有目标 Android 版本上的安装、覆盖升级或密钥轮换都已经通过实机测试。
+签名方案的支持情况与目标设备 Android 版本有关。当前脚本要求签名工具报告 v2 与 v3 均验证成功，但没有据此证明所有目标 Android 版本上的安装、覆盖升级或密钥轮换都已经通过实机测试。
 
 参考：Android Open Source Project 的 [APK 签名概述](https://source.android.google.cn/docs/security/features/apksigning?hl=en)、[v2 方案](https://source.android.google.cn/docs/security/features/apksigning/v2?hl=en)和 [v3 方案](https://source.android.google.cn/docs/security/features/apksigning/v3?hl=en)。
 
@@ -169,7 +169,7 @@ Stable Release Pipeline（显式 workflow_dispatch）
 
 - `apksigner verify --verbose --print-certs` 必须成功；
 - 证书 SHA-256 必须与预期生产指纹完全相同；
-- 必须至少有一个 v2/v3 签名方案验证成功；
+- v2 和 v3 两种签名方案必须分别验证成功；
 - 包名和 ABI 再次核对；
 - `build-info.json` 更新为 `PRODUCTION SIGNED / IDENTITY VERIFIED`，并记录签名身份、方案和运行 ID；
 - `android-signing-verification.json` 记录证书匹配结果、包名、版本、ABI、APK SHA-256、签名方案、PIV slot、PKCS#11 ID 和运行身份；
