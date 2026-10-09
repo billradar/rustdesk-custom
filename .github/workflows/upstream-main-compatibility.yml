@@ -52,6 +52,7 @@ jobs:
         PY
     - name: Validate CI channel identity
       env:
+        PYTHONPATH: .
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
       run: |
         set -euo pipefail
