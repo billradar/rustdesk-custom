@@ -60,8 +60,6 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         UPSTREAM_TEST_REF: ${{ vars.UPSTREAM_TEST_REF || vars.UPSTREAM_TEST_BRANCH || 'test' }}
         CHANNEL: nightly
-      env:
-        GH_TOKEN: ${{ github.token }}
         REQUESTED_REF: ${{ inputs.upstream_ref }}
         NIGHTLY_RUN_ID: ${{ inputs.upstream_nightly_run_id }}
         NIGHTLY_RELEASE_UPDATED_AT: ${{ inputs.upstream_nightly_release_updated_at }}
@@ -74,30 +72,43 @@ jobs:
             exit 1
           fi
           python3 - <<'PY'
-          import json, os, urllib.request
+          import datetime, json, os, urllib.request
           def api(path):
               req=urllib.request.Request("https://api.github.com/"+path,headers={"Accept":"application/vnd.github+json","User-Agent":"rustdesk-custom-nightly-validator","Authorization":"Bearer "+os.environ["GH_TOKEN"]})
               with urllib.request.urlopen(req,timeout=30) as response:
                   return json.load(response)
+          def timestamp(value):
+              return datetime.datetime.fromisoformat(value.replace("Z","+00:00")) if value else None
           run_id=os.environ["NIGHTLY_RUN_ID"]
           expected_sha=os.environ["REQUESTED_REF"]
           if not run_id.isdigit():
               raise SystemExit("Invalid upstream Nightly run ID")
           run=api(f"repos/rustdesk/rustdesk/actions/runs/{run_id}")
+          if run.get("path", "").split("@", 1)[0] != ".github/workflows/flutter-nightly.yml":
+              raise SystemExit("Run ID does not belong to the official Flutter Nightly workflow")
           if run.get("event")!="schedule" or run.get("status")!="completed" or run.get("conclusion")!="success":
               raise SystemExit("Upstream Nightly run is not a successful scheduled run")
           if run.get("head_sha")!=expected_sha:
               raise SystemExit("Upstream Nightly run SHA does not match upstream_ref")
           release=api("repos/rustdesk/rustdesk/releases/tags/nightly")
-          if release.get("prerelease") is not True:
-              raise SystemExit("Official nightly release is not a prerelease")
-          selected_time=run.get("updated_at") or run.get("run_started_at") or run.get("created_at","")
-          if release.get("updated_at","") < selected_time:
-              raise SystemExit("Official nightly release predates selected Nightly run")
+          if release.get("draft") or release.get("prerelease") is not True:
+              raise SystemExit("Official nightly release is not a published prerelease")
+          assets=release.get("assets") or []
+          if not assets:
+              raise SystemExit("Official nightly release has no assets")
+          invalid=[a.get("name","<unnamed>") for a in assets if a.get("state")!="uploaded" or not isinstance(a.get("size"),int) or a["size"]<=0]
+          if invalid:
+              raise SystemExit("Official nightly release has invalid/unuploaded assets: "+", ".join(invalid[:10]))
+          started=timestamp(run.get("run_started_at") or run.get("created_at"))
+          if not started:
+              raise SystemExit("Official Nightly run has no valid start timestamp")
+          fresh=[a for a in assets if timestamp(a.get("updated_at") or a.get("created_at")) and timestamp(a.get("updated_at") or a.get("created_at")) >= started]
+          if not fresh:
+              raise SystemExit("No Nightly release asset was updated since this run started")
           expected_release_updated=os.environ["NIGHTLY_RELEASE_UPDATED_AT"]
-          if expected_release_updated and release.get("updated_at") != expected_release_updated:
+          if not expected_release_updated or release.get("updated_at") != expected_release_updated:
               raise SystemExit("Official nightly release changed after routing; retry the router")
-          print("Validated official Nightly:",run_id,expected_sha,release.get("updated_at"))
+          print("Validated official Nightly:",run_id,expected_sha,"assets=",len(assets),"fresh=",len(fresh))
           PY
         fi
         echo "Nightly official upstream ref: $REQUESTED_REF"
