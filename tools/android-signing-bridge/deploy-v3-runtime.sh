@@ -19,6 +19,14 @@ JAVA_JAR="$INSTALL_ROOT/lib/rustdesk-android-signing-bridge.jar"
   printf '%s\n' 'Repository remote mismatch; refusing deployment.' >&2
   exit 2
 }
+[[ "$(git -C "$REPO_ROOT" branch --show-current)" == "main" ]] || {
+  printf '%s\n' 'Deployment must run from the reviewed main branch.' >&2
+  exit 2
+}
+[[ -z "$(git -C "$REPO_ROOT" status --porcelain)" ]] || {
+  printf '%s\n' 'Working tree is not clean; refusing deployment.' >&2
+  exit 2
+}
 [[ -f "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java" ]]
 grep -Fq 'EXPECTED_HARDWARE_SIGNATURE_COUNT = 3' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java"
 grep -Fq '"setV3SigningEnabled", boolean.class, true' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java"
