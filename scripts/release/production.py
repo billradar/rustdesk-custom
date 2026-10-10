@@ -74,6 +74,21 @@ def discover(ref, force=False, dry_run=True):
     print(json.dumps(data, indent=2))
     return data
 
+PATCH_REVISION_RE = re.compile(r'^v(?P<patch>[1-9][0-9]*)\.(?P<revision>[1-9][0-9]{0,5})$')
+
+def validate_patch_revision(info):
+    """Bind artifacts to the preflight's patch-scoped revision, not the legacy counter."""
+    expected = os.environ.get('PATCH_REVISION', '')
+    match = PATCH_REVISION_RE.fullmatch(expected)
+    if not match:
+        raise ValueError('Expected patch revision required')
+    patchset = str(info.get('patchset', ''))
+    if not re.fullmatch(r'v[1-9][0-9]*', patchset) or match.group('patch') != patchset[1:]:
+        raise ValueError('Patch revision does not match selected patchset')
+    if info.get('patch_revision') != expected:
+        raise ValueError('Artifact patch revision mismatch')
+
+
 def scan_job_log(job_id):
     # gh rejects ANSI controls by default; permit them only into captured memory.
     # Never render or print downloaded logs. Scan raw and de-coloured text so
@@ -111,9 +126,10 @@ def assets(root):
     stable = choose_stable(tag)
     if stable['upstream_sha'] != info['upstream_sha']:
         raise ValueError('Official tag SHA changed or is not stable')
-    revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
-    if info['patch_revision'] != revision:
-        raise ValueError('Revision mismatch')
+    # Stable channel revisions are scoped to the selected patchset (e.g. v2.1).
+    # identity.json's legacy numeric counter is a different namespace and must not
+    # be compared with patch_revision.
+    validate_patch_revision(info)
     directory = ROOT / '.work/production-release-assets'
     directory.mkdir(parents=True, exist_ok=False)
     for variant, folder in folders.items():

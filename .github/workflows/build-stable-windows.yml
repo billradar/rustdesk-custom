@@ -245,6 +245,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PATCHSET: ${{ inputs.patchset }}
+      PATCH_REVISION: ${{ inputs.revision }}
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
       UPSTREAM_TAG: ${{ inputs.channel == 'stable' && inputs.upstream_ref || '' }}
       BUILD_CONFIGURATION: PRODUCTION

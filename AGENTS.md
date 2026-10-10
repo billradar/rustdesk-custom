@@ -72,8 +72,8 @@ These are baseline records, not a promise that every current upstream commit or 
 | `metadata/platform/matrix.json` | Canonical enabled/required/support-status target matrix | Whether a target participates in a build |
 | `metadata/platform/adapter-profiles.json` | Approved signatures for official upstream platform build definitions | An upstream build interface/profile changes |
 | `metadata/build/adapter-profiles.json` | Reviewed build adapter profiles and critical input fingerprints | Toolchain/build configuration drift is detected |
-| `metadata/release/identity.json` | Canonical release revision identity (currently a small JSON record) | Release revision identity changes |
-| `metadata/release/patch-revision-record.json` | Patch/revision record used by release logic | Patch revision tracking changes |
+| `metadata/release/identity.json` | Legacy numeric revision consumed by the legacy production adapter; distinct from patch-scoped Stable channel revisions | Legacy adapter identity changes |
+| `metadata/release/patch-revision-record.json` | Canonical Stable patch-scoped revision contract (`v{patchset}.{revision}`) and immutable tag format | Patch revision tracking changes |
 | `metadata/signing/android-standard.json` | Android Standard package and signing identity evidence | Package/certificate/legacy-identity claims change |
 | `metadata/baselines/` | Known build/source/UI baselines used by checks | A regression baseline changes |
 | `requirements.txt` | Python tooling dependencies | Python dependency/import failures occur |
