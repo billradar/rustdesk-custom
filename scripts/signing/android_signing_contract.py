@@ -77,6 +77,24 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn('APK SIGNING PERFORMED: NO', self.bridge_deploy)
         self.assertIn('grep -Fq \'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO\'', self.bridge_deploy)
 
+    def test_runtime_v3_preflight_fails_before_pin_binding_or_hardware_signing(self):
+        signing = self.tag["jobs"]["android-sign"]
+        steps = signing["steps"]
+        names = [step.get("name", "") for step in steps]
+        probe_index = names.index("Read-only Android v2/v3 runtime preflight")
+        pin_index = names.index("Environment Secret Binding Preflight")
+        sign_index = names.index("Production Android signing")
+        self.assertLess(probe_index, pin_index)
+        self.assertLess(pin_index, sign_index)
+        probe = steps[probe_index]
+        self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(probe))
+        command = probe["run"]
+        self.assertIn("/usr/local/bin/rustdesk-sign --capabilities", command)
+        self.assertIn("v2=YES, v3=YES, v3.1=NO, v4=NO", command)
+        self.assertIn("PIN REQUESTED: NO", command)
+        self.assertIn("PRIVATE KEY OPERATION: NO", command)
+        self.assertIn("installed bridge is outdated or unavailable", command)
+
     def test_build_does_not_own_production_signer(self):
         self.assertNotIn("android-sign:", self.build["jobs"])
         aggregate = self.build["jobs"]["aggregate"]
