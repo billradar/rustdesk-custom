@@ -222,18 +222,18 @@ jobs:
       run: |
         set -euo pipefail
         if ! CAPABILITIES=$(/usr/local/bin/rustdesk-sign --capabilities 2>&1); then
-          printf '%s\\n' "$CAPABILITIES"
-          printf '%s\\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: FAIL (installed bridge is outdated or unavailable; deploy and verify the reviewed v3 runtime)' >&2
+          printf '%s\n' "$CAPABILITIES"
+          printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: FAIL (installed bridge is outdated or unavailable; deploy and verify the reviewed v3 runtime)' >&2
           exit 1
         fi
-        printf '%s\\n' "$CAPABILITIES"
+        printf '%s\n' "$CAPABILITIES"
         grep -Fxq 'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO' <<< "$CAPABILITIES" || {
-          printf '%s\\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: FAIL (v3 capability is required)' >&2
+          printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: FAIL (v3 capability is required)' >&2
           exit 1
         }
         grep -Fxq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
         grep -Fxq 'PRIVATE KEY OPERATION: NO' <<< "$CAPABILITIES"
-        printf '%s\\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: PASS'
+        printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: PASS'
     - name: Environment Secret Binding Preflight
       shell: bash
       env:
