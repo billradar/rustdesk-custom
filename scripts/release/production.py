@@ -74,6 +74,168 @@ def discover(ref, force=False, dry_run=True):
     print(json.dumps(data, indent=2))
     return data
 
+PATCH_REVISION_RE = re.compile(r'^v(?P<patch>[1-9][0-9]*)\\.(?P<revision>[1-9][0-9]{0,5})
+    # Never render or print downloaded logs. Scan raw and de-coloured text so
+    # terminal formatting cannot hide a known credential pattern.
+    text = gh('api', '--allow-escape-sequences',
+              f'repos/{REPOSITORY}/actions/jobs/{job_id}/logs')
+    scan_bytes(text.encode())
+    normalized = re.sub(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))', '', text)
+    scan_bytes(normalized.encode())
+
+def assets(root):
+    guard()
+    # Check completed source/build jobs before either dry-run approval or publishing.
+    # GitHub redacts known Secrets; this gate checks visible credential patterns only.
+    run_id = os.environ.get('GITHUB_RUN_ID', '')
+    if not re.fullmatch(r'[1-9][0-9]*', run_id):
+        raise ValueError('Actual production workflow run ID required')
+    page = 1
+    while True:
+        jobs = api(f'repos/{REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100&page={page}')['jobs']
+        for job in jobs:
+            if job['status'] == 'completed' and job['conclusion'] == 'success':
+                scan_job_log(job["id"])
+        if len(jobs) < 100:
+            break
+        page += 1
+    infos, folders = collect(Path(root))
+    for variant in ('standard', 'sos'):
+        payload(folders[variant])
+    info = infos['standard']
+    tag = info['upstream_tag']
+    if not VERSION.fullmatch(tag):
+        raise ValueError('Official stable tag required')
+    version = tag.lstrip('v')
+    stable = choose_stable(tag)
+    if stable['upstream_sha'] != info['upstream_sha']:
+        raise ValueError('Official tag SHA changed or is not stable')
+    # Stable channel revisions are scoped to the selected patchset (e.g. v2.1).
+    # identity.json's legacy numeric counter is a different namespace and must not
+    # be compared with patch_revision.
+    validate_patch_revision(info)
+    directory = ROOT / '.work/production-release-assets'
+    directory.mkdir(parents=True, exist_ok=False)
+    for variant, folder in folders.items():
+        packages = folder / 'packages'
+        if not packages.is_dir():
+            raise ValueError('Missing Windows installer package directory')
+        files = sorted(p for p in packages.iterdir() if p.is_file())
+        if {p.suffix.lower() for p in files} != {'.exe', '.msi'}:
+            raise ValueError('Windows release requires exactly one EXE and one MSI per variant')
+        for package in files:
+            target = directory / windows_installer_name(version, variant, package.suffix)
+            shutil.copy2(package, target)
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
+    sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'
+                   for p in release_files)
+    (directory / 'SHA256SUMS').write_text(sums)
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
+    result = {'result': 'PASS', 'upstream_sha': info['upstream_sha'], 'patchset': info['patchset'],
+              'common_patch_hash': info['common_patch_hash'], 'sos_patch_hash': infos['sos']['sos_patch_hash'],
+              'custom_repository_sha': info['custom_repository_sha'], 'workflow_run': info['workflow_run'],
+              'configuration': 'PRODUCTION', 'runtime_ui': 'SKIPPED BY USER',
+              'completed_job_log_scan': 'PASS / VISIBLE KNOWN PATTERNS ONLY',
+              'server_config_fingerprint': info['server_config_fingerprint'],
+              'real_remote_session': 'NOT TESTED', 'credential_scan': 'KNOWN PATTERNS ONLY'}
+    (ROOT / '.work/production-validation.json').write_text(json.dumps(result, indent=2) + '\n')
+    return infos, directory
+
+def publish(root, dry_run_id):
+    guard()
+    previous = None
+    if dry_run_id:
+        if not re.fullmatch(r'[1-9][0-9]*', dry_run_id):
+            raise ValueError('Validated production dry-run ID required')
+        run = api(f'repos/{REPOSITORY}/actions/runs/{dry_run_id}')
+        if (run['conclusion'] != 'success' or run['event'] != 'workflow_dispatch' or
+                run['head_sha'] != os.environ['GITHUB_SHA'] or run['path'] != '.github/workflows/release-check.yml'):
+            raise ValueError('Dry-run must be successful at current production commit/workflow')
+        listed = api(f'repos/{REPOSITORY}/actions/runs/{dry_run_id}/artifacts?per_page=100')['artifacts']
+        if not any(a['name'] == 'production-dry-run-validated' and not a['expired'] for a in listed):
+            raise ValueError('Production dry-run validation artifact missing or expired')
+        # The workflow downloads and verifies this report before invoking publish.
+        previous = json.loads((ROOT / '.work/dry-run-evidence/production-validation.json').read_text())
+    else:
+        # First publication requires the explicit dry run. Subsequent stable versions
+        # retain all same-run build/validation gates and may publish automatically.
+        prior = api(f'repos/{REPOSITORY}/releases?per_page=100')
+        if not any(not r['draft'] and not r['prerelease'] and
+                   re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.[1-9][0-9]*', r['tag_name']) and
+                   'Automation-State: complete' in (r.get('body') or '') for r in prior):
+            raise ValueError('First production release requires a validated dry-run run ID')
+    infos, directory = assets(root)
+    info, sos = infos['standard'], infos['sos']
+    if previous is not None:
+        for key in ('upstream_sha', 'patchset', 'common_patch_hash', 'custom_repository_sha', 'server_config_fingerprint'):
+            if previous.get(key) != info[key]:
+                raise ValueError('Dry-run/current production provenance mismatch: ' + key)
+        if previous.get('result') != 'PASS' or previous.get('sos_patch_hash') != sos['sos_patch_hash'] or str(previous.get('workflow_run')) != dry_run_id:
+            raise ValueError('Dry-run evidence not validated for this pair')
+    tag = f'v{info["upstream_tag"].lstrip("v")}-custom.{info["patch_revision"]}'
+    if api(f'repos/{REPOSITORY}/releases/tags/{tag}', missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}', missing=True):
+        raise ValueError('Release/tag already exists; no overwrite')
+    changelog=(info.get('upstream_changelog') or '').strip()
+    if not changelog:
+        upstream_release=api(f'repos/rustdesk/rustdesk/releases/tags/{info["upstream_tag"]}',missing=True)
+        changelog=((upstream_release or {}).get('body') or '').strip()
+    if not changelog:raise ValueError('Official upstream release changelog is empty')
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
+    inventory=json.dumps([p.name for p in release_files],separators=(', ',': '))
+    metadata='\n'.join([
+        '<!-- rustdesk-custom-release-metadata',
+        f'Upstream SHA: {info["upstream_sha"]}',
+        f'Patch Set: {info["patchset"]}',
+        f'Common Patch Hash: {info["common_patch_hash"]}',
+        f'SOS Patch Hash: {sos["sos_patch_hash"]}',
+        f'Asset Inventory: {inventory}',
+        '-->'
+    ])
+    notes=changelog+'\n\n'+metadata+'\n'
+    draft = request('POST', f'repos/{REPOSITORY}/releases', {
+        'tag_name': tag, 'target_commitish': info['custom_repository_sha'],
+        'name': tag, 'body': notes, 'draft': True, 'prerelease': False})
+    release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
+    gh('release', 'upload', tag, *map(str, release_files), '--repo', REPOSITORY)
+    uploaded = api(f'repos/{REPOSITORY}/releases/{draft["id"]}/assets')
+    expected = {p.name: p.stat().st_size for p in release_files}
+    if {a['name']: a['size'] for a in uploaded if a['state'] == 'uploaded'} != expected:
+        raise ValueError('Incomplete draft upload; release remains unpublished')
+    result = request('PATCH', f'repos/{REPOSITORY}/releases/{draft["id"]}', {
+        'draft': True, 'prerelease': False, 'body': notes + '\nAutomation-State: complete\n'})
+    print(result['html_url'])
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('mode', choices=['discover', 'validate', 'publish'])
+    p.add_argument('--ref', default='')
+    p.add_argument('--force', action='store_true')
+    p.add_argument('--dry-run', action='store_true')
+    p.add_argument('--path', type=Path, default=Path('.work/collected'))
+    p.add_argument('--dry-run-id', default='')
+    args = p.parse_args()
+    if args.mode == 'discover':
+        discover(args.ref, args.force, args.dry_run)
+    elif args.mode == 'validate':
+        assets(args.path)
+    else:
+        publish(args.path, args.dry_run_id)
+)
+
+
+def validate_patch_revision(info):
+    """Bind artifacts to the preflight's patch-scoped revision, not the legacy counter."""
+    expected = os.environ.get('PATCH_REVISION', '')
+    match = PATCH_REVISION_RE.fullmatch(expected)
+    if not match:
+        raise ValueError('Expected patch revision required')
+    patchset = str(info.get('patchset', ''))
+    if not re.fullmatch(r'v[1-9][0-9]*', patchset) or match.group('patch') != patchset[1:]:
+        raise ValueError('Patch revision does not match selected patchset')
+    if info.get('patch_revision') != expected:
+        raise ValueError('Artifact patch revision mismatch')
+
+
 def scan_job_log(job_id):
     # gh rejects ANSI controls by default; permit them only into captured memory.
     # Never render or print downloaded logs. Scan raw and de-coloured text so
