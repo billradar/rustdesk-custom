@@ -26,10 +26,8 @@ def guard():
 def discover(ref, force=False, dry_run=True):
     guard()
     data = choose_stable(ref)
-    # Stable channel revisions are scoped to the selected patchset (e.g. v2.1).
-    # identity.json's legacy numeric counter is a different namespace and must not
-    # be compared with patch_revision.
-    validate_patch_revision(info)
+    revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
+    if not re.fullmatch(r'[1-9][0-9]{0,5}', revision):
         raise ValueError('Invalid revision')
     name = mapped(data['upstream_tag'])
     os.environ['PATCHSET'] = name
@@ -128,8 +126,10 @@ def assets(root):
     stable = choose_stable(tag)
     if stable['upstream_sha'] != info['upstream_sha']:
         raise ValueError('Official tag SHA changed or is not stable')
-    revision = str(json.loads(RELEASE_IDENTITY.read_text())['revision'])
-    if info['patch_revision'] != revision:
+    # Stable channel revisions are scoped to the selected patchset (e.g. v2.1).
+    # identity.json's legacy numeric counter is a different namespace and must not
+    # be compared with patch_revision.
+    validate_patch_revision(info)
         raise ValueError('Revision mismatch')
     directory = ROOT / '.work/production-release-assets'
     directory.mkdir(parents=True, exist_ok=False)
