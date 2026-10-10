@@ -131,6 +131,11 @@ class ChannelPolicyTests(unittest.TestCase):
         for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('qualification',str(jobs[name].get('needs',[])))
 
+    def test_windows_validation_receives_preflight_patch_revision(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/build-stable-windows.yml').read_text())
+        validate_env=workflow['jobs']['validate']['env']
+        self.assertEqual(validate_env['PATCH_REVISION'], '${{ inputs.revision }}')
+
     def test_stable_concurrency_and_ci_contract(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         self.assertEqual(tag['concurrency']['group'],"stable-${{ inputs.upstream_ref || format('manual-{0}', github.run_id) }}")
