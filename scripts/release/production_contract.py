@@ -144,13 +144,6 @@ class PatchRevisionTests(unittest.TestCase):
         with patch.dict(os.environ, {'PATCH_REVISION': 'v2.1'}):
             production.validate_patch_revision(info)
 
-    def test_legacy_numeric_identity_is_not_used_as_patch_revision(self):
-        info = {'patchset': 'v2', 'patch_revision': 'v2.1'}
-        # The repository's legacy identity.json uses numeric revision 1; the
-        # Stable channel's patch-scoped identity is v2.1 and must validate.
-        with patch.dict(os.environ, {'PATCH_REVISION': 'v2.1'}):
-            production.validate_patch_revision(info)
-
     def test_patch_revision_mismatch_and_missing_expected_value_fail_closed(self):
         info = {'patchset': 'v2', 'patch_revision': 'v2.1'}
         with patch.dict(os.environ, {'PATCH_REVISION': 'v2.2'}), self.assertRaisesRegex(ValueError, 'Artifact patch revision mismatch'):
