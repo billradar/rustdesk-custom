@@ -1,0 +1,72 @@
+name: Android v3 Signing Runtime Preflight
+run-name: Android v3 runtime preflight · ${{ github.run_id }}
+
+'on':
+  workflow_dispatch:
+    inputs:
+      confirm_read_only_test:
+        type: boolean
+        description: Confirm this is a read-only runtime capability check (no APK signing)
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rustdesk-android-v3-runtime-preflight
+  cancel-in-progress: false
+
+jobs:
+  runtime-preflight:
+    name: Read-only Android v2/v3 runtime checks
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/test-android-v3-signing.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.confirm_read_only_test == true
+    runs-on:
+      - self-hosted
+      - linux
+      - arm64
+      - rustdesk-signing
+      - android-signing
+      - yubikey
+    timeout-minutes: 5
+    steps:
+      - name: Confirm expected runner account
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(id -un)" == "github-runner" ]] || {
+            echo "Unexpected runner account; refusing test."
+            exit 1
+          }
+          command -v /usr/local/bin/rustdesk-sign >/dev/null
+          echo "Runner identity and signer path: PASS"
+
+      - name: Check installed v2/v3 capability without PIN or private-key operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          CAPABILITIES=$(/usr/local/bin/rustdesk-sign --capabilities)
+          printf '%s\n' "$CAPABILITIES"
+          grep -Fq 'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO' <<< "$CAPABILITIES" || {
+            echo "FAIL: installed signer does not advertise v2 and v3 support."
+            exit 1
+          }
+          grep -Fq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
+          grep -Fq 'PRIVATE KEY OPERATION: NO' <<< "$CAPABILITIES"
+          echo "Read-only v2/v3 capability preflight: PASS"
+
+      - name: Run installed bridge read-only self-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          SELF_TEST=$(/usr/local/bin/rustdesk-sign --self-test)
+          printf '%s\n' "$SELF_TEST"
+          grep -Fq 'INSTALLED BRIDGE SELF-TEST: PASS' <<< "$SELF_TEST"
+          grep -Fq 'PIN REQUESTED: NO' <<< "$SELF_TEST"
+          grep -Fq 'PRIVATE KEY OPERATION: NO' <<< "$SELF_TEST"
+          echo "Read-only bridge self-test: PASS"
