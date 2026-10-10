@@ -27,6 +27,12 @@ class InstalledBridgeDeploymentTest(unittest.TestCase):
         self.assertIn('PIN REQUESTED: NO', output)
         self.assertIn('PRIVATE KEY OPERATION: NO', output)
 
+    def test_installed_runtime_advertises_v2_v3_without_pin_or_private_key_operation(self):
+        output = run(['/usr/bin/sudo', '-n', '-u', 'github-runner', str(STABLE), '--capabilities']).stdout
+        self.assertIn('APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO', output)
+        self.assertIn('PIN REQUESTED: NO', output)
+        self.assertIn('PRIVATE KEY OPERATION: NO', output)
+
     def test_root_ownership_and_runner_read_execute_only(self):
         self.assertEqual(STABLE.resolve(), INSTALL / 'bin/rustdesk-sign')
         for path in (Path('/usr/local/bin'), STABLE, INSTALL, INSTALL / 'bin', INSTALL / 'lib',

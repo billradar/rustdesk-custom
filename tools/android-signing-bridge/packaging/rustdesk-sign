@@ -73,6 +73,10 @@ case "${1:-}" in
   --version)
     cat "$ROOT/VERSION"
     ;;
+  --capabilities)
+    [ "$(id -un)" = github-runner ] || fail 'capability probe must run as github-runner'
+    run_java "$SIGNER" --capabilities
+    ;;
   --self-test)
     [ "$(id -un)" = github-runner ] || fail 'self-test must run as github-runner'
     "$JAVA" -version 2>&1 | /usr/bin/grep -Eq 'version "21\.' || fail 'OpenJDK 21 is required'
@@ -106,6 +110,6 @@ case "${1:-}" in
     run_signer "$SIGNER" "$@"
     ;;
   *)
-    fail 'supported modes: --version, --verify-install, --self-test, --dry-run, --input'
+    fail 'supported modes: --version, --verify-install, --capabilities, --self-test, --dry-run, --input'
     ;;
 esac
