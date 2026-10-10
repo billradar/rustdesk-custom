@@ -130,7 +130,6 @@ def assets(root):
     # identity.json's legacy numeric counter is a different namespace and must not
     # be compared with patch_revision.
     validate_patch_revision(info)
-        raise ValueError('Revision mismatch')
     directory = ROOT / '.work/production-release-assets'
     directory.mkdir(parents=True, exist_ok=False)
     for variant, folder in folders.items():
