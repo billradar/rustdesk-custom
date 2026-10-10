@@ -14,6 +14,8 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.action = (ROOT / ".github/actions/android-yubikey-sign/action.yml").read_text()
         self.script = (ROOT / "scripts/signing/android_yubikey_sign.py").read_text()
         self.hardware_signer = (ROOT / "tools/android-signing-bridge/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java").read_text()
+        self.bridge_launcher = (ROOT / "tools/android-signing-bridge/packaging/rustdesk-sign").read_text()
+        self.bridge_deploy = (ROOT / "tools/android-signing-bridge/deploy-v3-runtime.sh").read_text()
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]
@@ -60,6 +62,20 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn('"setV3SigningEnabled", boolean.class, false', self.hardware_signer)
         self.assertIn("if not {2, 3}.issubset(set(schemes)):", self.script)
         self.assertIn("both v2 and v3 signatures verified", self.script)
+
+    def test_v3_runtime_probe_and_deployment_are_explicit_and_read_only(self):
+        probe = self.hardware_signer.index('"--capabilities".equals(args[0])')
+        signer_init = self.hardware_signer.index('XiPkiAdaptiveBackend backend = new XiPkiAdaptiveBackend()')
+        self.assertLess(probe, signer_init)
+        self.assertIn('APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO', self.hardware_signer)
+        self.assertIn('PRIVATE KEY OPERATION: NO', self.hardware_signer)
+        self.assertIn('PIN REQUESTED: NO', self.hardware_signer)
+        self.assertIn('--capabilities)', self.bridge_launcher)
+        self.assertIn('AUTHORIZE_V3_RUNTIME_DEPLOY', self.bridge_deploy)
+        self.assertIn('mvn -q clean test package', self.bridge_deploy)
+        self.assertIn('ROLLBACK_REQUIRED=1', self.bridge_deploy)
+        self.assertIn('APK SIGNING PERFORMED: NO', self.bridge_deploy)
+        self.assertIn('grep -Fq \'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO\'', self.bridge_deploy)
 
     def test_build_does_not_own_production_signer(self):
         self.assertNotIn("android-sign:", self.build["jobs"])
