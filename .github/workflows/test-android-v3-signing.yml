@@ -50,10 +50,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CAPABILITIES=$(/usr/local/bin/rustdesk-sign --capabilities)
-          printf '%s\n' "$CAPABILITIES"
+          VERSION=$(/usr/local/bin/rustdesk-sign --version 2>&1) || {
+            echo "::error::Unable to read the installed signing runtime version."
+            exit 1
+          }
+          printf 'Installed signing runtime version: %s\\n' "$VERSION"
+
+          if ! CAPABILITIES=$(/usr/local/bin/rustdesk-sign --capabilities 2>&1); then
+            printf '%s\\n' "$CAPABILITIES" >&2
+            if grep -Fq 'supported modes:' <<< "$CAPABILITIES"; then
+              echo "::error::The installed signing bridge is outdated: its runtime does not recognize --capabilities."
+              echo "Update it from a reviewed, clean main checkout with tools/android-signing-bridge/deploy_v3_runtime.sh."
+              echo "The deployment script is manual and requires explicit AUTHORIZE_V3_RUNTIME_DEPLOY=YES authorization."
+            else
+              echo "::error::The installed signing bridge capability probe failed."
+            fi
+            exit 1
+          fi
+          printf '%s\\n' "$CAPABILITIES"
           grep -Fq 'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO' <<< "$CAPABILITIES" || {
-            echo "FAIL: installed signer does not advertise v2 and v3 support."
+            echo "::error::Installed signer does not advertise the required v2 and v3 support."
             exit 1
           }
           grep -Fq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
