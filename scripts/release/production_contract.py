@@ -138,6 +138,29 @@ import scripts.signing.production_config as config
 import scripts.upstream.resolve as upstream
 import scripts.release.github as release
 
+class PatchRevisionTests(unittest.TestCase):
+    def test_patch_scoped_revision_is_checked_against_preflight_output(self):
+        info = {'patchset': 'v2', 'patch_revision': 'v2.1'}
+        with patch.dict(os.environ, {'PATCH_REVISION': 'v2.1'}):
+            production.validate_patch_revision(info)
+
+    def test_legacy_numeric_identity_is_not_used_as_patch_revision(self):
+        info = {'patchset': 'v2', 'patch_revision': 'v2.1'}
+        # The repository's legacy identity.json uses numeric revision 1; the
+        # Stable channel's patch-scoped identity is v2.1 and must validate.
+        with patch.dict(os.environ, {'PATCH_REVISION': 'v2.1'}):
+            production.validate_patch_revision(info)
+
+    def test_patch_revision_mismatch_and_missing_expected_value_fail_closed(self):
+        info = {'patchset': 'v2', 'patch_revision': 'v2.1'}
+        with patch.dict(os.environ, {'PATCH_REVISION': 'v2.2'}), self.assertRaisesRegex(ValueError, 'Artifact patch revision mismatch'):
+            production.validate_patch_revision(info)
+        with patch.dict(os.environ, {'PATCH_REVISION': 'v1.1'}), self.assertRaisesRegex(ValueError, 'selected patchset'):
+            production.validate_patch_revision(info)
+        with patch.dict(os.environ, {'PATCH_REVISION': ''}), self.assertRaisesRegex(ValueError, 'Expected patch revision required'):
+            production.validate_patch_revision(info)
+
+
 class ProductionInputTests(unittest.TestCase):
     def values(self):
         return dict(RUSTDESK_ID_SERVER='id.example.com', RUSTDESK_RELAY_SERVER='relay.example.com',
