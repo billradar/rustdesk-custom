@@ -61,9 +61,9 @@ grep -qi '559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5' "$VE
 grep -Eq '^Verified using v1 scheme.*true$' "$VERIFY_LOG"
 grep -Eq '^Verified using v2 scheme.*true$' "$VERIFY_LOG"
 grep -Eq '^Verified using v3 scheme.*true$' "$VERIFY_LOG"
-grep -Eq '^Verified using v3\\.1 scheme.*false$' "$VERIFY_LOG"
+grep -Eq '^Verified using v3\.1 scheme.*false$' "$VERIFY_LOG"
 grep -Eq '^Verified using v4 scheme.*false$' "$VERIFY_LOG"
 
 /usr/bin/sudo install -o bill -g bill -m 644 "$WORK/signed-production-test.apk" "$OUTPUT"
 printf 'VERIFIED OUTPUT APK: %s\n' "$OUTPUT"
-printf 'TEST ONLY: NOT RELEASED\\n'
+printf 'TEST ONLY: NOT RELEASED\n'
