@@ -74,7 +74,7 @@ def discover(ref, force=False, dry_run=True):
     print(json.dumps(data, indent=2))
     return data
 
-PATCH_REVISION_RE = re.compile(r'^v(?P<patch>[1-9][0-9]*)\\.(?P<revision>[1-9][0-9]{0,5})
+PATCH_REVISION_RE = re.compile(r'^v(?P<patch>[1-9][0-9]*)\.(?P<revision>[1-9][0-9]{0,5})$')
     # Never render or print downloaded logs. Scan raw and de-coloured text so
     # terminal formatting cannot hide a known credential pattern.
     text = gh('api', '--allow-escape-sequences',
