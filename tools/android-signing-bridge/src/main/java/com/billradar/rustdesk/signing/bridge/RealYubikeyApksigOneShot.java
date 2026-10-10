@@ -25,6 +25,13 @@ public final class RealYubikeyApksigOneShot {
     private RealYubikeyApksigOneShot() { }
 
     public static void main(String[] args) {
+        // Read-only capability probe: must not initialize PKCS#11, read a PIN, or use the private key.
+        if (args.length == 1 && "--capabilities".equals(args[0])) {
+            System.out.println("APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO");
+            System.out.println("PRIVATE KEY OPERATION: NO");
+            System.out.println("PIN REQUESTED: NO");
+            return;
+        }
         Options options;
         try { options = parse(args); }
         catch (IllegalArgumentException e) { System.err.println("rustdesk-sign: " + e.getMessage()); System.exit(2); return; }
