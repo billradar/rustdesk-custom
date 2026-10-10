@@ -15,7 +15,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.script = (ROOT / "scripts/signing/android_yubikey_sign.py").read_text()
         self.hardware_signer = (ROOT / "tools/android-signing-bridge/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java").read_text()
         self.bridge_launcher = (ROOT / "tools/android-signing-bridge/packaging/rustdesk-sign").read_text()
-        self.bridge_deploy = (ROOT / "tools/android-signing-bridge/deploy-v3-runtime.sh").read_text()
+        self.bridge_deploy = (ROOT / "tools/android-signing-bridge/deploy_v3_runtime.sh").read_text()
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]
