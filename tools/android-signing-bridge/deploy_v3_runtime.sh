@@ -27,6 +27,19 @@ JAVA_JAR="$INSTALL_ROOT/lib/rustdesk-android-signing-bridge.jar"
   printf '%s\n' 'Working tree is not clean; refusing deployment.' >&2
   exit 2
 }
+
+# A clean local main can still be stale or point at an unreviewed commit.
+# Fetch the canonical branch and require an exact commit match before building
+# anything that will be installed with elevated privileges.
+git -C "$REPO_ROOT" fetch --no-tags origin main
+LOCAL_HEAD=$(git -C "$REPO_ROOT" rev-parse HEAD)
+REMOTE_HEAD=$(git -C "$REPO_ROOT" rev-parse FETCH_HEAD)
+[[ "$LOCAL_HEAD" == "$REMOTE_HEAD" ]] || {
+  printf 'Local main does not match origin/main; local=%s remote=%s. Update the checkout and retry.\n' "$LOCAL_HEAD" "$REMOTE_HEAD" >&2
+  exit 2
+}
+printf 'Deployment source commit verified: %s\n' "$LOCAL_HEAD"
+
 [[ -f "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java" ]]
 grep -Fq 'EXPECTED_HARDWARE_SIGNATURE_COUNT = 3' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java"
 grep -Fq '"setV3SigningEnabled", boolean.class, true' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java"
@@ -43,15 +56,28 @@ BACKUP=''
 ROLLBACK_REQUIRED=0
 cleanup() {
   status=$?
+  trap - EXIT
+  rollback_failed=0
   if [[ "$ROLLBACK_REQUIRED" == 1 && -n "$BACKUP" ]]; then
     printf '%s\n' 'Deployment check failed; restoring previous runtime files.' >&2
-    sudo install -o root -g root -m 755 "$BACKUP/rustdesk-sign" "$INSTALL_ROOT/bin/rustdesk-sign"
-    sudo install -o root -g root -m 644 "$BACKUP/bridge.jar" "$JAVA_JAR"
-    sudo install -o root -g root -m 644 "$BACKUP/VERSION" "$INSTALL_ROOT/VERSION"
-    sudo install -o root -g root -m 644 "$BACKUP/MANIFEST.sha256" "$INSTALL_ROOT/MANIFEST.sha256"
+    sudo install -o root -g root -m 755 "$BACKUP/rustdesk-sign" "$INSTALL_ROOT/bin/rustdesk-sign" || rollback_failed=1
+    sudo install -o root -g root -m 644 "$BACKUP/bridge.jar" "$JAVA_JAR" || rollback_failed=1
+    sudo install -o root -g root -m 644 "$BACKUP/VERSION" "$INSTALL_ROOT/VERSION" || rollback_failed=1
+    sudo install -o root -g root -m 644 "$BACKUP/MANIFEST.sha256" "$INSTALL_ROOT/MANIFEST.sha256" || rollback_failed=1
+    if [[ "$rollback_failed" == 0 ]]; then
+      sudo "$STABLE" --verify-install || rollback_failed=1
+    fi
+    if [[ "$rollback_failed" == 0 ]]; then
+      printf '%s\n' 'RUNTIME ROLLBACK: PASS' >&2
+    else
+      printf 'RUNTIME ROLLBACK: FAIL; preserving privileged backup at %s for manual recovery.\n' "$BACKUP" >&2
+      status=1
+    fi
   fi
-  if [[ -n "$BACKUP" ]]; then sudo rm -rf -- "$BACKUP"; fi
-  rm -rf -- "$STAGE"
+  if [[ -n "$BACKUP" && "$rollback_failed" == 0 ]]; then
+    sudo rm -rf -- "$BACKUP" || status=1
+  fi
+  rm -rf -- "$STAGE" || status=1
   exit "$status"
 }
 trap cleanup EXIT
@@ -92,4 +118,6 @@ grep -Fq 'PIN REQUESTED: NO' <<< "$SELF_TEST"
 grep -Fq 'PRIVATE KEY OPERATION: NO' <<< "$SELF_TEST"
 
 ROLLBACK_REQUIRED=0
+sudo rm -rf -- "$BACKUP"
+BACKUP=''
 printf '%s\n' 'V2+V3 RUNTIME DEPLOYMENT: PASS' 'APK SIGNING PERFORMED: NO'
