@@ -37,6 +37,9 @@ SIGNING_WORKFLOWS = {
     ".github/workflows/android-yubikey-signing-test.yml",
     ".github/workflows/nightly.yml",
 }
+# This manual, read-only preflight is allowed to target the dedicated signing
+# runner, but must never bind a PIN or invoke a production signing operation.
+READ_ONLY_SIGNING_PREFLIGHT = ".github/workflows/test-android-v3-signing.yml"
 SIGNING_MARKERS = (
     "YUBIKEY_PIV_PIN",
     "android-production-signing",
@@ -188,7 +191,19 @@ def check_signing_boundary(files: list[Path], errors: list[str]) -> None:
             text = file.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        for marker in SIGNING_MARKERS:
+        markers = SIGNING_MARKERS
+        if path == READ_ONLY_SIGNING_PREFLIGHT:
+            # Runner labels are required to select the hardware host. Keep the
+            # exception narrow: credentials and production signing interfaces
+            # remain forbidden in this read-only workflow.
+            markers = (
+                "YUBIKEY_PIV_PIN",
+                "android-production-signing",
+                "PKCS#11",
+                "pkcs11",
+                "YubiKey",
+            )
+        for marker in markers:
             if marker in text:
                 fail(errors, file, "production signing marker leaked into normal workflow", "absent", marker)
 
