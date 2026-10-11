@@ -10,7 +10,10 @@ def fail(message):
     raise SystemExit(message)
 
 def parse_arches(value):
-    arches = [item.strip() for item in value.split(",") if item.strip()]
+    entries = value.split(",")
+    if not entries or any(not item.strip() for item in entries):
+        fail("SIGNING: ARCHES must contain non-empty architecture entries")
+    arches = [item.strip() for item in entries]
     if not arches:
         fail("SIGNING: ARCHES must contain at least one supported architecture")
     if len(arches) != len(set(arches)):
