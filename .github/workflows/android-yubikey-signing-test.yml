@@ -6,12 +6,12 @@ on:
     inputs:
       upstream_ref:
         type: string
-        description: Official stable tag to build the aarch64 signing fixture
+        description: Official stable tag to build all three Android signing fixtures
         required: true
         default: "1.5.0"
       authorize_yubikey_test:
         type: boolean
-        description: Authorize one real YubiKey PIV 9C signature (aarch64 smoke test only)
+        description: Authorize three real YubiKey PIV 9C signatures (all Android architectures)
         required: true
         default: false
 
@@ -57,7 +57,7 @@ jobs:
           {
             echo '## Android YubiKey smoke test'
             echo
-            echo '- Scope: **aarch64 / standard variant only**'
+            echo '- Scope: **aarch64, armv7, x86_64 / standard variant**'
             echo "- Official stable ref: $SOURCE_REF"
             echo "- Official source SHA: $SOURCE_SHA"
             echo "- Version: $SOURCE_VERSION"
@@ -88,7 +88,7 @@ jobs:
       patchset: ${{ needs.compatibility.outputs.patchset }}
 
   build:
-    name: "4 - Build aarch64 smoke APK"
+    name: "4 - Build three Android smoke APKs"
     needs: [resolve, compatibility, prepare]
     if: needs.prepare.result == 'success'
     uses: ./.github/workflows/build.yml
@@ -109,7 +109,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
 
   android-sign:
-    name: "5 - Sign and verify on Raspberry Pi"
+    name: "5 - Sign and verify three APKs on Raspberry Pi"
     needs: [resolve, compatibility, prepare, build]
     if: >-
       needs.build.result == 'success' &&
@@ -170,12 +170,12 @@ jobs:
           fi
           printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
 
-      - name: Sign and verify aarch64 APK
+      - name: Sign and verify all three Android APKs
         uses: ./.github/actions/android-yubikey-sign
         env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
         with:
-          arches: aarch64
+          arches: aarch64,armv7,x86_64
           channel: stable
           upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
           upstream_version: ${{ needs.prepare.outputs.upstream_version }}
@@ -189,8 +189,8 @@ jobs:
             echo
             echo '## Result: PASS'
             echo
-            echo '- Target: Android aarch64 / standard variant'
+            echo '- Targets: Android aarch64, armv7 and x86_64 / standard variant'
             echo '- Hardware: Raspberry Pi self-hosted YubiKey PIV 9C'
             echo '- Verification: signing script completed and verified the APK'
-            echo '- Scope: one smoke-test APK; this is not a full multi-architecture release'
+            echo '- Scope: three smoke-test APKs; this is not a full multi-variant release'
           } >> "$GITHUB_STEP_SUMMARY"
