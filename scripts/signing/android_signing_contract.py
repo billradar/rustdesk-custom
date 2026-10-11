@@ -16,6 +16,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.hardware_signer = (ROOT / "tools/android-signing-bridge/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java").read_text()
         self.bridge_launcher = (ROOT / "tools/android-signing-bridge/packaging/rustdesk-sign").read_text()
         self.bridge_deploy = (ROOT / "tools/android-signing-bridge/deploy_v3_runtime.sh").read_text()
+        self.v3_preflight = (ROOT / ".github/workflows/test-android-v3-signing.yml").read_text()
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]
@@ -73,8 +74,14 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn('--capabilities)', self.bridge_launcher)
         self.assertIn('AUTHORIZE_V3_RUNTIME_DEPLOY', self.bridge_deploy)
         self.assertIn('mvn -q clean test package', self.bridge_deploy)
+        self.assertIn('git -C "$REPO_ROOT" fetch --no-tags origin main', self.bridge_deploy)
+        self.assertIn('REMOTE_HEAD=$(git -C "$REPO_ROOT" rev-parse FETCH_HEAD)', self.bridge_deploy)
         self.assertIn('ROLLBACK_REQUIRED=1', self.bridge_deploy)
+        self.assertIn('RUNTIME ROLLBACK: FAIL; preserving privileged backup', self.bridge_deploy)
         self.assertIn('APK SIGNING PERFORMED: NO', self.bridge_deploy)
+        self.assertIn('does not recognize --capabilities', self.v3_preflight)
+        self.assertIn('AUTHORIZE_V3_RUNTIME_DEPLOY=YES', self.v3_preflight)
+        self.assertNotIn('YUBIKEY_PIV_PIN', self.v3_preflight)
         self.assertIn('grep -Fq \'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO\'', self.bridge_deploy)
 
     def test_runtime_v3_preflight_fails_before_pin_binding_or_hardware_signing(self):
