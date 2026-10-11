@@ -38,6 +38,9 @@ env:
       android_only:
         type: boolean
         default: false
+      signing_smoke_test:
+        type: boolean
+        default: false
       desktop_only:
         type: boolean
         default: false
@@ -79,9 +82,20 @@ jobs:
         python3 scripts/release/qualification.py plan --channel "$CHANNEL" "${args[@]}"'
     - id: split
       name: Split Android and other platform target matrices
+      env:
+        SIGNING_SMOKE_TEST: ${{ inputs.signing_smoke_test }}
       run: |
-        android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
-        android_count=$(jq '[.selected[] | select(.platform == "android")] | length' .work/target-plan.json)
+        set -euo pipefail
+        if [[ "$SIGNING_SMOKE_TEST" == "true" ]]; then
+          android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android" and .arch == "aarch64" and .variant == "standard")]}' .work/target-plan.json)
+        else
+          android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
+        fi
+        android_count=$(jq '.include | length' <<< "$android_matrix")
+        if [[ "$SIGNING_SMOKE_TEST" == "true" && "$android_count" -ne 1 ]]; then
+          echo "Expected exactly one Android aarch64 standard target for signing smoke test; found $android_count" >&2
+          exit 1
+        fi
         other_platform_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
         other_platform_count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
         echo "android_matrix=$android_matrix" >> "$GITHUB_OUTPUT"

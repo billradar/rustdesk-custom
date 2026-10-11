@@ -176,4 +176,28 @@ class StableAndroidSigningContractTests(unittest.TestCase):
     def test_old_reusable_signer_is_gone(self):
         self.assertFalse((ROOT / ".github/workflows/sign-android.yml").exists())
 
+
+    def test_yubikey_smoke_workflow_is_fast_clear_and_fail_closed(self):
+        smoke = yaml.safe_load((ROOT / ".github/workflows/android-yubikey-signing-test.yml").read_text())
+        smoke_on = smoke.get("on", smoke.get(True))
+        resolve = smoke["jobs"]["resolve"]
+        self.assertIn("inputs.authorize_yubikey_test == true", resolve["if"])
+        self.assertFalse(smoke_on["workflow_dispatch"]["inputs"]["authorize_yubikey_test"]["default"])
+        resolve_command = next(step["run"] for step in resolve["steps"] if step.get("id") == "resolve")
+        self.assertIn("python3 -m scripts.release.channel resolve", resolve_command)
+        self.assertNotIn("python3 scripts/release/channel.py resolve", resolve_command)
+        self.assertEqual(smoke["jobs"]["build"]["with"]["android_only"], True)
+        self.assertEqual(smoke["jobs"]["build"]["with"]["signing_smoke_test"], True)
+        sign_step = next(step for step in smoke["jobs"]["android-sign"]["steps"] if step.get("name") == "Sign and verify aarch64 APK")
+        self.assertEqual(sign_step["with"]["arches"], "aarch64")
+        self.assertEqual(smoke["jobs"]["android-sign"]["environment"]["name"], "android-production-signing")
+        build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
+        build_on = build.get("on", build.get(True))
+        self.assertIn("signing_smoke_test", build_on["workflow_call"]["inputs"])
+        split = next(step for step in build["jobs"]["plan"]["steps"] if step.get("id") == "split")
+        self.assertIn('select(.platform == "android" and .arch == "aarch64" and .variant == "standard")', split["run"])
+        self.assertIn('"$android_count" -ne 1', split["run"])
+        self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(resolve))
+        self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(smoke["jobs"]["build"]))
+
 if __name__ == "__main__": unittest.main()

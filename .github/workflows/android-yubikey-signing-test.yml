@@ -1,16 +1,17 @@
 name: Android - YubiKey Signing Smoke Test
+run-name: Android YubiKey smoke - ${{ inputs.upstream_ref }}
 
 on:
   workflow_dispatch:
     inputs:
       upstream_ref:
         type: string
-        description: Official stable tag to build for the signing test
+        description: Official stable tag to build the aarch64 signing fixture
         required: true
         default: "1.5.0"
       authorize_yubikey_test:
         type: boolean
-        description: Explicitly authorize one real YubiKey PIV 9C signing test
+        description: Authorize one real YubiKey PIV 9C signature (aarch64 smoke test only)
         required: true
         default: false
 
@@ -24,7 +25,7 @@ concurrency:
 
 jobs:
   resolve:
-    name: Resolve test source
+    name: "1 - Resolve official stable source"
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
@@ -44,10 +45,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_REF: ${{ inputs.upstream_ref }}
-        run: python3 scripts/release/channel.py resolve --channel stable --ref "$REQUESTED_REF" --discovery-only
+        run: python3 -m scripts.release.channel resolve --channel stable --ref "$REQUESTED_REF" --discovery-only
+      - name: Summarize resolved source
+        shell: bash
+        env:
+          SOURCE_REF: ${{ steps.resolve.outputs.upstream_ref }}
+          SOURCE_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+          SOURCE_VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Android YubiKey smoke test'
+            echo
+            echo '- Scope: **aarch64 / standard variant only**'
+            echo "- Official stable ref: $SOURCE_REF"
+            echo "- Official source SHA: $SOURCE_SHA"
+            echo "- Version: $SOURCE_VERSION"
+            echo '- Hardware signing: explicitly authorized Environment-bound job only'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   compatibility:
-    name: Validate patch compatibility
+    name: "2 - Validate source and patch compatibility"
     needs: resolve
     if: needs.resolve.result == 'success'
     uses: ./.github/workflows/compat-check.yml
@@ -58,7 +76,7 @@ jobs:
       channel: stable
 
   prepare:
-    name: Prepare source
+    name: "3 - Prepare verified source"
     needs: [resolve, compatibility]
     if: needs.compatibility.result == 'success'
     uses: ./.github/workflows/prepare-source.yml
@@ -69,7 +87,7 @@ jobs:
       patchset: ${{ needs.compatibility.outputs.patchset }}
 
   build:
-    name: Build Android test inputs
+    name: "4 - Build aarch64 smoke APK"
     needs: [resolve, compatibility, prepare]
     if: needs.prepare.result == 'success'
     uses: ./.github/workflows/build.yml
@@ -84,12 +102,13 @@ jobs:
       revision: "signing-test"
       include_experimental: false
       android_only: true
+      signing_smoke_test: true
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
 
   android-sign:
-    name: Real YubiKey PIV 9C signing smoke test
+    name: "5 - Sign and verify on Raspberry Pi"
     needs: [resolve, compatibility, prepare, build]
     if: >-
       needs.build.result == 'success' &&
@@ -150,13 +169,27 @@ jobs:
           fi
           printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
 
-      - name: Sign and verify all Android architectures
+      - name: Sign and verify aarch64 APK
         uses: ./.github/actions/android-yubikey-sign
         env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
         with:
-          arches: aarch64,armv7,x86_64
+          arches: aarch64
           channel: stable
           upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
           upstream_version: ${{ needs.prepare.outputs.upstream_version }}
           patchset: ${{ needs.compatibility.outputs.patchset }}
+
+      - name: Summarize successful hardware smoke test
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo
+            echo '## Result: PASS'
+            echo
+            echo '- Target: Android aarch64 / standard variant'
+            echo '- Hardware: Raspberry Pi self-hosted YubiKey PIV 9C'
+            echo '- Verification: signing script completed and verified the APK'
+            echo '- Scope: one smoke-test APK; this is not a full multi-architecture release'
+          } >> "$GITHUB_STEP_SUMMARY"
