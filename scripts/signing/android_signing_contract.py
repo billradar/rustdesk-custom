@@ -55,13 +55,14 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn(r'r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
         self.assertNotIn(r'r"^Signer #d+ certificate SHA-256 digest:', self.script)
 
-    def test_signer_accepts_single_arch_and_rejects_invalid_arch_lists(self):
+    def test_signer_requires_all_three_arches_and_rejects_invalid_arch_lists(self):
         self.assertIn("def parse_arches(value):", self.script)
         self.assertIn('arches = parse_arches(os.environ["ARCHES"])', self.script)
         self.assertIn('if not entries or any(not item.strip() for item in entries):', self.script)
         self.assertIn('if len(arches) != len(set(arches)):', self.script)
         self.assertIn('unsupported = [arch for arch in arches if arch not in ABI_BY_ARCH]', self.script)
-        self.assertNotIn('if set(arches) != set(ABI_BY_ARCH):', self.script)
+        self.assertIn('if set(arches) != set(ABI_BY_ARCH):', self.script)
+        self.assertIn("expected exactly aarch64, armv7 and x86_64", self.script)
         # Keep the existing v2/v3 verification gate in place for every selected APK.
         self.assertIn("if not {2, 3}.issubset(set(schemes)):", self.script)
 
@@ -187,6 +188,16 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertFalse((ROOT / ".github/workflows/sign-android.yml").exists())
 
 
+    def test_signer_requires_all_three_architectures_and_rejects_invalid_lists(self):
+        self.assertIn("def parse_arches(value):", self.script)
+        self.assertIn('arches = parse_arches(os.environ["ARCHES"])', self.script)
+        self.assertIn('if not entries or any(not item.strip() for item in entries):', self.script)
+        self.assertIn('if len(arches) != len(set(arches)):', self.script)
+        self.assertIn('unsupported = [arch for arch in arches if arch not in ABI_BY_ARCH]', self.script)
+        self.assertIn('if set(arches) != set(ABI_BY_ARCH):', self.script)
+        self.assertIn("expected exactly aarch64, armv7 and x86_64", self.script)
+        self.assertIn("if not {2, 3}.issubset(set(schemes)):", self.script)
+
     def test_yubikey_smoke_workflow_is_fast_clear_and_fail_closed(self):
         smoke = yaml.safe_load((ROOT / ".github/workflows/android-yubikey-signing-test.yml").read_text())
         smoke_on = smoke.get("on", smoke.get(True))
@@ -198,15 +209,16 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("python3 scripts/release/channel.py resolve", resolve_command)
         self.assertEqual(smoke["jobs"]["build"]["with"]["android_only"], True)
         self.assertEqual(smoke["jobs"]["build"]["with"]["signing_smoke_test"], True)
-        sign_step = next(step for step in smoke["jobs"]["android-sign"]["steps"] if step.get("name") == "Sign and verify aarch64 APK")
-        self.assertEqual(sign_step["with"]["arches"], "aarch64")
+        sign_step = next(step for step in smoke["jobs"]["android-sign"]["steps"] if step.get("name") == "Sign and verify all three Android APKs")
+        self.assertEqual(sign_step["with"]["arches"], "aarch64,armv7,x86_64")
         self.assertEqual(smoke["jobs"]["android-sign"]["environment"]["name"], "android-production-signing")
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         build_on = build.get("on", build.get(True))
         self.assertIn("signing_smoke_test", build_on["workflow_call"]["inputs"])
         split = next(step for step in build["jobs"]["plan"]["steps"] if step.get("id") == "split")
-        self.assertIn('select(.platform == "android" and .arch == "aarch64" and .variant == "standard")', split["run"])
-        self.assertIn('"$android_count" -ne 1', split["run"])
+        self.assertIn('.arch == "armv7"', split["run"])
+        self.assertIn('.arch == "x86_64"', split["run"])
+        self.assertIn('"$android_count" -ne 3', split["run"])
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(resolve))
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(smoke["jobs"]["build"]))
 

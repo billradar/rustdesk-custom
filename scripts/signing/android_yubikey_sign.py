@@ -24,6 +24,8 @@ def parse_arches(value):
             + "; supported: "
             + ", ".join(ABI_BY_ARCH)
         )
+    if set(arches) != set(ABI_BY_ARCH):
+        fail("SIGNING: expected exactly aarch64, armv7 and x86_64")
     return arches
 
 

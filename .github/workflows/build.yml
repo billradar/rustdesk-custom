@@ -87,14 +87,18 @@ jobs:
       run: |
         set -euo pipefail
         if [[ "$SIGNING_SMOKE_TEST" == "true" ]]; then
-          android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android" and .arch == "aarch64" and .variant == "standard")]}' .work/target-plan.json)
+          android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android" and (.arch == "aarch64" or .arch == "armv7" or .arch == "x86_64") and .variant == "standard")]}' .work/target-plan.json)
         else
           android_matrix=$(jq -c '{include: [.selected[] | select(.platform == "android")]}' .work/target-plan.json)
         fi
         android_count=$(jq '.include | length' <<< "$android_matrix")
-        if [[ "$SIGNING_SMOKE_TEST" == "true" && "$android_count" -ne 1 ]]; then
-          echo "Expected exactly one Android aarch64 standard target for signing smoke test; found $android_count" >&2
-          exit 1
+        if [[ "$SIGNING_SMOKE_TEST" == "true" ]]; then
+          expected_arches='["aarch64","armv7","x86_64"]'
+          actual_arches=$(jq -c '[.include[].arch] | sort' <<< "$android_matrix")
+          if [[ "$android_count" -ne 3 || "$actual_arches" != "$expected_arches" ]]; then
+            echo "Expected exactly aarch64, armv7 and x86_64 Android standard targets for signing smoke test; found count=$android_count arches=$actual_arches" >&2
+            exit 1
+          fi
         fi
         other_platform_matrix=$(jq -c '{include: [.selected[] | select(.platform != "android" and .platform != "windows")]}' .work/target-plan.json)
         other_platform_count=$(jq '[.selected[] | select(.platform != "android" and .platform != "windows")] | length' .work/target-plan.json)
