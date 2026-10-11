@@ -169,7 +169,7 @@ jobs:
           fi
           printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
 
-      - name: Sign and verify all Android architectures
+      - name: Sign and verify aarch64 APK
         uses: ./.github/actions/android-yubikey-sign
         env:
           YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
@@ -179,3 +179,17 @@ jobs:
           upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
           upstream_version: ${{ needs.prepare.outputs.upstream_version }}
           patchset: ${{ needs.compatibility.outputs.patchset }}
+
+      - name: Summarize successful hardware smoke test
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo
+            echo '## Result: PASS'
+            echo
+            echo '- Target: Android aarch64 / standard variant'
+            echo '- Hardware: Raspberry Pi self-hosted YubiKey PIV 9C'
+            echo '- Verification: signing script completed and verified the APK'
+            echo '- Scope: one smoke-test APK; this is not a full multi-architecture release'
+          } >> "$GITHUB_STEP_SUMMARY"
