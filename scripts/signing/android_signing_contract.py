@@ -58,6 +58,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
     def test_signer_accepts_single_arch_and_rejects_invalid_arch_lists(self):
         self.assertIn("def parse_arches(value):", self.script)
         self.assertIn('arches = parse_arches(os.environ["ARCHES"])', self.script)
+        self.assertIn('if not entries or any(not item.strip() for item in entries):', self.script)
         self.assertIn('if not arches:', self.script)
         self.assertIn('if len(arches) != len(set(arches)):', self.script)
         self.assertIn('unsupported = [arch for arch in arches if arch not in ABI_BY_ARCH]', self.script)
