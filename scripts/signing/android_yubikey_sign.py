@@ -9,9 +9,24 @@ ABI_BY_ARCH = {"aarch64": "arm64-v8a", "armv7": "armeabi-v7a", "x86_64": "x86_64
 def fail(message):
     raise SystemExit(message)
 
-arches = [x.strip() for x in os.environ["ARCHES"].split(",") if x.strip()]
-if set(arches) != set(ABI_BY_ARCH):
-    fail("SIGNING: expected exactly aarch64, armv7 and x86_64")
+def parse_arches(value):
+    arches = [item.strip() for item in value.split(",") if item.strip()]
+    if not arches:
+        fail("SIGNING: ARCHES must contain at least one supported architecture")
+    if len(arches) != len(set(arches)):
+        fail("SIGNING: ARCHES contains duplicate architectures")
+    unsupported = [arch for arch in arches if arch not in ABI_BY_ARCH]
+    if unsupported:
+        fail(
+            "SIGNING: unsupported architecture(s): "
+            + ", ".join(unsupported)
+            + "; supported: "
+            + ", ".join(ABI_BY_ARCH)
+        )
+    return arches
+
+
+arches = parse_arches(os.environ["ARCHES"])
 if not os.environ.get("YUBIKEY_PIV_PIN"):
     print("ENVIRONMENT PIN AVAILABLE: FAIL")
     raise SystemExit(1)
