@@ -55,13 +55,14 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn(r'r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
         self.assertNotIn(r'r"^Signer #d+ certificate SHA-256 digest:', self.script)
 
-    def test_signer_accepts_single_arch_and_rejects_invalid_arch_lists(self):
+    def test_signer_requires_all_three_arches_and_rejects_invalid_arch_lists(self):
         self.assertIn("def parse_arches(value):", self.script)
         self.assertIn('arches = parse_arches(os.environ["ARCHES"])', self.script)
         self.assertIn('if not entries or any(not item.strip() for item in entries):', self.script)
         self.assertIn('if len(arches) != len(set(arches)):', self.script)
         self.assertIn('unsupported = [arch for arch in arches if arch not in ABI_BY_ARCH]', self.script)
-        self.assertNotIn('if set(arches) != set(ABI_BY_ARCH):', self.script)
+        self.assertIn('if set(arches) != set(ABI_BY_ARCH):', self.script)
+        self.assertIn("expected exactly aarch64, armv7 and x86_64", self.script)
         # Keep the existing v2/v3 verification gate in place for every selected APK.
         self.assertIn("if not {2, 3}.issubset(set(schemes)):", self.script)
 
