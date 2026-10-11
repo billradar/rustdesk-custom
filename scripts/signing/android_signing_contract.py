@@ -187,7 +187,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("python3 scripts/release/channel.py resolve", resolve_command)
         self.assertEqual(smoke["jobs"]["build"]["with"]["android_only"], True)
         self.assertEqual(smoke["jobs"]["build"]["with"]["signing_smoke_test"], True)
-        sign_step = next(step for step in smoke["jobs"]["android-sign"]["steps"] if step.get("name") == "Sign and verify all Android architectures")
+        sign_step = next(step for step in smoke["jobs"]["android-sign"]["steps"] if step.get("name") == "Sign and verify aarch64 APK")
         self.assertEqual(sign_step["with"]["arches"], "aarch64")
         self.assertEqual(smoke["jobs"]["android-sign"]["environment"]["name"], "android-production-signing")
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
