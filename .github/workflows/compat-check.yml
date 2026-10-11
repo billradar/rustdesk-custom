@@ -84,7 +84,6 @@ jobs:
         UP_SHA: ${{ inputs.upstream_sha }}
         UP_REPO: ${{ inputs.upstream_repository }}
         CHANNEL: ${{ inputs.channel }}
-        ANDROID_SIGNING_SMOKE: ${{ inputs.android_signing_smoke }}
       run: 'python3 - <<''PYCODE''
 
         import os,re
@@ -417,6 +416,7 @@ jobs:
         HELPER_RESULT: ${{ needs.windows-helper.result }}
         CONTRACT_RESULT: ${{ needs.contracts.result }}
         CHANNEL: ${{ inputs.channel }}
+        ANDROID_SIGNING_SMOKE: ${{ inputs.android_signing_smoke }}
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\nroots=list(Path('diagnostics').rglob('patchset-selection.json'))\n\
         report=json.loads(roots[0].read_text()) if roots else {'selected':None}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success' and os.environ['BRIDGE_RESULT']=='success' and os.environ['FLUTTER_RESULT']=='success' and (os.environ['CHANNEL']=='ci' or os.environ['ANDROID_SIGNING_SMOKE']=='true' or os.environ['HELPER_RESULT']=='success'))\nreport['overall']='PASS' if passed else 'FAIL'\nreport['Rust fast check']='PASS'\
         \ if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'\nreport['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success'\
