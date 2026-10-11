@@ -74,6 +74,7 @@ jobs:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable
+      android_signing_smoke: true
 
   prepare:
     name: "3 - Prepare verified source"
