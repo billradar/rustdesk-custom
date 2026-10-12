@@ -333,7 +333,7 @@ Before changing anything:
 3. Confirm the actual implementation and affected interfaces; do not guess from filenames.
 4. Classify the change as documentation-only or functional.
 5. Identify impact on upstream identity, patchset selection, target matrix, qualification, artifact provenance, signing isolation, and release behavior.
-6. Make the smallest coherent change on `test/development` unless explicitly instructed otherwise.
+6. Make the smallest coherent change directly on `development` unless explicitly instructed otherwise.
 7. Run relevant local contracts/tests and inspect exit codes.
 8. Review the full diff for unrelated changes, stale references, leaked secrets, and weakened gates.
 9. Open/update a PR to `main` when integration is expected; do not merge without explicit authorization.
