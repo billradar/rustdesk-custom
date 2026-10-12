@@ -63,6 +63,39 @@
           ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
         }
       }
+    },
+    {
+      "signature": "f1cc993c2741b1fb94cb6b9941d5b314147c65e7145e5159c48b8c8288f7cd9a",
+      "upstream_version": "1.5.0",
+      "runner": "windows-2022",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "llvm": "15.0.6",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "bridge_flutter": "3.22.3",
+      "helper_commit": "ecd8d6a139eee76845ea66423fb739af450fda90",
+      "source_sbom_requested": true,
+      "id": "reviewed-150-109c39",
+      "reviewed_upstream_sha": "109c39bccb478170b035ab6821bd5996bf87ddd7",
+      "review_notes": "Reviewed official RustDesk 1.5.0 source snapshot for this exact upstream SHA. The critical Windows x64 job remains on windows-2022 with Rust 1.75, Flutter 3.24.5, LLVM 15.0.6 and the pinned vcpkg commit; upstream adds a separately gated Windows ARM64 lane using Flutter 3.44.x and a separate bridge artifact. build.py adds opt-in Linux DRM packaging with pinned libdrmtap source and artifact checks; DRM remains opt-in and is not enabled by the custom workflow. build.rs adds the Android ifaddrs compatibility shim. This profile approves only this exact critical-interface signature; platform/patch/API and release gates remain independent.",
+      "critical": {
+        "tools": {
+          "RUST_VERSION": "1.75",
+          "FLUTTER_VERSION": "3.24.5",
+          "LLVM_VERSION": "15.0.6",
+          "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+        },
+        "files": {
+          "build.py": "88445cdf48d214fd9ff73d7fe2c878ad277f84c31839bb6ac94563d37f281708",
+          "build.rs": "3fc72873ebfb2a238a2ab58f69b984c2978829291856bdfe8d0b62dd958f621a",
+          ".github/workflows/bridge.yml": "b519191d9d9bd7f4350cc978c8fd6db366cf3152206835620a73f09a165b4d05",
+          ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+          ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
+        }
+      }
     }
   ]
 }

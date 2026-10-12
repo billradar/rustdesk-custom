@@ -35,7 +35,6 @@ LEGACY_TEXT_MARKERS = (
 SIGNING_WORKFLOWS = {
     ".github/workflows/tag.yml",
     ".github/workflows/android-yubikey-signing-test.yml",
-    ".github/workflows/nightly.yml",
 }
 # This manual, read-only preflight is allowed to target the dedicated signing
 # runner, but must never bind a PIN or invoke a production signing operation.
@@ -235,13 +234,43 @@ def check_stable_runtime_contract(files: list[Path], errors: list[str]) -> None:
     elif not (wrapper.stat().st_mode & 0o111):
         fail(errors, wrapper, "Stable Android compiler wrapper must be executable", "mode with execute bit", oct(wrapper.stat().st_mode & 0o777))
 
-    windows = paths.get(".github/workflows/build-stable-windows.yml")
-    if windows:
+    for workflow_path in (
+        ".github/workflows/build.yml",
+        ".github/workflows/build-stable-windows.yml",
+    ):
+        windows = paths.get(workflow_path)
+        if not windows:
+            continue
         text = windows.read_text(encoding="utf-8")
         if "bytes((0x50,0x45,0,0))" not in text:
-            fail(errors, windows, "Stable Windows PE signature check must use explicit NUL bytes")
+            fail(errors, windows, "Windows PE signature check must use explicit NUL bytes")
         if "int.from_bytes(b[off+4:off+6],'little')!=0x8664" not in text:
-            fail(errors, windows, "Stable Windows PE machine check must validate AMD64 explicitly")
+            fail(errors, windows, "Windows PE machine check must validate AMD64 explicitly")
+
+
+def check_nightly_removed(files: list[Path], errors: list[str]) -> None:
+    """Nightly build/release automation is retired; CI and Stable remain."""
+    paths = {rel(p) for p in files}
+    for retired in (
+        ".github/workflows/nightly.yml",
+        ".github/workflows/upstream-nightly.yml",
+    ):
+        if retired in paths:
+            fail(errors, ROOT / retired, "retired Nightly workflow must not be present")
+    for path in files:
+        r = rel(path)
+        if r == "scripts/validation/repository_contract.py" or is_non_functional_document(path):
+            continue
+        if not r.startswith(".github/workflows/"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for retired in ("gh workflow run nightly.yml", "upstream-nightly.yml"):
+            if retired in text:
+                fail(errors, path, "active workflow references retired Nightly automation", "absent", retired)
+
 
 def check_workflow_syntax(files: list[Path], errors: list[str]) -> None:
     for path in files:
@@ -268,6 +297,7 @@ def main() -> int:
         ("metadata uniqueness", lambda: check_metadata(files, errors)),
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
         ("Stable runtime contract", lambda: check_stable_runtime_contract(files, errors)),
+        ("Nightly retirement contract", lambda: check_nightly_removed(files, errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
     ]
 

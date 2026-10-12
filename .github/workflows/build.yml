@@ -149,7 +149,7 @@ jobs:
         p=Path('.work/topmost/WindowInjection/x64/Release/WindowInjection.dll')
         b=p.read_bytes()
         off=struct.unpack_from('<I',b,0x3c)[0]
-        assert b[:2]==b'MZ' and b[off:off+4]==b'PE\\0\\0' and struct.unpack_from('<H',b,off+4)[0]==0x8664
+        assert b[:2]==b'MZ' and b[off:off+4]==bytes((0x50,0x45,0,0)) and int.from_bytes(b[off+4:off+6],'little')==0x8664
         info={
           'upstream_sha':os.environ['UPSTREAM_SHA'],
           'helper_commit':'${{ steps.profile.outputs.helper_commit }}',
@@ -185,8 +185,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       BUILD_CHANNEL: ${{ inputs.channel }}
       UPSTREAM_VERSION: ${{ inputs.upstream_version }}
-      ARTIFACT_IDENTITY: ${{ inputs.channel == 'nightly' && format('nightly-{0}-{1}', inputs.upstream_version, inputs.upstream_sha)
-        || inputs.upstream_version }}
+      ARTIFACT_IDENTITY: ${{ inputs.upstream_version }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
@@ -305,7 +304,7 @@ jobs:
         for key,value in [('upstream_sha',os.environ['UPSTREAM_EXPECTED_SHA']),('helper_commit',os.environ['HELPER_SHA']),('architecture','x86_64'),('workflow_run',os.environ['GITHUB_RUN_ID'])]:\n\
         \ if info[key]!=value:raise ValueError('Shared helper identity mismatch: '+key)\nb=(root/'WindowInjection/x64/Release/WindowInjection.dll').read_bytes()\n\
         if hashlib.sha256(b).hexdigest()!=info['sha256']:raise ValueError('Shared helper checksum mismatch')\noff=struct.unpack_from('<I',b,0x3c)[0]\n\
-        if b[:2]!=b'MZ' or b[off:off+4]!=b'PE\\0\\0' or struct.unpack_from('<H',b,off+4)[0]!=0x8664:raise ValueError('Shared\
+        if b[:2]!=b'MZ' or b[off:off+4]!=bytes((0x50,0x45,0,0)) or int.from_bytes(b[off+4:off+6],'little')!=0x8664:raise ValueError('Shared\
         \ helper is not AMD64')\nprint('Shared helper checksum/architecture/source: PASS')\nPYCODE\n"
     - name: Build and verify selected variant
       env:

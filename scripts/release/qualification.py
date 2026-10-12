@@ -26,6 +26,8 @@ def entries():
     return rows
 
 def plan(channel,experimental=False):
+    if channel not in ('ci','stable'):
+        raise ValueError('Unsupported channel; Nightly build has been retired')
     selected=[dict(e,id=target(e)) for e in entries() if e.get('enabled') and
               (e['support_status']=='SUPPORTED' or (experimental and e['support_status']=='EXPERIMENTAL'))]
     if not selected:raise ValueError('Empty supported matrix')
@@ -51,7 +53,7 @@ def aggregate(root,channel,experimental):
             windows_validate(path.parent)
         else:validate(path.parent)
         if i['channel']!=channel:raise ValueError('PROVENANCE: channel mismatch')
-        if platform=='android' and channel in ('stable','nightly') and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Stable Android requires verified production identity')
+        if platform=='android' and channel=='stable' and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Stable Android requires verified production identity')
         found[name]=i;folders[name]=path.parent
     windows={i['variant']:i for n,i in found.items() if n.startswith('windows-x86_64-')}
     if len(windows)==2:
@@ -90,7 +92,7 @@ def aggregate(root,channel,experimental):
         for file in sorted(folder.rglob('*')):
             if file.is_file():rows.append(hashlib.sha256(file.read_bytes()).hexdigest()+'  '+name+'/'+file.relative_to(folder).as_posix())
     (out/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
-    if required_pass and channel in ('stable','nightly'):
+    if required_pass and channel == 'stable':
         assets=out/'assets';assets.mkdir(exist_ok=True)
         for name,e in expected.items():
             if not e['required']:continue
@@ -336,7 +338,7 @@ def normalize_release_body(body):
 def release_notes_body(upstream_tag):
     """Use the official upstream release body, without the Pro promotion badge."""
     from scripts.upstream.resolve import api
-    tag=upstream_tag or 'nightly'
+    tag=upstream_tag
     release=api(f'repos/rustdesk/rustdesk/releases/tags/{tag}',missing=True)
     return normalize_release_body(release.get('body') if release else '')
 
@@ -347,10 +349,8 @@ def build_release_body(official_body, metadata):
     return body+'\n\n## Custom release metadata\n\n'+'\n'.join(metadata)+'\n'
 
 def _release(root, publish, channel='stable', experimental=False):
-    if channel == 'nightly' and publish:
-        raise ValueError('Nightly release is forbidden; only draft publication is allowed')
-    if channel not in ('stable','nightly'):
-        raise ValueError('Unsupported release channel')
+    if channel != 'stable':
+        raise ValueError('Only Stable release qualification is supported; Nightly build has been retired')
     from scripts.upstream.resolve import api
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
@@ -361,10 +361,9 @@ def _release(root, publish, channel='stable', experimental=False):
     infos=[json.loads(p.read_text()) for p in root.rglob('build-info.json')]
     standard=next(i for i in infos if i['variant']=='standard' and i['platform']=='windows-x86_64')
     sos=next(i for i in infos if i['variant']=='sos' and i['platform']=='windows-x86_64')
-    suffix='' if channel=='stable' else '-nightly'
     version=standard['upstream_version']
     upstream_sha=standard['upstream_sha']
-    tag=f'v{version}-custom.{standard["patch_revision"]}' if channel=='stable' else f'v{version}-custom.{standard["patch_revision"]}-nightly.{upstream_sha[:12]}'
+    tag=f'v{version}-custom.{standard["patch_revision"]}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
     if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
@@ -373,7 +372,7 @@ def _release(root, publish, channel='stable', experimental=False):
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
-    official_notes=release_notes_body(standard['upstream_tag'] or ('nightly' if channel=='nightly' else standard['upstream_version']))
+    official_notes=release_notes_body(standard['upstream_tag'] or standard['upstream_version'])
     metadata=[
         'upstream_repository=rustdesk/rustdesk',
         f'upstream_tag={standard["upstream_tag"]}',
@@ -392,7 +391,7 @@ def _release(root, publish, channel='stable', experimental=False):
         'runtime_ui_validation=SKIPPED BY USER',
         'real_remote_session_validation=NOT TESTED',
         'desktop_code_signing=NOT ENABLED',
-        'android_signing='+('PRODUCTION SIGNED / IDENTITY VERIFIED' if channel=='stable' else 'TEST SIGNED / NOT PRODUCTION SIGNED'),
+        'android_signing=PRODUCTION SIGNED / IDENTITY VERIFIED',
         'password_security_v2=DEFERRED',
         'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
         'automation_state=complete',
@@ -457,7 +456,7 @@ def release(root, channel='stable', experimental=False): _release(root, True, ch
 if __name__=='__main__':
     a=argparse.ArgumentParser()
     a.add_argument('mode',choices=['check','plan','aggregate','draft','release','publish-existing','lookup','verify-ci'])
-    a.add_argument('--channel',choices=['stable','nightly'],default='stable')
+    a.add_argument('--channel',choices=['stable'],default='stable')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
     a.add_argument('--repository',default=os.environ.get('GITHUB_REPOSITORY',''))
