@@ -54,9 +54,20 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('tree',type=Path);parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     args.output.parent.mkdir(parents=True,exist_ok=True)
-    try: result=check(args.tree)
+    try:
+        result=check(args.tree)
     except Exception as e:
-        args.output.write_text(json.dumps({'Build Compatibility':'FAIL','reason':str(e)},indent=2)+'\n');raise
+        failure={'Build Compatibility':'FAIL','reason':str(e)}
+        # Keep a machine-readable review packet for unknown upstream signatures. This is diagnostic
+        # evidence only: it does not approve the profile or relax the fail-closed gate.
+        try:
+            observed, critical=inspect(args.tree)
+            failure['observed_profile']=observed
+            failure['critical']=critical
+        except Exception as diagnostic_error:
+            failure['diagnostic_error']=str(diagnostic_error)
+        args.output.write_text(json.dumps(failure,indent=2)+'\n')
+        raise
     args.output.write_text(json.dumps(result,indent=2)+'\n')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:
