@@ -92,8 +92,7 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       BUILD_CHANNEL: ${{ inputs.channel }}
       UPSTREAM_VERSION: ${{ inputs.upstream_version }}
-      ARTIFACT_IDENTITY: ${{ inputs.channel == 'nightly' && format('nightly-{0}-{1}', inputs.upstream_version, inputs.upstream_sha)
-        || inputs.upstream_version }}
+      ARTIFACT_IDENTITY: ${{ inputs.upstream_version }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
