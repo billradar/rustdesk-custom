@@ -3,7 +3,6 @@
 [English](README.md) · 中文
 
 [![Stable Release Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
-[![Nightly - Development artifacts](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
 [![CI - Patch and Build compatibility](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
 
 ## 项目简介
@@ -82,7 +81,7 @@ python3 -m pip install -r requirements.txt
 ```bash
 git clone https://github.com/billradar/rustdesk-custom.git
 cd rustdesk-custom
-git checkout test/development
+git checkout development
 ```
 
 修改前可以运行：
