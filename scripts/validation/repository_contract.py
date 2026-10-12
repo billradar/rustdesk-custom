@@ -235,13 +235,18 @@ def check_stable_runtime_contract(files: list[Path], errors: list[str]) -> None:
     elif not (wrapper.stat().st_mode & 0o111):
         fail(errors, wrapper, "Stable Android compiler wrapper must be executable", "mode with execute bit", oct(wrapper.stat().st_mode & 0o777))
 
-    windows = paths.get(".github/workflows/build-stable-windows.yml")
-    if windows:
+    for workflow_path in (
+        ".github/workflows/build.yml",
+        ".github/workflows/build-stable-windows.yml",
+    ):
+        windows = paths.get(workflow_path)
+        if not windows:
+            continue
         text = windows.read_text(encoding="utf-8")
         if "bytes((0x50,0x45,0,0))" not in text:
-            fail(errors, windows, "Stable Windows PE signature check must use explicit NUL bytes")
+            fail(errors, windows, "Windows PE signature check must use explicit NUL bytes")
         if "int.from_bytes(b[off+4:off+6],'little')!=0x8664" not in text:
-            fail(errors, windows, "Stable Windows PE machine check must validate AMD64 explicitly")
+            fail(errors, windows, "Windows PE machine check must validate AMD64 explicitly")
 
 def check_workflow_syntax(files: list[Path], errors: list[str]) -> None:
     for path in files:
