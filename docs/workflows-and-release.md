@@ -13,7 +13,7 @@
 | `.github/workflows/build-stable-android.yml` | Stable Android 构建入口；生产签名在独立的受保护 Job 中执行 |
 | `.github/workflows/tag.yml` | Stable 解析、revision 预检、构建、产物聚合、Android 生产签名门禁及 Dry-run / Draft / Release 决策 |
 | `.github/workflows/upstream-stable.yml` | 定期发现官方 Stable Release，并对下游 Stable 流水线执行去重后的 dry-run 路由 |
-| `.github/workflows/upstream-main-compatibility.yml` | 定期验证官方上游默认分支的兼容性；与 Stable 发布和 Nightly 产物路由分离 |
+| `.github/workflows/upstream-main-compatibility.yml` | 定期验证官方上游默认分支的兼容性；不构建或发布 Nightly 产物 |
 | `.github/workflows/android-yubikey-signing-test.yml` | 需要手动触发并明确授权的 YubiKey 签名冒烟测试，不发布或提升 Release |
 
 本表用于导航。触发器、输入、权限、条件、Job 依赖和发布语义均以当前工作流文件为准。不要引用仓库中不存在的旧工作流名。
