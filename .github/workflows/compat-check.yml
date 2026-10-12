@@ -92,7 +92,7 @@ jobs:
 
         assert re.fullmatch(''[0-9a-f]{40}'',os.environ[''UP_SHA''])
 
-        assert os.environ[''CHANNEL''] in (''ci'',''stable'',''nightly'')
+        assert os.environ[''CHANNEL''] in (''ci'',''stable'')
 
         PYCODE
 
