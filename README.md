@@ -3,7 +3,6 @@
 English · [中文](README.zh-CN.md)
 
 [![Stable Release Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
-[![Nightly - Development artifacts](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
 [![CI - Patch and Build compatibility](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
 
 RustDesk Custom is a maintained RustDesk distribution built from upstream RustDesk with a reviewed set of custom patches.
@@ -122,7 +121,7 @@ Clone the repository and work from the development branch:
 ~~~bash
 git clone https://github.com/billradar/rustdesk-custom.git
 cd rustdesk-custom
-git checkout test/development
+git checkout development
 ~~~
 
 Before making a larger change, run the repository contract:
