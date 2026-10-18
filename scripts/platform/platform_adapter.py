@@ -25,7 +25,7 @@ def inspect(tree,platform,arch):
 
 def check(tree,platform,arch):
  p,j=inspect(tree,platform,arch);known=json.loads((ROOT/'metadata/platform/adapter-profiles.json').read_text())
- if p['signature'] not in known['approved'].get(platform,[]):raise ValueError('BUILD_COMPAT: unreviewed official '+platform+' build interface')
+ if p['signature'] not in known['approved'].get(platform,[]):raise ValueError('BUILD_COMPAT: unreviewed official '+platform+' build interface; observed signature='+p['signature'])
  if p['official_disabled']:raise ValueError('BUILD_COMPAT: official job is disabled')
  return p,j
 

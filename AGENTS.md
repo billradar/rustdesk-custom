@@ -65,7 +65,7 @@ These are baseline records, not a promise that every current upstream commit or 
 | `scripts/source/` | Fetch, prepare, patch, and verify clean upstream source | Prepared source, submodules, or patch application fails |
 | `scripts/build/` | Platform build entrypoints and build configuration | Toolchain invocation or build flags change |
 | `scripts/platform/` | Adapter checks, target execution, packaging and artifact validation | Platform matrix/build adapter/package behavior changes |
-| `scripts/release/` | Channel identity, naming, preflight, aggregation, qualification and publication | CI qualification or Stable/Nightly release behavior changes |
+| `scripts/release/` | Channel identity, naming, preflight, aggregation, qualification and publication | CI qualification or Stable release behavior changes |
 | `scripts/signing/` | Android signing identity/configuration and signing workflow helpers | Android signing policy or certificate validation changes |
 | `tools/android-signing-bridge/` | Java bridge for hardware-backed Android signing; includes mock and production interfaces/tests | PKCS#11, PIN handling, ECDSA encoding or signing flow changes |
 | `scripts/validation/` | Repository, compatibility, change-classification and native configuration contracts | Architecture policy or change classification changes |
@@ -178,25 +178,25 @@ Workflow names and interfaces are live contracts. Read the YAML and the scripts 
 - `.github/workflows/build.yml` and `.github/workflows/build-platform.yml`: build orchestration and target-level platform execution.
 - `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target-build entry points.
 - `.github/workflows/tag.yml`: Stable resolve/preflight/build/aggregate/qualification and release-mode routing. Current manual release modes are `dry-run`, `draft`, and `release`. Default is `dry-run`.
-- `.github/workflows/nightly.yml`: dispatch-driven Nightly build/artifact pipeline. Current modes are `build` and `draft`; it must not publish Stable and must not access Android production signing.
+- Nightly build and publication workflows are retired; `scripts/validation/repository_contract.py` must fail if they are reintroduced.
 - `.github/workflows/upstream-stable.yml`: polls/detects official Stable release and routes a deduplicated Stable dry-run only. It is not publication authorization.
-- `.github/workflows/upstream-nightly.yml`: validates the official upstream scheduled Flutter Nightly run, successful completion, exact `head_sha`, published prerelease/assets and freshness, then routes the locked SHA to the downstream Nightly workflow.
-- `.github/workflows/upstream-main-compatibility.yml`: periodic compatibility signal for the official upstream default branch; separate from Stable and Nightly release routing.
+- No upstream Nightly router is retained.
+- `.github/workflows/upstream-main-compatibility.yml`: periodic compatibility signal for the official upstream default branch; it does not build or publish Nightly artifacts.
 - `.github/workflows/android-yubikey-signing-test.yml`: manually and explicitly authorized signing smoke test; it is not a Stable release and must not publish one.
 - `.github/actions/android-yubikey-sign/`: local reusable signing action implementation.
 
-Never assume a file exists because an old guide mentions it. In particular, `.github/workflows/upstream-event-router.yml` is not the current router. Do not reintroduce it as a supposed source of truth.
+Never assume a file exists because an old guide mentions it. Retired Nightly workflow names must not be resurrected. In particular, `.github/workflows/upstream-event-router.yml` is not a current router.
 
 ### Channel rules
 
 - **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
 - **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, performs preflight and required builds/validation, and follows the explicit release mode.
-- **Nightly** is a development artifact path. Automated routing must be based on the validated official upstream Nightly run and exact SHA; the downstream workflow revalidates the provenance. Manual refs are a separate explicit use case and must not be misrepresented as official automated Nightly provenance.
-- **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable or Nightly publication.
+- **Nightly** is retired. Do not recreate a Nightly workflow or accept `nightly` as a release/qualification channel without an explicit architecture decision and matching contract change.
+- **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable publication.
 - A router-triggered dry-run is not release authorization. A successful build or qualification is not publication authorization.
 - Preserve duplicate suppression and safe retry behavior. Do not weaken freshness checks, SHA revalidation, run matching, or downstream provenance checks just because the upstream router already performed validation.
 
-`force_rebuild` is a current input of `ci.yml`; do not assume it exists in `nightly.yml` or `tag.yml`. `promote_stable` is not a current workflow interface. Never document or add an input based on memory rather than the live YAML.
+`force_rebuild` is a current input of `ci.yml`; do not assume it exists in `tag.yml`. `promote_stable` is not a current workflow interface. Never document or add an input based on memory rather than the live YAML.
 
 ## 7. CI classification and contracts
 
@@ -239,7 +239,7 @@ Current intended configuration, which must be rechecked against live workflow an
 
 ### Non-negotiable isolation
 
-- Ordinary CI, compatibility checks, Nightly, and ordinary build jobs must not access the production signing Environment, production PIN, YubiKey, PKCS#11 device, or production signing step.
+- Ordinary CI, compatibility checks, and ordinary build jobs must not access the production signing Environment, production PIN, YubiKey, PKCS#11 device, or production signing step.
 - Production signing must remain behind the intended Stable workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
 - The manual signing smoke test is separately gated and must never publish/promote a release.
 - Never commit a keystore, private key, PIN, password, token, PKCS#11 credential, or sensitive signing output.
@@ -284,9 +284,9 @@ Report separately whether a source revision was prepared, an artifact built, art
 
 The intended long-lived branches are only:
 - `main`: protected stable integration/release baseline;
-- `test/development`: shared development/integration branch.
+- `development`: shared development/integration branch.
 
-Normal work is done directly on `test/development`, validated, and proposed to `main` through a PR. Do not create `feature/*`, `fix/*`, `docs/*`, or other temporary branches unless the user explicitly asks or a platform constraint makes one necessary. Do not commit directly to protected `main`.
+Normal work is done directly on `development`, validated, and proposed to `main` through a PR. Do not create `feature/*`, `fix/*`, `docs/*`, or other temporary branches unless the user explicitly asks or a platform constraint makes one necessary. Do not commit directly to protected `main`.
 
 Before branch-sensitive operations, inspect both branch heads, merge base, ahead/behind counts, unique commits, and changed files. Tree equality does not prove ancestry. Git history is audit evidence: do not routinely squash/rebase away the shared development history.
 
@@ -333,7 +333,7 @@ Before changing anything:
 3. Confirm the actual implementation and affected interfaces; do not guess from filenames.
 4. Classify the change as documentation-only or functional.
 5. Identify impact on upstream identity, patchset selection, target matrix, qualification, artifact provenance, signing isolation, and release behavior.
-6. Make the smallest coherent change on `test/development` unless explicitly instructed otherwise.
+6. Make the smallest coherent change directly on `development` unless explicitly instructed otherwise.
 7. Run relevant local contracts/tests and inspect exit codes.
 8. Review the full diff for unrelated changes, stale references, leaked secrets, and weakened gates.
 9. Open/update a PR to `main` when integration is expected; do not merge without explicit authorization.
@@ -345,7 +345,7 @@ Never claim that CI passed, a PR merged, branches synchronized, a release publis
 
 - Inspect the live repository; do not invent files, inputs, target support, or workflow behavior.
 - Preserve exact source identity, patch integrity, provenance, qualification, and fail-closed validation.
-- Preserve the boundary between ordinary CI/Nightly and production Android signing.
+- Preserve the boundary between ordinary CI and production Android signing.
 - Do not turn build evidence into runtime, upgrade, or release evidence.
 - Do not perform destructive Git operations or merge/publish/sign without the required explicit authorization.
 - Keep changes scoped. Report broader audit findings separately instead of bundling unrelated refactors.

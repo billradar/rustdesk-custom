@@ -159,27 +159,22 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_ci_cd_isolation_contract(self):
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         stable=yaml.safe_load((ROOT/'.github/workflows/upstream-stable.yml').read_text())
-        nightly=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
         tag=(ROOT/'.github/workflows/tag.yml').read_text()
         ci_text=(ROOT/'.github/workflows/ci.yml').read_text()
         self.assertNotIn('promote_stable',ci['on']['workflow_dispatch']['inputs'])
         self.assertNotIn('gh workflow run tag.yml',ci_text)
         stable_run=stable['jobs']['route']['steps'][-1].get('run','')
-        nightly_run=nightly['jobs']['route']['steps'][-1].get('run','')
         self.assertNotIn('ci-qualification-',stable_run)
         self.assertNotIn('workflow run ci.yml',stable_run)
         self.assertIn('gh workflow run tag.yml',stable_run)
-        self.assertIn('gh workflow run nightly.yml',nightly_run)
-        self.assertIn('flutter-nightly.yml/runs',str(nightly))
-        self.assertIn('per_page=20',str(nightly))
-        self.assertIn("item.get('conclusion') == 'success'",str(nightly))
-        self.assertIn("item.get('event') == 'schedule'",str(nightly))
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)
         self.assertIn('Select Stable patchset by version boundary',tag)
         self.assertIn('patchsets.py --version "$UPSTREAM_VERSION"',tag)
         self.assertNotIn('--exact',tag)
         self.assertNotIn('ci-qualification',tag)
+        self.assertFalse((ROOT/'.github/workflows/nightly.yml').exists())
+        self.assertFalse((ROOT/'.github/workflows/upstream-nightly.yml').exists())
 
     def test_qualification_identity_and_lookup_semantics(self):
         common='c'*64; sos='d'*64
@@ -226,48 +221,9 @@ class ChannelPolicyTests(unittest.TestCase):
              patch.object(qualification,'_download_qualification',return_value=reused):
             self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'FOUND')
 
-    def test_nightly_uses_default_branch_not_stable(self):
-        with patch.object(channel,'api',return_value={'default_branch':'development'}),patch.object(channel,'resolve_ref',return_value='a'*40) as resolve,patch.object(channel,'outputs') as output:
-            channel.resolve('nightly');resolve.assert_called_once_with('development')
-            self.assertEqual(output.call_args.args[0]['upstream_sha'],'a'*40)
-            self.assertEqual(output.call_args.args[0]['upstream_tag'],'')
-    def test_nightly_explicit_ref_bypasses_default_branch(self):
-        with patch.object(channel,'api',return_value={'default_branch':'development'}),patch.object(channel,'resolve_ref',return_value='a'*40) as resolve,patch.object(channel,'outputs') as output:
-            channel.resolve('nightly','test')
-            resolve.assert_called_once_with('test')
-            self.assertEqual(output.call_args.args[0]['upstream_ref'],'test')
-
-    def test_nightly_workflow_uses_official_test_ref_and_router_default_branch(self):
-        nightly=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
-        router=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
-        nightly_text=(ROOT/'.github/workflows/nightly.yml').read_text()
-        router_text=(ROOT/'.github/workflows/upstream-nightly.yml').read_text()
-        self.assertIn('UPSTREAM_TEST_REF:',nightly_text)
-        self.assertIn('upstream_nightly_run_id',nightly['on']['workflow_dispatch']['inputs'])
-        self.assertIn('upstream_nightly_release_updated_at',nightly['on']['workflow_dispatch']['inputs'])
-        self.assertIn('Automated Nightly requires an exact upstream SHA',nightly_text)
-        self.assertIn('Upstream Nightly run SHA does not match upstream_ref',nightly_text)
-        self.assertIn('No Nightly release asset was updated since this run started',nightly_text)
-        self.assertIn('NIGHTLY_RELEASE_UPDATED_AT',nightly_text)
-        self.assertIn('Official nightly release changed after routing; retry the router',nightly_text)
-        self.assertIn('flutter-nightly.yml',nightly_text)
-        self.assertIn('upstream_nightly_run_id',router_text)
-        self.assertIn('upstream_nightly_release_updated_at',router_text)
-        self.assertIn("-f upstream_nightly_run_id='${{ needs.detect.outputs.nightly_run_id }}'",router_text)
-        self.assertNotIn('schedule',nightly['on'])
-        self.assertIn("repos/rustdesk/rustdesk/actions/workflows/flutter-nightly.yml",router_text)
-        self.assertIn('actions/workflows/flutter-nightly.yml/runs',router_text)
-        self.assertIn('?event=schedule&status=success&per_page=20',router_text)
-        self.assertIn('releases/tags/nightly',router_text)
-        self.assertIn("release_updated_at = release.get('updated_at')",router_text)
-        self.assertIn('fresh_assets',router_text)
-        self.assertNotIn("release.get('updated_at','') < run.get('updated_at','')",router_text)
-        self.assertIn("asset['size'] <= 0",router_text)
-        self.assertIn("asset.get('state') != 'uploaded'",router_text)
-        self.assertIn("-f upstream_ref='${{ needs.detect.outputs.nightly_sha }}'",router_text)
-        self.assertIn('--ref main',router_text)
-        self.assertIn('workflow_dispatch',router['on'])
-        self.assertNotIn('billradar/rustdesk-custom:test/development',nightly_text+router_text)
+    def test_nightly_channel_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'Nightly build has been retired'):
+            channel.resolve('nightly')
 
     def test_public_release_assets_are_binary_only(self):
         source=(ROOT/'scripts/release/qualification.py').read_text()
@@ -339,15 +295,13 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('commits/',resolve_text)
         self.assertIn('40',resolve_text)
         self.assertNotIn('gh workflow run tag.yml',path.read_text())
-        self.assertNotIn('gh workflow run nightly.yml',path.read_text())
         self.assertFalse((ROOT/'.github/workflows/upstream-main-sync.yml').exists())
 
     def test_entry_and_release_permissions(self):
         docs={p.name:yaml.safe_load(p.read_text()) for p in (ROOT/'.github/workflows').glob('*.yml')}
-        self.assertNotIn('schedule',docs['nightly.yml']['on'])
-        self.assertIn('workflow_dispatch',docs['nightly.yml']['on'])
+        self.assertNotIn('nightly.yml',docs)
+        self.assertNotIn('upstream-nightly.yml',docs)
         self.assertTrue(all(j.get('permissions',{}).get('contents')!='write' for j in docs['ci.yml']['jobs'].values()))
-        self.assertEqual(docs['nightly.yml']['jobs']['draft']['permissions']['contents'],'write')
         matrix=docs['build.yml']['jobs']['build']['strategy']['matrix']['include']
         self.assertEqual({(r['platform'],r['arch'],r['variant']) for r in matrix},{('windows','x86_64','standard'),('windows','x86_64','sos')})
         planned=json.loads((ROOT/'metadata/platform/matrix.json').read_text())['entries']
