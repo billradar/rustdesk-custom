@@ -1,5 +1,5 @@
 name: Android YubiKey production signing
-description: Validate, sign and verify Stable Android artifacts with the Environment-bound YubiKey job
+description: Validate, sign and verify channel-bound Android artifacts with the Environment-bound YubiKey job
 inputs:
   arches:
     required: true
@@ -36,6 +36,7 @@ runs:
       shell: bash
       env:
         ARCHES: ${{ inputs.arches }}
+        SIGNING_CHANNEL: ${{ inputs.channel }}
         UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
         UPSTREAM_VERSION: ${{ inputs.upstream_version }}
         PATCHSET: ${{ inputs.patchset }}

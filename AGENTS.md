@@ -40,7 +40,7 @@ These filenames are useful orientation, not a complete semantic specification. R
 
 ### Wayland unattended build flavor
 
-- `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard source. No separate manual trigger remains. Tag draft/release revalidates and attaches both DEBs; Nightly aggregates them as Actions artifacts.
+- `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard source. No separate manual trigger remains. Tag draft/release revalidates and attaches both DEBs; Nightly aggregates them as Actions artifacts and includes them in its signed prerelease Draft.
 - `build-wayland-target.yml` reuses verified Standard source and records `build_flavor: unattended-wayland` separately from the source variant.
 - Canonical x86_64/ARM64 targets remain experimental in `metadata/platform/matrix.json`, excluded from the generic planner (`enabled: false`) and explicitly opted into this workflow (`workflow_enabled: true`). Do not promote without real build evidence.
 - `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and two-target aggregate gates.
@@ -188,7 +188,7 @@ Workflow names and interfaces are live contracts. Read the YAML and the scripts 
 - `.github/workflows/build.yml` and `.github/workflows/build-platform.yml`: build orchestration and target-level platform execution.
 - `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target-build entry points.
 - `.github/workflows/tag.yml`: Stable resolve/preflight/build/aggregate/qualification and release-mode routing. Current manual release modes are `dry-run`, `draft`, and `release`. Default is `dry-run`.
-- Nightly was explicitly restored by the user on 2026-10-25 as an artifact-only channel. `nightly.yml` reuses the Tag source/build cores and full supported matrix, without production signing or Release writes; `nightly_contract.py` enforces that boundary.
+- Nightly was explicitly restored and then requested to match Tag signing/Draft behavior by the user on 2026-10-25. `nightly.yml` reuses the Tag build cores; protected-main `draft` mode uses the same direct Environment-bound YubiKey signer and creates an immutable prerelease Draft. `dry-run` stays build-only; no Nightly public publication path exists. `nightly_contract.py` enforces these boundaries.
 - `.github/workflows/upstream-stable.yml`: polls/detects official Stable release and routes a deduplicated Stable dry-run only. It is not publication authorization.
 - The upstream-main monitor also generates unknown-interface review packets in a read-only job and can create report-only draft PRs from protected `main`. It never changes approved profiles or runs unknown upstream build scripts. `scripts/upstream/interface_review.py` and its contract own this boundary.
 - Automation exception to the two-branch rule: `automation/upstream-interface-<interface-signature>` branches may contain only a generated JSON report under `docs/upstream-interface-reviews/`, are deduplicated, and are never reset or auto-merged. This isolation is required to propose a report without modifying `main` or shared `development`.
@@ -203,7 +203,7 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 
 - **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
 - **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, performs preflight and required builds/validation, and follows the explicit release mode.
-- **Nightly** follows completed official Nightly runs, prepares independent Standard/SOS sources, builds the supported Tag matrix, and aggregates exact-run artifact evidence. It is not Stable qualification. Android is not production-signed; there is no automated Release publication or draft creation. Generic `channel.py resolve` remains CI/Stable-only; use `nightly.py` for verified-run resolution.
+- **Nightly** follows completed official Nightly runs, prepares independent Standard/SOS sources, builds the supported Tag matrix, and aggregates exact-run artifact evidence. It is not Stable qualification. Protected-main draft mode requires production-signed Android artifacts (both v2 and v3), revalidates the complete package set in its write-permission job and creates a prerelease Draft; it never publishes publicly. Generic `channel.py resolve` remains CI/Stable-only; use `nightly.py` for verified-run resolution.
 - **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable publication.
 - A router-triggered dry-run is not release authorization. A successful build or qualification is not publication authorization.
 - Preserve duplicate suppression and safe retry behavior. Do not weaken freshness checks, SHA revalidation, run matching, or downstream provenance checks just because the upstream router already performed validation.
@@ -252,7 +252,7 @@ Current intended configuration, which must be rechecked against live workflow an
 ### Non-negotiable isolation
 
 - Ordinary CI, compatibility checks, and ordinary build jobs must not access the production signing Environment, production PIN, YubiKey, PKCS#11 device, or production signing step.
-- Production signing must remain behind the intended Stable workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
+- Production signing must remain behind the intended Tag or protected-main Nightly draft workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
 - The manual signing smoke test is separately gated and must never publish/promote a release.
 - Never commit a keystore, private key, PIN, password, token, PKCS#11 credential, or sensitive signing output.
 - Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.

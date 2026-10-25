@@ -53,9 +53,10 @@ overwritten: requesting Wayland while reusing an older revision without matching
 Wayland evidence fails. Disable the option to reuse that old revision, or build a
 new patch identity through the existing revision mechanism.
 
-Nightly includes both DEBs in its aggregated Actions package artifact and remains
-artifact-only. No new publication, Android production signing, YubiKey access or
-PIN authorization is introduced by this integration.
+Nightly includes both DEBs in its aggregated Actions package artifact and, in
+protected-main draft mode, its prerelease Draft. Android signing in that mode uses
+the same separately protected direct YubiKey job as Tag. Wayland itself never
+receives a PIN or signing-host access; Nightly never publishes publicly.
 
 Per-target artifacts remain `rustdesk-wayland-<version>-<upstream-sha>-<arch>`;
 `wayland-qualification-<run-id>` records the pair, with `stable`/`nightly` channel

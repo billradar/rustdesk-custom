@@ -29,6 +29,22 @@ def parse_arches(value):
     return arches
 
 
+def validate_signing_context(channel, env):
+    if channel not in ('stable', 'nightly'):
+        fail('SIGNING: unsupported production signing channel')
+    if channel == 'nightly':
+        expected = {
+            'GITHUB_REPOSITORY': 'billradar/rustdesk-custom',
+            'GITHUB_REF': 'refs/heads/main',
+            'GITHUB_EVENT_NAME': 'workflow_dispatch',
+            'GITHUB_WORKFLOW_REF': 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main',
+        }
+        if any(env.get(k) != v for k, v in expected.items()):
+            fail('SIGNING: Nightly requires protected main workflow context')
+
+
+channel = os.environ.get('SIGNING_CHANNEL', 'stable')
+validate_signing_context(channel, os.environ)
 arches = parse_arches(os.environ["ARCHES"])
 if not os.environ.get("YUBIKEY_PIV_PIN"):
     print("ENVIRONMENT PIN AVAILABLE: FAIL")
@@ -61,6 +77,7 @@ for arch in arches:
     source = json.loads((bundle / "source-manifest.json").read_text())
     expected = {
         "platform": "android", "variant": "standard", "architecture": arch,
+        "channel": channel,
         "package_type": "debug-signed-apk",
         "signed_status": "TEST SIGNED / NOT PRODUCTION SIGNED",
         "custom_repository": os.environ["GITHUB_REPOSITORY"],
@@ -163,6 +180,7 @@ for arch in arches:
     )
     (destination / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
     receipt = {
+        "channel": channel,
         "certificate_sha256": certs[0].lower(), "expected_certificate_sha256": EXPECTED_FINGERPRINT,
         "certificate_match": "PASS", "package_name": match.group(1),
         "version_code": int(match.group(2)), "version_name": match.group(3), "abis": [abi],

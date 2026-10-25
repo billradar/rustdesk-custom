@@ -132,8 +132,33 @@ v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口
 
 全矩阵和同批来源验证通过后，安装包、SHA256SUMS 与验证报告出现在
 `nightly-qualification-<run-id>` Actions 产物中；单目标失败不会发布完整批次。
-Nightly 没有 Release 写权限，不自动创建草稿或公开发布；不触碰 Android
-生产签名 Environment、YubiKey 或 PIN。Android 包不是生产签名包。
+Nightly 的 `release_mode` 默认 `draft`：仅主分支的直接签名 job 绑定 Android
+生产签名 Environment 与 YubiKey，全部构建和签名验证通过后创建 prerelease Draft。
+普通构建 job 不接触 PIN，Draft job 也不接触 PIN；没有自动公开发布环节。
+`dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
 运行时与真实远程连接状态保持未测试，构建成功不能证明锁屏兼容。
 
 定时工作流需要合入 main 后才会生效；代码/契约检查通过与真实全平台构建成功应分别报告。
+
+### Nightly signing and Draft contract
+
+The user explicitly requested Tag-equivalent signing and Draft stages. The router
+now requests `release_mode=draft`. Signing/draft mode is restricted to repository
+main, the exact Nightly workflow reference and workflow_dispatch; development must
+use dry-run. The direct Android signing job shares Tag's Environment, runner labels,
+PIV identity, v2/v3 requirements and physical-key concurrency lock. The input APK
+channel must match `SIGNING_CHANNEL`; Nightly receipts also record the channel.
+
+The complete parent aggregate requires all three production-signed Android ABIs
+in Draft mode. A separate contents-write job downloads the exact same-run signed
+packages and optional Wayland pair and revalidates them before any write. It scans
+completed build logs, creates an immutable Nightly-specific prerelease Draft,
+uploads packages and SHA256SUMS, verifies remote names, sizes and SHA256 digests,
+and only then records automation_state=complete. Upload failures leave an incomplete
+private Draft; an existing tag/release/draft is never overwritten. Public publication
+is absent. Windows/macOS signing status remains the same as Tag (not enabled).
+
+Run titles/dedup distinguish Draft from dry-run and Wayland-on from Wayland-off,
+so a successful build-only run cannot suppress the router's signed Draft batch.
+This workflow must be merged to main before production signing/Draft can execute;
+unit and CI checks do not prove a hardware signing operation occurred.

@@ -47,7 +47,7 @@ class NightlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.discover(r)
 
     def test_dedup_and_bounded_retries(self):
-        row=dict(display_title='Nightly 17 / '+'a'*40, head_sha='a'*40, event='workflow_dispatch',
+        row=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true', head_sha='a'*40, event='workflow_dispatch',
                  head_branch='main', status='completed', conclusion='failure')
         state=lambda rows:nightly.route_state(rows,'17','a'*40)
         self.assertEqual(state([]),'RETRY')
@@ -55,6 +55,8 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(state([dict(row,conclusion='success')]),'SUCCESS')
         self.assertEqual(state([dict(row,status='queued')]),'ACTIVE')
         self.assertEqual(state([dict(row,head_sha='c'*40)]),'RETRY')
+        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
+        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'RETRY')
 
     def test_route_rejects_non_main_before_dispatch(self):
         with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
@@ -92,25 +94,42 @@ class NightlyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):nightly.aggregate(root,d)
                 gate.assert_not_called()
 
-    def test_workflows_reuse_tag_cores_without_write_or_signing(self):
+    def test_workflows_reuse_tag_cores_with_isolated_signing_and_draft(self):
         w=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
         self.assertEqual(set(w['on']),{'workflow_dispatch'})
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['default'],'draft')
         self.assertIn('github.repository',w['jobs']['resolve']['if'])
         for family in ['windows','platforms','android']:
             j=w['jobs'][family+'-build']
             self.assertEqual(j['uses'],'./.github/workflows/build-stable-'+family+'.yml')
             self.assertEqual(j['with']['channel'],'nightly')
             self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
-        for j in w['jobs'].values():
-            self.assertNotIn('environment',j)
-            self.assertNotIn('write',json.dumps(j.get('permissions',{})))
-        for token in ['YUBIKEY','self-hosted','qualification.py release','qualification.py draft','secrets: inherit','continue-on-error']:
-            self.assertNotIn(token,(ROOT/'.github/workflows/nightly.yml').read_text())
+        for name,j in w['jobs'].items():
+            if name!='android-sign':self.assertNotIn('environment',j)
+            if name!='draft':self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name!='android-sign':self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(j))
+        signer=w['jobs']['android-sign'];tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']['android-sign']
+        for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
+        for name in ['android-sign','draft']:
+            guard=w['jobs'][name]['if']
+            for token in ["github.ref == 'refs/heads/main'","github.event_name == 'workflow_dispatch'","inputs.release_mode == 'draft'",'.github/workflows/nightly.yml@refs/heads/main']:
+                self.assertIn(token,guard)
+        action=next(x for x in signer['steps'] if x.get('uses')=='./.github/actions/android-yubikey-sign')
+        self.assertEqual(action['with']['channel'],'nightly')
         aggregate=w['jobs']['aggregate']
-        self.assertEqual(set(aggregate['needs']),{'resolve','windows-build','platforms-build','android-build','wayland-build'})
-        self.assertEqual(aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'],'false')
+        self.assertEqual(set(aggregate['needs']),{'resolve','windows-build','platforms-build','android-build','wayland-build','android-sign'})
+        self.assertIn("needs.android-sign.result == 'success'",aggregate['if'])
+        self.assertIn("inputs.release_mode == 'draft'",aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'])
         self.assertTrue(any('nightly.py aggregate' in s.get('run','') for s in aggregate['steps']))
+        unsigned=next(x for x in aggregate['steps'] if x.get('with',{}).get('pattern')=='android-build-input-nightly-*')
+        self.assertEqual(unsigned['if'],"inputs.release_mode == 'dry-run'")
+        draft=w['jobs']['draft']
+        self.assertEqual(draft['permissions'],{'contents':'write','actions':'read'})
+        self.assertIn('aggregate',draft['needs'])
+        self.assertTrue(any('nightly.py draft' in s.get('run','') for s in draft['steps']))
+        for token in ['qualification.py release','secrets: inherit','continue-on-error']:
+            self.assertNotIn(token,(ROOT/'.github/workflows/nightly.yml').read_text())
 
     def test_all_platform_review_happens_before_bridge_dependencies(self):
         w=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())
@@ -131,6 +150,58 @@ class NightlyTests(unittest.TestCase):
             w=yaml.safe_load((ROOT/f'.github/workflows/build-stable-{family}.yml').read_text())
             names += [s['with']['name'] for s in w['jobs']['plan']['steps'] if s.get('uses','').startswith('actions/upload-artifact@')]
         self.assertEqual(len(names),len(set(names)))
+
+
+class NightlyDraftTests(unittest.TestCase):
+    def setUp(self):
+        self.env={'GITHUB_REPOSITORY':nightly.REPO,'GITHUB_REF':'refs/heads/main',
+                  'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':nightly.REPO+'/.github/workflows/nightly.yml@refs/heads/main',
+                  'RELEASE_MODE':'draft','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'9'}
+        self.data=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
+                       official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
+
+    def perform(self, mode='ok'):
+        import hashlib
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env):
+            root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
+            (assets/'client.apk').write_bytes(b'validated package fixture')
+            (assets/'SHA256SUMS').write_text(hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()+'  client.apk\n')
+            discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
+            uploaded=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
+            if mode=='bad-upload':uploaded[0]['digest']='sha256:'+'0'*64
+            def api(path,missing=False):
+                if '/releases/tags/' in path:return {'id':7} if mode=='existing' else None
+                if '/git/ref/tags/' in path:return None
+                if '/releases?' in path:return []
+                if '/actions/runs/' in path:return {'jobs':[]}
+                if '/assets?' in path:return uploaded
+                raise AssertionError(path)
+            report=dict(result='PASS',android_production_signing=mode!='unsigned')
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',return_value={'id':7,'draft':True,'prerelease':True}) as write:
+                if mode!='ok':
+                    with self.assertRaises(ValueError):nightly.draft(root,discovery)
+                    if mode in ['unsigned','existing']:write.assert_not_called()
+                    if mode=='bad-upload':self.assertEqual(write.call_count,1)
+                else:
+                    result=nightly.draft(root,discovery)
+                    self.assertTrue(result['draft']);self.assertTrue(result['prerelease'])
+                    self.assertEqual(write.call_count,2)
+                    for call in write.call_args_list:
+                        self.assertTrue(call.args[2]['draft']);self.assertTrue(call.args[2]['prerelease'])
+                    self.assertIn('automation_state=complete',write.call_args.args[2]['body'])
+                    self.assertNotIn('--clobber',upload.call_args.args)
+                    self.assertTrue(result['tag'].startswith('nightly-1.5.1-17-'))
+
+    def test_create_verified_draft_only(self):self.perform()
+    def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
+    def test_existing_release_never_overwritten(self):self.perform('existing')
+    def test_bad_upload_digest_cannot_mark_draft_complete(self):self.perform('bad-upload')
+
+    def test_wrong_branch_event_or_mode_blocks_before_validation(self):
+        for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),('RELEASE_MODE','dry-run')]:
+            with patch.dict(os.environ,dict(self.env,**{key:value})),patch.object(nightly,'aggregate') as validate:
+                with self.assertRaises(ValueError):nightly.draft(Path('.'),Path('.'))
+                validate.assert_not_called()
 
 
 if __name__ == '__main__':unittest.main()

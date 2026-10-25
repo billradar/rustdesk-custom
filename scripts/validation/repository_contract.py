@@ -33,6 +33,7 @@ LEGACY_TEXT_MARKERS = (
     "tests/",
 )
 SIGNING_WORKFLOWS = {
+    ".github/workflows/nightly.yml",
     ".github/workflows/tag.yml",
     ".github/workflows/android-yubikey-signing-test.yml",
 }
