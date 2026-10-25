@@ -33,7 +33,7 @@ def contracts(tree, variant, patchset=None):
             raise RuntimeError('Missing dependency file: ' + file)
         texts[file] = path.read_text()
     hbb = texts['libs/hbb_common/src/config.rs']
-    for token in ('HARD_SETTINGS', 'DEFAULT_SETTINGS', 'BUILTIN_SETTINGS',
+    for token in ('HARD_SETTINGS', 'DEFAULT_SETTINGS', 'BUILTIN_SETTINGS', 'OVERWRITE_SETTINGS',
                   'pub fn get_option(',
                   'pub fn get_rendezvous_server(', 'pub fn is_incoming_only(', 'pub fn is_disable_settings('):
         if token not in hbb:
@@ -50,6 +50,9 @@ def contracts(tree, variant, patchset=None):
                   'verification-method', 'allow-hide-cm', 'relay-server'):
         if token not in common:
             raise RuntimeError('Missing Common API/config dependency: ' + token)
+    helper = common[common.index('fn apply_custom_build_defaults()'):common.index('\npub fn load_custom_client()')]
+    if not re.search(r'config::OVERWRITE_SETTINGS\.write\(\)\.unwrap\(\)\.insert\(\s*"allow-always-software-render"\.to_owned\(\),\s*"N"\.to_owned\(\),?\s*\)', helper):
+        raise RuntimeError('Missing forced-off software rendering policy; saved Y must not override it')
     flutter = texts['src/flutter_ffi.rs'] + texts['src/flutter.rs']
     for token in ('fn main_get_buildin_option(', 'fn is_incoming_only(', 'fn is_disable_settings(', 'fn session_add('):
         if token not in flutter:

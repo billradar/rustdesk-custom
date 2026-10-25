@@ -11,12 +11,16 @@ index 0d46baf..4170534 100644
  }
  
  #[inline]
-@@ -2357,10 +2357,31 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
+@@ -2357,10 +2357,35 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
      ThrottledInterval::new(i)
  }
  
 +// Preserve the legacy custom-client defaults; password security redesign is deferred.
 +fn apply_custom_build_defaults() {
++    // Hardware DRM/EGL capture must not inherit forced software rendering, even from saved settings.
++    config::OVERWRITE_SETTINGS.write().unwrap().insert(
++        "allow-always-software-render".to_owned(), "N".to_owned(),
++    );
 +    {
 +        let mut hard_settings = config::HARD_SETTINGS.write().unwrap();
 +        hard_settings.insert("password".to_owned(), env!("RUSTDESK_PASSWORD").to_owned());
@@ -43,7 +47,7 @@ index 0d46baf..4170534 100644
          return;
      }
      let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
-@@ -2377,6 +2398,7 @@ pub fn load_custom_client() {
+@@ -2377,6 +2402,7 @@ pub fn load_custom_client() {
          };
          read_custom_client(&data.trim());
      }

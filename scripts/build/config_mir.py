@@ -26,7 +26,7 @@ def literals(text):
 
 def verify(text,values):
     defaults=literals(function(text,'common::apply_custom_build_defaults'))
-    if not {'password','verification-method','use-permanent-password',values['RUSTDESK_PASSWORD']}<=defaults:
+    if not {'password','verification-method','use-permanent-password','allow-always-software-render','N',values['RUSTDESK_PASSWORD']}<=defaults:
         raise ValueError('PLATFORM_API: compiled password/defaults MIR mismatch (values withheld)')
     relay=values.get('RUSTDESK_RELAY_SERVER')
     if relay and not {'relay-server',relay}<=defaults:

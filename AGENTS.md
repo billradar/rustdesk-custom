@@ -46,6 +46,8 @@ These filenames are useful orientation, not a complete semantic specification. R
 - `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and two-target aggregate gates.
 - Follow `docs/wayland-unattended.md`; run the new contract and affected release contracts. ARM means ARM64 here; upstream's dedicated DRM job directly defines only x86_64.
 
+Both Common patch generations force `allow-always-software-render=N` via `OVERWRITE_SETTINGS`, overriding saved/custom settings in all variants and platforms. Keep the structural, native-helper and compiled-MIR gates aligned; do not reduce this to a default that persisted `Y` can override.
+
 ### Patchset selection is version-bounded
 
 The current selector is `scripts/upstream/patchsets.py`:
