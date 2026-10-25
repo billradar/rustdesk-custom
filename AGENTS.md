@@ -152,10 +152,11 @@ A filename, release label, branch name, or manually edited JSON field is not suf
 
 The README currently summarizes these intended platform/variant families:
 - Windows x86_64: Standard and SOS;
+- Windows ARM64: Standard and SOS as experimental Tag/Nightly targets; builds and release assets are enabled, runtime qualification is pending;
 - Linux x86_64 and ARM64: Standard and SOS;
 - macOS x86_64 and ARM64: Standard and SOS;
 - Android ARM64, ARMv7, and x86_64: Standard;
-- Windows ARM64 is planned; Web is blocked by the reviewed upstream build definition; iOS is not a normal supported release target unless the live matrix says otherwise.
+- Web is blocked by the reviewed upstream build definition; iOS is not a normal supported release target unless the live matrix says otherwise.
 
 Always confirm these summaries against the current matrix before changing support claims or workflow behavior.
 
@@ -203,6 +204,7 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 
 - **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
 - **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, performs preflight and required builds/validation, and follows the explicit release mode.
+- Windows ARM64 is opt-in by canonical matrix metadata as an experimental `default_build`: Tag and Nightly run it by default and include successful ARM64 EXE/MSI assets, while CI's normal target plan remains x86_64-only. Do not call it fully supported until exact-run package and runtime evidence justify promotion.
 - **Nightly** follows completed official Nightly runs, prepares independent Standard/SOS sources, builds the supported Tag matrix, and aggregates exact-run artifact evidence. It is not Stable qualification. Protected-main draft mode requires production-signed Android artifacts (both v2 and v3), revalidates the complete package set in its write-permission job and creates a prerelease Draft; it never publishes publicly. Generic `channel.py resolve` remains CI/Stable-only; use `nightly.py` for verified-run resolution.
 - **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable publication.
 - A router-triggered dry-run is not release authorization. A successful build or qualification is not publication authorization.

@@ -10,6 +10,8 @@ import sys
 
 from scripts.release.naming import windows_installer_name
 
+WINDOWS_ARCH = os.environ.get('WINDOWS_ARCH', 'x86_64')
+if WINDOWS_ARCH not in ('x86_64', 'aarch64'): raise ValueError('Invalid Windows architecture')
 EXPECTED_SHA = os.environ.get('UPSTREAM_EXPECTED_SHA')
 BRIDGE_FILES = [
     'src/bridge_generated.rs', 'src/bridge_generated.io.rs',
@@ -62,7 +64,7 @@ def build_windows_installers(tree, release, packages, version):
     packed = tree / 'target/release/rustdesk-portable-packer.exe'
     if not packed.is_file() or packed.stat().st_size == 0:
         raise ValueError('Windows self-extracted EXE was not generated')
-    exe = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'exe')
+    exe = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'exe', WINDOWS_ARCH)
     shutil.copy2(packed, exe)
 
     # Upstream builds the MSI from res/msi using the reviewed WiX project.
@@ -80,18 +82,21 @@ def build_windows_installers(tree, release, packages, version):
         [
             'msbuild', 'msi.sln',
             '-p:Configuration=Release',
-            '-p:Platform=x64',
+            '-p:Platform='+('ARM64' if WINDOWS_ARCH=='aarch64' else 'x64'),
             '/p:TargetVersion=Windows10',
         ],
         cwd=msi_root, check=True, env=env,
     )
     candidates = sorted((tree / 'res/msi/Package/bin').glob('*/Release/en-us/Package.msi'))
-    if not candidates:
+    if len(candidates)!=1:
         raise ValueError('Windows MSI was not generated')
     msi = candidates[0]
     if msi.stat().st_size == 0:
         raise ValueError('Generated Windows MSI is empty')
-    msi_out = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'msi')
+    msi_out = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'msi', WINDOWS_ARCH)
+    if WINDOWS_ARCH=='aarch64':
+        script = "$i=New-Object -ComObject WindowsInstaller.Installer; $d=$i.OpenDatabase($args[0],0); $t=$d.SummaryInformation(0).Property(7); if ($t -notmatch '^Arm64;') { throw 'MSI template is not ARM64' }"
+        subprocess.run(['powershell.exe','-NoProfile','-Command',script,str(msi.resolve())],check=True)
     shutil.copy2(msi, msi_out)
     return exe, msi_out
 
@@ -120,7 +125,7 @@ elif command == 'package':
     if variant not in ('standard', 'sos'):
         raise SystemExit('Invalid variant')
     output, root = Path(output), Path(root)
-    release = tree / 'flutter/build/windows/x64/runner/Release'
+    release = tree / ('flutter/build/windows/'+('arm64' if WINDOWS_ARCH=='aarch64' else 'x64')+'/runner/Release')
     for name in ['rustdesk.exe', 'librustdesk.dll', 'flutter_windows.dll', 'dylib_virtual_display.dll']:
         if not (release / name).is_file() or (release / name).stat().st_size == 0:
             raise SystemExit(f'Missing compiled output: {name}')
@@ -159,7 +164,7 @@ elif command == 'package':
         raise SystemExit('Invalid artifact version')
     suffix = '' if configuration == 'PRODUCTION' else '-test'
     os.environ['BUILD_VARIANT'] = variant
-    folder = output / f'rustdesk-{version}-{variant}{suffix}-windows-x86_64'
+    folder = output / f'rustdesk-{version}-{variant}{suffix}-windows-{WINDOWS_ARCH}'
     if folder.exists():
         raise SystemExit('Artifact destination already exists; never overwrite it')
     sha = git(tree, 'rev-parse', 'HEAD')
@@ -182,7 +187,7 @@ elif command == 'package':
         'channel': os.environ.get('BUILD_CHANNEL', 'stable'),
         'hbb_common_sha': git(tree / 'libs/hbb_common', 'rev-parse', 'HEAD'),
         'custom_repository': os.environ.get('GITHUB_REPOSITORY', 'billradar/rustdesk-custom'),
-        'architecture': 'x86_64',
+        'architecture': WINDOWS_ARCH,
         'configuration_validation': 'PASS',
         'password_configuration_validation': 'PASS',
         'password_validation_method': 'built-dll-native-bridge',
@@ -191,7 +196,7 @@ elif command == 'package':
         'sos_patch_hash': patch_hash(root, 'sos') if variant == 'sos' else None,
         'build_time': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'workflow_run': os.environ.get('GITHUB_RUN_ID'),
-        'platform': 'windows-x86_64',
+        'platform': 'windows-'+WINDOWS_ARCH,
         'signed': False,
         'configuration': configuration,
         'runtime_ui_validation': 'SKIPPED BY USER',
@@ -204,10 +209,16 @@ elif command == 'package':
                     build_adapter_signature=manifest['build_adapter_signature'])
         from scripts.build.build_adapter import check
         profile = check(tree)
-        engine = os.environ.get('ENGINE_ARCHIVE_SHA256', '')
+        if WINDOWS_ARCH=='aarch64':
+            from scripts.build.windows_arm64 import verify_transform
+            profile=verify_transform(tree)
+            shutil.copy2(tree/'windows-arm64-transform.json',folder/'windows-arm64-transform.json')
+        engine = os.environ.get('ENGINE_LIBRARY_SHA256' if WINDOWS_ARCH=='aarch64' else 'ENGINE_ARCHIVE_SHA256', '')
         if not re.fullmatch('[0-9a-f]{64}', engine):
             raise SystemExit('Official engine download identity missing')
-        info['engine_archive_sha256'] = engine
+        info['engine_library_sha256' if WINDOWS_ARCH=='aarch64' else 'engine_archive_sha256'] = engine
+        if WINDOWS_ARCH=='aarch64' and engine!=hashlib.sha256((release/'flutter_windows.dll').read_bytes()).hexdigest():
+            raise ValueError('Packaged native engine differs from precached engine')
         info['build_toolchain'] = {k: profile[k] for k in ('rust', 'flutter', 'llvm', 'vcpkg', 'helper_commit', 'bridge_rust', 'bridge_flutter', 'frb', 'cargo_expand')}
         shutil.copy2(tree / 'source-manifest.json', folder / 'source-manifest.json')
     if configuration == 'PRODUCTION':

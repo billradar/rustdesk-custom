@@ -121,7 +121,7 @@ compatibility path. Nothing is automatically approved, merged or published.
 
 构建复用 Tag 的 `prepare-source.yml`、Windows/Linux/macOS/Android 构建核心，
 从同批 Common 补丁源码分出 Standard/SOS；目标及 ARM64/amd64 范围来自同一平台矩阵。
-Android 仍仅 Standard，Windows ARM64 等未支持目标不会因此自动启用。
+Android 仍仅 Standard。Windows ARM64 作为实验性目标由平台矩阵默认加入 Tag/Nightly，安装包通过架构与来源校验后随发布资产附带；普通 CI 仍不自动构建它，运行时资格待补充。
 DRM/Wayland 实验构建已作为默认开启的子流程接入，保留独立审核策略和资格结果，不冒充普通 Standard 目标。
 v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口继续阻断。
 

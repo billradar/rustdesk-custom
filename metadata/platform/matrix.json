@@ -36,25 +36,27 @@
       "platform": "windows",
       "arch": "aarch64",
       "variant": "standard",
-      "enabled": false,
-      "support_status": "PLANNED",
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
       "runner": "windows-11-arm",
       "id": "windows-aarch64-standard",
       "required": false,
-      "experimental": false,
-      "reason": "Dedicated ARM Flutter/Bridge and native probe adapter not yet implemented; not an x64 bridge consumer"
+      "experimental": true,
+      "reason": "Native ARM64 Flutter 3.44/bridge/MSI recipe configured for Tag and Nightly; awaiting exact-run build evidence",
+      "default_build": true
     },
     {
       "platform": "windows",
       "arch": "aarch64",
       "variant": "sos",
-      "enabled": false,
-      "support_status": "PLANNED",
+      "enabled": true,
+      "support_status": "EXPERIMENTAL",
       "runner": "windows-11-arm",
       "id": "windows-aarch64-sos",
       "required": false,
-      "experimental": false,
-      "reason": "Dedicated ARM Flutter/Bridge and native probe adapter not yet implemented; not an x64 bridge consumer"
+      "experimental": true,
+      "reason": "Native ARM64 Flutter 3.44/bridge/MSI recipe configured for Tag and Nightly; awaiting exact-run build evidence",
+      "default_build": true
     },
     {
       "platform": "linux",

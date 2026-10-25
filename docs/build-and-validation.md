@@ -80,6 +80,13 @@ toolchain drift and unreviewed runners still fail closed. The separate unattende
 workflow remains pinned to its own reviewed 1.5.0 DRM policy; this profile does not
 authorize a new libdrmtap pin or new unattended packages.
 
+Windows ARM64 is a separate experimental lane on the native `windows-11-arm`
+runner. It uses Flutter 3.44 and a same-source ARM64 bridge, validates the Dart,
+Flutter engine, Rust output, helper DLL, EXE and MSI architecture, then emits
+architecture-specific Standard/SOS installer assets. Tag and Nightly include this
+lane by default; normal CI remains x86_64-only. Exact-run compilation and runtime
+qualification are still needed before promoting it to supported.
+
 ## Public upstream test-key fixture during source preparation
 
 Nightly run 40198211193 reached official bridge generation successfully but its

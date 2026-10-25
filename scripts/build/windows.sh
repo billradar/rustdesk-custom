@@ -3,7 +3,7 @@ set -euo pipefail
 variant=${1:?Variant required}
 ref=${2:?Upstream ref required}
 [[ "$variant" == standard || "$variant" == sos ]] || exit 1
-[[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* ]] || { echo 'Windows x86_64 Git Bash is required.' >&2; exit 1; }
+[[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* ]] || { echo 'Windows Git Bash is required.' >&2; exit 1; }
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 python3 "$root/scripts/source/verify_source.py" --config-only
 mkdir -p "$root/.work" "$root/artifacts"
@@ -43,8 +43,13 @@ if [[ -z "${PREPARED_SOURCE_DIR:-}" ]]; then
     : "${RUSTDESK_BRIDGE_DIR:?Generate the official Flutter bridge first (see test-build.yml)}"
     python3 "$root/scripts/release/package.py" restore-bridge "$workspace" "$RUSTDESK_BRIDGE_DIR"
 fi
-pushd "$workspace" >/dev/null
 # The corresponding official build.py owns Rust/Cargo and Flutter compilation.
-python3 build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+if [[ "${WINDOWS_ARCH:-x86_64}" == aarch64 ]]; then
+    python3 -m scripts.build.windows_arm64 transform "$workspace" --bridge "${RUSTDESK_ARM64_BRIDGE_DIR:?Dedicated ARM64 bridge required}"
+fi
+pushd "$workspace" >/dev/null
+flags=(--portable --flutter --skip-portable-pack --hwcodec)
+[[ "${WINDOWS_ARCH:-x86_64}" == aarch64 ]] || flags+=(--vram)
+python3 build.py "${flags[@]}"
 popd >/dev/null
 python3 "$root/scripts/release/package.py" package "$workspace" "$variant" "$ref" "$root/artifacts" "$root"

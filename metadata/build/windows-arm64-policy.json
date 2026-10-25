@@ -1,0 +1,22 @@
+{
+  "profiles": [
+    {
+      "signature": "f7e2a62a707393c4ea97c42fe00a5a9cca89c87666a11e64e643dd028c663489",
+      "runner": "windows-11-arm",
+      "target": "aarch64-pc-windows-msvc",
+      "triplet": "arm64-windows-static",
+      "flutter": "3.44.9",
+      "bridge_flutter": "3.44.8",
+      "patch_sha256": "5d1400a5361dd14b366adb4ae28d82933528e727eaf6fe9dc6a43b3b744ff210"
+    },
+    {
+      "signature": "fead600e14fce31e0d4f16df77bf86ab2166f01f80464c59b0714c05f53c96f2",
+      "runner": "windows-11-arm",
+      "target": "aarch64-pc-windows-msvc",
+      "triplet": "arm64-windows-static",
+      "flutter": "3.44.9",
+      "bridge_flutter": "3.44.8",
+      "patch_sha256": "5d1400a5361dd14b366adb4ae28d82933528e727eaf6fe9dc6a43b3b744ff210"
+    }
+  ]
+}

@@ -29,7 +29,7 @@ def plan(channel,experimental=False):
     if channel not in ('ci','stable','nightly'):
         raise ValueError('Unsupported build channel')
     selected=[dict(e,id=target(e)) for e in entries() if e.get('enabled') and
-              (e['support_status']=='SUPPORTED' or (experimental and e['support_status']=='EXPERIMENTAL'))]
+              (e['support_status']=='SUPPORTED' or ((experimental or (channel in ('stable','nightly') and e.get('default_build'))) and e['support_status']=='EXPERIMENTAL'))]
     if not selected:raise ValueError('Empty supported matrix')
     for e in selected:e['required']=e['support_status']=='SUPPORTED'
     return {'channel':channel,'selected':selected,'include_experimental':experimental}
@@ -46,7 +46,7 @@ def aggregate(root,channel,experimental):
     for path in root.rglob('diagnostic.json'):
         data=json.loads(path.read_text());diagnostics[data['target']]=data
     for path in root.rglob('build-info.json'):
-        i=json.loads(path.read_text());platform=i['platform'].removesuffix('-x86_64');name=platform+'-'+i['architecture']+'-'+i['variant']
+        i=json.loads(path.read_text());platform='windows' if i['platform'].startswith('windows-') else i['platform'];name=platform+'-'+i['architecture']+'-'+i['variant']
         if i.get('build_flavor'):raise ValueError('PROVENANCE: dedicated build flavor cannot satisfy ordinary Stable/CI targets')
         if name not in expected:raise ValueError('PROVENANCE: unexpected artifact '+name)
         if name in found:raise ValueError('PROVENANCE: duplicate artifact '+name)
@@ -56,9 +56,10 @@ def aggregate(root,channel,experimental):
         if i['channel']!=channel:raise ValueError('PROVENANCE: channel mismatch')
         if platform=='android' and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Android aggregate requires verified production identity')
         found[name]=i;folders[name]=path.parent
-    windows={i['variant']:i for n,i in found.items() if n.startswith('windows-x86_64-')}
-    if len(windows)==2:
-        validate_prepared(windows,{v:folders['windows-x86_64-'+v] for v in windows})
+    for arch in ('x86_64','aarch64'):
+        windows={i['variant']:i for n,i in found.items() if n.startswith('windows-'+arch+'-')}
+        if len(windows)==2:
+            validate_prepared(windows,{v:folders['windows-'+arch+'-'+v] for v in windows})
     if found:
         first=next(iter(found.values()))
         for i in found.values():
@@ -96,7 +97,7 @@ def aggregate(root,channel,experimental):
     if required_pass and channel in ('stable', 'nightly'):
         assets=out/'assets';assets.mkdir(exist_ok=True)
         for name,e in expected.items():
-            if not e['required']:continue
+            if name not in found:continue
             info=found[name];folder=folders[name]
             if e['platform']=='windows':
                 packages_dir=folder/'packages'
@@ -106,7 +107,7 @@ def aggregate(root,channel,experimental):
                 if {p.suffix.lower() for p in packages} != {'.exe','.msi'}:
                     raise ValueError('PACKAGE: Windows release requires exactly one EXE and one MSI')
                 for package in packages:
-                    filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix)
+                    filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix, e['arch'])
                     shutil.copy2(package,assets/filename)
             else:
                 packages_dir=folder/'packages'

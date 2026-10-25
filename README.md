@@ -26,6 +26,7 @@ The repository is a **maintenance and release repository**, not a full RustDesk 
 | Platform | Architecture | Standard | SOS |
 | --- | --- | :---: | :---: |
 | Windows | x86_64 | ✓ | ✓ |
+| Windows | ARM64 (experimental) | ✓ | ✓ |
 | Linux | x86_64 | ✓ | ✓ |
 | Linux | ARM64 | ✓ | ✓ |
 | macOS | x86_64 | ✓ | ✓ |
@@ -34,7 +35,7 @@ The repository is a **maintenance and release repository**, not a full RustDesk 
 | Android | ARMv7 | ✓ | — |
 | Android | x86_64 | ✓ | — |
 
-Windows ARM64 and iOS are planned. Web is currently blocked by the reviewed upstream build definition.
+Windows ARM64 is built experimentally by Tag and Nightly; its packages are included in those release assets. Runtime qualification is pending. iOS is planned. Web is currently blocked by the reviewed upstream build definition.
 
 The authoritative platform matrix is [metadata/platform/matrix.json](metadata/platform/matrix.json).
 
