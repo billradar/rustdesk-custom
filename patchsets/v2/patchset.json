@@ -43,5 +43,30 @@
     "config_api_preflight": "pass",
     "workflow_run": "https://github.com/billradar/rustdesk-custom-test/actions/runs/36828069170",
     "custom_repository_sha": "ceb48ac57fcf4aa2d3467ff942637af8c51a2c3d"
-  }
+  },
+  "compatibility_snapshots": [
+    {
+      "upstream_version": "1.5.1",
+      "upstream_ref": "master",
+      "upstream_tag": null,
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "inspected_at": "2026-10-25",
+      "custom_repository_sha": "aa65afc25c893b285db8a8b6c424605d733925fc",
+      "workflow_run": "https://github.com/billradar/rustdesk-custom/actions/runs/40175351746",
+      "patches_changed": false,
+      "validation": {
+        "standard_patch_apply": "pass",
+        "sos_patch_apply": "pass",
+        "standard_rust_api": "pass",
+        "sos_rust_api": "pass",
+        "bridge": "pass",
+        "standard_flutter_analyze": "pass",
+        "sos_flutter_analyze": "pass",
+        "ci_qualification": "pass"
+      },
+      "runtime_ui": "not_tested",
+      "real_remote_session": "not_tested",
+      "package_build": "not_run"
+    }
+  ]
 }

@@ -37,3 +37,14 @@
 ## 5. 什么时候需要重新验证
 
 上游 SHA、补丁内容、patchset 选择、构建适配器、目标矩阵或来源清单结构发生变化时，都应重新运行相关验证。仅更新文档不应触发完整构建。
+
+## 1.5.1 source compatibility
+
+The 1.5.1 development snapshot `1297da6d186e58d9096be24072ae3998cdbbf8fe`
+uses `v2` unchanged. Standard/SOS Rust configuration API compilation, bridge
+generation, both Flutter analyses and CI qualification passed in run
+[40175351746](https://github.com/billradar/rustdesk-custom/actions/runs/40175351746).
+The exact evidence commit and upstream identity are recorded in the v2 manifest.
+This is not a claim about an unobserved future 1.5.1 tag, native packages or real
+remote-session behavior. A v3 generation is reserved for an actual incompatible
+upstream API boundary, not a new version number alone.

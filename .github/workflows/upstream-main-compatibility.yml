@@ -76,3 +76,64 @@ jobs:
       upstream_ref: ${{ needs.resolve.outputs.upstream_branch }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: ci
+
+
+  interface-review:
+    name: Record unknown build interface without approving it
+    needs: resolve
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    outputs:
+      review_needed: ${{ steps.review.outputs.review_needed }}
+    env:
+      PYTHONPATH: .
+      UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - name: Fetch immutable official source for static inspection only
+      run: bash scripts/source/prepare.sh "$UPSTREAM_SHA" .work/review-source
+    - id: review
+      name: Record differences and independently check both patch variants
+      run: python3 scripts/upstream/interface_review.py collect --source .work/review-source --sha "$UPSTREAM_SHA" --out .work/interface-review
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: steps.review.outputs.review_needed == 'true'
+      with:
+        name: upstream-interface-review-${{ github.run_id }}
+        path: .work/interface-review/proposal.json
+        if-no-files-found: error
+        retention-days: 30
+
+  propose-interface-review:
+    name: Propose report-only review draft
+    needs: interface-review
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      needs.interface-review.result == 'success' &&
+      needs.interface-review.outputs.review_needed == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    env:
+      PYTHONPATH: .
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: upstream-interface-review-${{ github.run_id }}
+        path: .work/interface-review
+    - name: Create or deduplicate review draft; never change approved profiles
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 scripts/upstream/interface_review.py publish --packet .work/interface-review/proposal.json
