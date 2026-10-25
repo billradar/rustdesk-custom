@@ -1,0 +1,132 @@
+name: Nightly Build Pipeline
+run-name: Nightly ${{ inputs.official_run_id || 'latest' }} / ${{ github.sha }}
+env:
+  PYTHONPATH: .
+'on':
+  workflow_dispatch:
+    inputs:
+      official_run_id:
+        type: string
+        default: ''
+        description: Successful official flutter-nightly run ID; empty = latest successful
+      expected_sha:
+        type: string
+        default: ''
+        description: Optional exact SHA guard, required by the automatic router
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: nightly-${{ inputs.official_run_id || 'latest' }}-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.event_name == 'workflow_dispatch' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+      upstream_version: ${{ steps.resolve.outputs.upstream_version }}
+      patchset: ${{ steps.resolve.outputs.patchset }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - name: Nightly source, matrix and signing isolation contracts
+      run: python3 -m scripts.release.nightly_contract
+    - id: resolve
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
+        EXPECTED_SHA: ${{ inputs.expected_sha }}
+      run: python3 scripts/release/nightly.py resolve --official-run-id "$OFFICIAL_RUN_ID" --expected-sha "$EXPECTED_SHA"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: nightly-discovery-${{ github.run_id }}
+        path: .work/nightly-discovery.json
+        if-no-files-found: error
+  prepare:
+    needs: resolve
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+  windows-build:
+    needs: [resolve, prepare]
+    uses: ./.github/workflows/build-stable-windows.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  platforms-build:
+    needs: [resolve, prepare]
+    uses: ./.github/workflows/build-stable-platforms.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  android-build:
+    needs: [resolve, prepare]
+    uses: ./.github/workflows/build-stable-android.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  aggregate:
+    needs: [resolve, windows-build, platforms-build, android-build]
+    runs-on: ubuntu-22.04
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      BUILD_CONFIGURATION: PRODUCTION
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'false'
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-nightly-*
+        path: .work/all-targets
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: nightly-discovery-${{ github.run_id }}
+        path: .work/discovery
+    - name: Revalidate complete matrix, exact source and same-run artifacts
+      run: python3 scripts/release/nightly.py aggregate --discovery .work/discovery/nightly-discovery.json
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: nightly-qualification-${{ github.run_id }}
+        path: .work/qualification-aggregate
+        if-no-files-found: error
+        retention-days: 30

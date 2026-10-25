@@ -26,8 +26,8 @@ def entries():
     return rows
 
 def plan(channel,experimental=False):
-    if channel not in ('ci','stable'):
-        raise ValueError('Unsupported channel; Nightly build has been retired')
+    if channel not in ('ci','stable','nightly'):
+        raise ValueError('Unsupported build channel')
     selected=[dict(e,id=target(e)) for e in entries() if e.get('enabled') and
               (e['support_status']=='SUPPORTED' or (experimental and e['support_status']=='EXPERIMENTAL'))]
     if not selected:raise ValueError('Empty supported matrix')
@@ -93,7 +93,7 @@ def aggregate(root,channel,experimental):
         for file in sorted(folder.rglob('*')):
             if file.is_file():rows.append(hashlib.sha256(file.read_bytes()).hexdigest()+'  '+name+'/'+file.relative_to(folder).as_posix())
     (out/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
-    if required_pass and channel == 'stable':
+    if required_pass and channel in ('stable', 'nightly'):
         assets=out/'assets';assets.mkdir(exist_ok=True)
         for name,e in expected.items():
             if not e['required']:continue
@@ -351,7 +351,7 @@ def build_release_body(official_body, metadata):
 
 def _release(root, publish, channel='stable', experimental=False):
     if channel != 'stable':
-        raise ValueError('Only Stable release qualification is supported; Nightly build has been retired')
+        raise ValueError('Only Stable supports release publication; Nightly is artifact-only')
     from scripts.upstream.resolve import api
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
@@ -457,7 +457,7 @@ def release(root, channel='stable', experimental=False): _release(root, True, ch
 if __name__=='__main__':
     a=argparse.ArgumentParser()
     a.add_argument('mode',choices=['check','plan','aggregate','draft','release','publish-existing','lookup','verify-ci'])
-    a.add_argument('--channel',choices=['stable'],default='stable')
+    a.add_argument('--channel',choices=['stable','nightly'],default='stable')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
     a.add_argument('--repository',default=os.environ.get('GITHUB_REPOSITORY',''))

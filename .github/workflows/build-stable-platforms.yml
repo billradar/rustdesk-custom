@@ -40,7 +40,7 @@ jobs:
         echo "count=$count" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: target-plan-${{ github.run_id }}
+        name: target-plan-platforms-${{ github.run_id }}
         path: .work/target-plan.json
         if-no-files-found: error
   platforms:

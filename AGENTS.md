@@ -188,22 +188,22 @@ Workflow names and interfaces are live contracts. Read the YAML and the scripts 
 - `.github/workflows/build.yml` and `.github/workflows/build-platform.yml`: build orchestration and target-level platform execution.
 - `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target-build entry points.
 - `.github/workflows/tag.yml`: Stable resolve/preflight/build/aggregate/qualification and release-mode routing. Current manual release modes are `dry-run`, `draft`, and `release`. Default is `dry-run`.
-- Nightly build and publication workflows are retired; `scripts/validation/repository_contract.py` must fail if they are reintroduced.
+- Nightly was explicitly restored by the user on 2026-10-25 as an artifact-only channel. `nightly.yml` reuses the Tag source/build cores and full supported matrix, without production signing or Release writes; `nightly_contract.py` enforces that boundary.
 - `.github/workflows/upstream-stable.yml`: polls/detects official Stable release and routes a deduplicated Stable dry-run only. It is not publication authorization.
 - The upstream-main monitor also generates unknown-interface review packets in a read-only job and can create report-only draft PRs from protected `main`. It never changes approved profiles or runs unknown upstream build scripts. `scripts/upstream/interface_review.py` and its contract own this boundary.
 - Automation exception to the two-branch rule: `automation/upstream-interface-<interface-signature>` branches may contain only a generated JSON report under `docs/upstream-interface-reviews/`, are deduplicated, and are never reset or auto-merged. This isolation is required to propose a report without modifying `main` or shared `development`.
-- No upstream Nightly router is retained.
+- `upstream-nightly.yml` polls every 15 minutes at :07/:22/:37/:52 UTC, following the latest successful official `flutter-nightly.yml` run on the official default branch. Use its exact head SHA, never the moving `nightly` tag. Deduplicate by official run and custom SHA; stop after three failed attempts.
 - `.github/workflows/upstream-main-compatibility.yml`: periodic compatibility signal for the official upstream default branch; it does not build or publish Nightly artifacts.
 - `.github/workflows/android-yubikey-signing-test.yml`: manually and explicitly authorized signing smoke test; it is not a Stable release and must not publish one.
 - `.github/actions/android-yubikey-sign/`: local reusable signing action implementation.
 
-Never assume a file exists because an old guide mentions it. Retired Nightly workflow names must not be resurrected. In particular, `.github/workflows/upstream-event-router.yml` is not a current router.
+Never assume a file exists because an old guide mentions it. Nightly is owned by its explicit workflow and contracts; do not restore legacy release behavior. In particular, `.github/workflows/upstream-event-router.yml` is not a current router.
 
 ### Channel rules
 
 - **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
 - **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, performs preflight and required builds/validation, and follows the explicit release mode.
-- **Nightly** is retired. Do not recreate a Nightly workflow or accept `nightly` as a release/qualification channel without an explicit architecture decision and matching contract change.
+- **Nightly** follows completed official Nightly runs, prepares independent Standard/SOS sources, builds the supported Tag matrix, and aggregates exact-run artifact evidence. It is not Stable qualification. Android is not production-signed; there is no automated Release publication or draft creation. Generic `channel.py resolve` remains CI/Stable-only; use `nightly.py` for verified-run resolution.
 - **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable publication.
 - A router-triggered dry-run is not release authorization. A successful build or qualification is not publication authorization.
 - Preserve duplicate suppression and safe retry behavior. Do not weaken freshness checks, SHA revalidation, run matching, or downstream provenance checks just because the upstream router already performed validation.

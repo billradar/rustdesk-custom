@@ -18,8 +18,7 @@ class MatrixTests(unittest.TestCase):
         self.assertFalse(any(e['platform'] in ('android','ios','web') and e['variant']=='sos' for e in stable['selected']))
         stable_ids={e['id'] for e in stable['selected']}
         self.assertEqual(len(stable_ids),len(stable['selected']))
-        with self.assertRaisesRegex(ValueError, 'Nightly build has been retired'):
-            qualification.plan('nightly', True)
+        self.assertEqual(stable_ids, {e['id'] for e in qualification.plan('nightly')['selected']})
     def test_duplicate_forbidden_and_false_promotion_block(self):
         good=json.loads((ROOT/'metadata/platform/matrix.json').read_text())
         for edit in ('duplicate','android-sos','fake-supported','experimental-required'):

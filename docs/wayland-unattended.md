@@ -4,7 +4,7 @@
 `unattended-wayland` Linux flavor. It resolves an official Stable tag (default
 `1.5.0`) to an immutable SHA, selects the normal version-bounded patchset, and
 uses the same prepared Common/Standard source as the tag pipeline. It does not
-restart the retired Nightly channel, publish a release, sign Android artifacts,
+join the separate Nightly channel, publish a release, sign Android artifacts,
 or qualify the existing Stable target set.
 
 ## Targets and source identity

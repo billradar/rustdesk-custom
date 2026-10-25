@@ -173,8 +173,8 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('patchsets.py --version "$UPSTREAM_VERSION"',tag)
         self.assertNotIn('--exact',tag)
         self.assertNotIn('ci-qualification',tag)
-        self.assertFalse((ROOT/'.github/workflows/nightly.yml').exists())
-        self.assertFalse((ROOT/'.github/workflows/upstream-nightly.yml').exists())
+        self.assertTrue((ROOT/'.github/workflows/nightly.yml').exists())
+        self.assertTrue((ROOT/'.github/workflows/upstream-nightly.yml').exists())
 
     def test_qualification_identity_and_lookup_semantics(self):
         common='c'*64; sos='d'*64
@@ -222,7 +222,7 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(qualification.lookup_ci_qualification('repo','a'*40,'b'*40,'v2','v2')['status'],'FOUND')
 
     def test_nightly_channel_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'Nightly build has been retired'):
+        with self.assertRaisesRegex(ValueError, 'verified official-run Nightly resolver'):
             channel.resolve('nightly')
 
     def test_public_release_assets_are_binary_only(self):
@@ -299,8 +299,8 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_entry_and_release_permissions(self):
         docs={p.name:yaml.safe_load(p.read_text()) for p in (ROOT/'.github/workflows').glob('*.yml')}
-        self.assertNotIn('nightly.yml',docs)
-        self.assertNotIn('upstream-nightly.yml',docs)
+        self.assertIn('nightly.yml',docs)
+        self.assertIn('upstream-nightly.yml',docs)
         self.assertTrue(all(j.get('permissions',{}).get('contents')!='write' for j in docs['ci.yml']['jobs'].values()))
         matrix=docs['build.yml']['jobs']['build']['strategy']['matrix']['include']
         self.assertEqual({(r['platform'],r['arch'],r['variant']) for r in matrix},{('windows','x86_64','standard'),('windows','x86_64','sos')})

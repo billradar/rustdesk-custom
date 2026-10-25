@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Nightly must follow exact official success and never open production signing."""
+import base64
+import copy
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import yaml
+from scripts.release import nightly, qualification
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class NightlyTests(unittest.TestCase):
+    def run_fixture(self):
+        return dict(status='completed', conclusion='success', head_branch='master', event='schedule',
+                    path='.github/workflows/flutter-nightly.yml', head_repository={'full_name':nightly.OFFICIAL},
+                    head_sha='b'*40, id=17, html_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
+
+    def discover(self, run):
+        def api(path):
+            if path == 'repos/'+nightly.OFFICIAL:
+                return {'default_branch':'master'}
+            if '/contents/' in path:
+                self.assertIn('?ref='+'b'*40,path)
+                return {'content':base64.b64encode(b'[package]\nversion="1.5.1"\n').decode()}
+            if '/workflows/' in path:
+                return {'workflow_runs':[run]}
+            return run
+        with patch.object(nightly,'api',side_effect=api):
+            return nightly.discover('17')
+
+    def test_immutable_run_source_not_moving_nightly_tag(self):
+        d=self.discover(self.run_fixture())
+        self.assertEqual(d['upstream_sha'],'b'*40)
+        self.assertEqual(d['upstream_ref'],d['upstream_sha'])
+        self.assertEqual(d['upstream_tag'],'')
+        self.assertEqual(d['patchset'],'v2')
+
+    def test_failed_running_foreign_or_wrong_workflow_is_blocked(self):
+        for k,v in [('status','in_progress'),('conclusion','failure'),('head_branch','other'),
+                    ('event','pull_request'),('path','.github/workflows/ci.yml'),
+                    ('head_repository',{'full_name':'attacker/fork'}),('head_sha','nightly')]:
+            r=self.run_fixture();r[k]=v
+            with self.assertRaises(ValueError):self.discover(r)
+
+    def test_dedup_and_bounded_retries(self):
+        row=dict(display_title='Nightly 17 / '+'a'*40, head_sha='a'*40, event='workflow_dispatch',
+                 head_branch='main', status='completed', conclusion='failure')
+        state=lambda rows:nightly.route_state(rows,'17','a'*40)
+        self.assertEqual(state([]),'RETRY')
+        self.assertEqual(state([row]*3),'EXHAUSTED')
+        self.assertEqual(state([dict(row,conclusion='success')]),'SUCCESS')
+        self.assertEqual(state([dict(row,status='queued')]),'ACTIVE')
+        self.assertEqual(state([dict(row,head_sha='c'*40)]),'RETRY')
+
+    def test_route_rejects_non_main_before_dispatch(self):
+        with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
+            with self.assertRaises(ValueError):nightly.route({})
+            api.assert_not_called()
+
+    def test_route_dispatches_only_pinned_official_run(self):
+        env=dict(GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
+        with patch.dict(os.environ,env),patch.object(nightly,'api',return_value={'workflow_runs':[]}),patch.object(nightly.subprocess,'run') as dispatch:
+            nightly.route({'official_run_id':'17','upstream_sha':'b'*40})
+            args=dispatch.call_args.args[0]
+            self.assertIn('official_run_id=17',args)
+            self.assertIn('expected_sha='+'b'*40,args)
+            self.assertEqual(args[args.index('--ref')+1],'main')
+
+    def test_nightly_cannot_enter_stable_publication(self):
+        with patch.object(qualification,'aggregate') as gate:
+            with self.assertRaisesRegex(ValueError,'Only Stable'):
+                qualification._release(Path('.'),True,'nightly')
+            gate.assert_not_called()
+
+    def test_matrix_matches_tag_and_excludes_dedicated_flavors(self):
+        self.assertEqual({r['id'] for r in qualification.plan('nightly')['selected']},
+                         {r['id'] for r in qualification.plan('stable')['selected']})
+        self.assertFalse(any('wayland' in r['id'] for r in qualification.plan('nightly')['selected']))
+
+    def test_aggregate_rejects_stale_channel_and_run_before_qualification(self):
+        env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.1',PATCHSET='v2',GITHUB_SHA='a'*40,GITHUB_RUN_ID='9')
+        discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL)
+        info=dict(discovery,custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='')
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env),patch.object(qualification,'aggregate') as gate:
+            root=Path(td);d=root/'discovery.json';d.write_text(json.dumps(discovery))
+            for edit in [dict(channel='stable'),dict(build_run='8'),dict(custom_repository_sha='c'*40),dict(upstream_sha='c'*40),dict(upstream_tag='1.5.1')]:
+                (root/'build-info.json').write_text(json.dumps(dict(info,**edit)))
+                with self.assertRaises(ValueError):nightly.aggregate(root,d)
+                gate.assert_not_called()
+
+    def test_workflows_reuse_tag_cores_without_write_or_signing(self):
+        w=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
+        self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
+        self.assertEqual(set(w['on']),{'workflow_dispatch'})
+        self.assertIn('github.repository',w['jobs']['resolve']['if'])
+        for family in ['windows','platforms','android']:
+            j=w['jobs'][family+'-build']
+            self.assertEqual(j['uses'],'./.github/workflows/build-stable-'+family+'.yml')
+            self.assertEqual(j['with']['channel'],'nightly')
+            self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
+        for j in w['jobs'].values():
+            self.assertNotIn('environment',j)
+            self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+        for token in ['YUBIKEY','self-hosted','qualification.py release','qualification.py draft','secrets: inherit','continue-on-error']:
+            self.assertNotIn(token,(ROOT/'.github/workflows/nightly.yml').read_text())
+        aggregate=w['jobs']['aggregate']
+        self.assertEqual(set(aggregate['needs']),{'resolve','windows-build','platforms-build','android-build'})
+        self.assertEqual(aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'],'false')
+        self.assertTrue(any('nightly.py aggregate' in s.get('run','') for s in aggregate['steps']))
+
+    def test_polling_and_unique_plan_artifacts(self):
+        w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
+        self.assertEqual(w['on']['schedule'],[{'cron':'7,22,37,52 * * * *'}])
+        self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
+        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
+        names=[]
+        for family in ['platforms','android']:
+            w=yaml.safe_load((ROOT/f'.github/workflows/build-stable-{family}.yml').read_text())
+            names += [s['with']['name'] for s in w['jobs']['plan']['steps'] if s.get('uses','').startswith('actions/upload-artifact@')]
+        self.assertEqual(len(names),len(set(names)))
+
+
+if __name__ == '__main__':unittest.main()

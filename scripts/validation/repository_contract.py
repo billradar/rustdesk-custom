@@ -248,28 +248,13 @@ def check_stable_runtime_contract(files: list[Path], errors: list[str]) -> None:
             fail(errors, windows, "Windows PE machine check must validate AMD64 explicitly")
 
 
-def check_nightly_removed(files: list[Path], errors: list[str]) -> None:
-    """Nightly build/release automation is retired; CI and Stable remain."""
-    paths = {rel(p) for p in files}
-    for retired in (
-        ".github/workflows/nightly.yml",
-        ".github/workflows/upstream-nightly.yml",
-    ):
-        if retired in paths:
-            fail(errors, ROOT / retired, "retired Nightly workflow must not be present")
-    for path in files:
-        r = rel(path)
-        if r == "scripts/validation/repository_contract.py" or is_non_functional_document(path):
-            continue
-        if not r.startswith(".github/workflows/"):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        for retired in ("gh workflow run nightly.yml", "upstream-nightly.yml"):
-            if retired in text:
-                fail(errors, path, "active workflow references retired Nightly automation", "absent", retired)
+def check_nightly_contract(files: list[Path], errors: list[str]) -> None:
+    import subprocess
+    import os
+    result = subprocess.run([sys.executable, "-m", "scripts.release.nightly_contract"], cwd=ROOT,
+                            env=dict(os.environ, PYTHONPATH=str(ROOT)), capture_output=True, text=True)
+    if result.returncode:
+        errors.append("Nightly gates: " + result.stdout + result.stderr)
 
 
 def check_workflow_syntax(files: list[Path], errors: list[str]) -> None:
@@ -306,7 +291,7 @@ def main() -> int:
         ("metadata uniqueness", lambda: check_metadata(files, errors)),
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
         ("Stable runtime contract", lambda: check_stable_runtime_contract(files, errors)),
-        ("Nightly retirement contract", lambda: check_nightly_removed(files, errors)),
+        ("Nightly source and isolation contract", lambda: check_nightly_contract(files, errors)),
         ("Wayland isolation and negative contracts", lambda: check_wayland_contract(errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
     ]
