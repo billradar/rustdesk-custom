@@ -64,3 +64,18 @@ python3 scripts/signing/android_signing_contract.py
 - CI Qualification 通过，不等于已创建 Draft 或正式发布。
 - Android ABI 构建通过，不等于生产证书兼容性或应用覆盖安装升级已验证。
 - 只有实际执行并成功的验证，才能标记为 PASS。
+
+## Reviewed 1.5.1 CI interface
+
+The upstream CI snapshot `1297da6d186e58d9096be24072ae3998cdbbf8fe` has
+reviewed critical signature `fead600e14fce31e0d4f16df77bf86ab2166f01f80464c59b0714c05f53c96f2`.
+Rust/Flutter/LLVM/vcpkg, bridge generation and the Windows helper pin are unchanged
+from reviewed 1.5.0. The changed Windows job adds tests and opt-in update-metadata
+steps. `build.rs` changes the non-Flutter Sciter branch; `build.py` updates the
+optional DRM dependency. The custom workflow does not inherit upstream signing
+or publication credentials. This is an interface review, not build/runtime proof.
+
+`build_adapter_contract.py` checks that missing reviews, critical-file changes,
+toolchain drift and unreviewed runners still fail closed. The separate unattended
+workflow remains pinned to its own reviewed 1.5.0 DRM policy; this profile does not
+authorize a new libdrmtap pin or new unattended packages.

@@ -96,6 +96,39 @@
           ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
         }
       }
+    },
+    {
+      "signature": "fead600e14fce31e0d4f16df77bf86ab2166f01f80464c59b0714c05f53c96f2",
+      "upstream_version": "1.5.1",
+      "runner": "windows-2022",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "llvm": "15.0.6",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "bridge_flutter": "3.22.3",
+      "helper_commit": "ecd8d6a139eee76845ea66423fb739af450fda90",
+      "source_sbom_requested": true,
+      "id": "reviewed-151-1297da",
+      "reviewed_upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "review_notes": "Reviewed against official 1.5.0 fada664df7a294d1d1a9ca3e7cd3637069122f17. Windows x64 runner, Rust/Flutter/LLVM/vcpkg, bridge tools, helper pin and dropdown patch are unchanged. The Windows job adds release-mode feature-matched Rust tests and opt-in signed-update metadata validation/upload; this repository uses its own publication path and does not inherit those signing credentials. build.rs changes only the non-Flutter Sciter C++17/service-control branch; custom builds use Flutter. build.py changes only the opt-in libdrmtap pin from v0.5.8 to v0.5.12. This approves this exact critical interface only; source/patch/API/Flutter/bridge and package gates still run. The separate Wayland policy remains pinned to reviewed 1.5.0 and does not inherit approval for the new DRM dependency.",
+      "critical": {
+        "tools": {
+          "RUST_VERSION": "1.75",
+          "FLUTTER_VERSION": "3.24.5",
+          "LLVM_VERSION": "15.0.6",
+          "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+        },
+        "files": {
+          "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+          "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46",
+          ".github/workflows/bridge.yml": "b519191d9d9bd7f4350cc978c8fd6db366cf3152206835620a73f09a165b4d05",
+          ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+          ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
+        }
+      }
     }
   ]
 }

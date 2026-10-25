@@ -129,6 +129,7 @@ jobs:
     - name: Run release and domain contracts
       run: |
         set -euo pipefail
+        python3 scripts/build/build_adapter_contract.py
         python3 scripts/platform/wayland_contract.py
         python3 scripts/release/production_contract.py
         python3 scripts/release/qualification_contract.py
