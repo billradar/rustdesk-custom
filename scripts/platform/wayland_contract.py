@@ -144,6 +144,26 @@ class SourceContract(unittest.TestCase):
                 wayland.validate_source_policy(info,{'files':{'build.py':'wrong'}})
         with self.assertRaisesRegex(ValueError,'unreviewed'):wayland.policy_for_pin('unknown')
 
+    def test_post_build_arm_rewrites_are_exact_and_source_bound(self):
+        original=b'flutter build linux --release\nx64/release\n'
+        p=dict(wayland.policy(),build_py_sha256=__import__('hashlib').sha256(original).hexdigest())
+        manifest={'upstream_sha':'a'*40,'files':{'build.py':p['build_py_sha256']}}
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,UPSTREAM_EXPECTED_SHA='a'*40):
+            tree=Path(td);(tree/'source-manifest.json').write_text(json.dumps(manifest))
+            (tree/'.github/workflows').mkdir(parents=True)
+            (tree/'.github/workflows/flutter-build.yml').write_text('jobs: {build-rustdesk-linux-drm: {steps: []}}')
+            with patch.object(wayland.subprocess,'check_output',return_value=original),patch.object(wayland,'profiles',return_value=[p]),patch.object(wayland.adapter,'digest',return_value=p['upstream_drm_job_sha256']):
+                for arch,content in [('x86_64',original),('aarch64',original.replace(b'flutter build linux --release',b'flutter-elinux build linux --verbose').replace(b'x64/release',b'arm64/release'))]:
+                    (tree/'build.py').write_bytes(content)
+                    self.assertEqual(wayland.policy_for_built_tree(tree,arch)['libdrmtap_sha'],p['libdrmtap_sha'])
+                    (tree/'build.py').write_bytes(content+b'unreviewed')
+                    with self.assertRaisesRegex(ValueError,'post-build packaging modification'):wayland.policy_for_built_tree(tree,arch)
+                (tree/'source-manifest.json').write_text(json.dumps(dict(manifest,upstream_sha='b'*40)))
+                with self.assertRaisesRegex(ValueError,'source SHA'):wayland.policy_for_built_tree(tree,'aarch64')
+                bad=dict(manifest,files={'build.py':'wrong'})
+                (tree/'source-manifest.json').write_text(json.dumps(bad))
+                with self.assertRaisesRegex(ValueError,'prepared inventory'):wayland.policy_for_built_tree(tree,'aarch64')
+
     def test_unknown_architecture_fails(self):
         with self.assertRaisesRegex(ValueError,'ARCH:'):
             wayland.preflight(Path('/nonexistent'), 'armv7')

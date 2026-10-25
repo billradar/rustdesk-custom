@@ -202,8 +202,8 @@ def create(tree,platform,arch,variant):
  info={k:m[k] for k in ('variant','upstream_repository','upstream_ref','upstream_version','upstream_sha','patchset','common_patch_hash','sos_patch_hash','custom_repository','custom_repository_sha')}
  info.update(channel=channel,platform=platform,architecture=arch,platform_patch_hash=None,prepared_source_identity=sha(tree/'source-manifest.json'),prepare_run=m['prepare_workflow_run'],build_run=os.environ['GITHUB_RUN_ID'],workflow_run=os.environ['GITHUB_RUN_ID'],build_job=os.environ.get('GITHUB_JOB'),runner=os.environ.get('RUNNER_OS'),runner_arch=os.environ.get('RUNNER_ARCH'),runner_image=os.environ.get('ImageOS'),package_type=kind,signed_status=signed,configuration='PRODUCTION',configuration_validation='PASS',password_validation_method='compiler-mir-and-package-native-identity' if platform=='android' else 'built-library-native-bridge',server_config_fingerprint=server_fingerprint(),build_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED',architecture_validation='PASS',package_validation='PASS',credential_scan='PASS',platform_adapter_signature=profile['signature'],build_toolchain={k:profile[k] for k in ['rust','flutter','vcpkg','ndk','cargo_ndk']})
  if flavor:
-  from scripts.platform.wayland import POLICY,policy_for_pin,policy_for_tree
-  pin=policy_for_tree(tree)
+  from scripts.platform.wayland import POLICY,policy_for_built_tree
+  pin=policy_for_built_tree(tree,arch)
   actual=subprocess.check_output(['git','-C',str(tree/'third_party/libdrmtap'),'rev-parse','HEAD'],text=True).strip()
   if actual!=pin['libdrmtap_sha']:raise ValueError('PROVENANCE: actual libdrmtap checkout mismatch')
   tests=json.loads((tree/'wayland-tests.json').read_text())

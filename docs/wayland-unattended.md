@@ -69,3 +69,15 @@ that is not runtime evidence for these new builds, ARM64, login/reboot or other 
 Local contracts: `scripts/platform/wayland_contract.py`,
 `scripts/release/nightly_contract.py`, `scripts/release/channel_contract.py`,
 `scripts/release/qualification_contract.py` and `scripts/validation/repository_contract.py`.
+
+## ARM64 post-build packaging validation
+
+The official Linux ARM recipe replaces the Flutter Linux command with
+flutter-elinux and changes x64/release paths to arm64/release in build.py. Run
+40202174271 built its ARM64 binary and DEB successfully, then our final package
+check incorrectly compared this transformed script to the pristine fingerprint.
+Finalization now retrieves build.py from the locked Git object, verifies its hash
+against the prepared inventory and DRM policy, and accepts exactly those two
+reviewed substitutions for ARM64 (no substitutions for amd64). Extra changes,
+wrong source SHAs and modified inventories remain blocked. This fixes the check;
+a fresh full build is still required to validate the resulting artifact.

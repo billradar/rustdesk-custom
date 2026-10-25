@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import yaml
 from scripts.platform import platform_adapter as adapter
 from scripts.platform.platform_package import validate, sha
@@ -45,8 +46,8 @@ def validate_source_policy(info, manifest):
         raise ValueError('PROVENANCE: DRM dependency pin does not match exact prepared packaging source')
 
 
-def policy_for_tree(tree):
-    build = (tree / 'build.py').read_bytes()
+def policy_for_tree(tree, build=None):
+    build = (tree / 'build.py').read_bytes() if build is None else build
     job = yaml.safe_load((tree / '.github/workflows/flutter-build.yml').read_text())['jobs'].get('build-rustdesk-linux-drm')
     if job is None or job.get('if') is False:
         raise ValueError('BUILD_COMPAT: official DRM job missing/disabled')
@@ -57,6 +58,28 @@ def policy_for_tree(tree):
     if len(matches) != 1:
         raise ValueError('BUILD_COMPAT: unreviewed DRM packaging interface')
     return matches[0]
+
+
+def policy_for_built_tree(tree, arch):
+    tree = Path(tree)
+    if arch not in ('x86_64', 'aarch64'):
+        raise ValueError('ARCH: unreviewed Wayland packaging architecture')
+    manifest = json.loads((tree / 'source-manifest.json').read_text())
+    source_sha = manifest.get('upstream_sha', '')
+    if not re.fullmatch('[0-9a-f]{40}', source_sha) or source_sha != os.environ.get('UPSTREAM_EXPECTED_SHA'):
+        raise ValueError('PROVENANCE: built packaging source SHA mismatch')
+    original = subprocess.check_output(['git', '-C', str(tree), 'show', source_sha + ':build.py'])
+    if hashlib.sha256(original).hexdigest() != manifest.get('files', {}).get('build.py'):
+        raise ValueError('PROVENANCE: original packaging file differs from prepared inventory')
+    p = policy_for_tree(tree, original)
+    expected = original
+    if arch == 'aarch64':
+        # Exactly the two substitutions in the reviewed official ARM Linux recipe.
+        expected = expected.replace(b'flutter build linux --release', b'flutter-elinux build linux --verbose')
+        expected = expected.replace(b'x64/release', b'arm64/release')
+    if (tree / 'build.py').read_bytes() != expected:
+        raise ValueError('BUILD_COMPAT: unreviewed post-build packaging modification')
+    return p
 
 
 def preflight(tree, arch):
