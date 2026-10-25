@@ -77,6 +77,31 @@ class AdapterTests(unittest.TestCase):
                 if platform=='linux':
                     s=next(s for s in j['steps'] if s.get('name')=='Build rustdesk' and 'with' in s)
                     for key in ['run','install']:self.assertNotIn('${{',platform_adapter.render(s['with'][key],p))
+    def test_changed_recipe_files_tools_and_disabled_jobs_stay_blocked(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);tree=root/'source';tree.mkdir()
+            for f in platform_adapter.FILES:
+                p=tree/f;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('reviewed')
+            wf=tree/'.github/workflows/flutter-build.yml'
+            data={'env':{'RUST_VERSION':'1.75','FLUTTER_VERSION':'3.24.5','VCPKG_COMMIT_ID':'a'*40},
+                  'jobs':{'build-rustdesk-linux':{'runs-on':'ubuntu-22.04','strategy':{'matrix':{'job':[{'arch':'x86_64','os':'ubuntu-22.04'}]}}}}}
+            wf.write_text(yaml.safe_dump(data))
+            profile,_=platform_adapter.inspect(tree,'linux','x86_64')
+            meta=root/'metadata/platform';meta.mkdir(parents=True)
+            approved=meta/'adapter-profiles.json';approved.write_text(json.dumps({'approved':{'linux':[profile['signature']]}}))
+            with patch.object(platform_adapter,'ROOT',root):
+                platform_adapter.check(tree,'linux','x86_64')
+                for file in platform_adapter.FILES:
+                    p=tree/file;p.write_text('unreviewed')
+                    with self.assertRaisesRegex(ValueError,'unreviewed official'):platform_adapter.check(tree,'linux','x86_64')
+                    p.write_text('reviewed')
+                data['env']['RUST_VERSION']='1.99';wf.write_text(yaml.safe_dump(data))
+                with self.assertRaises(ValueError):platform_adapter.check(tree,'linux','x86_64')
+                data['jobs']['build-rustdesk-linux']['if']=False;wf.write_text(yaml.safe_dump(data))
+                disabled,_=platform_adapter.inspect(tree,'linux','x86_64')
+                approved.write_text(json.dumps({'approved':{'linux':[disabled['signature']]}}))
+                with self.assertRaisesRegex(ValueError,'disabled'):platform_adapter.check(tree,'linux','x86_64')
+
     def test_unknown_expression_blocks(self):
         with self.assertRaises(ValueError):platform_adapter.render('${{ secrets.TEST }}',{'official_matrix':{},'tools':{},'rust':'1.75'})
     def test_unknown_architecture_and_disabled_web_block(self):

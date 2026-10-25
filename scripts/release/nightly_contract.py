@@ -112,6 +112,15 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'],'false')
         self.assertTrue(any('nightly.py aggregate' in s.get('run','') for s in aggregate['steps']))
 
+    def test_all_platform_review_happens_before_bridge_dependencies(self):
+        w=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())
+        steps=w['jobs']['prepare']['steps']
+        index=next(i for i,s in enumerate(steps) if 'nightly.py preflight' in s.get('run',''))
+        self.assertEqual(steps[index]['if'],"inputs.channel == 'nightly'")
+        self.assertLess(index,next(i for i,s in enumerate(steps) if s.get('name')=='Install official bridge prerequisites'))
+        with patch.dict(os.environ,UPSTREAM_EXPECTED_SHA='b'*40),patch.object(nightly.subprocess,'check_output',return_value='c'*40):
+            with self.assertRaisesRegex(ValueError,'SHA mismatch'):nightly.preflight(Path('.'))
+
     def test_polling_and_unique_plan_artifacts(self):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
         self.assertEqual(w['on']['schedule'],[{'cron':'7,22,37,52 * * * *'}])

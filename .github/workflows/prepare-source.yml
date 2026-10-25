@@ -51,6 +51,9 @@ jobs:
     - id: profile
       name: Resolve reviewed official bridge/build profile
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
+    - name: Review all Nightly native target interfaces before bridge dependencies
+      if: inputs.channel == 'nightly'
+      run: python3 scripts/release/nightly.py preflight --tree .work/official
     - name: Install official bridge prerequisites
       run: |
         sudo apt-get update -y

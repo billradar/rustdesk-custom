@@ -93,3 +93,18 @@ content. Failures now identify only the filename and withhold the value.
 The global production input/package/log scanner remains strict, without this
 source-only exception. Regression contracts cover changed content, relocated keys
 and ASCII/UTF-16 tokens.
+
+## 1.5.1 native platform recipe review
+
+Run 40199720676 passed prepared-source scanning, then Linux/macOS/Android stopped
+at their independent platform adapter gates. The Windows/bridge profile approval
+was not a platform recipe approval. `metadata/platform/adapter-profiles.json` now
+records the exact native signatures for upstream 1297da6d, seven supported native
+architecture profiles, baseline comparison, critical file hashes and review scope.
+Linux/Android job definitions and toolchains remain unchanged; the global version
+and shared source/build file fingerprints changed. macOS also adds conditional
+tests, deployment-target export and opt-in official signing/update routing. Only
+the named setup/build scripts are inherited; custom macOS packages remain unsigned.
+The separate Wayland DRM policy is not expanded by this review. Signature approval
+is not package/runtime validation; unknown future files/tools/recipes and disabled
+jobs remain blocked, with regression tests for those cases.

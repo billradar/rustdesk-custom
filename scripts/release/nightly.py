@@ -91,6 +91,30 @@ def save(data):
     print(json.dumps(data, indent=2))
 
 
+def preflight(tree):
+    from scripts.platform.platform_adapter import check
+    from scripts.release.qualification import plan
+    actual = subprocess.check_output(['git', '-C', str(tree), 'rev-parse', 'HEAD'], text=True).strip()
+    if actual != os.environ['UPSTREAM_EXPECTED_SHA']:
+        raise ValueError('Nightly platform preflight source SHA mismatch')
+    checked = set()
+    errors = []
+    for target in plan('nightly')['selected']:
+        pair = (target['platform'], target['arch'])
+        if pair[0] == 'windows' or pair in checked:
+            continue  # Windows uses the separate build_adapter gate directly before this step.
+        checked.add(pair)
+        try:
+            profile, _ = check(tree, *pair)
+            if profile['runner'] != target['runner']:
+                raise ValueError('Canonical native runner mismatch')
+            print('Nightly platform preflight: ' + '/'.join(pair) + ' PASS')
+        except ValueError as error:
+            errors.append('/'.join(pair) + ': ' + str(error))
+    if errors:
+        raise ValueError('Nightly platform review required before native dependencies: ' + '; '.join(errors))
+
+
 def aggregate(root, discovery):
     from scripts.release.qualification import aggregate as qualify
     data = json.loads(discovery.read_text())
@@ -121,13 +145,18 @@ def aggregate(root, discovery):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('mode', choices=['resolve', 'route', 'aggregate'])
+    p.add_argument('mode', choices=['resolve', 'route', 'aggregate', 'preflight'])
     p.add_argument('--official-run-id', default='')
     p.add_argument('--expected-sha', default='')
     p.add_argument('--root', type=Path, default=Path('.work/all-targets'))
+    p.add_argument('--tree', type=Path)
     p.add_argument('--discovery', type=Path, default=Path('.work/nightly-discovery.json'))
     a = p.parse_args()
-    if a.mode == 'aggregate':
+    if a.mode == 'preflight':
+        if a.tree is None:
+            p.error('preflight requires --tree')
+        preflight(a.tree)
+    elif a.mode == 'aggregate':
         aggregate(a.root, a.discovery)
     else:
         data = discover(a.official_run_id)
