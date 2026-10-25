@@ -285,6 +285,15 @@ def check_workflow_syntax(files: list[Path], errors: list[str]) -> None:
             fail(errors, path, f"YAML parse failed: {exc}")
 
 
+def check_wayland_contract(errors: list[str]) -> None:
+    import subprocess
+    import os
+    result = subprocess.run([sys.executable, "scripts/platform/wayland_contract.py"], cwd=ROOT,
+                            env=dict(os.environ, PYTHONPATH=str(ROOT)), capture_output=True, text=True)
+    if result.returncode:
+        errors.append("Wayland gates: " + result.stdout + result.stderr)
+
+
 def main() -> int:
     files = tracked_files()
     errors: list[str] = []
@@ -298,6 +307,7 @@ def main() -> int:
         ("signing boundary", lambda: check_signing_boundary(files, errors)),
         ("Stable runtime contract", lambda: check_stable_runtime_contract(files, errors)),
         ("Nightly retirement contract", lambda: check_nightly_removed(files, errors)),
+        ("Wayland isolation and negative contracts", lambda: check_wayland_contract(errors)),
         ("workflow YAML", lambda: check_workflow_syntax(files, errors)),
     ]
 

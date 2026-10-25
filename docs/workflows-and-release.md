@@ -77,3 +77,7 @@ Dry-run / Draft / Release
 7. 记录最终 Workflow URL、自定义 commit SHA、上游 SHA、patchset、产物验证和真实发布结果。
 
 修改工作流输入或触发方式后，应同步更新本文并核实所有引用；不得保留已经删除的工作流名或过期的输入说明。
+
+## Wayland unattended build
+
+`wayland.yml` is a manual, Stable-tag-resolved experimental amd64/ARM64 build. It does not publish or join ordinary Stable qualification. See [its contracts and usage](wayland-unattended.md).

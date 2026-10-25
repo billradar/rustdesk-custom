@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Per-target packages, architecture, configuration, credential and provenance checks."""
-import argparse,datetime,hashlib,json,os,shutil,struct,subprocess,tempfile,zipfile
+import argparse,datetime,hashlib,json,os,re,shutil,struct,subprocess,tempfile,zipfile
 from pathlib import Path
 from scripts.signing.production_config import configured,server_fingerprint,scan_bytes,FORBIDDEN
 from scripts.upstream.patchsets import patch_hash,verify
@@ -43,7 +43,9 @@ def verify_checksums(folder):
  if found!=expected:raise ValueError('PROVENANCE: checksum coverage mismatch')
 
 def validate(folder):
- folder=Path(folder);i=json.loads((folder/'build-info.json').read_text());verify(i['patchset']);verify_checksums(folder)
+ folder=Path(folder);i=json.loads((folder/'build-info.json').read_text());
+ if i.get('build_flavor') and (i['platform']!='linux' or i['variant']!='standard' or i['build_flavor']!='unattended-wayland'):raise ValueError('PACKAGE: invalid build flavor')
+ verify(i['patchset']);verify_checksums(folder)
  if i['variant']=='sos' and i['platform'] not in ('linux','macos'):raise ValueError('Forbidden SOS platform')
  for k,e in [('upstream_sha','UPSTREAM_EXPECTED_SHA'),('custom_repository_sha','GITHUB_SHA'),('build_run','GITHUB_RUN_ID'),('patchset','PATCHSET')]:
   if os.environ.get(e) and str(i[k])!=os.environ[e]:raise ValueError('PROVENANCE: '+k)
@@ -83,12 +85,16 @@ def validate(folder):
     for n in z.namelist():
      if not n.endswith('/'):scan(z.read(n))
  elif i['platform']=='linux':
+  unattended=i.get('build_flavor')=='unattended-wayland'
+  if i.get('build_flavor') not in (None,'unattended-wayland'):raise ValueError('PACKAGE: unknown build flavor')
+  if unattended and (len(packages)!=1 or packages[0].suffix!='.deb'):raise ValueError('PACKAGE: unattended flavor must contain exactly one DEB')
   deb=next((p for p in packages if p.suffix=='.deb'),None)
-  if deb is None or not any(p.suffix=='.rpm' for p in packages):raise ValueError('PACKAGE: missing deb/rpm')
+  if deb is None or (not unattended and not any(p.suffix=='.rpm' for p in packages)):raise ValueError('PACKAGE: missing deb/rpm')
   arch=subprocess.check_output(['dpkg-deb','-f',str(deb),'Architecture'],text=True).strip()
   if arch!={'x86_64':'amd64','aarch64':'arm64'}[i['architecture']]:raise ValueError('ARCH: Debian metadata mismatch')
   with tempfile.TemporaryDirectory() as tmp:
    subprocess.run(['dpkg-deb','-x',str(deb),tmp],check=True)
+   if unattended:validate_wayland_deb(deb,Path(tmp),i)
    native=list(Path(tmp).rglob('librustdesk.so'))
    if len(native)!=1 or sha(native[0])!=sha(libs[0]):raise ValueError('PACKAGE: Debian native library mismatch')
    for p in Path(tmp).rglob('*'):
@@ -111,6 +117,37 @@ def validate(folder):
      if p.is_file() and not p.is_symlink():scan(p.read_bytes())
  return i
 
+def validate_wayland_deb(deb, root, info):
+ from scripts.platform.wayland import POLICY,policy
+ p=policy()
+ if info.get('wayland_policy_sha256')!=sha(POLICY) or info.get('libdrmtap_sha')!=p['libdrmtap_sha'] or info.get('drm_tests')!='PASS':raise ValueError('PROVENANCE: DRM pin, test or policy gate missing')
+ if info.get('drm_test_groups')!=8 or info.get('drm_test_count',0)<8:raise ValueError('PROVENANCE: DRM tests did not execute')
+ if info['variant']!='standard' or info['channel']!='stable':raise ValueError('PROVENANCE: DRM source/channel mismatch')
+ if not deb.name.startswith('unattended-wayland-rustdesk-unattended-wayland-'):raise ValueError('PACKAGE: ambiguous artifact filename')
+ control={k:subprocess.check_output(['dpkg-deb','-f',str(deb),k],text=True).strip() for k in ['Package','Conflicts','Provides','Replaces','Depends']}
+ if control['Package']!='rustdesk-unattended-wayland':raise ValueError('PACKAGE: misleading DRM package name')
+ for k in ['Conflicts','Provides','Replaces']:
+  if not re.search(r'(?:^|,)\s*rustdesk(?:\s|,|$)',control[k]):raise ValueError('PACKAGE: missing stock package relationship: '+k)
+ for dep in ['libdrm2','libegl1','libgles2']:
+  if dep not in control['Depends']:raise ValueError('PACKAGE: missing capture runtime dependency')
+ objects=list((root/'usr/lib/rustdesk').glob('libdrmtap.so.0.*'))
+ objects=[x for x in objects if x.is_file() and not x.is_symlink()]
+ link=root/'usr/lib/rustdesk/libdrmtap.so.0'
+ if len(objects)!=1 or objects[0].name!='libdrmtap.so.0.5.8' or not link.is_symlink() or link.resolve()!=objects[0].resolve():raise ValueError('PACKAGE: capture library/soname mismatch')
+ data=objects[0].read_bytes();architecture(data,'linux',info['architecture'])
+ for marker in [b'socketpair',b'/usr/libexec/drmtap-helper']:
+  if marker in data:raise ValueError('PACKAGE: privileged helper path present')
+ # The pinned library must include EGL detiling, not a CPU-only stub.
+ if any(x not in data for x in [b'libEGL.so.1',b'eglCreateImageKHR']):raise ValueError('PACKAGE: EGL capture path missing')
+ libs=list((root/'usr/share/rustdesk').rglob('librustdesk.so'))
+ if len(libs)!=1:raise ValueError('PACKAGE: ambiguous DRM client library')
+ binary=libs[0].read_bytes()
+ versions=[tuple(map(int,m)) for m in re.findall(rb'GLIBC_(\d+)\.(\d+)',data+binary)]
+ floor=re.search(r'(?:^|,)\s*libc6\s*\(>=\s*(\d+)\.(\d+)',control['Depends'])
+ if not versions or not floor or tuple(map(int,floor.groups()))<max(versions):raise ValueError('PACKAGE: libc6 dependency below actual ELF requirement')
+ for marker in [b'/usr/lib/rustdesk/libdrmtap.so.0',b'enable-drm-display-wake']:
+  if marker not in binary:raise ValueError('PACKAGE: stock/no-wake binary under unattended name')
+
 def create(tree,platform,arch,variant):
  tree=Path(tree);values=configured();m=json.loads((tree/'source-manifest.json').read_text());profile=json.loads(Path('.work/platform-profile.json').read_text())
  if platform in ('linux','macos'):
@@ -131,15 +168,18 @@ def create(tree,platform,arch,variant):
   receipt=json.loads((folder/'validated.json').read_text())
   if receipt!={'result':'PASS','target':arch,'method':'compiler-mir'}:raise ValueError('PLATFORM_API: compiler receipt mismatch')
   verify_mir((folder/'client.mir').read_text(),values)
- version=os.environ['UPSTREAM_VERSION'];channel=os.environ['BUILD_CHANNEL'];dest=ROOT/'artifacts'/f'rustdesk-{channel}-{version}-{m["upstream_sha"]}-{variant}-{platform}-{arch}'
+ version=os.environ['UPSTREAM_VERSION'];channel=os.environ['BUILD_CHANNEL'];flavor=os.environ.get('BUILD_FLAVOR')
+ if flavor and (flavor!='unattended-wayland' or platform!='linux' or variant!='standard'):raise ValueError('PACKAGE: invalid build flavor')
+ artifact_variant=flavor or variant
+ dest=ROOT/'artifacts'/f'rustdesk-{channel}-{version}-{m["upstream_sha"]}-{artifact_variant}-{platform}-{arch}'
  dest.mkdir(parents=True,exist_ok=False);(dest/'packages').mkdir();(dest/'validation').mkdir()
  validation_name='librustdesk.so' if platform=='android' else library.name
  shutil.copy2(library,dest/'validation'/validation_name)
- if platform=='linux':packages=list(tree.glob('rustdesk*.deb'))+list(tree.glob('rustdesk*.rpm'));kind='deb/rpm'
+ if platform=='linux':packages=list(tree.glob('rustdesk-unattended-wayland*.deb')) if flavor else list(tree.glob('rustdesk*.deb'))+list(tree.glob('rustdesk*.rpm'));kind='deb' if flavor else 'deb/rpm'
  elif platform=='macos':packages=list(tree.glob('rustdesk*unsigned.dmg'));kind='unsigned-dmg'
  else:packages=list((tree/'signed-apk').glob('*.apk'));kind='debug-signed-apk'
  if not packages:raise ValueError('PACKAGE: official package absent')
- for p in packages:shutil.copy2(p,dest/'packages'/f'{variant}-{p.name}')
+ for p in packages:shutil.copy2(p,dest/'packages'/f'{artifact_variant}-{p.name}')
  if platform=='macos':
   # Validate the actual DMG bundle against the built Rust library on the macOS runner.
   with tempfile.TemporaryDirectory() as mount:
@@ -158,6 +198,14 @@ def create(tree,platform,arch,variant):
  signed='TEST SIGNED / NOT PRODUCTION SIGNED' if platform=='android' else 'NOT ENABLED'
  info={k:m[k] for k in ('variant','upstream_repository','upstream_ref','upstream_version','upstream_sha','patchset','common_patch_hash','sos_patch_hash','custom_repository','custom_repository_sha')}
  info.update(channel=channel,platform=platform,architecture=arch,platform_patch_hash=None,prepared_source_identity=sha(tree/'source-manifest.json'),prepare_run=m['prepare_workflow_run'],build_run=os.environ['GITHUB_RUN_ID'],workflow_run=os.environ['GITHUB_RUN_ID'],build_job=os.environ.get('GITHUB_JOB'),runner=os.environ.get('RUNNER_OS'),runner_arch=os.environ.get('RUNNER_ARCH'),runner_image=os.environ.get('ImageOS'),package_type=kind,signed_status=signed,configuration='PRODUCTION',configuration_validation='PASS',password_validation_method='compiler-mir-and-package-native-identity' if platform=='android' else 'built-library-native-bridge',server_config_fingerprint=server_fingerprint(),build_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED',architecture_validation='PASS',package_validation='PASS',credential_scan='PASS',platform_adapter_signature=profile['signature'],build_toolchain={k:profile[k] for k in ['rust','flutter','vcpkg','ndk','cargo_ndk']})
+ if flavor:
+  from scripts.platform.wayland import POLICY,policy
+  pin=policy()
+  actual=subprocess.check_output(['git','-C',str(tree/'third_party/libdrmtap'),'rev-parse','HEAD'],text=True).strip()
+  if actual!=pin['libdrmtap_sha']:raise ValueError('PROVENANCE: actual libdrmtap checkout mismatch')
+  tests=json.loads((tree/'wayland-tests.json').read_text())
+  if tests.get('groups')!=8 or tests.get('tests',0)<8:raise ValueError('BUILD_COMPAT: missing DRM test execution evidence')
+  info.update(drm_test_groups=tests['groups'],drm_test_count=tests['tests'],build_flavor=flavor,wayland_policy_sha256=sha(POLICY),libdrmtap_sha=actual,drm_tests='PASS',support_scope='EXPERIMENTAL BUILD ONLY')
  (dest/'build-info.json').write_text(json.dumps(info,indent=2)+'\n');shutil.copy2(tree/'source-manifest.json',dest/'source-manifest.json');shutil.copy2(tree/'LICENCE',dest/'LICENCE');shutil.copy2(ROOT/'README.md',dest/'SOURCE-README.md')
  for layer in ['common']+(['sos'] if variant=='sos' else []):shutil.copytree(ROOT/'patchsets'/m['patchset']/layer,dest/'patches'/layer)
  if (tree/'custom-source.sbom.json').exists():shutil.copy2(tree/'custom-source.sbom.json',dest/'custom-source.sbom.json')

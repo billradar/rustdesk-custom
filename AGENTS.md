@@ -38,6 +38,14 @@ Current patchset layout:
 
 These filenames are useful orientation, not a complete semantic specification. Read the patch before changing or describing its behavior.
 
+### Wayland unattended build flavor
+
+- `.github/workflows/wayland.yml` is a separate manual Stable-tag build, not a Nightly or publication flow.
+- `build-wayland-target.yml` reuses verified Standard source and records `build_flavor: unattended-wayland` separately from the source variant.
+- Canonical x86_64/ARM64 targets remain experimental in `metadata/platform/matrix.json`, excluded from the generic planner (`enabled: false`) and explicitly opted into this workflow (`workflow_enabled: true`). Do not promote without real build evidence.
+- `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and two-target aggregate gates.
+- Follow `docs/wayland-unattended.md`; run the new contract and affected release contracts. ARM means ARM64 here; upstream's dedicated DRM job directly defines only x86_64.
+
 ### Patchset selection is version-bounded
 
 The current selector is `scripts/upstream/patchsets.py`:

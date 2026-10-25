@@ -1,0 +1,16 @@
+{
+  "schema": "wayland-build-policy-v1",
+  "variant": "unattended-wayland",
+  "source_variant": "standard",
+  "channel": "stable",
+  "publication": false,
+  "upstream_drm_job_sha256": "e5f3c17fd76e912421562a139c2145f64af05ed87f87aa010865c23a89328741",
+  "build_py_sha256": "88445cdf48d214fd9ff73d7fe2c878ad277f84c31839bb6ac94563d37f281708",
+  "libdrmtap_repository": "https://github.com/rustdesk-org/libdrmtap",
+  "libdrmtap_sha": "95d4d74549631aa5c39461300acfd2e106583cc9",
+  "reviewed_upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17",
+  "target_ids": [
+    "linux-x86_64-unattended-wayland",
+    "linux-aarch64-unattended-wayland"
+  ]
+}
