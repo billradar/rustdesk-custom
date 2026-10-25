@@ -58,6 +58,12 @@ class ChannelPolicyTests(unittest.TestCase):
             body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: '+patchset+'\nPatch Revision: v'+patchset[1:]+'.'+revision+'\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'c'*64+'\nBuild Identity: '+channel.build_identity('a'*40,patchset,'c'*64,'c'*64)+'\nAsset Inventory: ["SHA256SUMS", "rustdesk-1.4.9-standard-windows-x86_64.zip", "rustdesk-1.4.9-sos-windows-x86_64.zip"]',
             assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
 
+    def test_existing_release_cannot_gain_wayland_without_new_identity(self):
+        existing=self.draft_fixture()
+        with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
+            with self.assertRaisesRegex(ValueError,'immutable revision lacks matching Wayland'):
+                channel.release_preflight(self.discovery())
+
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:
             channel.resolve('stable',discovery_only=True)
@@ -126,7 +132,7 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertNotIn('android_only',jobs[name].get('with',{}))
         self.assertEqual(jobs['release']['needs'],'aggregate')
         self.assertEqual(jobs['draft']['needs'],'aggregate')
-        self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign'])
+        self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
         self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
         for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('qualification',str(jobs[name].get('needs',[])))

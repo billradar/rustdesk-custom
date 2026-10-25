@@ -80,7 +80,7 @@ Dry-run / Draft / Release
 
 ## Wayland unattended build
 
-`wayland.yml` is a manual, Stable-tag-resolved experimental amd64/ARM64 build. It does not publish or join ordinary Stable qualification. See [its contracts and usage](wayland-unattended.md).
+`wayland.yml` is an internal reusable amd64/ARM64 experimental build, enabled by default through `include_wayland` in Tag and Nightly. Tag draft/release revalidates and attaches both DEBs; Nightly includes them in its aggregate. The flavor remains separately qualified. See [contracts and usage](wayland-unattended.md).
 
 ## Unknown-interface review automation
 
@@ -122,7 +122,7 @@ compatibility path. Nothing is automatically approved, merged or published.
 构建复用 Tag 的 `prepare-source.yml`、Windows/Linux/macOS/Android 构建核心，
 从同批 Common 补丁源码分出 Standard/SOS；目标及 ARM64/amd64 范围来自同一平台矩阵。
 Android 仍仅 Standard，Windows ARM64 等未支持目标不会因此自动启用。
-独立 DRM/Wayland 实验构建仍使用自己的审核策略，不冒充普通 Nightly。
+DRM/Wayland 实验构建已作为默认开启的子流程接入，保留独立审核策略和资格结果，不冒充普通 Standard 目标。
 v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口继续阻断。
 
 自动路由仅从本仓库 main 执行，按官方运行 ID 与自定义提交 SHA 去重；

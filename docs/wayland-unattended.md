@@ -1,81 +1,70 @@
-# Wayland unattended builds
+# Wayland unattended builds inside Tag and Nightly
 
-`wayland.yml` is a separate manually dispatched build flow for the
-`unattended-wayland` Linux flavor. It resolves an official Stable tag (default
-`1.5.0`) to an immutable SHA, selects the normal version-bounded patchset, and
-uses the same prepared Common/Standard source as the tag pipeline. It does not
-join the separate Nightly channel, publish a release, sign Android artifacts,
-or qualify the existing Stable target set.
+`wayland.yml` is now a **reusable internal workflow**, without a separate manual
+entry point. `tag.yml` and `nightly.yml` call it with their own locked upstream
+SHA, version, channel, patchset and same-run prepared Standard artifact. Common
+patch policy, including forced-off software rendering, is shared with the normal
+builds. No second resolve/fetch/prepare occurs in the Wayland lane.
 
-## Targets and source identity
+Both parent workflows expose `include_wayland` (boolean, default **true**).
+It builds native amd64 (`ubuntu-22.04`) and ARM64 (`ubuntu-22.04-arm`) DEBs. To build
+an older unsupported source such as 1.4.9, explicitly disable this option. A
+missing or unreviewed DRM interface fails before bridge dependencies are installed.
 
-The canonical target entries are in `metadata/platform/matrix.json`:
+The matrix rows remain experimental and `enabled: false` for the ordinary matrix;
+`workflow_enabled: true` selects only the reusable Wayland lane. They are not
+replacements for ordinary Standard/SOS qualification. Source variant is Standard;
+`build_flavor: unattended-wayland` identifies the distinct captured feature set.
 
-- `linux-x86_64-unattended-wayland`: native `ubuntu-22.04`, DEB `amd64`.
-- `linux-aarch64-unattended-wayland`: native `ubuntu-22.04-arm`, DEB `arm64`.
+## Reviewed interfaces and package gates
 
-Both are experimental and selected only by this dedicated workflow. `enabled:
-false` excludes them from the existing generic CI/Stable planner, including its
-experimental mode. `workflow_enabled: true` opts them into this workflow. This
-configuration is not evidence that either build or a real locked remote session
-has passed. In particular, upstream's dedicated DRM job directly targets x86_64;
-ARM64 adapts its reviewed native Linux recipe and must pass independent gates.
-ARMv7 is not part of this flow.
+`metadata/build/wayland-policy.json` records paired exact DRM-job/build.py hashes
+and dependency pins for upstream 1.5.0 (`libdrmtap 0.5.8`) and reviewed 1.5.1 snapshot
+1297da6d (`libdrmtap 0.5.12`). Unknown combinations fail closed. The library pin
+must also match the exact build.py hash in the prepared-source manifest, not just
+an approved library version. Ordinary Linux adapter signatures remain mandatory.
 
-The source variant remains `standard` in the immutable source manifest because
-no new source patch layer is applied. `build_flavor: unattended-wayland` separately
-identifies the compiled features and package. Standard, SOS and unattended
-packages cannot be interchanged as qualification evidence.
+The 1.5.1 review covers the official DRM job's additional tests and the library's
+0.5 ABI, frame lifetime/descriptor checks and privileged-environment hardening.
+This is source review, not successful package or runtime evidence for the new pin.
 
-## Fail-closed contracts
+The helper-disabled EGL library is built natively; compilation/package stages use
+the reviewed Linux recipe with `drm` and `drm-wake`. The 1.5.0 profile has eight test groups; 1.5.1 has twelve including DRM pacing,
+CRTC refresh, loader and clipboard tests. Each must
+execute at least one test. DEBs must pass architecture, libc floor, EGL/capture/wake
+markers, stock-package Conflicts/Provides/Replaces, exact library/soname, checksum,
+configuration, credential and prepared-source provenance checks. There is no RPM
+output for this flavor. Both architectures must validate in the same workflow run.
 
-`metadata/build/wayland-policy.json` pins the reviewed upstream DRM job,
-`build.py`, and libdrmtap repository/commit. Existing platform adapter signatures
-remain mandatory. A changed upstream interface requires a new explicit review;
-there is no automatic approval or fallback to a stock package.
+## Aggregate and Release behavior
 
-Before expensive dependencies, the target checks the prepared source identity,
-Linux/Standard/Stable scope, native runner, and reviewed DRM interface. The native
-runner builds the pinned libdrmtap with upstream's helper-disabled and EGL checks.
-The existing Ubuntu 18.04 native compilation recipe is adapted to request both
-`drm` and `drm-wake`; all eight upstream DRM test filters must execute at least
-one test. RPM packaging is deliberately excluded because upstream's DRM path
-supports DEB only.
+When enabled, both parents wait for the Wayland lane before their final aggregate.
+The packages download into a separate directory so they cannot accidentally satisfy
+ordinary platform targets. The final aggregate validates both DEBs again and binds
+their source-manifest identity, prepare run, Common patch hash and configuration
+fingerprint to the ordinary Standard build. Missing, duplicate, stale, cross-channel
+or mismatched-source packages block aggregation.
 
-Each artifact must pass the existing compiled configuration, credential scan,
-checksum, source provenance and client ELF architecture gates, plus:
+Tag draft/release jobs download and revalidate the Wayland pair again in the
+publication job, add both DEBs to the normal asset directory, and regenerate the
+public SHA256SUMS. Release metadata records the Wayland policy digest and its
+experimental scope. Existing immutable releases/drafts are never appended to or
+overwritten: requesting Wayland while reusing an older revision without matching
+Wayland evidence fails. Disable the option to reuse that old revision, or build a
+new patch identity through the existing revision mechanism.
 
-- DEB architecture and `rustdesk-unattended-wayland` package identity;
-- `Conflicts`, `Provides` and `Replaces` relationships with `rustdesk`;
-- DRM/EGL/GLES runtime dependencies;
-- versioned libdrmtap, contained soname link and matching ELF machine;
-- EGL capture markers and absence of the privileged helper fallback;
-- compiled capture and display-wake markers;
-- exact dependency pin, policy identity and positive DRM test execution.
+Nightly includes both DEBs in its aggregated Actions package artifact and remains
+artifact-only. No new publication, Android production signing, YubiKey access or
+PIN authorization is introduced by this integration.
 
-The aggregate independently revalidates both packages and rejects missing,
-duplicate, stale-run, mixed-source, mixed-flavor or mismatched-policy artifacts.
-One successful architecture does not qualify the pair. Successful qualification
-is **experimental build/package evidence only**, never proof of runtime support.
+Per-target artifacts remain `rustdesk-wayland-<version>-<upstream-sha>-<arch>`;
+`wayland-qualification-<run-id>` records the pair, with `stable`/`nightly` channel
+identity. Parent aggregate reports also contain this separate Wayland result.
 
-## Running and reviewing
+The package conflicts with ordinary RustDesk. The earlier 1.5.0 package worked in
+one user-confirmed locked-screen session after disabling forced software rendering;
+that is not runtime evidence for these new builds, ARM64, login/reboot or other GPUs.
 
-After integration to the default branch, select **Wayland Unattended Build** in
-Actions, choose the desired branch and official Stable tag, and run it. Validated
-packages are in `rustdesk-wayland-<version>-<upstream-sha>-<arch>` artifacts. The
-pair result is `wayland-qualification-<run-id>`. Failed targets upload redacted
-diagnostics separately; no failed client bundle is uploaded.
-
-The package conflicts with the ordinary RustDesk installation. Back up local
-configuration and retain a local recovery path before installation; this flow
-does not install anything on the user's computer. Test locked-screen access,
-logout, reboot/login screen, multi-monitor and Intel/NVIDIA behavior separately.
-
-Local contracts:
-
-```sh
-PYTHONPATH=. python3 scripts/platform/wayland_contract.py
-PYTHONPATH=. python3 scripts/validation/repository_contract.py
-PYTHONPATH=. python3 scripts/release/qualification_contract.py
-PYTHONPATH=. python3 scripts/release/channel_contract.py
-```
+Local contracts: `scripts/platform/wayland_contract.py`,
+`scripts/release/nightly_contract.py`, `scripts/release/channel_contract.py`,
+`scripts/release/qualification_contract.py` and `scripts/validation/repository_contract.py`.

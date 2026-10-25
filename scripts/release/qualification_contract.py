@@ -229,7 +229,7 @@ class ParallelGateTests(unittest.TestCase):
         self.assertEqual(tag['draft']['needs'],'aggregate')
         self.assertEqual(tag['release']['needs'],'aggregate')
         self.assertEqual(tag['publish-existing']['needs'],['resolve','draft-preflight'])
-        self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign'])
+        self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
         self.assertIn('build_needed',tag['aggregate']['outputs'])
         self.assertIn('draft_needed',tag['aggregate']['outputs'])
         self.assertIn('publish_existing',tag['aggregate']['outputs'])

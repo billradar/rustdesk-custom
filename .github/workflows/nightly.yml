@@ -5,6 +5,10 @@ env:
 'on':
   workflow_dispatch:
     inputs:
+      include_wayland:
+        type: boolean
+        default: true
+        description: Build both experimental Wayland DEBs and include validated packages
       official_run_id:
         type: string
         default: ''
@@ -53,10 +57,25 @@ jobs:
     needs: resolve
     uses: ./.github/workflows/prepare-source.yml
     with:
+      build_wayland: ${{ inputs.include_wayland }}
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: nightly
       patchset: ${{ needs.resolve.outputs.patchset }}
+  wayland-build:
+    needs: [resolve, prepare]
+    if: inputs.include_wayland && needs.prepare.result == 'success'
+    uses: ./.github/workflows/wayland.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      channel: nightly
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   windows-build:
     needs: [resolve, prepare]
     uses: ./.github/workflows/build-stable-windows.yml
@@ -100,9 +119,15 @@ jobs:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   aggregate:
-    needs: [resolve, windows-build, platforms-build, android-build]
+    needs: [resolve, windows-build, platforms-build, android-build, wayland-build]
+    if: >-
+      always() && needs.windows-build.result == 'success' &&
+      needs.platforms-build.result == 'success' && needs.android-build.result == 'success' &&
+      (!inputs.include_wayland || needs.wayland-build.result == 'success')
     runs-on: ubuntu-22.04
     env:
+      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+      BUILD_CHANNEL: nightly
       UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
@@ -121,6 +146,12 @@ jobs:
       with:
         name: nightly-discovery-${{ github.run_id }}
         path: .work/discovery
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: inputs.include_wayland
+      with:
+        pattern: rustdesk-wayland-*
+        path: .work/wayland-targets
+        merge-multiple: false
     - name: Revalidate complete matrix, exact source and same-run artifacts
       run: python3 scripts/release/nightly.py aggregate --discovery .work/discovery/nightly-discovery.json
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

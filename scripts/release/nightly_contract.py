@@ -108,7 +108,7 @@ class NightlyTests(unittest.TestCase):
         for token in ['YUBIKEY','self-hosted','qualification.py release','qualification.py draft','secrets: inherit','continue-on-error']:
             self.assertNotIn(token,(ROOT/'.github/workflows/nightly.yml').read_text())
         aggregate=w['jobs']['aggregate']
-        self.assertEqual(set(aggregate['needs']),{'resolve','windows-build','platforms-build','android-build'})
+        self.assertEqual(set(aggregate['needs']),{'resolve','windows-build','platforms-build','android-build','wayland-build'})
         self.assertEqual(aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'],'false')
         self.assertTrue(any('nightly.py aggregate' in s.get('run','') for s in aggregate['steps']))
 

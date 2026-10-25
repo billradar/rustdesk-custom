@@ -1,81 +1,37 @@
-name: Wayland Unattended Build
-run-name: Wayland unattended ${{ inputs.upstream_ref }} / amd64 + arm64
+name: Reusable Wayland Unattended Build
 env:
   PYTHONPATH: .
 'on':
-  workflow_dispatch:
+  workflow_call:
     inputs:
       upstream_ref:
         type: string
         required: true
-        default: 1.5.0
-        description: Official stable tag; both native architectures must pass
+      upstream_sha:
+        type: string
+        required: true
+      upstream_version:
+        type: string
+        required: true
+      patchset:
+        type: string
+        required: true
+      channel:
+        type: string
+        required: true
+      standard_artifact:
+        type: string
+        required: true
+    secrets:
+      RUSTDESK_KEY:
+        required: true
+      RUSTDESK_PASSWORD:
+        required: true
 permissions:
   contents: read
   actions: read
-concurrency:
-  group: wayland-${{ inputs.upstream_ref }}-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
-  resolve:
-    name: Resolve exact Stable upstream identity
-    runs-on: ubuntu-22.04
-    outputs:
-      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
-      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
-      upstream_version: ${{ steps.resolve.outputs.version }}
-      patchset: ${{ steps.patchset.outputs.patchset }}
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - name: Install reviewed parser
-      run: python3 -m pip install -r requirements.txt
-    - name: Wayland workflow and negative gates
-      run: python3 scripts/platform/wayland_contract.py
-    - id: resolve
-      env:
-        GH_TOKEN: ${{ github.token }}
-        REQUESTED_REF: ${{ inputs.upstream_ref || '' }}
-        CHANNEL: stable
-      run: python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
-    - id: patchset
-      name: Select Stable patchset by version boundary
-      env:
-        UPSTREAM_VERSION: ${{ steps.resolve.outputs.version }}
-      run: python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION"
-    - name: Validate Stable execution identity
-      env:
-        UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
-        PATCHSET: ${{ steps.patchset.outputs.patchset }}
-        VERSION: ${{ steps.resolve.outputs.version }}
-      run: |
-        set -euo pipefail
-        [[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid upstream_sha"; exit 1; }
-        [[ "$PATCHSET" =~ ^v[1-9][0-9]*$ ]] || { echo "Invalid patchset"; exit 1; }
-        [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version"; exit 1; }
-        printf '%s\n' 'Static patchset selection: PASS'
-        printf '  upstream_sha = %s\n' "$UPSTREAM_SHA"
-        printf '  patchset     = %s\n' "$PATCHSET"
-        printf '  version      = %s\n' "$VERSION"
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always()
-      with:
-        name: channel-discovery-${{ github.run_id }}
-        path: .work/channel.json
-        if-no-files-found: warn
-  prepare:
-    needs: resolve
-    uses: ./.github/workflows/prepare-source.yml
-    with:
-      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
-      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-      channel: stable
-      patchset: ${{ needs.resolve.outputs.patchset }}
   build:
-    needs:
-    - resolve
-    - prepare
     strategy:
       fail-fast: false
       matrix:
@@ -90,24 +46,23 @@ jobs:
       arch: ${{ matrix.arch }}
       variant: standard
       runner: ${{ matrix.runner }}
-      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
-      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
-      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
-      patchset: ${{ needs.resolve.outputs.patchset }}
-      channel: stable
-      source_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      upstream_ref: ${{ inputs.upstream_ref }}
+      upstream_sha: ${{ inputs.upstream_sha }}
+      upstream_version: ${{ inputs.upstream_version }}
+      patchset: ${{ inputs.patchset }}
+      channel: ${{ inputs.channel }}
+      source_artifact: ${{ inputs.standard_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   aggregate:
-    needs:
-    - resolve
-    - build
+    needs: build
     runs-on: ubuntu-22.04
     env:
-      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
-      UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
-      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_VERSION: ${{ inputs.upstream_version }}
+      PATCHSET: ${{ inputs.patchset }}
+      BUILD_CHANNEL: ${{ inputs.channel }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -115,7 +70,7 @@ jobs:
     - run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: rustdesk-wayland-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        pattern: rustdesk-wayland-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-*
         path: .work/wayland-targets
         merge-multiple: false
     - name: Both architectures, package and exact provenance gate

@@ -54,6 +54,9 @@ def validate(folder):
  for k in ('upstream_sha','upstream_version','patchset','common_patch_hash','sos_patch_hash','custom_repository_sha','variant'):
   if m[k]!=i[k]:raise ValueError('PROVENANCE: prepared source '+k)
  if sha(folder/'source-manifest.json')!=i['prepared_source_identity']:raise ValueError('PROVENANCE: source identity hash')
+ if i.get('build_flavor')=='unattended-wayland':
+  from scripts.platform.wayland import validate_source_policy
+  validate_source_policy(i,m)
  if str(m['prepare_workflow_run'])!=str(i['prepare_run']) or str(i['prepare_run'])!=str(i['build_run']):raise ValueError('PROVENANCE: workflow mismatch')
  for key in ('configuration_validation','architecture_validation','package_validation','credential_scan'):
   if i[key]!='PASS':raise ValueError('Required package gate missing: '+key)
@@ -118,11 +121,11 @@ def validate(folder):
  return i
 
 def validate_wayland_deb(deb, root, info):
- from scripts.platform.wayland import POLICY,policy
- p=policy()
+ from scripts.platform.wayland import POLICY,policy_for_pin,policy_for_tree
+ p=policy_for_pin(info.get('libdrmtap_sha'))
  if info.get('wayland_policy_sha256')!=sha(POLICY) or info.get('libdrmtap_sha')!=p['libdrmtap_sha'] or info.get('drm_tests')!='PASS':raise ValueError('PROVENANCE: DRM pin, test or policy gate missing')
- if info.get('drm_test_groups')!=8 or info.get('drm_test_count',0)<8:raise ValueError('PROVENANCE: DRM tests did not execute')
- if info['variant']!='standard' or info['channel']!='stable':raise ValueError('PROVENANCE: DRM source/channel mismatch')
+ if info.get('drm_test_groups')!=p['drm_test_groups'] or info.get('drm_test_count',0)<p['drm_test_groups']:raise ValueError('PROVENANCE: DRM tests did not execute')
+ if info['variant']!='standard' or info['channel'] not in ('stable','nightly'):raise ValueError('PROVENANCE: DRM source/channel mismatch')
  if not deb.name.startswith('unattended-wayland-rustdesk-unattended-wayland-'):raise ValueError('PACKAGE: ambiguous artifact filename')
  control={k:subprocess.check_output(['dpkg-deb','-f',str(deb),k],text=True).strip() for k in ['Package','Conflicts','Provides','Replaces','Depends']}
  if control['Package']!='rustdesk-unattended-wayland':raise ValueError('PACKAGE: misleading DRM package name')
@@ -133,7 +136,7 @@ def validate_wayland_deb(deb, root, info):
  objects=list((root/'usr/lib/rustdesk').glob('libdrmtap.so.0.*'))
  objects=[x for x in objects if x.is_file() and not x.is_symlink()]
  link=root/'usr/lib/rustdesk/libdrmtap.so.0'
- if len(objects)!=1 or objects[0].name!='libdrmtap.so.0.5.8' or not link.is_symlink() or link.resolve()!=objects[0].resolve():raise ValueError('PACKAGE: capture library/soname mismatch')
+ if len(objects)!=1 or objects[0].name!='libdrmtap.so.'+p['libdrmtap_version'] or not link.is_symlink() or link.resolve()!=objects[0].resolve():raise ValueError('PACKAGE: capture library/soname mismatch')
  data=objects[0].read_bytes();architecture(data,'linux',info['architecture'])
  for marker in [b'socketpair',b'/usr/libexec/drmtap-helper']:
   if marker in data:raise ValueError('PACKAGE: privileged helper path present')
@@ -199,12 +202,12 @@ def create(tree,platform,arch,variant):
  info={k:m[k] for k in ('variant','upstream_repository','upstream_ref','upstream_version','upstream_sha','patchset','common_patch_hash','sos_patch_hash','custom_repository','custom_repository_sha')}
  info.update(channel=channel,platform=platform,architecture=arch,platform_patch_hash=None,prepared_source_identity=sha(tree/'source-manifest.json'),prepare_run=m['prepare_workflow_run'],build_run=os.environ['GITHUB_RUN_ID'],workflow_run=os.environ['GITHUB_RUN_ID'],build_job=os.environ.get('GITHUB_JOB'),runner=os.environ.get('RUNNER_OS'),runner_arch=os.environ.get('RUNNER_ARCH'),runner_image=os.environ.get('ImageOS'),package_type=kind,signed_status=signed,configuration='PRODUCTION',configuration_validation='PASS',password_validation_method='compiler-mir-and-package-native-identity' if platform=='android' else 'built-library-native-bridge',server_config_fingerprint=server_fingerprint(),build_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED',architecture_validation='PASS',package_validation='PASS',credential_scan='PASS',platform_adapter_signature=profile['signature'],build_toolchain={k:profile[k] for k in ['rust','flutter','vcpkg','ndk','cargo_ndk']})
  if flavor:
-  from scripts.platform.wayland import POLICY,policy
-  pin=policy()
+  from scripts.platform.wayland import POLICY,policy_for_pin,policy_for_tree
+  pin=policy_for_tree(tree)
   actual=subprocess.check_output(['git','-C',str(tree/'third_party/libdrmtap'),'rev-parse','HEAD'],text=True).strip()
   if actual!=pin['libdrmtap_sha']:raise ValueError('PROVENANCE: actual libdrmtap checkout mismatch')
   tests=json.loads((tree/'wayland-tests.json').read_text())
-  if tests.get('groups')!=8 or tests.get('tests',0)<8:raise ValueError('BUILD_COMPAT: missing DRM test execution evidence')
+  if tests.get('groups')!=pin['drm_test_groups'] or tests.get('tests',0)<pin['drm_test_groups']:raise ValueError('BUILD_COMPAT: missing DRM test execution evidence')
   info.update(drm_test_groups=tests['groups'],drm_test_count=tests['tests'],build_flavor=flavor,wayland_policy_sha256=sha(POLICY),libdrmtap_sha=actual,drm_tests='PASS',support_scope='EXPERIMENTAL BUILD ONLY')
  (dest/'build-info.json').write_text(json.dumps(info,indent=2)+'\n');shutil.copy2(tree/'source-manifest.json',dest/'source-manifest.json');shutil.copy2(tree/'LICENCE',dest/'LICENCE');shutil.copy2(ROOT/'README.md',dest/'SOURCE-README.md')
  for layer in ['common']+(['sos'] if variant=='sos' else []):shutil.copytree(ROOT/'patchsets'/m['patchset']/layer,dest/'patches'/layer)

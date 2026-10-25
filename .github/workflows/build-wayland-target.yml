@@ -102,7 +102,7 @@ jobs:
     - name: Fail-closed DRM source and native architecture preflight
       run: |
         set -euo pipefail
-        [[ "$PLATFORM" == linux && "$VARIANT" == standard && "$BUILD_CHANNEL" == stable ]] || exit 1
+        [[ "$PLATFORM" == linux && "$VARIANT" == standard && ( "$BUILD_CHANNEL" == stable || "$BUILD_CHANNEL" == nightly ) ]] || exit 1
         [[ "$(uname -m)" == "$PLATFORM_ARCH" ]] || { echo 'ARCH: native runner required'; exit 1; }
         python3 scripts/platform/wayland.py preflight --tree "$PREPARED_SOURCE_DIR" --arch "$PLATFORM_ARCH"
       id: drm

@@ -40,7 +40,7 @@ These filenames are useful orientation, not a complete semantic specification. R
 
 ### Wayland unattended build flavor
 
-- `.github/workflows/wayland.yml` is a separate manual Stable-tag build, not a Nightly or publication flow.
+- `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard source. No separate manual trigger remains. Tag draft/release revalidates and attaches both DEBs; Nightly aggregates them as Actions artifacts.
 - `build-wayland-target.yml` reuses verified Standard source and records `build_flavor: unattended-wayland` separately from the source variant.
 - Canonical x86_64/ARM64 targets remain experimental in `metadata/platform/matrix.json`, excluded from the generic planner (`enabled: false`) and explicitly opted into this workflow (`workflow_enabled: true`). Do not promote without real build evidence.
 - `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and two-target aggregate gates.

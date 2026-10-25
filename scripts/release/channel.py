@@ -101,6 +101,13 @@ def release_preflight(data):
         data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
         return data
     body=existing.get('body') or ''
+    if os.environ.get('INCLUDE_WAYLAND') == 'true':
+        from scripts.platform.wayland import POLICY
+        expected_policy = hashlib.sha256(POLICY.read_bytes()).hexdigest()
+        required_wayland = {'unattended-wayland-rustdesk-unattended-wayland-' + data['version'] + '-' + arch + '.deb' for arch in ['x86_64', 'aarch64']}
+        uploaded_wayland = {a['name'] for a in existing.get('assets', []) if a.get('state') == 'uploaded'}
+        if ('wayland_policy_sha256=' + expected_policy not in body or not required_wayland <= uploaded_wayland):
+            raise ValueError('Existing immutable revision lacks matching Wayland evidence; disable include_wayland to reuse it or create a new patch identity')
     generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
     if generation is None: raise ValueError('Existing release missing generation identity')
     name=generation.group(1);verify(name)

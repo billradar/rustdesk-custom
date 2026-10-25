@@ -120,12 +120,17 @@ def aggregate(root,channel,experimental):
                         raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
                     filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
                     shutil.copy2(package,assets/filename)
+        if os.environ.get('INCLUDE_WAYLAND') == 'true':
+            from scripts.platform.wayland import attach_assets
+            peer = next(i for i in found.values() if i['variant'] == 'standard')
+            report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peer, channel)
         from scripts.platform.platform_package import checksums
         checksums(assets)
         public_assets=sorted(p.name for p in assets.iterdir())
         forbidden=[name for name in public_assets if name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')]
         if forbidden:
             raise ValueError('PACKAGE: non-public release assets generated: '+', '.join(forbidden))
+    (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
     if errors:raise ValueError('Aggregate required gate FAIL')
     return report
@@ -397,6 +402,9 @@ def _release(root, publish, channel='stable', experimental=False):
         'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
         'automation_state=complete',
     ]
+    if 'wayland' in report:
+        metadata += ['wayland_policy_sha256=' + report['wayland']['policy_sha256'],
+                     'wayland_scope=EXPERIMENTAL BUILD AND PACKAGE ONLY; RUNTIME NOT TESTED']
     notes=build_release_body(official_notes, metadata)
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)

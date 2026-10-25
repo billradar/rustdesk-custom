@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Opt-in DRM recipe and run-bound aggregate; never a Stable publication gate."""
+"""Reviewed DRM recipes and same-run pair qualification for Tag/Nightly parents."""
 import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import yaml
 from scripts.platform import platform_adapter as adapter
 from scripts.platform.platform_package import validate, sha
@@ -26,6 +27,38 @@ def policy():
     return p
 
 
+def profiles():
+    p = policy()
+    return [p] + p.get('additional_profiles', [])
+
+
+def policy_for_pin(pin):
+    matches = [p for p in profiles() if p['libdrmtap_sha'] == pin]
+    if len(matches) != 1:
+        raise ValueError('PROVENANCE: unreviewed or ambiguous libdrmtap pin')
+    return matches[0]
+
+
+def validate_source_policy(info, manifest):
+    p = policy_for_pin(info.get('libdrmtap_sha'))
+    if manifest.get('files', {}).get('build.py') != p['build_py_sha256']:
+        raise ValueError('PROVENANCE: DRM dependency pin does not match exact prepared packaging source')
+
+
+def policy_for_tree(tree):
+    build = (tree / 'build.py').read_bytes()
+    job = yaml.safe_load((tree / '.github/workflows/flutter-build.yml').read_text())['jobs'].get('build-rustdesk-linux-drm')
+    if job is None or job.get('if') is False:
+        raise ValueError('BUILD_COMPAT: official DRM job missing/disabled')
+    candidates = [p for p in profiles() if adapter.digest(job) == p['upstream_drm_job_sha256']]
+    if not candidates:
+        raise ValueError('BUILD_COMPAT: unreviewed official DRM recipe')
+    matches = [p for p in candidates if hashlib.sha256(build).hexdigest() == p['build_py_sha256']]
+    if len(matches) != 1:
+        raise ValueError('BUILD_COMPAT: unreviewed DRM packaging interface')
+    return matches[0]
+
+
 def preflight(tree, arch):
     tree = Path(tree)
     p = policy()
@@ -35,15 +68,8 @@ def preflight(tree, arch):
     profile, _ = adapter.check(tree, 'linux', arch)
     if profile['runner'] != target['runner']:
         raise ValueError('BUILD_COMPAT: native runner mismatch')
+    p = policy_for_tree(tree)
     build = (tree / 'build.py').read_bytes()
-    workflow = yaml.safe_load((tree / '.github/workflows/flutter-build.yml').read_text())
-    job = workflow['jobs'].get('build-rustdesk-linux-drm')
-    if job is None or job.get('if') is False:
-        raise ValueError('BUILD_COMPAT: official DRM job missing/disabled')
-    if adapter.digest(job) != p['upstream_drm_job_sha256']:
-        raise ValueError('BUILD_COMPAT: unreviewed official DRM recipe')
-    if hashlib.sha256(build).hexdigest() != p['build_py_sha256']:
-        raise ValueError('BUILD_COMPAT: unreviewed DRM packaging interface')
     text = build.decode()
     for name, value in [('LIBDRMTAP_REPO_PINNED', p['libdrmtap_repository']),
                         ('LIBDRMTAP_SHA_PINNED', p['libdrmtap_sha'])]:
@@ -86,6 +112,11 @@ run_drm_tests() {
                              ('-p scrap ', ['hotspot_provenance_tests', 'hotspot_guess_tests', 'plane_rotation_tests'])]:
         for test in filters:
             tests += f'run_drm_tests cargo test --locked {package}--lib --features drm {test}\n'
+    if policy_for_tree(tree)['drm_test_groups'] == 12:
+        tests += 'run_drm_tests cargo test --locked --lib --features drm drm_pacing_tests\n'
+        tests += 'run_drm_tests cargo test --locked -p scrap --lib --features drm crtc_refresh_tests\n'
+        tests += 'run_drm_tests cargo test --locked -p scrap --lib --features drm drmtap_dl::tests\n'
+        tests += 'run_drm_tests cargo test --locked -p clipboard --features unix-file-copy-paste\n'
     tests += '''printf '{"groups":%s,"tests":%s}\\n' "$DRM_TEST_GROUPS" "$DRM_TEST_TOTAL" > /workspace/wayland-tests.json
 '''
     tests += 'cargo build --locked --lib $JOBS --features "$FEATURES" --release'
@@ -114,7 +145,7 @@ def aggregate(root, output):
                          ('custom_repository_sha', 'GITHUB_SHA'), ('build_run', 'GITHUB_RUN_ID'), ('patchset', 'PATCHSET')]:
             if not os.environ.get(env) or str(info[key]) != os.environ[env]:
                 raise ValueError('PROVENANCE: exact aggregate identity required: ' + key)
-        if info['channel'] != 'stable' or info.get('wayland_policy_sha256') != sha(POLICY):
+        if info['channel'] != os.environ.get('BUILD_CHANNEL', 'stable') or info.get('wayland_policy_sha256') != sha(POLICY):
             raise ValueError('PROVENANCE: channel/policy mismatch')
         identities.append(tuple(str(info[k]) for k in ['upstream_sha', 'custom_repository_sha', 'build_run', 'common_patch_hash']))
         found[arch] = {'packages': {p.name: sha(p) for p in (f.parent / 'packages').iterdir()},
@@ -124,10 +155,28 @@ def aggregate(root, output):
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({'schema': 'wayland-qualification-v1', 'result': 'PASS',
         'scope': 'EXPERIMENTAL BUILD AND PACKAGE ONLY', 'publication_authorized': False,
+        'channel': os.environ.get('BUILD_CHANNEL', 'stable'),
         'custom_sha': os.environ['GITHUB_SHA'], 'upstream_sha': os.environ['UPSTREAM_EXPECTED_SHA'],
         'upstream_version': os.environ['UPSTREAM_VERSION'], 'patchset': os.environ['PATCHSET'],
         'common_patch_hash': patch_hash('common', os.environ['PATCHSET']),
         'workflow_run': os.environ['GITHUB_RUN_ID'], 'policy_sha256': sha(POLICY), 'targets': found}, indent=2) + '\n')
+
+
+def attach_assets(root, directory, peer, channel):
+    if channel not in policy()['channels'] or channel != os.environ.get('BUILD_CHANNEL'):
+        raise ValueError('PROVENANCE: Wayland parent channel mismatch')
+    report = ROOT / '.work/wayland-qualification.json'
+    aggregate(root, report)
+    for f in Path(root).rglob('build-info.json'):
+        info = validate(f.parent)
+        for key in ['prepared_source_identity', 'prepare_run', 'common_patch_hash', 'server_config_fingerprint']:
+            if info.get(key) is None or str(info[key]) != str(peer.get(key)):
+                raise ValueError('PROVENANCE: Wayland/ordinary source or configuration mismatch: ' + key)
+        for package in (f.parent / 'packages').iterdir():
+            if (directory / package.name).exists():
+                raise ValueError('PACKAGE: Wayland asset collision')
+            shutil.copy2(package, directory / package.name)
+    return json.loads(report.read_text())
 
 
 if __name__ == '__main__':
