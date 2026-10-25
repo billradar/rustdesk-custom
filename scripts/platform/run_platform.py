@@ -8,7 +8,10 @@ values=sorted([os.environ[n] for n in NAMES if os.environ.get(n)],key=len,revers
 def redact(text):
     for value in values:text=text.replace(value,'[REDACTED]')
     scan_bytes(text.encode());return text
-lines=[];p=subprocess.Popen(['bash','scripts/build/'+platform+'.sh'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+flavor=os.environ.get('BUILD_FLAVOR')
+if flavor and (flavor!='unattended-wayland' or platform!='linux' or variant!='standard'):raise ValueError('BUILD_COMPAT: forbidden build flavor')
+script='linux_wayland' if flavor else platform
+lines=[];p=subprocess.Popen(['bash','scripts/build/'+script+'.sh'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
 try:
     for line in p.stdout:
         line=redact(line);print(line,end='',flush=True);lines.append(line);lines=lines[-100:]

@@ -47,6 +47,7 @@ def aggregate(root,channel,experimental):
         data=json.loads(path.read_text());diagnostics[data['target']]=data
     for path in root.rglob('build-info.json'):
         i=json.loads(path.read_text());platform=i['platform'].removesuffix('-x86_64');name=platform+'-'+i['architecture']+'-'+i['variant']
+        if i.get('build_flavor'):raise ValueError('PROVENANCE: dedicated build flavor cannot satisfy ordinary Stable/CI targets')
         if name not in expected:raise ValueError('PROVENANCE: unexpected artifact '+name)
         if name in found:raise ValueError('PROVENANCE: duplicate artifact '+name)
         if platform=='windows':

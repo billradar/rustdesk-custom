@@ -77,3 +77,32 @@ Dry-run / Draft / Release
 7. 记录最终 Workflow URL、自定义 commit SHA、上游 SHA、patchset、产物验证和真实发布结果。
 
 修改工作流输入或触发方式后，应同步更新本文并核实所有引用；不得保留已经删除的工作流名或过期的输入说明。
+
+## Wayland unattended build
+
+`wayland.yml` is a manual, Stable-tag-resolved experimental amd64/ARM64 build. It does not publish or join ordinary Stable qualification. See [its contracts and usage](wayland-unattended.md).
+
+## Unknown-interface review automation
+
+The existing upstream-main monitor runs a separate read-only inspection alongside
+normal compatibility checks. Known signatures produce no review. Unknown ones
+produce a same-run JSON report with the observed interface, changed critical
+file/tool fingerprints, a full upstream compare link, and Standard/SOS patch
+application and API-structure results. Rust compilation, bridge generation,
+Flutter analysis and runtime are explicitly **not run** in this unapproved path.
+The normal compatibility gate continues to fail until the interface is reviewed.
+
+A separate trusted-main job, with only repository contents/PR write permissions,
+can propose a **draft, report-only PR**. It cannot change the approved profile
+list, patch policy, signing or release settings. Reports live under
+`docs/upstream-interface-reviews/`; automation branches use the full interface
+signature and are deduplicated across repeated runs. Partial PR-creation retries
+can reuse only a branch containing the single expected report; they never reset
+or force-update a branch. Existing closed reviews are not silently reopened.
+
+No PAT or production configuration is used. GitHub Actions must be permitted by
+the repository/organization to create pull requests; otherwise the report artifact
+remains available and the writer fails visibly. GITHUB_TOKEN-created PRs may not
+trigger new CI automatically; the report makes no CI-qualification claim. A human
+must inspect the diff, add a reviewed profile if appropriate, and run the full
+compatibility path. Nothing is automatically approved, merged or published.
