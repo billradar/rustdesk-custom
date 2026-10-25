@@ -351,6 +351,8 @@ Before changing anything:
 9. Open/update a PR to `main` when integration is expected; do not merge without explicit authorization.
 10. Verify CI on the exact resulting commit and report the files, commit, PR, checks, and remaining unverified claims.
 
+Prepared-source credential scanning permits only the reviewed public upstream WebSocket TLS test-key path plus exact content hash documented in `docs/build-and-validation.md`. Do not generalize this to a test-directory/PEM exclusion or the production payload/input scanner.
+
 Never claim that CI passed, a PR merged, branches synchronized, a release published, an artifact uploaded, a production signature succeeded, or identity continuity was proven unless current evidence establishes that exact claim. Label historical evidence as historical.
 
 ## 14. Core non-negotiable principles

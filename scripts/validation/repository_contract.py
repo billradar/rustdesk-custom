@@ -144,7 +144,9 @@ def check_current_legacy_references(files: list[Path], errors: list[str]) -> Non
         except UnicodeDecodeError:
             continue
         for marker in LEGACY_TEXT_MARKERS:
-            if marker in text:
+            # An exact external upstream fixture path is not our retired root test directory.
+            scanned = text.replace("libs/hbb_common/tests/data/websocket-key.pem", "") if marker == "tests/" else text
+            if marker in scanned:
                 fail(errors, path, "legacy reference is not allowed outside docs/archive", "absent", marker)
         if re.search(r"\bphase(?:4|5)(?:\.1|\.2b?1?)?\b", text, re.IGNORECASE):
             fail(errors, path, "historical Phase reference is not allowed in current artifacts")

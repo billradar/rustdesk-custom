@@ -79,3 +79,17 @@ or publication credentials. This is an interface review, not build/runtime proof
 toolchain drift and unreviewed runners still fail closed. The separate unattended
 workflow remains pinned to its own reviewed 1.5.0 DRM policy; this profile does not
 authorize a new libdrmtap pin or new unattended packages.
+
+## Public upstream test-key fixture during source preparation
+
+Nightly run 40198211193 reached official bridge generation successfully but its
+source scan rejected `libs/hbb_common/tests/data/websocket-key.pem`, an upstream
+WebSocket TLS integration-test fixture. Reviewed upstream 1297da6d pins hbb_common
+edefa08b; the fixture was introduced by upstream hbb_common commit 3aade011.
+Source preparation permits only that source-relative path with complete SHA256
+`95cf7a0a6890435c98bb3f644678d4fd20d80ff4a296d438a515802e233c6ec9`.
+It does not exempt tests directories, PEM files, other paths or modified secret
+content. Failures now identify only the filename and withhold the value.
+The global production input/package/log scanner remains strict, without this
+source-only exception. Regression contracts cover changed content, relocated keys
+and ASCII/UTF-16 tokens.

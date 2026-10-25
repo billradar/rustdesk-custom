@@ -16,6 +16,39 @@ from unittest.mock import patch
 import scripts.upstream.resolve as upstream
 import scripts.release.github as release
 
+class PreparedSourceCredentialTests(unittest.TestCase):
+    def test_public_fixture_requires_exact_source_path_and_digest(self):
+        from scripts.source import prepared_source as source
+        from scripts.signing.production_config import scan_bytes
+        data=b'-----BEGIN PRIVATE KEY-----\npublic synthetic test material\n'
+        path='libs/hbb_common/tests/data/websocket-key.pem'
+        policy={path:hashlib.sha256(data).hexdigest()}
+        with tempfile.TemporaryDirectory() as td,patch.object(source,'PUBLIC_UPSTREAM_TEST_FIXTURES',policy):
+            root=Path(td);p=root/path;p.parent.mkdir(parents=True);p.write_bytes(data)
+            source.scan_prepared_source(root)
+            # The global payload/input scanner never receives this exception.
+            with self.assertRaises(ValueError):scan_bytes(data)
+            for value in [data+b'changed',data+b'ghp_'+b'a'*36]:
+                p.write_bytes(value)
+                with self.assertRaisesRegex(ValueError,'value withheld'):source.scan_prepared_source(root)
+            p.unlink();(root/'other.pem').write_bytes(data)
+            with self.assertRaises(ValueError):source.scan_prepared_source(root)
+
+    def test_ascii_and_utf16_tokens_outside_fixture_still_block(self):
+        from scripts.source import prepared_source as source
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            for encoding in ['utf-8','utf-16-le']:
+                (root/'credentials.txt').write_bytes(('ghp_'+'a'*36).encode(encoding))
+                with self.assertRaisesRegex(ValueError,'credentials.txt'):source.scan_prepared_source(root)
+
+    def test_reviewed_fixture_allowlist_is_narrow(self):
+        from scripts.source.prepared_source import PUBLIC_UPSTREAM_TEST_FIXTURES
+        self.assertEqual(PUBLIC_UPSTREAM_TEST_FIXTURES,{
+            'libs/hbb_common/tests/data/websocket-key.pem':
+                '95cf7a0a6890435c98bb3f644678d4fd20d80ff4a296d438a515802e233c6ec9'})
+
+
 class DiscoveryTests(unittest.TestCase):
     def test_official_release_metadata_controls_stability(self):
         rows = [dict(id=1, tag_name='1.4.9', draft=False, prerelease=False, body='# Changelog\n\n- test change'),
