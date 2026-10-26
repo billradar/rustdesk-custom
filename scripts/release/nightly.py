@@ -198,9 +198,23 @@ def draft(root, discovery):
         if job['status'] == 'completed' and job['conclusion'] == 'success':
             scan_job_log(job['id'])
     files = sorted(p for p in ASSETS.iterdir() if p.is_file())
+    if any(p.suffix.lower() == '.json' or p.name.startswith(('source-', 'build-info-')) for p in files):
+        raise ValueError('Non-public metadata in Nightly release assets')
+    if len({p.name for p in files}) != len(files):
+        raise ValueError('Duplicate Nightly asset names')
     if not files or not (ASSETS / 'SHA256SUMS').is_file():
         raise ValueError('Nightly public package inventory missing')
     expected = {p.name: {'size': p.stat().st_size, 'digest': 'sha256:' + hashlib.sha256(p.read_bytes()).hexdigest()} for p in files}
+    checksum_lines = (ASSETS / 'SHA256SUMS').read_text().splitlines()
+    checksum_expected = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.name != 'SHA256SUMS'}
+    checksum_actual = {}
+    for line in checksum_lines:
+        match = re.fullmatch(r'([0-9a-f]{64})  ([^/\\\\]+)', line)
+        if not match or match.group(2) in checksum_actual:
+            raise ValueError('Malformed or duplicate Nightly checksum entry')
+        checksum_actual[match.group(2)] = match.group(1)
+    if checksum_actual != checksum_expected:
+        raise ValueError('Nightly SHA256SUMS does not match public assets')
     metadata = [f'channel=nightly', 'nightly_identity=' + identity,
                 'upstream_repository=' + OFFICIAL, 'upstream_sha=' + data['upstream_sha'],
                 'official_run_id=' + run_id, 'official_run_url=' + data['official_run_url'],
@@ -214,7 +228,12 @@ def draft(root, discovery):
                 'automation_state=uploading']
     if identity_data['wayland_policy']:
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy'])
-    notes = ('## RustDesk Custom Nightly ' + data['upstream_version'] + '\n\n' + 'Official successful Nightly run: ' + data['official_run_url'] + '\n\n' + '### Build provenance\n\n' + '\n'.join(metadata) + '\n')
+    notes = ('## RustDesk Custom Nightly ' + data['upstream_version'] + '\n\n'
+             'Based on the [verified upstream Nightly build](' + data['official_run_url'] + ').\n\n'
+             '### Downloads\n\nUse the attached packages and `SHA256SUMS` to verify integrity.\n\n'
+             '### Verification\n\nAndroid APK v2/v3 signatures verified; desktop code signing not enabled. '
+             'Runtime UI and remote sessions have not been tested.\n\n'
+             '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n')
     created = request('POST', f'repos/{REPO}/releases', dict(tag_name=tag, name='RustDesk ' + data['upstream_version'] + ' Custom Nightly (' + data['patchset'] + ', ' + identity[:12] + ')',
                       target_commitish=os.environ['GITHUB_SHA'], body=notes, draft=True, prerelease=True))
     if created.get('draft') is not True:
