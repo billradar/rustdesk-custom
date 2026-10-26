@@ -22,7 +22,10 @@ def validate(folder):
     verify(info['patchset'])
     if info['patchset'] != os.environ.get('PATCHSET', 'v1'):
         raise ValueError('Artifact selected patchset mismatch')
-    if info['variant'] not in ('standard', 'sos') or info['platform'] != 'windows-x86_64':
+    arch=info.get('architecture', 'x86_64')
+    if arch not in ('x86_64','aarch64'): raise ValueError('Unsupported Windows architecture')
+    machine={'x86_64':0x8664,'aarch64':0xaa64}[arch]
+    if info['variant'] not in ('standard', 'sos') or info['platform'] != 'windows-'+arch:
         raise ValueError('Unexpected variant/platform')
     if info.get('signed') is not False or info.get('configuration') != os.environ.get('BUILD_CONFIGURATION', 'TEST ONLY'):
         raise ValueError('Unexpected signing/configuration policy')
@@ -41,7 +44,7 @@ def validate(folder):
     if info['runtime_ui_validation'] != 'SKIPPED BY USER' or info['real_remote_session_validation'] != 'NOT TESTED':
         raise ValueError('Runtime status must not imply validation')
     if os.environ.get('BUILD_CONFIGURATION') == 'PRODUCTION':
-        if info.get('custom_repository') != 'billradar/rustdesk-custom' or info.get('architecture') != 'x86_64':
+        if info.get('custom_repository') != 'billradar/rustdesk-custom' or info.get('architecture') != arch:
             raise ValueError('Production repository/architecture provenance missing')
         from scripts.signing.production_config import payload
         payload(folder)
@@ -65,8 +68,8 @@ def validate(folder):
         if len(data) < 64 or data[:2] != b'MZ':
             raise ValueError('Missing PE header: ' + file.name)
         offset = struct.unpack_from('<I', data, 0x3c)[0]
-        if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
-            raise ValueError('Not Windows AMD64: ' + file.name)
+        if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != machine:
+            raise ValueError('Wrong Windows machine: ' + file.name)
     packages = folder / 'packages'
     expected_suffixes = {'.exe', '.msi'}
     if not packages.is_dir():
@@ -76,8 +79,8 @@ def validate(folder):
         raise ValueError('Windows installers must contain exactly one EXE and one MSI')
     version = info.get('upstream_version') or str(info.get('upstream_tag', '')).lstrip('v')
     expected_names = {
-        windows_installer_name(version, info['variant'], 'exe'),
-        windows_installer_name(version, info['variant'], 'msi'),
+        windows_installer_name(version, info['variant'], 'exe', arch),
+        windows_installer_name(version, info['variant'], 'msi', arch),
     }
     if {p.name for p in package_files} != expected_names:
         raise ValueError('Windows installer names violate the canonical variant contract')
@@ -89,18 +92,22 @@ def validate(folder):
             if len(data) < 64 or data[:2] != b'MZ':
                 raise ValueError('Installer EXE is not a PE file: ' + file.name)
             offset = struct.unpack_from('<I', data, 0x3c)[0]
-            if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != 0x8664:
-                raise ValueError('Installer EXE is not Windows AMD64: ' + file.name)
+            if offset + 6 > len(data) or data[offset:offset+4] != b'PE\0\0' or struct.unpack_from('<H', data, offset+4)[0] != machine:
+                raise ValueError('Installer EXE has wrong Windows machine: ' + file.name)
         else:
             if data[:8] != bytes.fromhex('D0CF11E0A1B11AE1'):
                 raise ValueError('Installer MSI is not an OLE compound package: ' + file.name)
-    print(f'{info["variant"]}: metadata, checksums, Windows AMD64, MSI/EXE installers: PASS')
+    if arch=='aarch64':
+        from scripts.build.windows_arm64 import validate_receipt
+        validate_receipt(folder, info)
+    print(f'{info["variant"]}: metadata, checksums, Windows {arch}, MSI/EXE installers: PASS')
     return info
 
-def collect(root):
+def collect(root, arch=None):
+    arch=arch or os.environ.get("WINDOWS_ARCH", "x86_64")
     infos, folders = {}, {}
     for variant in ('standard', 'sos'):
-        matches = [p.parent for p in root.rglob('build-info.json') if json.loads(p.read_text()).get('variant') == variant]
+        matches = [p.parent for p in root.rglob('build-info.json') if json.loads(p.read_text()).get('variant') == variant and json.loads(p.read_text()).get('architecture','x86_64') == arch]
         if len(matches) != 1:
             raise ValueError(f'Expected exactly one {variant} same-run artifact')
         folders[variant] = matches[0]

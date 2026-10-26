@@ -140,7 +140,7 @@ def assets(root):
         if {p.suffix.lower() for p in files} != {'.exe', '.msi'}:
             raise ValueError('Windows release requires exactly one EXE and one MSI per variant')
         for package in files:
-            target = directory / windows_installer_name(version, variant, package.suffix)
+            target = directory / windows_installer_name(version, variant, package.suffix, info['architecture'])
             shutil.copy2(package, target)
     release_files = sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
     sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'

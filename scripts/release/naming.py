@@ -12,11 +12,13 @@ def variant_suffix(variant):
         return '-sos'
     raise ValueError('Unknown release variant: '+str(variant))
 
-def windows_installer_name(version, variant, extension):
+def windows_installer_name(version, variant, extension, arch="x86_64"):
+    if arch not in ("x86_64", "aarch64"):
+        raise ValueError("Unsupported Windows architecture")
     ext = extension.lower().lstrip('.')
     if ext not in ('exe', 'msi'):
         raise ValueError('Unsupported Windows installer extension: '+ext)
-    return f'rustdesk-{version}{variant_suffix(variant)}-windows-x86_64.{ext}'
+    return f'rustdesk-{version}{variant_suffix(variant)}-windows-{arch}.{ext}'
 
 def native_package_name(version, variant, platform, arch, package_name):
     """Normalize native package names into one canonical public name."""

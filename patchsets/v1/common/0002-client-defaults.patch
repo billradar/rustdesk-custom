@@ -10,12 +10,16 @@ diff --git a/src/common.rs b/src/common.rs
  }
  
  #[inline]
-@@ -2080,10 +2080,31 @@
+@@ -2080,10 +2080,35 @@
      ThrottledInterval::new(i)
  }
  
 +// Preserve the legacy custom-client defaults; password security redesign is deferred.
 +fn apply_custom_build_defaults() {
++    // Hardware DRM/EGL capture must not inherit forced software rendering, even from saved settings.
++    config::OVERWRITE_SETTINGS.write().unwrap().insert(
++        "allow-always-software-render".to_owned(), "N".to_owned(),
++    );
 +    {
 +        let mut hard_settings = config::HARD_SETTINGS.write().unwrap();
 +        hard_settings.insert("password".to_owned(), env!("RUSTDESK_PASSWORD").to_owned());
@@ -42,7 +46,7 @@ diff --git a/src/common.rs b/src/common.rs
          return;
      }
      let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
-@@ -2100,6 +2121,7 @@
+@@ -2100,6 +2125,7 @@
          };
          read_custom_client(&data.trim());
      }

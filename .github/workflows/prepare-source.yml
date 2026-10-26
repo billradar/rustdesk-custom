@@ -4,6 +4,9 @@ env:
 'on':
   workflow_call:
     inputs:
+      build_wayland:
+        type: boolean
+        default: false
       upstream_repository:
         type: string
         default: rustdesk/rustdesk
@@ -51,6 +54,14 @@ jobs:
     - id: profile
       name: Resolve reviewed official bridge/build profile
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
+    - name: Review all Nightly native target interfaces before bridge dependencies
+      if: inputs.channel == 'nightly'
+      run: python3 scripts/release/nightly.py preflight --tree .work/official
+    - name: Review both Wayland target interfaces before bridge dependencies
+      if: inputs.build_wayland
+      run: |
+        python3 scripts/platform/wayland.py preflight --tree .work/official --arch x86_64
+        python3 scripts/platform/wayland.py preflight --tree .work/official --arch aarch64
     - name: Install official bridge prerequisites
       run: |
         sudo apt-get update -y

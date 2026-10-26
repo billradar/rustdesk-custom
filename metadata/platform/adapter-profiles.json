@@ -2,15 +2,18 @@
   "approved": {
     "linux": [
       "4e4b17f49bcda1d0a2a7c796f15cf86e87fe7a0b39eb9b77288ea22cdc598654",
-      "059a3ff345df456a5f0bd36ab831b0e76079765c4888c793cb374e0721c3644a"
+      "059a3ff345df456a5f0bd36ab831b0e76079765c4888c793cb374e0721c3644a",
+      "4eb774b0cf065bcd8f3e48d2be65a4a95a6c44aea8eb63863c63590bc0c85b9b"
     ],
     "macos": [
       "a26b22aceb5e2f19543fee740048250e0441782f3a24585d43ec75a50468cef7",
-      "05ef79604398c3bdfe43cc45e3993f1b6375b3a11256d64197f76ddcebd1f674"
+      "05ef79604398c3bdfe43cc45e3993f1b6375b3a11256d64197f76ddcebd1f674",
+      "42ef96742adf240e154b4fc0b2e1f2cb08719d82a6175e7e6a08edcd1c60974c"
     ],
     "android": [
       "fade10df57f50b94f7d6947f7a6596e4d22183f6980c0a3962e0a47c863bccd4",
-      "396230d95650e2e7609405db12c95e52f0c398905a1c24f8ebfd9c710b4aac93"
+      "396230d95650e2e7609405db12c95e52f0c398905a1c24f8ebfd9c710b4aac93",
+      "c4cd18eeb5d64e728964dea681ba249bca6885a891a04fc86c3fedcb75b9f6b6"
     ],
     "ios": [
       "9ef1f6c65b6135f22d9ff626b30159f9da1ba4c875232f4470be4039963687b9",
@@ -938,6 +941,329 @@
         "VERSION": "1.5.0",
         "NDK_VERSION": "r28c"
       }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "runner": "ubuntu-22.04",
+      "target": "x86_64-unknown-linux-gnu",
+      "triplet": "x64-linux",
+      "official_matrix": {
+        "arch": "x86_64",
+        "target": "x86_64-unknown-linux-gnu",
+        "distro": "ubuntu18.04",
+        "true": "ubuntu-22.04",
+        "deb_arch": "amd64",
+        "vcpkg-triplet": "x64-linux"
+      },
+      "signature": "4eb774b0cf065bcd8f3e48d2be65a4a95a6c44aea8eb63863c63590bc0c85b9b",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "runner": "ubuntu-22.04-arm",
+      "target": "aarch64-unknown-linux-gnu",
+      "triplet": "arm64-linux",
+      "official_matrix": {
+        "arch": "aarch64",
+        "target": "aarch64-unknown-linux-gnu",
+        "distro": "ubuntu18.04",
+        "true": "ubuntu-22.04-arm",
+        "deb_arch": "arm64",
+        "vcpkg-triplet": "arm64-linux"
+      },
+      "signature": "4eb774b0cf065bcd8f3e48d2be65a4a95a6c44aea8eb63863c63590bc0c85b9b",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "macos",
+      "architecture": "x86_64",
+      "runner": "macos-15-intel",
+      "target": "x86_64-apple-darwin",
+      "triplet": "x64-osx",
+      "official_matrix": {
+        "target": "x86_64-apple-darwin",
+        "os": "macos-15-intel",
+        "extra-build-args": "",
+        "extra-cargo-features": "",
+        "arch": "x86_64",
+        "vcpkg-triplet": "x64-osx"
+      },
+      "signature": "42ef96742adf240e154b4fc0b2e1f2cb08719d82a6175e7e6a08edcd1c60974c",
+      "rust": "1.81",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "macos",
+      "architecture": "aarch64",
+      "runner": "macos-14",
+      "target": "aarch64-apple-darwin",
+      "triplet": "arm64-osx",
+      "official_matrix": {
+        "target": "aarch64-apple-darwin",
+        "os": "macos-14",
+        "extra-build-args": "--screencapturekit",
+        "extra-cargo-features": ",screencapturekit",
+        "arch": "aarch64",
+        "vcpkg-triplet": "arm64-osx"
+      },
+      "signature": "42ef96742adf240e154b4fc0b2e1f2cb08719d82a6175e7e6a08edcd1c60974c",
+      "rust": "1.81",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "android",
+      "architecture": "aarch64",
+      "runner": "ubuntu-24.04",
+      "target": "aarch64-linux-android",
+      "triplet": null,
+      "official_matrix": {
+        "arch": "aarch64",
+        "target": "aarch64-linux-android",
+        "os": "ubuntu-24.04",
+        "reltype": "release",
+        "suffix": ""
+      },
+      "signature": "c4cd18eeb5d64e728964dea681ba249bca6885a891a04fc86c3fedcb75b9f6b6",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "android",
+      "architecture": "armv7",
+      "runner": "ubuntu-24.04",
+      "target": "armv7-linux-androideabi",
+      "triplet": null,
+      "official_matrix": {
+        "arch": "armv7",
+        "target": "armv7-linux-androideabi",
+        "os": "ubuntu-24.04",
+        "reltype": "release",
+        "suffix": ""
+      },
+      "signature": "c4cd18eeb5d64e728964dea681ba249bca6885a891a04fc86c3fedcb75b9f6b6",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "platform": "android",
+      "architecture": "x86_64",
+      "runner": "ubuntu-24.04",
+      "target": "x86_64-linux-android",
+      "triplet": null,
+      "official_matrix": {
+        "arch": "x86_64",
+        "target": "x86_64-linux-android",
+        "os": "ubuntu-24.04",
+        "reltype": "release",
+        "suffix": ""
+      },
+      "signature": "c4cd18eeb5d64e728964dea681ba249bca6885a891a04fc86c3fedcb75b9f6b6",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "compared_upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17",
+      "scope": [
+        "linux",
+        "macos",
+        "android"
+      ],
+      "critical_files_sha256": {
+        "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+        "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46",
+        "Cargo.toml": "d8879fa21a932b4ca331b19137476073be93f2cd4692ac0e300c12e58e2f8c4f",
+        "flutter/pubspec.yaml": "e7c452e50486755173ddf65f62e00f31e1a7f70df870e8b7aeb0ed1187dd9a4c",
+        ".github/workflows/bridge.yml": "b519191d9d9bd7f4350cc978c8fd6db366cf3152206835620a73f09a165b4d05"
+      },
+      "notes": [
+        "Linux and Android official jobs and Android-specific build files unchanged; filtered global VERSION changed from 1.5.0 to 1.5.1. Toolchain versions and canonical native runners unchanged.",
+        "macOS adds matrix extra-cargo-features, GITHUB_ENV deployment target export, broader conditional test steps and opt-in verified-update signing/upload routing. Custom build executes only named setup/build commands and packages an unsigned DMG; official signing/update publication steps are not inherited.",
+        "Cargo adds Linux wayland-client/xkbcommon-dl and changes dev-only tokio declaration; Flutter version metadata increments. build.rs change is non-Flutter Windows Sciter-only.",
+        "build.py optional DRM dependency advances 0.5.8 to 0.5.12. Ordinary platform builds do not opt into DRM; dedicated unattended Wayland policy remains separately pinned.",
+        "Profile approval is static recipe review only, not full package/runtime evidence. All other source signatures still fail closed."
+      ]
     }
   ]
 }

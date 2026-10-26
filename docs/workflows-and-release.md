@@ -31,7 +31,7 @@ Pull Request、受支持的 push 或手动触发首先进行变更分类：
 
 `upstream-main-compatibility.yml` 定期解析官方 `rustdesk/rustdesk` 默认分支的当前提交 SHA，并运行兼容性检查。它只提供持续兼容性信号，不触发 Nightly 构建、不生成开发版发布，也不能替代 Stable 版本的资格验证。
 
-Nightly 构建和路由工作流已移除。仓库只保留普通 CI / 上游兼容性验证以及单独受门禁控制的 Stable 发布流程；不得重新引入 Nightly 工作流或通过 Nightly 通道绕过 CI、来源身份、补丁兼容性、平台构建接口和 Stable 资格门禁。
+Nightly 根据用户 2026-10-25 的要求恢复为独立构建通道；它不能替代 Stable 资格验证，也不能绕过来源、补丁、构建接口和包检查。详见下面的同步策略。
 
 ## 4. Stable 资格验证与发布
 
@@ -80,7 +80,7 @@ Dry-run / Draft / Release
 
 ## Wayland unattended build
 
-`wayland.yml` is a manual, Stable-tag-resolved experimental amd64/ARM64 build. It does not publish or join ordinary Stable qualification. See [its contracts and usage](wayland-unattended.md).
+`wayland.yml` is an internal reusable amd64/ARM64 experimental build, enabled by default through `include_wayland` in Tag and Nightly. Tag draft/release revalidates and attaches both DEBs; Nightly includes them in its aggregate. The flavor remains separately qualified. See [contracts and usage](wayland-unattended.md).
 
 ## Unknown-interface review automation
 
@@ -106,3 +106,59 @@ remains available and the writer fails visibly. GITHUB_TOKEN-created PRs may not
 trigger new CI automatically; the report makes no CI-qualification claim. A human
 must inspect the diff, add a reviewed profile if appropriate, and run the full
 compatibility path. Nothing is automatically approved, merged or published.
+
+## Nightly 同步与构建
+
+官方 `flutter-nightly.yml` 每天 UTC 00:00（香港时间 08:00）启动。
+`upstream-nightly.yml` 在每小时 :07/:22/:37/:52 检查官方成功完成的构建，
+发现新批次后触发 `nightly.yml`。GitHub 定时任务可能延迟；不按固定等待分钟数猜测完成状态。
+官方计划见 https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-nightly.yml 。
+
+来源绑定官方仓库、默认分支、工作流路径、成功状态、运行 ID 和完整 40 位 SHA；
+不使用可能滞后的 `nightly` 标签，也不追逐尚未成功构建的最新 master。
+本次接入时，官方成功运行 40146600534 对应 `1297da6d186e58d9096be24072ae3998cdbbf8fe`，
+而 `nightly` 标签指向其他提交，因此两者不能混用。
+
+构建复用 Tag 的 `prepare-source.yml`、Windows/Linux/macOS/Android 构建核心，
+从同批 Common 补丁源码分出 Standard/SOS；目标及 ARM64/amd64 范围来自同一平台矩阵。
+Android 仍仅 Standard。Windows ARM64 作为实验性目标由平台矩阵默认加入 Tag/Nightly，安装包通过架构与来源校验后随发布资产附带；普通 CI 仍不自动构建它，运行时资格待补充。
+DRM/Wayland 实验构建已作为默认开启的子流程接入，保留独立审核策略和资格结果，不冒充普通 Standard 目标。
+v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口继续阻断。
+
+自动路由仅从本仓库 main 执行，按官方运行 ID 与自定义提交 SHA 去重；
+成功或活动批次不重复构建，同一身份累计失败三次后停止自动重试。
+手动运行支持指定官方成功运行 ID，并可用 `expected_sha` 校验提交。
+更新自定义代码会形成新的构建身份。
+
+全矩阵和同批来源验证通过后，安装包、SHA256SUMS 与验证报告出现在
+`nightly-qualification-<run-id>` Actions 产物中；单目标失败不会发布完整批次。
+Nightly 的 `release_mode` 默认 `draft`：仅主分支的直接签名 job 绑定 Android
+生产签名 Environment 与 YubiKey，全部构建和签名验证通过后创建 prerelease Draft。
+普通构建 job 不接触 PIN，Draft job 也不接触 PIN；没有自动公开发布环节。
+`dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
+运行时与真实远程连接状态保持未测试，构建成功不能证明锁屏兼容。
+
+定时工作流需要合入 main 后才会生效；代码/契约检查通过与真实全平台构建成功应分别报告。
+
+### Nightly signing and Draft contract
+
+The user explicitly requested Tag-equivalent signing and Draft stages. The router
+now requests `release_mode=draft`. Signing/draft mode is restricted to repository
+main, the exact Nightly workflow reference and workflow_dispatch; development must
+use dry-run. The direct Android signing job shares Tag's Environment, runner labels,
+PIV identity, v2/v3 requirements and physical-key concurrency lock. The input APK
+channel must match `SIGNING_CHANNEL`; Nightly receipts also record the channel.
+
+The complete parent aggregate requires all three production-signed Android ABIs
+in Draft mode. A separate contents-write job downloads the exact same-run signed
+packages and optional Wayland pair and revalidates them before any write. It scans
+completed build logs, creates an immutable Nightly-specific prerelease Draft,
+uploads packages and SHA256SUMS, verifies remote names, sizes and SHA256 digests,
+and only then records automation_state=complete. Upload failures leave an incomplete
+private Draft; an existing tag/release/draft is never overwritten. Public publication
+is absent. Windows/macOS signing status remains the same as Tag (not enabled).
+
+Run titles/dedup distinguish Draft from dry-run and Wayland-on from Wayland-off,
+so a successful build-only run cannot suppress the router's signed Draft batch.
+This workflow must be merged to main before production signing/Draft can execute;
+unit and CI checks do not prove a hardware signing operation occurred.

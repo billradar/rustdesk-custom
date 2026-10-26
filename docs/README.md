@@ -21,3 +21,5 @@
 - 所有生产签名和发布操作必须遵循工作流授权门禁，不允许为了复现问题绕过门禁。
 
 - [Wayland unattended build flow and gates](wayland-unattended.md)
+
+- Nightly 同步、触发时间和构建门禁见 [工作流与发布流程](workflows-and-release.md#nightly-同步与构建)。

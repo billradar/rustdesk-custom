@@ -32,6 +32,33 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     contracts(tree,variant,patchset);check(tree)
     return manifest
 
+# Public upstream TLS integration-test key, never a deployment credential.
+# Reviewed at rustdesk 1297da6d / hbb_common edefa08b; introduced in
+# hbb_common 3aade011c08cb1937c903deb48a711fb0e856958 (WebSocket proxy tests).
+# Only this source-relative path AND complete content digest are allowed.
+PUBLIC_UPSTREAM_TEST_FIXTURES = {
+    'libs/hbb_common/tests/data/websocket-key.pem':
+        '95cf7a0a6890435c98bb3f644678d4fd20d80ff4a296d438a515802e233c6ec9',
+}
+
+
+def scan_prepared_source(tree):
+    from scripts.signing.production_config import scan_bytes
+    for p in tree.rglob('*'):
+        relative = p.relative_to(tree)
+        if not p.is_file() or '.git' in relative.parts:
+            continue
+        data = p.read_bytes()
+        known = PUBLIC_UPSTREAM_TEST_FIXTURES.get(relative.as_posix())
+        if known and hashlib.sha256(data).hexdigest() == known:
+            continue
+        try:
+            scan_bytes(data)
+        except ValueError:
+            raise ValueError('Forbidden credential in prepared source file: ' + relative.as_posix()
+                             + ' (value withheld)') from None
+
+
 def prepare(base,output,ref,sha,name,bridge):
     verify(name)
     if git(base,'rev-parse','HEAD')!=sha or git(base,'status','--porcelain','--ignore-submodules=none'):
@@ -50,9 +77,7 @@ def prepare(base,output,ref,sha,name,bridge):
                 run('git','-C',tree,'apply','--check',p);run('git','-C',tree,'apply',p)
         contracts(tree,variant,name)
         run('python3',ROOT/'scripts/release/package.py','restore-bridge',tree,bridge)
-        from scripts.signing.production_config import scan_bytes
-        for p in tree.rglob('*'):
-            if p.is_file() and '.git' not in p.relative_to(tree).parts:scan_bytes(p.read_bytes())
+        scan_prepared_source(tree)
         if profile['source_sbom_requested']:
             run('syft','dir:'+str(tree),'-o','cyclonedx-json='+str(tree/'custom-source.sbom.json'))
         manifest={'upstream_repository':'rustdesk/rustdesk','upstream_ref':ref,'upstream_sha':sha,

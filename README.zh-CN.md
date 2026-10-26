@@ -34,7 +34,7 @@ RustDesk Custom 是一个基于上游 RustDesk 的维护与发行项目，用于
 | Android | ARMv7 | ✓ | — |
 | Android | x86_64 | ✓ | — |
 
-Windows ARM64 和 iOS 当前计划支持；Web 目前暂不支持。
+Windows ARM64 已作为实验性目标接入 Tag 和 Nightly 构建，生成的安装包会进入发布资产；运行时验证尚未完成。iOS 仍在计划中；Web 目前暂不支持。
 
 权威平台支持矩阵：[metadata/platform/matrix.json](metadata/platform/matrix.json)。
 

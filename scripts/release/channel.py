@@ -101,6 +101,13 @@ def release_preflight(data):
         data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
         return data
     body=existing.get('body') or ''
+    if os.environ.get('INCLUDE_WAYLAND') == 'true':
+        from scripts.platform.wayland import POLICY
+        expected_policy = hashlib.sha256(POLICY.read_bytes()).hexdigest()
+        required_wayland = {'unattended-wayland-rustdesk-unattended-wayland-' + data['version'] + '-' + arch + '.deb' for arch in ['x86_64', 'aarch64']}
+        uploaded_wayland = {a['name'] for a in existing.get('assets', []) if a.get('state') == 'uploaded'}
+        if ('wayland_policy_sha256=' + expected_policy not in body or not required_wayland <= uploaded_wayland):
+            raise ValueError('Existing immutable revision lacks matching Wayland evidence; disable include_wayland to reuse it or create a new patch identity')
     generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
     if generation is None: raise ValueError('Existing release missing generation identity')
     name=generation.group(1);verify(name)
@@ -134,7 +141,7 @@ def release_preflight(data):
 
 def resolve(channel,ref='',discovery_only=False):
     if channel not in ('ci','stable'):
-        raise ValueError('Unsupported channel; Nightly build has been retired')
+        raise ValueError('Unsupported channel here; use the verified official-run Nightly resolver')
     if channel=='stable':
         data=choose_stable(ref)
         data['upstream_ref']=data['upstream_tag']
@@ -221,7 +228,7 @@ def draft(root):
     print('Draft created; automatic publication disabled.')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--patchset',default='');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--patchset',default='');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
     if a.mode=='resolve':resolve(a.channel,a.ref,a.discovery_only)
     elif a.mode=='release-preflight':
         data=json.loads(a.discovery.read_text());data['patchset']=a.patchset or data.get('patchset','');outputs(release_preflight(data))

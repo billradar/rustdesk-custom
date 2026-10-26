@@ -1,0 +1,322 @@
+name: Nightly Build Pipeline
+run-name: Nightly ${{ inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }}
+env:
+  PYTHONPATH: .
+'on':
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        type: choice
+        default: draft
+        description: draft signs Android and creates a private prerelease draft on main; dry-run builds only
+        options: [dry-run, draft]
+      include_wayland:
+        type: boolean
+        default: true
+        description: Build both experimental Wayland DEBs and include validated packages
+      official_run_id:
+        type: string
+        default: ''
+        description: Successful official flutter-nightly run ID; empty = latest successful
+      expected_sha:
+        type: string
+        default: ''
+        description: Optional exact SHA guard, required by the automatic router
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: nightly-${{ inputs.official_run_id || 'latest' }}-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.event_name == 'workflow_dispatch' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
+    runs-on: ubuntu-22.04
+    outputs:
+      upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
+      upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
+      upstream_version: ${{ steps.resolve.outputs.upstream_version }}
+      patchset: ${{ steps.resolve.outputs.patchset }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - name: Validate Nightly signing and draft execution context
+      env:
+        RELEASE_MODE: ${{ inputs.release_mode }}
+      run: |
+        if [[ "$RELEASE_MODE" == draft && "$GITHUB_REF" != refs/heads/main ]]; then
+          echo 'Draft/signing mode requires main; use dry-run to test development.' >&2
+          exit 1
+        fi
+    - name: Nightly source, matrix and signing isolation contracts
+      run: python3 -m scripts.release.nightly_contract
+    - id: resolve
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
+        EXPECTED_SHA: ${{ inputs.expected_sha }}
+      run: python3 scripts/release/nightly.py resolve --official-run-id "$OFFICIAL_RUN_ID" --expected-sha "$EXPECTED_SHA"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: nightly-discovery-${{ github.run_id }}
+        path: .work/nightly-discovery.json
+        if-no-files-found: error
+  prepare:
+    needs: resolve
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      build_wayland: ${{ inputs.include_wayland }}
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+  wayland-build:
+    needs: [resolve, prepare]
+    if: inputs.include_wayland && needs.prepare.result == 'success'
+    uses: ./.github/workflows/wayland.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      channel: nightly
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  windows-build:
+    needs: [resolve, prepare]
+    uses: ./.github/workflows/build-stable-windows.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  platforms-build:
+    needs: [resolve, prepare]
+    uses: ./.github/workflows/build-stable-platforms.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  android-build:
+    needs: [resolve, prepare]
+    uses: ./.github/workflows/build-stable-android.yml
+    with:
+      upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
+      upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+      channel: nightly
+      patchset: ${{ needs.resolve.outputs.patchset }}
+      upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+      standard_artifact: ${{ needs.prepare.outputs.standard_artifact }}
+      sos_artifact: ${{ needs.prepare.outputs.sos_artifact }}
+    secrets:
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+  android-sign:
+    name: 'Sign Nightly Android production artifacts (YubiKey PIV 9C)'
+    needs: [resolve, android-build]
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release_mode == 'draft' &&
+      needs.android-build.result == 'success'
+    runs-on:
+      - self-hosted
+      - linux
+      - arm64
+      - rustdesk-signing
+      - android-signing
+      - yubikey
+    environment:
+      name: android-production-signing
+    concurrency:
+      group: rustdesk-android-yubikey-signing
+      cancel-in-progress: false
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+        sparse-checkout: |
+          metadata/signing/android-standard.json
+          scripts/signing/android_yubikey_sign.py
+          .github/actions/android-yubikey-sign/action.yml
+        sparse-checkout-cone-mode: false
+        fetch-depth: 1
+    - name: Validate public YubiKey identity metadata
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        info = json.loads(Path("metadata/signing/android-standard.json").read_text())["production"]
+        assert info["identity_kind"] == "new-yubikey-hardware-signing-identity"
+        assert info["certificate_sha256"] == "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5"
+        assert info["piv_slot"] == "9C" and info["pkcs11_id"] == "02"
+        print("YubiKey identity metadata: PASS")
+        PY
+    - name: Read-only Android v2/v3 runtime preflight
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! CAPABILITIES=$(/usr/local/bin/rustdesk-sign --capabilities 2>&1); then
+          printf '%s\n' "$CAPABILITIES"
+          printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: FAIL (installed bridge is outdated or unavailable; deploy and verify the reviewed v3 runtime)' >&2
+          exit 1
+        fi
+        printf '%s\n' "$CAPABILITIES"
+        grep -Fxq 'APK SIGNING SCHEMES: v1=YES, v2=YES, v3=YES, v3.1=NO, v4=NO' <<< "$CAPABILITIES" || {
+          printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: FAIL (v3 capability is required)' >&2
+          exit 1
+        }
+        grep -Fxq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
+        grep -Fxq 'PRIVATE KEY OPERATION: NO' <<< "$CAPABILITIES"
+        printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: PASS'
+    - name: Environment Secret Binding Preflight
+      shell: bash
+      env:
+        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+      run: |
+        set -euo pipefail
+        if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
+          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
+          exit 1
+        fi
+        printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
+    - name: Production Android signing
+      uses: ./.github/actions/android-yubikey-sign
+      env:
+        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
+      with:
+        arches: aarch64,armv7,x86_64
+        channel: nightly
+        upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
+        upstream_version: ${{ needs.resolve.outputs.upstream_version }}
+        patchset: ${{ needs.resolve.outputs.patchset }}
+  aggregate:
+    needs: [resolve, windows-build, platforms-build, android-build, wayland-build, android-sign]
+    if: >-
+      always() && needs.windows-build.result == 'success' &&
+      needs.platforms-build.result == 'success' && needs.android-build.result == 'success' &&
+      (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
+      (inputs.release_mode == 'dry-run' || needs.android-sign.result == 'success')
+    runs-on: ubuntu-22.04
+    env:
+      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+      BUILD_CHANNEL: nightly
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      BUILD_CONFIGURATION: PRODUCTION
+      RELEASE_MODE: ${{ inputs.release_mode }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode == 'draft' && 'true' || 'false' }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-nightly-*
+        path: .work/all-targets
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: nightly-discovery-${{ github.run_id }}
+        path: .work/discovery
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: inputs.include_wayland
+      with:
+        pattern: rustdesk-wayland-*
+        path: .work/wayland-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: inputs.release_mode == 'dry-run'
+      with:
+        pattern: android-build-input-nightly-*
+        path: .work/all-targets/unsigned-android
+        merge-multiple: false
+    - name: Package inspectors
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Revalidate complete matrix, exact source and same-run artifacts
+      run: python3 scripts/release/nightly.py aggregate --discovery .work/discovery/nightly-discovery.json
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: nightly-qualification-${{ github.run_id }}
+        path: .work/qualification-aggregate
+        if-no-files-found: error
+        retention-days: 30
+  draft:
+    name: Create qualified Nightly prerelease draft
+    needs: [resolve, aggregate]
+    if: >-
+      github.repository == 'billradar/rustdesk-custom' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' && inputs.release_mode == 'draft' &&
+      needs.aggregate.result == 'success'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_MODE: draft
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
+      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+      BUILD_CHANNEL: nightly
+      BUILD_CONFIGURATION: PRODUCTION
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-nightly-*
+        path: .work/all-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: inputs.include_wayland
+      with:
+        pattern: rustdesk-wayland-*
+        path: .work/wayland-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: nightly-discovery-${{ github.run_id }}
+        path: .work/discovery
+    - name: Package inspectors
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Revalidate signed matrix and create draft only
+      run: python3 scripts/release/nightly.py draft --discovery .work/discovery/nightly-discovery.json

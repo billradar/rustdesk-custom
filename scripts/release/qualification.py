@@ -26,10 +26,10 @@ def entries():
     return rows
 
 def plan(channel,experimental=False):
-    if channel not in ('ci','stable'):
-        raise ValueError('Unsupported channel; Nightly build has been retired')
+    if channel not in ('ci','stable','nightly'):
+        raise ValueError('Unsupported build channel')
     selected=[dict(e,id=target(e)) for e in entries() if e.get('enabled') and
-              (e['support_status']=='SUPPORTED' or (experimental and e['support_status']=='EXPERIMENTAL'))]
+              (e['support_status']=='SUPPORTED' or ((experimental or (channel in ('stable','nightly') and e.get('default_build'))) and e['support_status']=='EXPERIMENTAL'))]
     if not selected:raise ValueError('Empty supported matrix')
     for e in selected:e['required']=e['support_status']=='SUPPORTED'
     return {'channel':channel,'selected':selected,'include_experimental':experimental}
@@ -46,7 +46,7 @@ def aggregate(root,channel,experimental):
     for path in root.rglob('diagnostic.json'):
         data=json.loads(path.read_text());diagnostics[data['target']]=data
     for path in root.rglob('build-info.json'):
-        i=json.loads(path.read_text());platform=i['platform'].removesuffix('-x86_64');name=platform+'-'+i['architecture']+'-'+i['variant']
+        i=json.loads(path.read_text());platform='windows' if i['platform'].startswith('windows-') else i['platform'];name=platform+'-'+i['architecture']+'-'+i['variant']
         if i.get('build_flavor'):raise ValueError('PROVENANCE: dedicated build flavor cannot satisfy ordinary Stable/CI targets')
         if name not in expected:raise ValueError('PROVENANCE: unexpected artifact '+name)
         if name in found:raise ValueError('PROVENANCE: duplicate artifact '+name)
@@ -54,11 +54,12 @@ def aggregate(root,channel,experimental):
             windows_validate(path.parent)
         else:validate(path.parent)
         if i['channel']!=channel:raise ValueError('PROVENANCE: channel mismatch')
-        if platform=='android' and channel=='stable' and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Stable Android requires verified production identity')
+        if platform=='android' and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and i.get('signed_status')!='PRODUCTION SIGNED / IDENTITY VERIFIED':raise ValueError('SIGNING: Android aggregate requires verified production identity')
         found[name]=i;folders[name]=path.parent
-    windows={i['variant']:i for n,i in found.items() if n.startswith('windows-x86_64-')}
-    if len(windows)==2:
-        validate_prepared(windows,{v:folders['windows-x86_64-'+v] for v in windows})
+    for arch in ('x86_64','aarch64'):
+        windows={i['variant']:i for n,i in found.items() if n.startswith('windows-'+arch+'-')}
+        if len(windows)==2:
+            validate_prepared(windows,{v:folders['windows-'+arch+'-'+v] for v in windows})
     if found:
         first=next(iter(found.values()))
         for i in found.values():
@@ -93,10 +94,10 @@ def aggregate(root,channel,experimental):
         for file in sorted(folder.rglob('*')):
             if file.is_file():rows.append(hashlib.sha256(file.read_bytes()).hexdigest()+'  '+name+'/'+file.relative_to(folder).as_posix())
     (out/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
-    if required_pass and channel == 'stable':
+    if required_pass and channel in ('stable', 'nightly'):
         assets=out/'assets';assets.mkdir(exist_ok=True)
         for name,e in expected.items():
-            if not e['required']:continue
+            if name not in found:continue
             info=found[name];folder=folders[name]
             if e['platform']=='windows':
                 packages_dir=folder/'packages'
@@ -106,7 +107,7 @@ def aggregate(root,channel,experimental):
                 if {p.suffix.lower() for p in packages} != {'.exe','.msi'}:
                     raise ValueError('PACKAGE: Windows release requires exactly one EXE and one MSI')
                 for package in packages:
-                    filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix)
+                    filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix, e['arch'])
                     shutil.copy2(package,assets/filename)
             else:
                 packages_dir=folder/'packages'
@@ -120,12 +121,17 @@ def aggregate(root,channel,experimental):
                         raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
                     filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
                     shutil.copy2(package,assets/filename)
+        if os.environ.get('INCLUDE_WAYLAND') == 'true':
+            from scripts.platform.wayland import attach_assets
+            peer = next(i for i in found.values() if i['variant'] == 'standard')
+            report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peer, channel)
         from scripts.platform.platform_package import checksums
         checksums(assets)
         public_assets=sorted(p.name for p in assets.iterdir())
         forbidden=[name for name in public_assets if name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')]
         if forbidden:
             raise ValueError('PACKAGE: non-public release assets generated: '+', '.join(forbidden))
+    (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
     if errors:raise ValueError('Aggregate required gate FAIL')
     return report
@@ -351,7 +357,7 @@ def build_release_body(official_body, metadata):
 
 def _release(root, publish, channel='stable', experimental=False):
     if channel != 'stable':
-        raise ValueError('Only Stable release qualification is supported; Nightly build has been retired')
+        raise ValueError('Only Stable supports public release publication; Nightly uses its separate draft path')
     from scripts.upstream.resolve import api
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
@@ -397,6 +403,9 @@ def _release(root, publish, channel='stable', experimental=False):
         'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
         'automation_state=complete',
     ]
+    if 'wayland' in report:
+        metadata += ['wayland_policy_sha256=' + report['wayland']['policy_sha256'],
+                     'wayland_scope=EXPERIMENTAL BUILD AND PACKAGE ONLY; RUNTIME NOT TESTED']
     notes=build_release_body(official_notes, metadata)
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
@@ -457,7 +466,7 @@ def release(root, channel='stable', experimental=False): _release(root, True, ch
 if __name__=='__main__':
     a=argparse.ArgumentParser()
     a.add_argument('mode',choices=['check','plan','aggregate','draft','release','publish-existing','lookup','verify-ci'])
-    a.add_argument('--channel',choices=['stable'],default='stable')
+    a.add_argument('--channel',choices=['stable','nightly'],default='stable')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
     a.add_argument('--repository',default=os.environ.get('GITHUB_REPOSITORY',''))

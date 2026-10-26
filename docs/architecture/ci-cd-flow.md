@@ -24,7 +24,7 @@ flowchart TD
       SF --> PF[Release preflight]
       PF --> PS[Prepare exact source]
       PS --> B[Parallel production builds]
-      B --> BW[Windows Standard / SOS]
+      B --> BW[Windows x64 Standard / SOS + experimental ARM64 Standard / SOS]
       B --> BP[Linux + macOS]
       B --> BA[Android artifacts]
       BW --> A[Aggregate verified artifacts]
@@ -81,7 +81,7 @@ The separate helper validation in compat-check.yml is compatibility evidence. It
 2. **02 · Release preflight** — decide whether this revision needs a build, needs a Draft, or can publish an existing verified Draft
 3. **03 · Prepare exact production source** — only when a build is required
 4. **04 · Parallel production build stage**
-   - 04A · Windows Standard / SOS
+   - 04A · Windows x64 Standard / SOS and experimental native ARM64 Standard / SOS
    - 04B · Linux + macOS
    - 04C · Android artifacts
 5. **05 · Android production signing** — YubiKey PIV only for non-dry-run production paths

@@ -13,6 +13,8 @@ MIR='''fn common::apply_custom_build_defaults() -> () {
     _4 = const "use-permanent-password";
     _5 = const "relay-server";
     _6 = const "relay.example.com";
+    _7 = const "allow-always-software-render";
+    _8 = const "N";
 }
 fn common::get_api_server_(_1: String, _2: String) -> String {
     _3 = const "https://api.example.com";
@@ -28,7 +30,7 @@ class CompilerConfigTests(unittest.TestCase):
         for extra in [MIR,MIR.replace('common::','')]:
             with self.assertRaises(ValueError):config_mir.verify(MIR+extra,VALUES)
     def test_wrong_or_missing_config_blocks_without_disclosure(self):
-        for before,after in [('aaaa','bbbb'),('password','wrong-option'),('https://api.example.com','https://bad.example.com'),('relay.example.com','other.example.com')]:
+        for before,after in [('allow-always-software-render','wrong-render-key'),('const "N"','const "Y"'),('aaaa','bbbb'),('password','wrong-option'),('https://api.example.com','https://bad.example.com'),('relay.example.com','other.example.com')]:
             with self.assertRaises(ValueError) as error:config_mir.verify(MIR.replace(before,after),VALUES)
             self.assertNotIn(VALUES['RUSTDESK_PASSWORD'],str(error.exception))
     def test_unrelated_constants_do_not_prove_customization(self):
@@ -57,6 +59,7 @@ pub fn apply_custom_build_defaults() -> std::collections::HashMap<String,String>
 let mut options=std::collections::HashMap::new();
 options.insert("password".to_owned(),env!("RUSTDESK_PASSWORD").to_owned());
 options.insert("verification-method".to_owned(),"use-permanent-password".to_owned());
+options.insert("allow-always-software-render".to_owned(),"N".to_owned());
 options.insert("relay-server".to_owned(),env!("RUSTDESK_RELAY_SERVER").to_owned());options
 }
 pub fn get_api_server_() -> String {env!("RUSTDESK_API_SERVER").to_owned()}

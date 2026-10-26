@@ -11,15 +11,18 @@ import scripts.platform.platform_adapter as platform_adapter
 import scripts.platform.platform_package as platform_package
 
 class MatrixTests(unittest.TestCase):
-    def test_explicit_policy_and_stable_excludes_experiments(self):
+    def test_explicit_policy_and_default_experimental_windows_arm64(self):
         stable=qualification.plan('stable')
         self.assertTrue(stable['selected'])
-        self.assertTrue(all(e['required'] for e in stable['selected']))
+        self.assertTrue(all(e['required'] for e in stable['selected'] if e['support_status']=='SUPPORTED'))
+        arm={e['id']:e for e in stable['selected'] if e['platform']=='windows' and e['arch']=='aarch64'}
+        self.assertEqual(set(arm),{'windows-aarch64-standard','windows-aarch64-sos'})
+        self.assertTrue(all(e['support_status']=='EXPERIMENTAL' and not e['required'] for e in arm.values()))
+        self.assertFalse(any(e['arch']=='aarch64' and e['platform']=='windows' for e in qualification.plan('ci')['selected']))
         self.assertFalse(any(e['platform'] in ('android','ios','web') and e['variant']=='sos' for e in stable['selected']))
         stable_ids={e['id'] for e in stable['selected']}
         self.assertEqual(len(stable_ids),len(stable['selected']))
-        with self.assertRaisesRegex(ValueError, 'Nightly build has been retired'):
-            qualification.plan('nightly', True)
+        self.assertEqual(stable_ids, {e['id'] for e in qualification.plan('nightly')['selected']})
     def test_duplicate_forbidden_and_false_promotion_block(self):
         good=json.loads((ROOT/'metadata/platform/matrix.json').read_text())
         for edit in ('duplicate','android-sos','fake-supported','experimental-required'):
@@ -36,12 +39,19 @@ class MatrixTests(unittest.TestCase):
         windows=yaml.safe_load((ROOT/'.github/workflows/build-stable-windows.yml').read_text())
         platforms=yaml.safe_load((ROOT/'.github/workflows/build-stable-platforms.yml').read_text())
         android=yaml.safe_load((ROOT/'.github/workflows/build-stable-android.yml').read_text())
-        self.assertEqual(set(windows['jobs']),{'windows-helper','build','validate'})
+        self.assertEqual(set(windows['jobs']),{'windows-helper','build','validate','arm64-bridge','build-arm64','validate-arm64'})
         self.assertEqual(windows['jobs']['build']['needs'],'windows-helper')
         self.assertEqual(windows['jobs']['validate']['needs'],'build')
         self.assertNotIn('if',windows['jobs']['windows-helper'])
         self.assertNotIn('if',windows['jobs']['build'])
         self.assertNotIn('if',windows['jobs']['validate'])
+        self.assertEqual(windows['jobs']['arm64-bridge']['runs-on'],'ubuntu-22.04')
+        self.assertEqual(windows['jobs']['build-arm64']['runs-on'],'windows-11-arm')
+        self.assertEqual(windows['jobs']['validate-arm64']['needs'],'build-arm64')
+        arm_steps='\n'.join(s.get('run','') for s in windows['jobs']['build-arm64']['steps'])
+        self.assertIn('aarch64-pc-windows-msvc',arm_steps)
+        self.assertIn('arm64-windows-static',arm_steps)
+        self.assertIn('ENGINE_LIBRARY_SHA256',arm_steps)
         self.assertEqual(set(platforms['jobs']),{'plan','platforms'})
         self.assertEqual(platforms['jobs']['platforms']['needs'],'plan')
         self.assertNotIn('if',platforms['jobs']['platforms'])
@@ -52,6 +62,8 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(workflow['permissions'],{'contents':'read','actions':'read'})
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertEqual(tag['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
+        nightly=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())['jobs']
+        self.assertEqual(nightly['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
         self.assertEqual(tag['platforms-build']['uses'],'./.github/workflows/build-stable-platforms.yml')
         self.assertEqual(tag['android-build']['uses'],'./.github/workflows/build-stable-android.yml')
         for name in ('windows-build','platforms-build','android-build'):
@@ -78,6 +90,31 @@ class AdapterTests(unittest.TestCase):
                 if platform=='linux':
                     s=next(s for s in j['steps'] if s.get('name')=='Build rustdesk' and 'with' in s)
                     for key in ['run','install']:self.assertNotIn('${{',platform_adapter.render(s['with'][key],p))
+    def test_changed_recipe_files_tools_and_disabled_jobs_stay_blocked(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);tree=root/'source';tree.mkdir()
+            for f in platform_adapter.FILES:
+                p=tree/f;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('reviewed')
+            wf=tree/'.github/workflows/flutter-build.yml'
+            data={'env':{'RUST_VERSION':'1.75','FLUTTER_VERSION':'3.24.5','VCPKG_COMMIT_ID':'a'*40},
+                  'jobs':{'build-rustdesk-linux':{'runs-on':'ubuntu-22.04','strategy':{'matrix':{'job':[{'arch':'x86_64','os':'ubuntu-22.04'}]}}}}}
+            wf.write_text(yaml.safe_dump(data))
+            profile,_=platform_adapter.inspect(tree,'linux','x86_64')
+            meta=root/'metadata/platform';meta.mkdir(parents=True)
+            approved=meta/'adapter-profiles.json';approved.write_text(json.dumps({'approved':{'linux':[profile['signature']]}}))
+            with patch.object(platform_adapter,'ROOT',root):
+                platform_adapter.check(tree,'linux','x86_64')
+                for file in platform_adapter.FILES:
+                    p=tree/file;p.write_text('unreviewed')
+                    with self.assertRaisesRegex(ValueError,'unreviewed official'):platform_adapter.check(tree,'linux','x86_64')
+                    p.write_text('reviewed')
+                data['env']['RUST_VERSION']='1.99';wf.write_text(yaml.safe_dump(data))
+                with self.assertRaises(ValueError):platform_adapter.check(tree,'linux','x86_64')
+                data['jobs']['build-rustdesk-linux']['if']=False;wf.write_text(yaml.safe_dump(data))
+                disabled,_=platform_adapter.inspect(tree,'linux','x86_64')
+                approved.write_text(json.dumps({'approved':{'linux':[disabled['signature']]}}))
+                with self.assertRaisesRegex(ValueError,'disabled'):platform_adapter.check(tree,'linux','x86_64')
+
     def test_unknown_expression_blocks(self):
         with self.assertRaises(ValueError):platform_adapter.render('${{ secrets.TEST }}',{'official_matrix':{},'tools':{},'rust':'1.75'})
     def test_unknown_architecture_and_disabled_web_block(self):
@@ -140,6 +177,7 @@ class NamingContractTests(unittest.TestCase):
     def test_standard_has_no_variant_token_and_sos_does(self):
         self.assertEqual(windows_installer_name('1.4.9','standard','exe'), 'rustdesk-1.4.9-windows-x86_64.exe')
         self.assertEqual(windows_installer_name('1.4.9','sos','exe'), 'rustdesk-1.4.9-sos-windows-x86_64.exe')
+        self.assertEqual(windows_installer_name('1.5.1','standard','msi','aarch64'), 'rustdesk-1.5.1-windows-aarch64.msi')
         self.assertEqual(native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-linux-x86_64.deb')
         self.assertEqual(native_package_name('1.4.9','sos','macos','aarch64','sos-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-sos-macos-aarch64-unsigned.dmg')
 
@@ -205,7 +243,7 @@ class ParallelGateTests(unittest.TestCase):
         self.assertEqual(tag['draft']['needs'],'aggregate')
         self.assertEqual(tag['release']['needs'],'aggregate')
         self.assertEqual(tag['publish-existing']['needs'],['resolve','draft-preflight'])
-        self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign'])
+        self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
         self.assertIn('build_needed',tag['aggregate']['outputs'])
         self.assertIn('draft_needed',tag['aggregate']['outputs'])
         self.assertIn('publish_existing',tag['aggregate']['outputs'])

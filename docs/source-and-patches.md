@@ -41,10 +41,27 @@
 ## 1.5.1 source compatibility
 
 The 1.5.1 development snapshot `1297da6d186e58d9096be24072ae3998cdbbf8fe`
-uses `v2` unchanged. Standard/SOS Rust configuration API compilation, bridge
+was validated with the pre-render-policy `v2` patch hash. Standard/SOS Rust configuration API compilation, bridge
 generation, both Flutter analyses and CI qualification passed in run
 [40175351746](https://github.com/billradar/rustdesk-custom/actions/runs/40175351746).
 The exact evidence commit and upstream identity are recorded in the v2 manifest.
 This is not a claim about an unobserved future 1.5.1 tag, native packages or real
 remote-session behavior. A v3 generation is reserved for an actual incompatible
 upstream API boundary, not a new version number alone.
+
+## Hardware rendering policy in all custom builds
+
+Both v1 and v2 Common helpers force `allow-always-software-render=N` through
+`config::OVERWRITE_SETTINGS` after loading custom client settings. This overrides
+persisted `Y` values and is inherited by Standard, SOS and the unattended Wayland
+build flavor on every platform; it is not a new patch generation. On Linux the
+normal upstream startup path consequently removes `LIBGL_ALWAYS_SOFTWARE`.
+The setting cannot be re-enabled in these custom builds. Other rendering and
+codec choices retain their existing behavior.
+
+On the tested AX211/Intel+NVIDIA laptop, forcing software rendering crashed Mesa
+when libdrmtap explicitly selected the Intel EGL device. Removing the setting
+allowed EGL 1.5 initialization and a user-confirmed locked-screen remote session.
+That is local configuration evidence for the previous package, not validation of
+new packages. New Common hashes require fresh build/qualification evidence; old
+validation entries remain explicitly historical.

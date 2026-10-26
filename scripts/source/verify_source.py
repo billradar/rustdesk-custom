@@ -78,6 +78,7 @@ mod config {
         }
     }
     pub static HARD_SETTINGS: Settings = Settings(OnceLock::new());
+    pub static OVERWRITE_SETTINGS: Settings = Settings(OnceLock::new());
     pub static DEFAULT_SETTINGS: Settings = Settings(OnceLock::new());
     pub static BUILTIN_SETTINGS: Settings = Settings(OnceLock::new());
     pub mod keys { pub const OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION: &str = "allow-remote-config-modification"; }
@@ -87,7 +88,9 @@ if os.environ.get('PATCHSET', 'v1') == 'v2':
     mock += '\nmod base { pub mod config { pub use crate::config::keys; } }\n'
 test = '''
 fn main() {
+    config::OVERWRITE_SETTINGS.write().unwrap().insert("allow-always-software-render".to_owned(), "Y".to_owned());
     apply_custom_build_defaults();
+    assert_eq!(config::OVERWRITE_SETTINGS.write().unwrap()["allow-always-software-render"], "N");
     assert_eq!(RENDEZVOUS_SERVERS, &[std::env::var("RUSTDESK_ID_SERVER").unwrap()]);
     assert_eq!(RS_PUB_KEY, std::env::var("RUSTDESK_KEY").unwrap());
     let hard = config::HARD_SETTINGS.write().unwrap();

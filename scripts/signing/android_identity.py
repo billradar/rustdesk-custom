@@ -187,8 +187,8 @@ def finalize_yubikey(folder, signed, output, arch):
     for key in ('package_name', 'version_code', 'version_name', 'abis'):
         if actual[key] != original[key]:
             raise ValueError('SIGNING: APK identity changed during signing: ' + key)
-    if not any(scheme in (2, 3) for scheme in actual['signing_schemes']):
-        raise ValueError('SIGNING: APK lacks a verified v2 or v3 signature')
+    if not {2, 3}.issubset(set(actual['signing_schemes'])):
+        raise ValueError('SIGNING: APK must have both verified v2 and v3 signatures')
     with zipfile.ZipFile(signed) as archive:
         native = 'lib/' + ABIS[arch] + '/librustdesk.so'
         validation = folder / 'validation' / 'librustdesk.so'
@@ -245,12 +245,14 @@ def verify_yubikey_signed(folder, info):
         raise ValueError('SIGNING: invalid production APK inventory')
     actual = public_identity(packages[0])
     identity_gate(actual, reference, info['architecture'])
-    if not any(scheme in (2, 3) for scheme in actual['signing_schemes']):
-        raise ValueError('SIGNING: APK lacks a verified v2 or v3 signature')
+    if not {2, 3}.issubset(set(actual['signing_schemes'])):
+        raise ValueError('SIGNING: APK must have both verified v2 and v3 signatures')
     for key in ('certificate_sha256', 'package_name', 'version_code', 'version_name', 'signing_schemes'):
         if info.get(key) != actual[key]:
             raise ValueError('SIGNING: APK/build-info mismatch: ' + key)
     receipt = json.loads((folder / 'android-signing-verification.json').read_text())
+    if info.get('channel') == 'nightly' and receipt.get('channel') != 'nightly':
+        raise ValueError('SIGNING: Nightly receipt channel mismatch')
     for key in actual:
         if receipt.get(key) != actual[key]:
             raise ValueError('SIGNING: YubiKey receipt mismatch: ' + key)

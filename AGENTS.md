@@ -40,11 +40,13 @@ These filenames are useful orientation, not a complete semantic specification. R
 
 ### Wayland unattended build flavor
 
-- `.github/workflows/wayland.yml` is a separate manual Stable-tag build, not a Nightly or publication flow.
+- `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard source. No separate manual trigger remains. Tag draft/release revalidates and attaches both DEBs; Nightly aggregates them as Actions artifacts and includes them in its signed prerelease Draft.
 - `build-wayland-target.yml` reuses verified Standard source and records `build_flavor: unattended-wayland` separately from the source variant.
 - Canonical x86_64/ARM64 targets remain experimental in `metadata/platform/matrix.json`, excluded from the generic planner (`enabled: false`) and explicitly opted into this workflow (`workflow_enabled: true`). Do not promote without real build evidence.
 - `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and two-target aggregate gates.
 - Follow `docs/wayland-unattended.md`; run the new contract and affected release contracts. ARM means ARM64 here; upstream's dedicated DRM job directly defines only x86_64.
+
+Both Common patch generations force `allow-always-software-render=N` via `OVERWRITE_SETTINGS`, overriding saved/custom settings in all variants and platforms. Keep the structural, native-helper and compiled-MIR gates aligned; do not reduce this to a default that persisted `Y` can override.
 
 ### Patchset selection is version-bounded
 
@@ -150,10 +152,11 @@ A filename, release label, branch name, or manually edited JSON field is not suf
 
 The README currently summarizes these intended platform/variant families:
 - Windows x86_64: Standard and SOS;
+- Windows ARM64: Standard and SOS as experimental Tag/Nightly targets; builds and release assets are enabled, runtime qualification is pending;
 - Linux x86_64 and ARM64: Standard and SOS;
 - macOS x86_64 and ARM64: Standard and SOS;
 - Android ARM64, ARMv7, and x86_64: Standard;
-- Windows ARM64 is planned; Web is blocked by the reviewed upstream build definition; iOS is not a normal supported release target unless the live matrix says otherwise.
+- Web is blocked by the reviewed upstream build definition; iOS is not a normal supported release target unless the live matrix says otherwise.
 
 Always confirm these summaries against the current matrix before changing support claims or workflow behavior.
 
@@ -186,22 +189,23 @@ Workflow names and interfaces are live contracts. Read the YAML and the scripts 
 - `.github/workflows/build.yml` and `.github/workflows/build-platform.yml`: build orchestration and target-level platform execution.
 - `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target-build entry points.
 - `.github/workflows/tag.yml`: Stable resolve/preflight/build/aggregate/qualification and release-mode routing. Current manual release modes are `dry-run`, `draft`, and `release`. Default is `dry-run`.
-- Nightly build and publication workflows are retired; `scripts/validation/repository_contract.py` must fail if they are reintroduced.
+- Nightly was explicitly restored and then requested to match Tag signing/Draft behavior by the user on 2026-10-25. `nightly.yml` reuses the Tag build cores; protected-main `draft` mode uses the same direct Environment-bound YubiKey signer and creates an immutable prerelease Draft. `dry-run` stays build-only; no Nightly public publication path exists. `nightly_contract.py` enforces these boundaries.
 - `.github/workflows/upstream-stable.yml`: polls/detects official Stable release and routes a deduplicated Stable dry-run only. It is not publication authorization.
 - The upstream-main monitor also generates unknown-interface review packets in a read-only job and can create report-only draft PRs from protected `main`. It never changes approved profiles or runs unknown upstream build scripts. `scripts/upstream/interface_review.py` and its contract own this boundary.
 - Automation exception to the two-branch rule: `automation/upstream-interface-<interface-signature>` branches may contain only a generated JSON report under `docs/upstream-interface-reviews/`, are deduplicated, and are never reset or auto-merged. This isolation is required to propose a report without modifying `main` or shared `development`.
-- No upstream Nightly router is retained.
+- `upstream-nightly.yml` polls every 15 minutes at :07/:22/:37/:52 UTC, following the latest successful official `flutter-nightly.yml` run on the official default branch. Use its exact head SHA, never the moving `nightly` tag. Deduplicate by official run and custom SHA; stop after three failed attempts.
 - `.github/workflows/upstream-main-compatibility.yml`: periodic compatibility signal for the official upstream default branch; it does not build or publish Nightly artifacts.
 - `.github/workflows/android-yubikey-signing-test.yml`: manually and explicitly authorized signing smoke test; it is not a Stable release and must not publish one.
 - `.github/actions/android-yubikey-sign/`: local reusable signing action implementation.
 
-Never assume a file exists because an old guide mentions it. Retired Nightly workflow names must not be resurrected. In particular, `.github/workflows/upstream-event-router.yml` is not a current router.
+Never assume a file exists because an old guide mentions it. Nightly is owned by its explicit workflow and contracts; do not restore legacy release behavior. In particular, `.github/workflows/upstream-event-router.yml` is not a current router.
 
 ### Channel rules
 
 - **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
 - **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, performs preflight and required builds/validation, and follows the explicit release mode.
-- **Nightly** is retired. Do not recreate a Nightly workflow or accept `nightly` as a release/qualification channel without an explicit architecture decision and matching contract change.
+- Windows ARM64 is opt-in by canonical matrix metadata as an experimental `default_build`: Tag and Nightly run it by default and include successful ARM64 EXE/MSI assets, while CI's normal target plan remains x86_64-only. Do not call it fully supported until exact-run package and runtime evidence justify promotion.
+- **Nightly** follows completed official Nightly runs, prepares independent Standard/SOS sources, builds the supported Tag matrix, and aggregates exact-run artifact evidence. It is not Stable qualification. Protected-main draft mode requires production-signed Android artifacts (both v2 and v3), revalidates the complete package set in its write-permission job and creates a prerelease Draft; it never publishes publicly. Generic `channel.py resolve` remains CI/Stable-only; use `nightly.py` for verified-run resolution.
 - **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable publication.
 - A router-triggered dry-run is not release authorization. A successful build or qualification is not publication authorization.
 - Preserve duplicate suppression and safe retry behavior. Do not weaken freshness checks, SHA revalidation, run matching, or downstream provenance checks just because the upstream router already performed validation.
@@ -250,7 +254,7 @@ Current intended configuration, which must be rechecked against live workflow an
 ### Non-negotiable isolation
 
 - Ordinary CI, compatibility checks, and ordinary build jobs must not access the production signing Environment, production PIN, YubiKey, PKCS#11 device, or production signing step.
-- Production signing must remain behind the intended Stable workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
+- Production signing must remain behind the intended Tag or protected-main Nightly draft workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
 - The manual signing smoke test is separately gated and must never publish/promote a release.
 - Never commit a keystore, private key, PIN, password, token, PKCS#11 credential, or sensitive signing output.
 - Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.
@@ -348,6 +352,8 @@ Before changing anything:
 8. Review the full diff for unrelated changes, stale references, leaked secrets, and weakened gates.
 9. Open/update a PR to `main` when integration is expected; do not merge without explicit authorization.
 10. Verify CI on the exact resulting commit and report the files, commit, PR, checks, and remaining unverified claims.
+
+Prepared-source credential scanning permits only the reviewed public upstream WebSocket TLS test-key path plus exact content hash documented in `docs/build-and-validation.md`. Do not generalize this to a test-directory/PEM exclusion or the production payload/input scanner.
 
 Never claim that CI passed, a PR merged, branches synchronized, a release published, an artifact uploaded, a production signature succeeded, or identity continuity was proven unless current evidence establishes that exact claim. Label historical evidence as historical.
 

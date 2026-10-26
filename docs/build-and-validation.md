@@ -79,3 +79,39 @@ or publication credentials. This is an interface review, not build/runtime proof
 toolchain drift and unreviewed runners still fail closed. The separate unattended
 workflow remains pinned to its own reviewed 1.5.0 DRM policy; this profile does not
 authorize a new libdrmtap pin or new unattended packages.
+
+Windows ARM64 is a separate experimental lane on the native `windows-11-arm`
+runner. It uses Flutter 3.44 and a same-source ARM64 bridge, validates the Dart,
+Flutter engine, Rust output, helper DLL, EXE and MSI architecture, then emits
+architecture-specific Standard/SOS installer assets. Tag and Nightly include this
+lane by default; normal CI remains x86_64-only. Exact-run compilation and runtime
+qualification are still needed before promoting it to supported.
+
+## Public upstream test-key fixture during source preparation
+
+Nightly run 40198211193 reached official bridge generation successfully but its
+source scan rejected `libs/hbb_common/tests/data/websocket-key.pem`, an upstream
+WebSocket TLS integration-test fixture. Reviewed upstream 1297da6d pins hbb_common
+edefa08b; the fixture was introduced by upstream hbb_common commit 3aade011.
+Source preparation permits only that source-relative path with complete SHA256
+`95cf7a0a6890435c98bb3f644678d4fd20d80ff4a296d438a515802e233c6ec9`.
+It does not exempt tests directories, PEM files, other paths or modified secret
+content. Failures now identify only the filename and withhold the value.
+The global production input/package/log scanner remains strict, without this
+source-only exception. Regression contracts cover changed content, relocated keys
+and ASCII/UTF-16 tokens.
+
+## 1.5.1 native platform recipe review
+
+Run 40199720676 passed prepared-source scanning, then Linux/macOS/Android stopped
+at their independent platform adapter gates. The Windows/bridge profile approval
+was not a platform recipe approval. `metadata/platform/adapter-profiles.json` now
+records the exact native signatures for upstream 1297da6d, seven supported native
+architecture profiles, baseline comparison, critical file hashes and review scope.
+Linux/Android job definitions and toolchains remain unchanged; the global version
+and shared source/build file fingerprints changed. macOS also adds conditional
+tests, deployment-target export and opt-in official signing/update routing. Only
+the named setup/build scripts are inherited; custom macOS packages remain unsigned.
+The separate Wayland DRM policy is not expanded by this review. Signature approval
+is not package/runtime validation; unknown future files/tools/recipes and disabled
+jobs remain blocked, with regression tests for those cases.

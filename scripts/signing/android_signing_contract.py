@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import json
+import ast
+import os
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 import unittest
 import yaml
@@ -17,6 +21,28 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.bridge_launcher = (ROOT / "tools/android-signing-bridge/packaging/rustdesk-sign").read_text()
         self.bridge_deploy = (ROOT / "tools/android-signing-bridge/deploy_v3_runtime.sh").read_text()
         self.v3_preflight = (ROOT / ".github/workflows/test-android-v3-signing.yml").read_text()
+
+    def test_nightly_signing_context_rejects_foreign_branches_and_events(self):
+        module=ast.parse(self.script)
+        nodes=[n for n in module.body if isinstance(n,ast.FunctionDef) and n.name in ['fail','validate_signing_context']]
+        namespace={};exec(compile(ast.Module(body=nodes,type_ignores=[]),'context-test','exec'),namespace)
+        env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','GITHUB_REF':'refs/heads/main',
+             'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main'}
+        namespace['validate_signing_context']('nightly',env)
+        for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),('GITHUB_REPOSITORY','foreign/repo'),('GITHUB_WORKFLOW_REF','foreign/workflow')]:
+            with self.assertRaises(SystemExit):namespace['validate_signing_context']('nightly',dict(env,**{key:value}))
+        self.assertIn('"channel": channel',self.script)
+        self.assertIn('SIGNING_CHANNEL: ${{ inputs.channel }}',self.action)
+
+    def test_signature_revalidation_requires_both_v2_and_v3(self):
+        from scripts.signing import android_identity as identity
+        info={'signed':True,'signing_identity_verified':True,'signing_method':'yubikey-piv-9c-pkcs11',
+              'signing_run':'7','build_run':'7','architecture':'aarch64'}
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/'packages').mkdir();(root/'packages/client.apk').write_bytes(b'fixture')
+            for schemes in [[2],[3],[]]:
+                with patch.object(identity,'yubikey_expected',return_value={}),patch.object(identity,'identity_gate'),patch.object(identity,'public_identity',return_value={'signing_schemes':schemes}):
+                    with self.assertRaisesRegex(ValueError,'both verified v2 and v3'):identity.verify_yubikey_signed(root,info)
 
     def test_stable_signing_is_a_direct_environment_bound_job(self):
         signing = self.tag["jobs"]["android-sign"]

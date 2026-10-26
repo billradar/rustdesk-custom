@@ -269,3 +269,256 @@ jobs:
 
           .work/production-release-assets/'
         if-no-files-found: error
+  arm64-bridge:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - name: Fetch frozen official source
+      run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/arm-bridge
+    - name: Review dedicated ARM64 bridge recipe
+      id: profile
+      run: python3 -m scripts.build.windows_arm64 profile .work/arm-bridge
+    - run: 'sudo apt-get update -y
+
+        sudo apt-get install -y clang cmake libclang-dev libgtk-3-dev llvm-dev nasm ninja-build pkg-config'
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: ${{ steps.profile.outputs.bridge_rust }}
+        components: rustfmt
+    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+      with:
+        flutter-version: ${{ steps.profile.outputs.bridge_flutter }}
+        channel: stable
+    - name: Generate exact-source Flutter 3.44 bridge
+      working-directory: .work/arm-bridge
+      env:
+        CARGO_EXPAND: ${{ steps.profile.outputs.cargo_expand }}
+        FRB: ${{ steps.profile.outputs.frb }}
+      run: 'cargo install cargo-expand --version "$CARGO_EXPAND" --locked
+
+        cargo install flutter_rust_bridge_codegen --version "$FRB" --features uuid --locked
+
+        bash .github/patches/apply_flutter_3.44_source_patches.sh
+
+        (cd flutter && flutter pub get)
+
+        flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output
+        ./flutter/macos/Runner/bridge_generated.h
+
+        cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
+
+        cd "$GITHUB_WORKSPACE"
+
+        python3 -m scripts.build.windows_arm64 bridge-info .work/arm-bridge'
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: windows-arm64-bridge-${{ github.run_id }}
+        path: '.work/arm-bridge/src/bridge_generated*.rs
+
+          .work/arm-bridge/flutter/lib/generated_bridge*.dart
+
+          .work/arm-bridge/flutter/macos/Runner/bridge_generated.h
+
+          .work/arm-bridge/flutter/ios/Runner/bridge_generated.h
+
+          .work/arm-bridge/arm64-bridge-info.json'
+        if-no-files-found: error
+        retention-days: 7
+  build-arm64:
+    name: build/windows-aarch64-${{ matrix.variant }}
+    env:
+      PATCHSET: ${{ inputs.patchset }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ inputs.channel == 'stable' && inputs.upstream_ref || '' }}
+      PATCH_REVISION: ${{ inputs.revision }}
+      BUILD_CONFIGURATION: PRODUCTION
+      RUSTDESK_ID_SERVER: ${{ vars.RUSTDESK_ID_SERVER }}
+      RUSTDESK_RELAY_SERVER: ${{ vars.RUSTDESK_RELAY_SERVER }}
+      RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+      RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
+      BUILD_CHANNEL: ${{ inputs.channel }}
+      UPSTREAM_VERSION: ${{ inputs.upstream_version }}
+      ARTIFACT_IDENTITY: ${{ inputs.upstream_version }}
+      WINDOWS_ARCH: aarch64
+      VCPKG_DEFAULT_HOST_TRIPLET: arm64-windows-static
+    runs-on: windows-11-arm
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+        - standard
+        - sos
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.13'
+        architecture: arm64
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: ${{ matrix.variant == 'standard' && inputs.standard_artifact || inputs.sos_artifact }}
+        path: .work/source-bundle
+    - id: profile
+      name: Verify immutable prepared source before any dependency build
+      env:
+        VARIANT: ${{ matrix.variant }}
+      run: 'python3 scripts/source/prepared_source.py unpack --bundle .work/source-bundle --destination .work/prepared-input
+        --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET"
+
+        python3 -m scripts.build.windows_arm64 profile .work/prepared-input/source'
+    - name: Validate production inputs without printing values
+      env:
+        RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+      run: python3 scripts/signing/production_config.py inputs
+    - uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+      with:
+        version: ${{ steps.profile.outputs.llvm }}
+        arch: arm64
+    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+      with:
+        flutter-version: ${{ steps.profile.outputs.flutter }}
+        channel: stable
+        architecture: x64
+      id: flutter
+    - name: Select native Rust host
+      run: rustup set default-host aarch64-pc-windows-msvc
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: ${{ steps.profile.outputs.rust }}
+        targets: aarch64-pc-windows-msvc
+        components: rustfmt
+    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+      with:
+        msbuild-architecture: arm64
+    - name: Prepare upstream dependency recipes
+      run: echo "Dependency recipes are from verified Prepared Source"
+    - name: Install and verify native ARM64 Dart and engine
+      shell: pwsh
+      run: '$ErrorActionPreference = ''Stop''
+
+        $sdk = ''${{ steps.flutter.outputs.CACHE-PATH }}''
+
+        Remove-Item -Force "$sdk/bin/cache/engine-dart-sdk.stamp" -ErrorAction SilentlyContinue
+
+        & "$sdk/bin/internal/update_dart_sdk.ps1"
+
+        if ($LASTEXITCODE -ne 0) { throw ''Native Dart installation failed'' }
+
+        $dart = & "$sdk/bin/dart.bat" --version 2>&1 | Out-String
+
+        if ($dart -notmatch ''windows_arm64'') { throw ''Dart is not native ARM64'' }
+
+        & "$sdk/bin/flutter.bat" precache --windows
+
+        if ($LASTEXITCODE -ne 0) { throw ''Native engine precache failed'' }
+
+        $engine = "$sdk/bin/cache/artifacts/engine/windows-arm64-release/flutter_windows.dll"
+
+        if (!(Test-Path $engine)) { throw ''Native ARM64 engine missing'' }
+
+        $hash = (Get-FileHash $engine -Algorithm SHA256).Hash.ToLowerInvariant()
+
+        "ENGINE_LIBRARY_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+        python -c "from scripts.build.windows_arm64 import pe; import sys; pe(sys.executable); pe(r''$engine'')"
+
+        if ($LASTEXITCODE -ne 0) { throw ''Python/engine ARM64 machine check failed'' }
+
+        $rust = rustc -vV | Out-String
+
+        if ($rust -notmatch ''host: aarch64-pc-windows-msvc'') { throw ''Rust host is not native ARM64'' }'
+    - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+      with:
+        vcpkgDirectory: C:\vcpkg
+        vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
+        doNotCache: true
+    - name: Install official vcpkg dependencies
+      working-directory: .work/prepared-input/source
+      env:
+        VCPKG_DEFAULT_HOST_TRIPLET: arm64-windows-static
+      run: '"$VCPKG_ROOT/vcpkg" install --triplet arm64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
+    - name: Select the vcpkg ARM64 libsodium library
+      run: echo "SODIUM_LIB_DIR=$VCPKG_ROOT/installed/arm64-windows-static/lib" >> "$GITHUB_ENV"
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: windows-arm64-bridge-${{ github.run_id }}
+        path: .work/arm-bridge
+    - name: Build pinned native ARM64 WindowInjection
+      shell: bash
+      run: |
+        git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
+        git -C .work/topmost checkout --detach "${{ steps.profile.outputs.helper_commit }}"
+        MSBuild.exe .work/topmost/WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=ARM64 -p:TargetVersion=Windows10
+        python3 -c 'from scripts.build.windows_arm64 import pe; pe(".work/topmost/WindowInjection/ARM64/Release/WindowInjection.dll")'
+    - name: Build and verify selected variant
+      env:
+        UPSTREAM_REF: ${{ inputs.upstream_sha }}
+        VARIANT: ${{ matrix.variant }}
+        RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
+        RUSTDESK_ARM64_BRIDGE_DIR: ${{ github.workspace }}/.work/arm-bridge
+      run: 'export PREPARED_SOURCE_DIR="$PWD/.work/prepared-input/source"
+
+        export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/ARM64/Release/WindowInjection.dll")"
+
+        bash "scripts/build/$VARIANT.sh" "$UPSTREAM_REF"
+
+        '
+    - name: Upload verified production bundle
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rustdesk-${{ inputs.channel }}-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ matrix.variant
+          }}-windows-aarch64
+        path: artifacts/rustdesk-*-${{ matrix.variant }}-windows-aarch64/
+        if-no-files-found: error
+        retention-days: 14
+    needs: arm64-bridge
+  validate-arm64:
+    name: Validate native Windows ARM64 provenance
+    needs: build-arm64
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PATCHSET: ${{ inputs.patchset }}
+      PATCH_REVISION: ${{ inputs.revision }}
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+      UPSTREAM_TAG: ${{ inputs.channel == 'stable' && inputs.upstream_ref || '' }}
+      BUILD_CONFIGURATION: PRODUCTION
+      CHANNEL: ${{ inputs.channel }}
+      WINDOWS_ARCH: aarch64
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Install reviewed workflow parser
+      run: python3 -m pip install -r requirements.txt
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        pattern: rustdesk-*-windows-aarch64
+        path: .work/collected
+        merge-multiple: false
+    - name: Verify paired prepared-source provenance, production config, checksum and architecture
+      run: python3 scripts/release/channel.py validate --channel "$CHANNEL"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: channel-validation-arm64-${{ github.run_id }}
+        path: '.work/channel-validation.json
+
+          .work/production-release-assets/'
+        if-no-files-found: error
