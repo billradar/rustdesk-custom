@@ -117,8 +117,8 @@ compatibility path. Nothing is automatically approved, merged or published.
 ## Nightly 同步与构建
 
 官方 `flutter-nightly.yml` 每天 UTC 00:00（香港时间 08:00）启动。
-`upstream-nightly.yml` 每天 UTC 05:00（香港时间 13:00）检查官方成功完成的构建，
-即比上游计划启动时间晚五小时。路由等待当天上游运行实际完成，只有成功后才触发
+`upstream-nightly.yml` 每天 UTC 12:00（香港时间 20:00）检查官方成功完成的构建，
+即比上游计划启动时间晚十二小时。路由等待当天上游运行实际完成，只有成功后才触发
 `nightly.yml`；GitHub 定时任务可能延迟，因此使用官方运行状态而非猜测完成时间。
 官方计划见 https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-nightly.yml 。
 

@@ -208,7 +208,7 @@ class NightlyTests(unittest.TestCase):
 
     def test_polling_and_unique_plan_artifacts(self):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
-        self.assertEqual(w['on']['schedule'],[{'cron':'0 5 * * *'}])
+        self.assertEqual(w['on']['schedule'],[{'cron':'0 12 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
         self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
