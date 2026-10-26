@@ -160,16 +160,16 @@ def aggregate(root, discovery):
 
 def require_draft_context():
     expected = {'GITHUB_REPOSITORY': REPO, 'GITHUB_REF': 'refs/heads/main',
-                'GITHUB_EVENT_NAME': 'workflow_dispatch', 'RELEASE_MODE': 'draft',
-                'GITHUB_WORKFLOW_REF': REPO + '/.github/workflows/nightly.yml@refs/heads/main'}
-    if any(os.environ.get(k) != v for k, v in expected.items()):
-        raise ValueError('Nightly draft writes require the protected main draft workflow')
+                'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_WORKFLOW_REF': REPO + '/.github/workflows/nightly.yml@refs/heads/main'}
+    if any(os.environ.get(k) != v for k, v in expected.items()) or os.environ.get('RELEASE_MODE') not in ('draft', 'release'):
+        raise ValueError('Nightly release writes require the protected main workflow and qualified mode')
 
 
 def draft(root, discovery):
     from scripts.release.github import request, gh
     from scripts.release.production import scan_job_log
     require_draft_context()
+    release_mode = os.environ['RELEASE_MODE']
     report = aggregate(root, discovery)  # Revalidate downloaded binaries and signatures in write job.
     if report['result'] != 'PASS' or not report['android_production_signing']:
         raise ValueError('Incomplete signed Nightly aggregate')
@@ -224,7 +224,7 @@ def draft(root, discovery):
                 'asset_inventory=' + json.dumps(sorted(expected)),
                 'android_signing=PRODUCTION SIGNED / IDENTITY VERIFIED; APK v2 AND v3',
                 'desktop_code_signing=NOT ENABLED', 'runtime_ui_validation=NOT TESTED',
-                'real_remote_session=NOT TESTED', 'release_policy=DRAFT ONLY; NOT PUBLIC',
+                'real_remote_session=NOT TESTED', 'release_policy=' + ('PUBLIC NIGHTLY PRERELEASE; NOT STABLE' if release_mode == 'release' else 'DRAFT ONLY; NOT PUBLIC'),
                 'automation_state=uploading']
     if identity_data['wayland_policy']:
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy'])
@@ -248,14 +248,16 @@ def draft(root, discovery):
             time.sleep(5)
     if uploaded != expected:
         raise ValueError('Incomplete Nightly upload/checksum verification; draft remains incomplete')
+    # Publication is the final irreversible step, only after every signed asset digest matches.
     final = request('PATCH', f'repos/{REPO}/releases/{created["id"]}',
-                    dict(draft=True, prerelease=True, body=notes.replace('automation_state=uploading', 'automation_state=complete')))
-    if final.get('draft') is not True or final.get('prerelease') is not True:
-        raise ValueError('Nightly draft state mismatch')
-    result = dict(tag=tag, release_id=created['id'], draft=True, prerelease=True,
+                    dict(draft=release_mode != 'release', prerelease=True,
+                         body=notes.replace('automation_state=uploading', 'automation_state=complete')))
+    if final.get('draft') is not (release_mode != 'release') or final.get('prerelease') is not True:
+        raise ValueError('Nightly release state mismatch')
+    result = dict(tag=tag, release_id=created['id'], draft=release_mode != 'release', prerelease=True,
                   workflow_run=os.environ['GITHUB_RUN_ID'], assets=expected)
     (ROOT / '.work/nightly-draft.json').write_text(json.dumps(result, indent=2) + '\n')
-    print('Verified Nightly draft created: ' + tag)
+    print('Verified Nightly ' + release_mode + ' created: ' + tag)
     return result
 
 
