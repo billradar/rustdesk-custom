@@ -69,24 +69,21 @@ if any(value < ord("0") or value > ord("9") for value in PIN_BUFFER):
 print("SIGNING PIN AVAILABLE: PASS")
 
 def sign_with_yubikey(apk, out_apk):
+    process = subprocess.Popen([
+        "/usr/local/bin/rustdesk-sign", "--input", str(apk),
+        "--output", str(out_apk), "--pin-source", "stdin"
+    ], stdin=subprocess.PIPE)
     try:
-        process = subprocess.Popen([
-            "/usr/local/bin/rustdesk-sign", "--input", str(apk),
-            "--output", str(out_apk), "--pin-source", "stdin"
-        ], stdin=subprocess.PIPE)
-        try:
-            process.stdin.write(PIN_BUFFER)
-            process.stdin.write(b"\n")
-            process.stdin.close()
-            status = process.wait()
-        except BaseException:
-            process.kill()
-            process.wait()
-            raise
-        if status:
-            raise subprocess.CalledProcessError(status, process.args)
-    finally:
-        clear_pin()
+        process.stdin.write(PIN_BUFFER)
+        process.stdin.write(b"\n")
+        process.stdin.close()
+        status = process.wait()
+    except BaseException:
+        process.kill()
+        process.wait()
+        raise
+    if status:
+        raise subprocess.CalledProcessError(status, process.args)
 
 root = Path(".work/android-input").resolve()
 signed_root = Path(".work/signed").resolve()
@@ -231,3 +228,5 @@ for arch in arches:
             rows.append(hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.relative_to(destination).as_posix())
     (destination / "SHA256SUMS").write_text("\n".join(rows) + "\n")
     print(f"{arch}: APK signature, fingerprint, package, ABI and provenance gates: PASS")
+
+clear_pin()

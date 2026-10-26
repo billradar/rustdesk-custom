@@ -78,6 +78,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn('os.environ.pop("YUBIKEY_PIV_PIN", None)', self.script)
         self.assertIn('process.stdin.write(PIN_BUFFER)', self.script)
         self.assertIn('process.stdin.write(b"\\n")', self.script)
+        self.assertTrue(self.script.rstrip().endswith("clear_pin()"))
         self.assertIn('case "stdin" -> new StandardInputPinSource();',
                       (ROOT / "tools/android-signing-bridge/src/main/java/com/billradar/rustdesk/signing/bridge/PinSources.java").read_text())
         self.assertIn(r'r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
