@@ -25,7 +25,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: stable-${{ inputs.upstream_ref || format('manual-{0}', github.run_id) }}
+  group: stable-${{ github.sha }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}
   cancel-in-progress: false
 
 jobs:
@@ -89,6 +89,9 @@ jobs:
       release_tag: ${{ steps.gate.outputs.release_tag }}
       build_identity: ${{ steps.gate.outputs.build_identity }}
       patch_revision: ${{ steps.gate.outputs.patch_revision }}
+      custom_repository_sha: ${{ steps.gate.outputs.custom_repository_sha }}
+      wayland_included: ${{ steps.gate.outputs.wayland_included }}
+      wayland_policy_sha256: ${{ steps.gate.outputs.wayland_policy_sha256 }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -352,6 +355,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.draft-preflight.outputs.patch_revision }}
+      BUILD_IDENTITY: ${{ needs.draft-preflight.outputs.build_identity }}
+      UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
+      PATCHSET: ${{ needs.resolve.outputs.patchset }}
+      CUSTOM_REPOSITORY_SHA: ${{ github.sha }}
+      WAYLAND_INCLUDED: ${{ inputs.include_wayland && 'true' || 'false' }}
+      WAYLAND_POLICY_SHA256: ${{ needs.draft-preflight.outputs.wayland_policy_sha256 }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:

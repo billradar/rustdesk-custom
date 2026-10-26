@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Channel identity and paired validation; stable publication is draft-only."""
-import argparse, hashlib, json, os, re, subprocess
+import argparse, hashlib, json, os, re, subprocess, tempfile
 from pathlib import Path
 from scripts.upstream.resolve import api, choose_stable, resolve_ref
 from scripts.release.github import collect, request, gh
@@ -20,8 +20,64 @@ def outputs(data):
                 f.write(f'{k}={s}\n')
     print(json.dumps(data,indent=2))
 
-def build_identity(upstream_sha, patchset, common_hash, sos_hash):
-    return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
+def build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha=None,
+                   wayland_included=None, wayland_policy_sha256=''):
+    # Keep the four-field form only for reading historical Stable records.
+    if custom_sha is None and wayland_included is None and not wayland_policy_sha256:
+        return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
+    if not re.fullmatch(r'[0-9a-f]{40}', str(custom_sha or '')):
+        raise ValueError('Stable identity requires the exact custom repository SHA')
+    if not isinstance(wayland_included, bool):
+        raise ValueError('Stable identity requires an explicit Wayland selection')
+    if wayland_included and not re.fullmatch(r'[0-9a-f]{64}', wayland_policy_sha256):
+        raise ValueError('Stable Wayland identity requires the policy SHA-256')
+    if not wayland_included and wayland_policy_sha256:
+        raise ValueError('Wayland policy hash supplied while Wayland is disabled')
+    identity = dict(schema='stable-build-identity-v2', upstream_sha=upstream_sha,
+                    patchset=patchset, common_patch_hash=common_hash, sos_patch_hash=sos_hash,
+                    custom_repository_sha=custom_sha, wayland_included=wayland_included,
+                    wayland_policy_sha256=wayland_policy_sha256)
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def wayland_identity():
+    included = os.environ.get('INCLUDE_WAYLAND', 'false').lower() == 'true'
+    if not included:
+        return False, ''
+    from scripts.platform.wayland import POLICY
+    return True, hashlib.sha256(POLICY.read_bytes()).hexdigest()
+
+
+def verify_release_asset_checksums(tag, assets):
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}',tag):
+        raise ValueError('Invalid Stable release tag for asset verification')
+    names=[asset.get('name','') for asset in assets]
+    if len(names)!=len(set(names)) or 'SHA256SUMS' not in names:
+        raise ValueError('Stable release asset inventory is duplicate or missing SHA256SUMS')
+    expected={}
+    for asset in assets:
+        digest=asset.get('digest','')
+        if asset.get('state')!='uploaded' or asset.get('size',0)<=0 or not re.fullmatch(r'sha256:[0-9a-f]{64}',digest):
+            raise ValueError('Stable release asset is incomplete or lacks a GitHub SHA-256 digest')
+        if asset['name']!='SHA256SUMS':expected[asset['name']]=digest.removeprefix('sha256:')
+    with tempfile.TemporaryDirectory(prefix='stable-release-assets-') as temp:
+        subprocess.run(['gh','release','download',tag,'--repo',REPOSITORY,'--pattern','SHA256SUMS','--dir',temp],
+                       check=True,capture_output=True,text=True,env=os.environ)
+        checksum=Path(temp)/'SHA256SUMS'
+        if not checksum.is_file() or checksum.stat().st_size>1024*1024:
+            raise ValueError('Stable release SHA256SUMS could not be safely downloaded')
+        raw=checksum.read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=next(a['digest'][7:] for a in assets if a['name']=='SHA256SUMS'):
+            raise ValueError('Stable remote SHA256SUMS digest does not match the GitHub asset digest')
+    actual={}
+    for line in raw.decode('utf-8').splitlines():
+        match=re.fullmatch(r'([0-9a-f]{64})  ([^/\\]+)',line)
+        if not match or match.group(2) in actual:
+            raise ValueError('Stable remote SHA256SUMS is malformed or contains duplicate assets')
+        actual[match.group(2)]=match.group(1)
+    if actual!=expected:
+        raise ValueError('Stable release asset digests do not match its SHA256SUMS')
+    return True
 
 PATCHSET_RE = re.compile(r'^v([1-9][0-9]*)$')
 CUSTOM_REVISION_RE = re.compile(r'^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-custom\.v(?P<patch>[1-9][0-9]*)\.(?P<revision>[1-9][0-9]{0,5})$')
@@ -81,7 +137,13 @@ def release_preflight(data):
     if not PATCHSET_RE.fullmatch(data.get("patchset","")): raise ValueError("Invalid patchset")
     if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
         raise ValueError('Locked stable ref mismatch')
-    current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),patch_hash('sos',data['patchset']))
+    custom_sha=os.environ.get('GITHUB_SHA','')
+    if not re.fullmatch(r'[0-9a-f]{40}',custom_sha): raise ValueError('Stable preflight requires the exact custom repository SHA')
+    wayland_included,wayland_policy_sha256=wayland_identity()
+    data.update(custom_repository_sha=custom_sha,wayland_included=wayland_included,
+                wayland_policy_sha256=wayland_policy_sha256)
+    current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),
+                                    patch_hash('sos',data['patchset']),custom_sha,wayland_included,wayland_policy_sha256)
     same=same_identity_release(data['version'],current_identity)
     if same:
         data['release_tag']=require_release_tag(same,data['version'])
@@ -101,40 +163,58 @@ def release_preflight(data):
         data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
         return data
     body=existing.get('body') or ''
-    if os.environ.get('INCLUDE_WAYLAND') == 'true':
+    if wayland_included:
         from scripts.platform.wayland import POLICY
-        expected_policy = hashlib.sha256(POLICY.read_bytes()).hexdigest()
+        expected_policy = wayland_policy_sha256
         required_wayland = {'unattended-wayland-rustdesk-unattended-wayland-' + data['version'] + '-' + arch + '.deb' for arch in ['x86_64', 'aarch64']}
         uploaded_wayland = {a['name'] for a in existing.get('assets', []) if a.get('state') == 'uploaded'}
-        if ('wayland_policy_sha256=' + expected_policy not in body or not required_wayland <= uploaded_wayland):
+        if (('wayland_policy_sha256=' + expected_policy not in body and 'Wayland Policy SHA256: ' + expected_policy not in body)
+                or not required_wayland <= uploaded_wayland):
             raise ValueError('Existing immutable revision lacks matching Wayland evidence; disable include_wayland to reuse it or create a new patch identity')
-    generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M)
+    generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M) or re.search(r'^patchset=(v[1-9][0-9]*)$',body,re.M)
     if generation is None: raise ValueError('Existing release missing generation identity')
     name=generation.group(1);verify(name)
-    historical_identity=build_identity(data['upstream_sha'],name,patch_hash('common',name),patch_hash('sos',name))
-    expected_identity=[f'Upstream SHA: {data["upstream_sha"]}',f'Common Patch Hash: {patch_hash("common",name)}',f'SOS Patch Hash: {patch_hash("sos",name)}']
+    expected_identity=[(f'Upstream SHA: {data["upstream_sha"]}',f'upstream_sha={data["upstream_sha"]}'),
+                       (f'Patch Set: {name}',f'patchset={name}'),
+                       (f'Common Patch Hash: {patch_hash("common",name)}',f'common_patch_hash={patch_hash("common",name)}'),
+                       (f'SOS Patch Hash: {patch_hash("sos",name)}',f'sos_patch_hash={patch_hash("sos",name)}'),
+                       (f'Patch Revision: {data["patch_revision"]}',f'custom_release_revision={data["patch_revision"]}'),
+                       (f'Custom Repository SHA: {custom_sha}',f'custom_repository_sha={custom_sha}'),
+                       (f'Wayland Included: {str(wayland_included).lower()}',f'wayland_included={str(wayland_included).lower()}')]
+    if wayland_policy_sha256:
+        expected_identity.append(('Wayland Policy SHA256: '+wayland_policy_sha256,'wayland_policy_sha256='+wayland_policy_sha256))
     automation_marker='Automation-State: complete'
     legacy_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
     metadata_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('automation_state=')]
     if legacy_lines and legacy_lines != [automation_marker]: raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-    if metadata_lines and metadata_lines != ['automation_state=complete']: raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
+    if metadata_lines and metadata_lines not in (['automation_state=complete'],['automation_state=published']): raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
     if legacy_lines and metadata_lines: raise ValueError('Existing release has duplicate automation state markers')
+    if not legacy_lines and not metadata_lines: raise ValueError('Existing release missing its automation completion marker')
     required={'SHA256SUMS',windows_installer_name(data['version'],'standard','exe'),windows_installer_name(data['version'],'standard','msi'),windows_installer_name(data['version'],'sos','exe'),windows_installer_name(data['version'],'sos','msi')}
     legacy_required={'SHA256SUMS',f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-    inventory=re.search(r'Asset Inventory: (.+)',body)
+    inventory=re.search(r'^Asset Inventory: (.+)$',body,re.M) or re.search(r'^asset_inventory=(.+)$',body,re.M)
     has_inventory=bool(inventory)
     if inventory:
         supplied=json.loads(inventory.group(1))
         if not required.issubset(set(supplied)) and not legacy_required.issubset(set(supplied)): raise ValueError('Invalid historical asset inventory')
         if len(set(supplied))!=len(supplied): raise ValueError('Invalid historical asset inventory')
         required=set(supplied)
-    uploaded={x['name'] for x in existing['assets'] if x['state']=='uploaded'}
-    missing_identity=[x for x in expected_identity if x not in body]
+    all_assets=existing.get('assets',[])
+    uploaded={x['name'] for x in all_assets if x.get('state')=='uploaded'}
+    metadata_lines_set=set(body.splitlines())
+    missing_identity=[values for values in expected_identity if not any(value in metadata_lines_set for value in values)]
     recorded=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
     identity_ok=not missing_identity and recorded is not None and recorded.group(1)==current_identity
-    assets_ok=required.issubset(uploaded) if has_inventory else (required.issubset(uploaded) or legacy_required.issubset(uploaded))
+    if identity_ok and not has_inventory:
+        raise ValueError('Existing Stable release missing its exact asset inventory')
+    if has_inventory:
+        assets_ok=(required==uploaded and len(all_assets)==len(uploaded)
+                   and all(re.fullmatch(r'sha256:[0-9a-f]{64}',x.get('digest','')) and x.get('size',0)>0 for x in all_assets))
+    else:
+        assets_ok=required.issubset(uploaded) or legacy_required.issubset(uploaded)
     if existing.get('prerelease') or not assets_ok: raise ValueError('Existing release incomplete or incompatible; never overwrite')
-    if identity_ok or (recorded is None and historical_identity==current_identity):
+    if identity_ok:
+        verify_release_asset_checksums(data['release_tag'],all_assets)
         data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
         return data
     raise ValueError('Existing revision tag has a different Build Identity; immutable revision collision')
@@ -205,15 +285,20 @@ def draft(root):
         upstream_release=api(f'repos/rustdesk/rustdesk/releases/tags/{info["upstream_tag"]}',missing=True)
         changelog=((upstream_release or {}).get('body') or '').strip()
     if not changelog:raise ValueError('Official upstream release changelog is empty')
+    wayland_included,wayland_policy_sha256=wayland_identity()
     metadata='\n'.join([
         '<!-- rustdesk-custom-release-metadata',
         f'Upstream SHA: {info["upstream_sha"]}',
         f'Patch Set: {info["patchset"]}',
         f'Common Patch Hash: {info["common_patch_hash"]}',
         f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',
+        f'Custom Repository SHA: {info["custom_repository_sha"]}',
+        f'Wayland Included: {str(wayland_included).lower()}',
+        *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
         f'Patch Revision: {info["patch_revision"]}',
-        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"])}',
+        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],info["custom_repository_sha"],wayland_included,wayland_policy_sha256)}',
         f'Asset Inventory: {inventory}',
+        'automation_state=complete',
         '-->'
     ])
     notes=changelog+'\n\n'+metadata+'\n'

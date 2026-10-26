@@ -380,6 +380,11 @@ def _release(root, publish, channel='stable', experimental=False):
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
     official_notes=release_notes_body(standard['upstream_tag'] or standard['upstream_version'])
+    from scripts.release.channel import build_identity
+    wayland_included=os.environ.get('INCLUDE_WAYLAND') == 'true'
+    wayland_policy=report.get('wayland',{}).get('policy_sha256','')
+    identity=build_identity(standard['upstream_sha'],standard['patchset'],standard['common_patch_hash'],
+                            sos['sos_patch_hash'],standard['custom_repository_sha'],wayland_included,wayland_policy)
     metadata=[
         'upstream_repository=rustdesk/rustdesk',
         f'upstream_tag={standard["upstream_tag"]}',
@@ -387,9 +392,10 @@ def _release(root, publish, channel='stable', experimental=False):
         f'patchset={standard["patchset"]}',
         f'common_patch_hash={standard["common_patch_hash"]}',
         f'sos_patch_hash={sos["sos_patch_hash"]}',
-        f'build_identity={hashlib.sha256("|".join((standard["upstream_sha"],standard["patchset"],standard["common_patch_hash"],sos["sos_patch_hash"])).encode()).hexdigest()}',
-        f'custom_release_revision={standard["patch_revision"]}',
         f'custom_repository_sha={standard["custom_repository_sha"]}',
+        f'wayland_included={str(wayland_included).lower()}',
+        f'build_identity={identity}',
+        f'custom_release_revision={standard["patch_revision"]}',
         f'prepare_run={standard["prepare_run"]}',
         f'build_run={standard["build_run"]}',
         'required_targets='+','.join(sorted(report['targets'])),
@@ -430,13 +436,14 @@ def publish_existing_draft(channel='stable'):
     if channel != 'stable':
         raise ValueError('Only Stable supports publishing an existing completed draft')
     from scripts.release.github import request
+    from scripts.upstream.patchsets import patch_hash
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY') != repo:
         raise ValueError('Wrong release repository')
     tag=os.environ.get('RELEASE_TAG','')
-    if not re.fullmatch(r'v[0-9]+\\.[0-9]+\\.[0-9]+-custom\\.[1-9][0-9]{0,5}',tag):
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}',tag):
         raise ValueError('Invalid existing Stable release tag')
-    from scripts.release.channel import matching_drafts
+    from scripts.release.channel import matching_drafts, verify_release_asset_checksums
     drafts=matching_drafts(tag)
     if len(drafts) != 1:
         raise ValueError('Expected exactly one existing Stable draft')
@@ -451,6 +458,43 @@ def publish_existing_draft(channel='stable'):
             raise ValueError('Existing draft missing complete aggregate marker')
     elif 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
         raise ValueError('Existing draft missing complete aggregate marker')
+    identity=os.environ.get('BUILD_IDENTITY','')
+    upstream_sha=os.environ.get('UPSTREAM_SHA','')
+    custom_sha=os.environ.get('CUSTOM_REPOSITORY_SHA','')
+    patchset=os.environ.get('PATCHSET','')
+    wayland=os.environ.get('WAYLAND_INCLUDED','false').lower()
+    policy=os.environ.get('WAYLAND_POLICY_SHA256','')
+    if (not re.fullmatch(r'[0-9a-f]{64}',identity)
+            or not re.fullmatch(r'[0-9a-f]{40}',upstream_sha)
+            or not re.fullmatch(r'[0-9a-f]{40}',custom_sha)
+            or wayland not in ('true','false')):
+        raise ValueError('Existing Stable publication requires a complete preflight identity')
+    required_metadata={
+        'build_identity='+identity,
+        'upstream_sha='+upstream_sha,
+        'custom_repository_sha='+custom_sha,
+        'patchset='+patchset,
+        'common_patch_hash='+patch_hash('common',patchset),
+        'sos_patch_hash='+patch_hash('sos',patchset),
+        'wayland_included='+wayland,
+    }
+    if wayland=='true':
+        if not re.fullmatch(r'[0-9a-f]{64}',policy):
+            raise ValueError('Existing Stable publication missing Wayland policy identity')
+        required_metadata.add('wayland_policy_sha256='+policy)
+    if not required_metadata.issubset(set(body.splitlines())):
+        raise ValueError('Existing Stable draft identity differs from the release preflight')
+    try:
+        inventory_line=next(line for line in body.splitlines() if line.startswith('asset_inventory='))
+        inventory=json.loads(inventory_line.split('=',1)[1])
+    except (StopIteration,IndexError,json.JSONDecodeError):
+        raise ValueError('Existing Stable draft is missing its asset inventory')
+    assets=existing.get('assets',[])
+    uploaded={asset['name'] for asset in assets if asset.get('state')=='uploaded'}
+    if (len(inventory)!=len(set(inventory)) or set(inventory)!=uploaded or len(assets)!=len(uploaded)
+            or any(not re.fullmatch(r'sha256:[0-9a-f]{64}',asset.get('digest','')) or asset.get('size',0)<=0 for asset in assets)):
+        raise ValueError('Existing Stable draft asset inventory/digests are incomplete')
+    verify_release_asset_checksums(tag,assets)
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',

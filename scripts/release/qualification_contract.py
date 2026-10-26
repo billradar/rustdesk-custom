@@ -149,17 +149,20 @@ class AggregateTests(unittest.TestCase):
         import scripts.release.channel as channel
         sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
         patchset='v999999'
-        identity=channel.build_identity(sha,patchset,'c'*64,'d'*64)
+        custom='b'*40
+        identity=channel.build_identity(sha,patchset,'c'*64,'d'*64,custom,False)
         name='v1.4.9-custom.v999999.1'
         assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
-               'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,'Patch Revision: v999999.1','Build Identity: '+identity,'Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
-               'assets':[{'name':n,'state':'uploaded'} for n in assets]}
+               'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,
+                   'Custom Repository SHA: '+custom,'Wayland Included: false','Patch Revision: v999999.1','Build Identity: '+identity,
+                   'Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
+               'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in assets]}
         def api(path,**kwargs):
             if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
             if path.endswith('releases?per_page=100&page=1'): return [draft]
             return None
-        with patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'matching_drafts',return_value=[draft]):
+        with patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
             data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
             self.assertFalse(data['build_needed'])
             self.assertFalse(data['draft_needed'])
@@ -204,6 +207,29 @@ class ReleaseBodyContractTests(unittest.TestCase):
         self.assertEqual(body.rstrip().splitlines()[-1],'automation_state=complete')
         self.assertIn('release_policy=DRAFT ONLY; publication is a manual user decision',body)
         self.assertIn('upstream_sha='+'a'*40,body)
+
+    def test_existing_stable_draft_publish_rechecks_identity_and_asset_inventory(self):
+        import scripts.release.channel as channel
+        upstream='a'*40;custom='b'*40;patchset='v1'
+        common=channel.patch_hash('common',patchset);sos=channel.patch_hash('sos',patchset)
+        identity=channel.build_identity(upstream,patchset,common,sos,custom,False)
+        names=['SHA256SUMS']
+        body='\n'.join(['automation_state=complete','build_package_checksum_architecture_provenance=PASS',
+            'build_identity='+identity,'upstream_sha='+upstream,'custom_repository_sha='+custom,'patchset='+patchset,
+            'common_patch_hash='+common,'sos_patch_hash='+sos,'wayland_included=false','asset_inventory='+json.dumps(names)])
+        release={'id':7,'draft':True,'prerelease':False,'body':body,
+                 'assets':[{'name':'SHA256SUMS','state':'uploaded','size':10,'digest':'sha256:'+'c'*64}]}
+        env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','RELEASE_TAG':'v1.4.9-custom.v1.1',
+             'BUILD_IDENTITY':identity,'UPSTREAM_SHA':upstream,'CUSTOM_REPOSITORY_SHA':custom,
+             'PATCHSET':patchset,'WAYLAND_INCLUDED':'false','WAYLAND_POLICY_SHA256':''}
+        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request',return_value={'draft':False}) as write:
+            qualification.publish_existing_draft()
+            write.assert_called_once()
+        mismatch=dict(release,body=body.replace('custom_repository_sha='+custom,'custom_repository_sha='+'d'*40))
+        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[mismatch]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request') as write:
+            with self.assertRaisesRegex(ValueError,'identity differs'):
+                qualification.publish_existing_draft()
+            write.assert_not_called()
 
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):

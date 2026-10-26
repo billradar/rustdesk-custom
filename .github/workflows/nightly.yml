@@ -1,5 +1,5 @@
 name: Nightly Build Pipeline
-run-name: Nightly ${{ inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }}
+run-name: Nightly ${{ inputs.expected_sha || inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }}
 env:
   PYTHONPATH: .
 'on':
@@ -26,7 +26,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-${{ inputs.official_run_id || 'latest' }}-${{ github.sha }}
+  group: nightly-${{ github.sha }}-${{ inputs.release_mode == 'dry-run' && 'dry-run' || 'production' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}
   cancel-in-progress: false
 jobs:
   resolve:
@@ -36,6 +36,7 @@ jobs:
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
     runs-on: ubuntu-22.04
     outputs:
+      dedup_skip: ${{ steps.dedup.outputs.skip }}
       upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       upstream_version: ${{ steps.resolve.outputs.upstream_version }}
@@ -61,13 +62,23 @@ jobs:
         OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
         EXPECTED_SHA: ${{ inputs.expected_sha }}
       run: python3 scripts/release/nightly.py resolve --official-run-id "$OFFICIAL_RUN_ID" --expected-sha "$EXPECTED_SHA"
+    - id: dedup
+      name: Skip an active or completed identical Nightly batch
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_MODE: ${{ inputs.release_mode }}
+        INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+        UPSTREAM_EXPECTED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+      run: python3 scripts/release/nightly.py dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: steps.dedup.outputs.skip != 'true'
       with:
         name: nightly-discovery-${{ github.run_id }}
         path: .work/nightly-discovery.json
         if-no-files-found: error
   prepare:
     needs: resolve
+    if: needs.resolve.outputs.dedup_skip != 'true'
     uses: ./.github/workflows/prepare-source.yml
     with:
       build_wayland: ${{ inputs.include_wayland }}
@@ -77,7 +88,7 @@ jobs:
       patchset: ${{ needs.resolve.outputs.patchset }}
   wayland-build:
     needs: [resolve, prepare]
-    if: inputs.include_wayland && needs.prepare.result == 'success'
+    if: needs.resolve.outputs.dedup_skip != 'true' && inputs.include_wayland && needs.prepare.result == 'success'
     uses: ./.github/workflows/wayland.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
@@ -91,6 +102,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   windows-build:
     needs: [resolve, prepare]
+    if: needs.resolve.outputs.dedup_skip != 'true'
     uses: ./.github/workflows/build-stable-windows.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
@@ -105,6 +117,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   platforms-build:
     needs: [resolve, prepare]
+    if: needs.resolve.outputs.dedup_skip != 'true'
     uses: ./.github/workflows/build-stable-platforms.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
@@ -119,6 +132,7 @@ jobs:
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
   android-build:
     needs: [resolve, prepare]
+    if: needs.resolve.outputs.dedup_skip != 'true'
     uses: ./.github/workflows/build-stable-android.yml
     with:
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
@@ -139,6 +153,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
+      needs.resolve.outputs.dedup_skip != 'true' &&
       (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
       needs.android-build.result == 'success'
     runs-on:
@@ -219,7 +234,7 @@ jobs:
   aggregate:
     needs: [resolve, windows-build, platforms-build, android-build, wayland-build, android-sign]
     if: >-
-      always() && needs.windows-build.result == 'success' &&
+      always() && needs.resolve.outputs.dedup_skip != 'true' && needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' && needs.android-build.result == 'success' &&
       (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
       (inputs.release_mode == 'dry-run' || needs.android-sign.result == 'success')
@@ -279,6 +294,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' && (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
+      needs.resolve.outputs.dedup_skip != 'true' &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
