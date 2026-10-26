@@ -8,7 +8,8 @@ public final class PinSources {
         return switch (mode) {
             case "console" -> new InteractivePinSource();
             case "env" -> new EnvironmentPinSource();
-            default -> throw new IllegalArgumentException("PIN source must be console or env");
+            case "stdin" -> new StandardInputPinSource();
+            default -> throw new IllegalArgumentException("PIN source must be console, env or stdin");
         };
     }
 }

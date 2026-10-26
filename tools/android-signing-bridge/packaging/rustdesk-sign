@@ -57,7 +57,8 @@ run_signer() {
     || fail 'cannot create private runtime directory'
   /usr/bin/chmod 700 "$runtime"
   status=0
-  "$JAVA" -Djava.io.tmpdir="$runtime" -DPKCS11_TEMP_DIR="$runtime" \
+  /usr/bin/env -i HOME=/home/github-runner PATH=/usr/bin:/bin \
+    "$JAVA" -Djava.io.tmpdir="$runtime" -DPKCS11_TEMP_DIR="$runtime" \
     --add-exports=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED \
     -cp "$CLASSPATH" "$@" || status=$?
   /usr/bin/find "$runtime" -depth -delete || status=1

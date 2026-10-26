@@ -210,17 +210,6 @@ jobs:
         grep -Fxq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
         grep -Fxq 'PRIVATE KEY OPERATION: NO' <<< "$CAPABILITIES"
         printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: PASS'
-    - name: Environment Secret Binding Preflight
-      shell: bash
-      env:
-        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
-      run: |
-        set -euo pipefail
-        if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
-          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
-          exit 1
-        fi
-        printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
     - name: Production Android signing
       uses: ./.github/actions/android-yubikey-sign
       env:

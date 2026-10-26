@@ -143,8 +143,7 @@ public final class RealYubikeyApksigOneShot {
     }
 
     static void reportPinSourceUnavailable() {
-        System.err.println("PIN SOURCE: ENVIRONMENT");
-        System.err.println("ENVIRONMENT PIN AVAILABLE: FAIL");
+        System.err.println("PIN SOURCE: UNAVAILABLE");
         System.err.println("FAILURE STAGE: PIN SOURCE");
     }
 
@@ -158,22 +157,22 @@ public final class RealYubikeyApksigOneShot {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--input" -> {
-                    if (++i >= args.length || input != null) throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env]");
+                    if (++i >= args.length || input != null) throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env|stdin]");
                     input = Path.of(args[i]);
                 }
                 case "--output" -> {
-                    if (++i >= args.length || output != null) throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env]");
+                    if (++i >= args.length || output != null) throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env|stdin]");
                     output = Path.of(args[i]);
                 }
                 case "--pin-source" -> {
-                    if (++i >= args.length) throw new IllegalArgumentException("PIN source must be console or env");
+                    if (++i >= args.length) throw new IllegalArgumentException("PIN source must be console, env or stdin");
                     pinSource = args[i];
                 }
                 default -> throw new IllegalArgumentException("unsupported argument");
             }
         }
-        if (input == null || output == null || !(pinSource.equals("console") || pinSource.equals("env"))) {
-            throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env]");
+        if (input == null || output == null || !(pinSource.equals("console") || pinSource.equals("env") || pinSource.equals("stdin"))) {
+            throw new IllegalArgumentException("usage: --input <input.apk> --output <new-output.apk> [--pin-source console|env|stdin]");
         }
         return new Options(input, output, pinSource);
     }
