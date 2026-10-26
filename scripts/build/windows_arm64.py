@@ -39,7 +39,27 @@ def pe(path, arch='aarch64'):
         raise ValueError('Wrong Windows '+arch+' machine: '+Path(path).name)
 
 def apply(tree):
-    subprocess.run(['bash',PATCH],cwd=tree,check=True)
+    # A bare ``bash`` on Windows can resolve to the WSL launcher instead of
+    # Git Bash. GitHub's Windows ARM runners provide Git for Windows, so invoke
+    # that executable explicitly for this source patch.
+    if os.name == 'nt':
+        git = shutil.which('git')
+        candidates = []
+        if git:
+            git_path = Path(git).resolve()
+            candidates.extend((git_path.parent.parent/'bin'/'bash.exe',
+                               git_path.parent/'bash.exe'))
+        for env_name in ('ProgramFiles', 'ProgramW6432'):
+            root = os.environ.get(env_name)
+            if root:
+                candidates.append(Path(root)/'Git'/'bin'/'bash.exe')
+        bash = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if bash is None:
+            raise RuntimeError('Git for Windows bash.exe was not found; refusing to invoke WSL bash')
+        command = [str(bash), PATCH]
+    else:
+        command = ['bash', PATCH]
+    subprocess.run(command,cwd=tree,check=True)
 
 def bridge_info(tree):
     p=check(tree)
