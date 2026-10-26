@@ -12,7 +12,7 @@
 | `.github/workflows/build-stable-platforms.yml` | Stable Linux / macOS 等平台构建入口 |
 | `.github/workflows/build-stable-android.yml` | Stable Android 构建入口；生产签名在独立的受保护 Job 中执行 |
 | `.github/workflows/tag.yml` | Stable 解析、revision 预检、构建、产物聚合、Android 生产签名门禁及 Dry-run / Draft / Release 决策 |
-| `.github/workflows/upstream-stable.yml` | 定期发现官方 Stable Release，并对下游 Stable 流水线执行去重后的 dry-run 路由 |
+| `.github/workflows/upstream-stable.yml` | 定期发现官方 Stable Release，并将最新版本路由到已签名的私有 Draft 构建 |
 | `.github/workflows/upstream-main-compatibility.yml` | 定期验证官方上游默认分支的兼容性；不构建或发布 Nightly 产物 |
 | `.github/workflows/android-yubikey-signing-test.yml` | 需要手动触发并明确授权的 YubiKey 签名冒烟测试，不发布或提升 Release |
 
@@ -40,7 +40,7 @@ Stable 发布以**准确的自定义提交 + 准确的官方上游 Stable 版本
 ~~~text
 发现官方 Stable Release
        ↓
-Stable dry-run 路由 / 解析准确上游 SHA
+Stable 路由 / 解析准确上游 SHA，并生成私有 Draft
        ↓
 Draft / Revision 预检
        ↓
@@ -63,7 +63,7 @@ Dry-run / Draft / Release
 2. 预检发现同版本/同 revision 的既有产物时，按门禁结果处理；不要手动覆盖或删除以绕过防重。
 3. Dry-run 不代表 Release 已创建或发布。
 4. Draft 和正式 Release 是不同操作；正式发布必须明确请求并通过完整聚合门禁。
-5. Stable router 自动触发的是 dry-run，不是发布授权。
+5. Stable router 仅触发已签名的私有 Draft，不会公开发布。它复用 Stable 发布预检校验完整构建身份、资产清单和 SHA-256 摘要；相同完整构建已存在时跳过，活动构建时不重复派发。
 6. Android 生产签名属于受保护的独立 Job，不是普通构建的一部分。
 
 Stable 去重身份现在包括上游 SHA、自定义仓库提交 SHA、补丁集及 Common/SOS 补丁哈希、

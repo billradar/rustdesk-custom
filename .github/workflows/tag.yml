@@ -1,5 +1,5 @@
 name: Stable Release Pipeline
-run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }}
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }}
 env:
   PYTHONPATH: .
 'on':

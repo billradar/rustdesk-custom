@@ -66,7 +66,7 @@ python3 scripts/validation/repository_contract.py
 4. 初次验证使用 `dry-run`。确认来源 SHA、patchset、revision、必需平台和聚合资格均匹配后，选择 `draft` 创建 GitHub Draft Release；只有明确准备公开发布时才选择 `release`。
 5. 正式发布会重新校验准确身份和远端资产。若已有完整、身份完全匹配的 Draft，流程会复核后发布该 Draft；不匹配或不完整时会停止，不能通过删 Release、改身份字段或手动覆盖资产来绕过。
 
-Stable router（`.github/workflows/upstream-stable.yml`）每 15 分钟发现官方最新 Stable，并自动对 `main` 触发 Stable `dry-run`。它不创建 Draft，也不公开发布。需要手动检查路由时，可在 Actions 页面手动运行 **Upstream Stable Router**。
+Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方最新 Stable，并将其路由到 `main` 上的签名私有 Draft 构建。路由会复用 Stable 发布预检核对身份、完整资产清单和摘要；相同的完整构建已存在时跳过，活动构建不重复派发。它不会公开发布。需要手动检查路由时，可在 Actions 页面运行 **Upstream Stable Router**。
 
 ### Nightly
 

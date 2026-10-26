@@ -1,49 +1,100 @@
 #!/usr/bin/env python3
-"""Stable upstream router: only dispatch trusted main drafts, bounded retries."""
-import os,re,subprocess
-from scripts.upstream.resolve import api,choose_stable
-from scripts.upstream.patchsets import patchset_for_version,patch_hash
-from scripts.release.channel import build_identity,release_rows
+"""Route the latest official Stable release to a complete private Draft build."""
+import os
+import re
+import subprocess
 
-REPO='billradar/rustdesk-custom'
+from scripts.release.channel import release_preflight
+from scripts.upstream.patchsets import patchset_for_version
+from scripts.upstream.resolve import api, choose_stable
 
-def state(rows,tag,sha):
-    selected=[r for r in rows if r.get('display_title')==f'Stable {tag} / draft' and r.get('head_sha')==sha and r.get('head_branch')=='main' and r.get('event')=='workflow_dispatch']
-    if any(r.get('status')!='completed' for r in selected):return 'ACTIVE'
-    return 'EXHAUSTED' if len(selected)>=3 else 'RETRY'
+REPOSITORY = 'billradar/rustdesk-custom'
+WORKFLOW = 'tag.yml'
+MAX_ATTEMPTS = 3
 
-def existing(release):
-    version=release['version']; patchset=patchset_for_version(version)
-    identity=build_identity(release['upstream_sha'],patchset,patch_hash('common',patchset),patch_hash('sos',patchset))
-    for row in release_rows(version):
-        body=row.get('body') or ''
-        if re.search(r'^(?:Build Identity: |build_identity=)'+identity+r'$',body,re.M):
-            if (f'Upstream SHA: {release["upstream_sha"]}' not in body or row.get('prerelease')
-                or not ('Automation-State: complete' in body or 'automation_state=complete' in body)
-                or not any(a.get('name')=='SHA256SUMS' and a.get('state')=='uploaded' for a in row.get('assets',[]))):
-                raise ValueError('Existing Stable release is incomplete; manual review required')
-            return True
-    return False
+
+def verify_context():
+    """Only allow scheduled/manual routing from the trusted main branch."""
+    if os.environ.get('GITHUB_REPOSITORY') != REPOSITORY:
+        raise ValueError('Stable router may only run in the release repository')
+    if os.environ.get('GITHUB_REF') != 'refs/heads/main':
+        raise ValueError('Stable router may only dispatch from main')
+    if os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch'):
+        raise ValueError('Unsupported Stable router trigger')
+    if not re.fullmatch(r'[0-9a-f]{40}', os.environ.get('GITHUB_SHA', '')):
+        raise ValueError('Stable router requires an exact custom repository SHA')
+
+
+def discovery():
+    release = choose_stable()
+    data = {
+        'channel': 'stable',
+        'upstream_tag': release['upstream_tag'],
+        'upstream_ref': release['upstream_tag'],
+        'upstream_sha': release['upstream_sha'],
+        'version': release['version'],
+        'patchset': patchset_for_version(release['version']),
+    }
+    return data
+
+
+def existing_build(data):
+    """Use the downstream release gate as the sole authority for reuse."""
+    os.environ['INCLUDE_WAYLAND'] = 'true'
+    return not release_preflight(data)['build_needed']
+
+
+def workflow_runs(tag):
+    """Find prior exact tag.yml dispatches; fail closed if pagination is incomplete."""
+    runs = []
+    for page in range(1, 11):
+        batch = api(f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/runs?branch=main&event=workflow_dispatch&per_page=100&page={page}') or {}
+        runs.extend(batch.get('workflow_runs', []))
+        if len(batch.get('workflow_runs', [])) < 100:
+            return [row for row in runs if row.get('head_branch') == 'main'
+                    and row.get('event') == 'workflow_dispatch'
+                    and row.get('display_title') in (
+                        f'Stable {tag} / draft / wayland=true',
+                        # Older router runs did not include Wayland in run-name.
+                        f'Stable {tag} / draft',
+                    )]
+    raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
+
+
+def run_state(rows):
+    if any(row.get('status') != 'completed' for row in rows):
+        return 'ACTIVE'
+    return 'EXHAUSTED' if len(rows) >= MAX_ATTEMPTS else 'RETRY'
+
+
+def dispatch(tag):
+    subprocess.run([
+        'gh', 'workflow', 'run', WORKFLOW,
+        '--repo', REPOSITORY,
+        '--ref', 'main',
+        '-f', f'upstream_ref={tag}',
+        '-f', 'release_mode=draft',
+        '-f', 'include_wayland=true',
+    ], check=True)
+
 
 def route():
-    if (os.getenv('GITHUB_REPOSITORY')!=REPO or os.getenv('GITHUB_REF')!='refs/heads/main'
-        or os.getenv('GITHUB_EVENT_NAME') not in ('schedule','workflow_dispatch')
-        or not re.fullmatch(r'[0-9a-f]{40}',os.getenv('GITHUB_SHA',''))):
-        raise ValueError('Untrusted Stable router context')
-    release=choose_stable()
-    if existing(release):
-        print('Verified Stable draft/release exists; skip')
+    verify_context()
+    data = discovery()
+    if existing_build(data):
+        print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
         return
-    tag=release['upstream_tag'];rows=[]
-    for page in range(1,11):
-        batch=api(f'repos/{REPO}/actions/workflows/tag.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
-        rows.extend(batch)
-        if len(batch)<100:break
-    else:raise ValueError('Run history exhausted; fail closed')
-    current=state(rows,tag,os.environ['GITHUB_SHA'])
-    if current=='ACTIVE':return
-    if current=='EXHAUSTED':raise ValueError('Three attempts failed to produce a verified Stable draft')
-    subprocess.run(['gh','workflow','run','tag.yml','--repo',REPO,'--ref','main',
-                    '-f','upstream_ref='+tag,'-f','release_mode=draft','-f','include_wayland=true'],check=True)
 
-if __name__=='__main__':route()
+    state = run_state(workflow_runs(data['upstream_tag']))
+    if state == 'ACTIVE':
+        print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
+        return
+    if state == 'EXHAUSTED':
+        raise ValueError('Stable Draft retry budget exhausted; manual review required')
+
+    dispatch(data['upstream_tag'])
+    print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
+
+
+if __name__ == '__main__':
+    route()
