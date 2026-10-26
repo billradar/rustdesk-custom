@@ -117,14 +117,15 @@ compatibility path. Nothing is automatically approved, merged or published.
 ## Nightly 同步与构建
 
 官方 `flutter-nightly.yml` 每天 UTC 00:00（香港时间 08:00）启动。
-`upstream-nightly.yml` 在每小时 :07/:22/:37/:52 检查官方成功完成的构建，
-发现新批次后触发 `nightly.yml`。GitHub 定时任务可能延迟；不按固定等待分钟数猜测完成状态。
+`upstream-nightly.yml` 每天 UTC 12:00（香港时间 20:00）检查官方成功完成的构建，
+即比上游计划启动时间晚十二小时。路由等待当天上游运行实际完成，只有成功后才触发
+`nightly.yml`；GitHub 定时任务可能延迟，因此使用官方运行状态而非猜测完成时间。
 官方计划见 https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-nightly.yml 。
 
 来源绑定官方仓库、默认分支、工作流路径、成功状态、运行 ID 和完整 40 位 SHA；
-不使用可能滞后的 `nightly` 标签，也不追逐尚未成功构建的最新 master。
-本次接入时，官方成功运行 40146600534 对应 `1297da6d186e58d9096be24072ae3998cdbbf8fe`，
-而 `nightly` 标签指向其他提交，因此两者不能混用。
+不使用上游可能滞后的 `nightly` 标签，也不追逐尚未成功构建的最新 master。
+例如官方运行 40146600534 对应源码 SHA `1297da6d186e58d9096be24072ae3998cdbbf8fe`；
+上游 Release 的 tag 与运行源码 SHA 应分别看待。
 
 构建复用 Tag 的 `prepare-source.yml`、Windows/Linux/macOS/Android 构建核心，
 从同批 Common 补丁源码分出 Standard/SOS；目标及 ARM64/amd64 范围来自同一平台矩阵。
@@ -145,9 +146,11 @@ Nightly 的 `release_mode` 默认 `draft`：仅主分支的直接签名 job 绑�
 普通构建 job 不接触 PIN，Draft job 也不接触 PIN；公开 Nightly 预发布版只能通过明确选择
 `release` 手动触发。
 `dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
-重复的完整 Draft 保持不变，不重建或覆盖；明确选择 `release` 时，只有上游/自定义
-SHA、补丁集、Wayland 配置、完成状态、资产清单及远端 SHA-256 全部匹配，才复用该 Draft
-并转为公开 Nightly 预发布版。身份或远端资产有任何不一致时均停止，不覆盖原发布。
+所有 Nightly 输出使用固定的 `nightly` tag 和同一个 Release 入口。全矩阵、签名、
+来源和校验和验证通过后，更新 tag 到本次自定义仓库提交，清除旧 assets，上传并验证新产物；
+替换期间先把 Release 暂设为 Draft，验证完成后按 `release_mode` 保持 Draft 或公开为 prerelease。
+Release 记录和下载入口保持稳定。构建或验证失败时不会开始替换；身份、tag 所有权或远端
+资产校验不符合预期时停止。相同来源与构建配置仍按去重规则跳过，不重复构建。
 运行时与真实远程连接状态保持未测试，构建成功不能证明锁屏兼容。
 
 定时工作流需要合入 main 后才会生效；代码/契约检查通过与真实全平台构建成功应分别报告。
@@ -165,12 +168,14 @@ channel must match `SIGNING_CHANNEL`; Nightly receipts also record the channel.
 The complete parent aggregate requires all three production-signed Android ABIs
 in Draft and release modes. A separate contents-write job downloads the exact
 same-run signed packages and optional Wayland pair and revalidates them before any
-write. It scans completed build logs, creates an immutable Nightly-specific
-prerelease Draft, uploads packages and SHA256SUMS, verifies remote names, sizes and
-SHA256 digests, and only then records automation_state=complete. Explicit release
-mode reuses a complete matching Draft only after verifying its metadata, inventory,
-remote sizes and SHA256 digests; mismatched or incomplete releases are never
-overwritten. Windows/macOS signing status remains the same as Tag (not enabled).
+write. It scans completed build logs, then refreshes the fixed `nightly` tag and
+Release only after validation succeeds. The existing Release is temporarily made a
+Draft, prior assets are removed, the tag is moved to the custom build commit, and
+the new packages and SHA256SUMS are uploaded and verified by name, size and digest.
+Only then is automation_state marked complete and the Release left as a Draft or
+published prerelease according to the selected mode. A release-write concurrency
+lock prevents overlapping builds from replacing each other's assets. Windows/macOS
+signing status remains the same as Tag (not enabled).
 
 Run titles include the upstream SHA, custom SHA, mode and Wayland selection. The
 workflow serializes matching custom/mode/Wayland batches, and the resolve job checks

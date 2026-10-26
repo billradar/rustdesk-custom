@@ -191,6 +191,7 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(unsigned['if'],"inputs.release_mode == 'dry-run'")
         draft=w['jobs']['draft']
         self.assertEqual(draft['permissions'],{'contents':'write','actions':'read'})
+        self.assertEqual(draft['concurrency'],{'group':'rustdesk-nightly-release-write','cancel-in-progress':False})
         self.assertIn('aggregate',draft['needs'])
         self.assertTrue(any('nightly.py draft' in s.get('run','') for s in draft['steps']))
         for token in ['qualification.py release','secrets: inherit','continue-on-error']:
@@ -207,9 +208,10 @@ class NightlyTests(unittest.TestCase):
 
     def test_polling_and_unique_plan_artifacts(self):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
-        self.assertEqual(w['on']['schedule'],[{'cron':'7,22,37,52 * * * *'}])
+        self.assertEqual(w['on']['schedule'],[{'cron':'0 12 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
         self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
+        self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
         names=[]
         for family in ['platforms','android']:
             w=yaml.safe_load((ROOT/f'.github/workflows/build-stable-{family}.yml').read_text())
@@ -244,9 +246,10 @@ class NightlyDraftTests(unittest.TestCase):
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return uploaded
+                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             report=dict(result='PASS',android_production_signing=mode!='unsigned')
-            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',return_value={'id':7,'draft':True,'prerelease':True}) as write:
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',return_value={'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}) as write:
                 if mode!='ok':
                     with self.assertRaises(ValueError):nightly.draft(root,discovery)
                     if mode in ['unsigned','existing','bad-checksum','forbidden-json']:write.assert_not_called()
@@ -261,7 +264,7 @@ class NightlyDraftTests(unittest.TestCase):
                     self.assertIn('<!-- rustdesk-custom-release-metadata',write.call_args.args[2]['body'])
                     self.assertIn('SHA256SUMS',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)
-                    self.assertTrue(result['tag'].startswith('nightly-v1.5.1-custom.v2-'))
+                    self.assertEqual(result['tag'], 'nightly')
 
     def test_create_verified_draft_only(self):self.perform()
 
@@ -276,17 +279,23 @@ class NightlyDraftTests(unittest.TestCase):
             remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
             create_payload={}
             def first_request(method,path,payload):
-                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True}
+                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
                 if method=='PATCH':create_payload['body']=payload['body']
                 return {'id':7,'draft':True,'prerelease':True}
             def first_api(path,missing=False):
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
+                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 first=nightly.draft(root,discovery)
-            reused_api=lambda path,missing=False: ({'id':7,'draft':True,'prerelease':True,'body':create_payload['body']} if '/releases/tags/' in path else {'jobs':[]} if '/actions/runs/' in path else remote if '/assets?' in path else None)
+            def reused_api(path,missing=False):
+                if '/releases/tags/' in path:return {'id':7,'draft':True,'prerelease':True,'body':create_payload['body']}
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
+                if '/actions/runs/' in path:return {'jobs':[]}
+                if '/assets?' in path:return remote
+                return None
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request') as write:
                 second=nightly.draft(root,discovery)
                 self.assertTrue(second['reused'])
@@ -305,17 +314,23 @@ class NightlyDraftTests(unittest.TestCase):
             remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
             create_payload={}
             def first_request(method,path,payload):
-                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True}
+                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
                 if method=='PATCH':create_payload['body']=payload['body']
                 return {'id':7,'draft':True,'prerelease':True}
             def first_api(path,missing=False):
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
+                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 nightly.draft(root,discovery)
-            reused_api=lambda path,missing=False: ({'id':7,'draft':True,'prerelease':True,'body':create_payload['body']} if '/releases/tags/' in path else {'jobs':[]} if '/actions/runs/' in path else remote if '/assets?' in path else None)
+            def reused_api(path,missing=False):
+                if '/releases/tags/' in path:return {'id':7,'draft':True,'prerelease':True,'body':create_payload['body']}
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
+                if '/actions/runs/' in path:return {'jobs':[]}
+                if '/assets?' in path:return remote
+                return None
             with patch.dict(os.environ,RELEASE_MODE='release'),patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request',return_value={'draft':False,'prerelease':True}) as write:
                 result=nightly.draft(root,discovery)
                 self.assertTrue(result['reused'])
@@ -336,11 +351,12 @@ class NightlyDraftTests(unittest.TestCase):
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return uploaded
+                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             calls=[]
             def request(method,path,payload):
                 calls.append((method,payload))
-                if method=='POST':return {'id':7,'draft':True,'prerelease':True}
+                if method=='POST':return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
                 return {'id':7,**payload}
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value={'result':'PASS','android_production_signing':True}),patch.object(nightly,'api',side_effect=api),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=request):
                 result=nightly.draft(root,discovery)
