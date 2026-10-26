@@ -57,11 +57,9 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertNotIn("production_android_signing", signing["if"])
         self.assertIn("release_mode != 'dry-run'", signing["if"])
 
-    def test_secret_is_bound_only_at_direct_job_steps(self):
+    def test_secret_is_bound_only_to_production_signing_action(self):
         signing = self.tag["jobs"]["android-sign"]
         expected = "$" + "{{ secrets.YUBIKEY_PIV_PIN }}"
-        preflight = next(s for s in signing["steps"] if s.get("name") == "Environment Secret Binding Preflight")
-        self.assertEqual(preflight["env"]["YUBIKEY_PIV_PIN"], expected)
         hardware = next(s for s in signing["steps"] if s.get("name") == "Production Android signing")
         self.assertEqual(hardware["env"]["YUBIKEY_PIV_PIN"], expected)
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(self.action))
@@ -74,10 +72,14 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertIn("actions/download-artifact@", self.action)
         self.assertIn("actions/upload-artifact@", self.action)
         self.assertIn('"/usr/local/bin/rustdesk-sign"', self.script)
-        self.assertIn('"--pin-source", "env"', self.script)
+        self.assertIn('"--pin-source", "stdin"', self.script)
         self.assertIn("559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5", self.script)
         self.assertIn('EXPECTED_PACKAGE = "com.carriez.flutter_hbb"', self.script)
-        self.assertIn('if not os.environ.get("YUBIKEY_PIV_PIN")', self.script)
+        self.assertIn('os.environ.pop("YUBIKEY_PIV_PIN", None)', self.script)
+        self.assertIn('process.stdin.write(PIN_BUFFER)', self.script)
+        self.assertIn('process.stdin.write(b"\\n")', self.script)
+        self.assertIn('case "stdin" -> new StandardInputPinSource();',
+                      (ROOT / "tools/android-signing-bridge/src/main/java/com/billradar/rustdesk/signing/bridge/PinSources.java").read_text())
         self.assertIn(r'r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$"', self.script)
         self.assertNotIn(r'r"^Signer #d+ certificate SHA-256 digest:', self.script)
 
@@ -126,10 +128,8 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         steps = signing["steps"]
         names = [step.get("name", "") for step in steps]
         probe_index = names.index("Read-only Android v2/v3 runtime preflight")
-        pin_index = names.index("Environment Secret Binding Preflight")
         sign_index = names.index("Production Android signing")
-        self.assertLess(probe_index, pin_index)
-        self.assertLess(pin_index, sign_index)
+        self.assertLess(probe_index, sign_index)
         probe = steps[probe_index]
         self.assertNotIn("YUBIKEY_PIV_PIN", json.dumps(probe))
         command = probe["run"]

@@ -23,7 +23,7 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 2. 独立的 `android-sign` Job 只在工作流定义的受限条件下运行。
 3. Job 使用专用 self-hosted ARM64 Runner 标签组：`self-hosted`、`linux`、`arm64`、`rustdesk-signing`、`android-signing`、`yubikey`。
 4. Job 进入 GitHub Environment：`android-production-signing`。
-5. Environment Secret `YUBIKEY_PIV_PIN` 只注入需要它的预检/签名步骤，不应打印或传递给普通构建。
+5. Environment Secret `YUBIKEY_PIV_PIN` 只注入签名步骤。脚本会在启动校验工具前从自身环境移除 PIN，再通过标准输入管道传给签名器；不得打印或传递给普通构建。
 6. 签名辅助逻辑校验输入产物来源、包名、ABI、身份指纹和签名结果；任何不匹配都应失败关闭。
 7. 签名完成后，结果进入后续聚合验证，不应绕过最终产物验证。
 
@@ -70,9 +70,13 @@ APK 签名不是对文件名或版本号盖章，而是用签名私钥对 APK �
 - **PKCS#11 对象 ID**：`02`。
 - **密钥类型**：椭圆曲线 EC，曲线 `secp384r1`。
 - **身份校验**：签名后证书 SHA-256 必须等于工作流/脚本中配置的预期指纹。
-- **签名工具接口**：当前脚本调用 Runner 上安装的 `/usr/local/bin/rustdesk-sign`，并使用 `--pin-source env` 从进程环境读取 PIN。
+- **签名工具接口**：当前脚本调用 Runner 上安装的 `/usr/local/bin/rustdesk-sign`，通过标准输入管道传递 PIN；不会把 PIN 放进命令行参数或签名器环境变量。
+
+Python 脚本在启动校验子进程前会先从自身环境中移除 PIN，签名完成或失败后尽力清零可变缓冲区。Java 签名器将标准输入读入可清零缓冲区。Python、内核管道、Java 及 PKCS#11 实现仍可能在短时间内保留内存副本；此加固降低暴露面，不能抵御已被攻陷的主机、root 权限恶意软件或进程内存读取。
 
 仓库脚本调用的是本机签名工具接口。签名工具内部的 PKCS#11 provider、设备连接方式和驱动配置属于专用 Runner 的部署配置；不能仅从 Python 调用处推断其所有内部实现细节。
+
+自托管 Runner 必须保持专用且可信。GitHub Environment 能限制密钥何时注入，但不会隔离同一 Runner 主机上的其他进程或任务；Runner 配置和主机完整性需在主机及 GitHub 设置中单独核实。
 
 ### 一次签名的密码学步骤
 

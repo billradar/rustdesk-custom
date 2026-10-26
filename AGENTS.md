@@ -257,7 +257,7 @@ Current intended configuration, which must be rechecked against live workflow an
 - Production signing must remain behind the intended Tag or protected-main Nightly draft workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
 - The manual signing smoke test is separately gated and must never publish/promote a release.
 - Never commit a keystore, private key, PIN, password, token, PKCS#11 credential, or sensitive signing output.
-- Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.
+- Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Remove it from the signing script environment before child tools start, pass it to the signer only through standard input, and clear mutable buffers after use. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.
 - Do not replace hardware signing with an undisclosed software key or weaken gates to make a run pass.
 - A failed PIN preflight, missing device, unavailable key, unexpected certificate, or invalid APK is a stop condition. Do not retry by weakening checks.
 

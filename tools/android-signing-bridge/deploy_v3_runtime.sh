@@ -43,6 +43,10 @@ printf 'Deployment source commit verified: %s\n' "$LOCAL_HEAD"
 [[ -f "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java" ]]
 grep -Fq 'EXPECTED_HARDWARE_SIGNATURE_COUNT = 3' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java"
 grep -Fq '"setV3SigningEnabled", boolean.class, true' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.java"
+grep -Fq 'case "stdin" -> new StandardInputPinSource();' "$BRIDGE/src/main/java/com/billradar/rustdesk/signing/bridge/PinSources.java"
+grep -Fq '"--pin-source", "stdin"' "$REPO_ROOT/scripts/signing/android_yubikey_sign.py"
+grep -Fq 'process.stdin.write(PIN_BUFFER)' "$REPO_ROOT/scripts/signing/android_yubikey_sign.py"
+grep -Fq 'os.environ.pop("YUBIKEY_PIV_PIN", None)' "$REPO_ROOT/scripts/signing/android_yubikey_sign.py"
 
 command -v mvn >/dev/null
 command -v jar >/dev/null
@@ -85,6 +89,8 @@ trap cleanup EXIT
 jar --create --file "$STAGE/rustdesk-android-signing-bridge.jar" -C "$BRIDGE/target/classes" .
 jar tf "$STAGE/rustdesk-android-signing-bridge.jar" | grep -Fxq \
   'com/billradar/rustdesk/signing/bridge/RealYubikeyApksigOneShot.class'
+jar tf "$STAGE/rustdesk-android-signing-bridge.jar" | grep -Fxq \
+  'com/billradar/rustdesk/signing/bridge/StandardInputPinSource.class'
 printf '%s\n' '0.2.0-v2-v3' > "$STAGE/VERSION"
 
 [[ -d "$INSTALL_ROOT/lib" && -d "$INSTALL_ROOT/bin" ]]
