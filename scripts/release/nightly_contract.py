@@ -166,6 +166,10 @@ class NightlyDraftTests(unittest.TestCase):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
             (assets/'client.apk').write_bytes(b'validated package fixture')
             (assets/'SHA256SUMS').write_text(hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()+'  client.apk\n')
+            if mode == 'bad-checksum':
+                (assets/'SHA256SUMS').write_text('0'*64 + '  client.apk\n')
+            if mode == 'forbidden-json':
+                (assets/'build-info-secret.json').write_text('{}')
             discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
             uploaded=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
             if mode=='bad-upload':uploaded[0]['digest']='sha256:'+'0'*64
@@ -180,7 +184,7 @@ class NightlyDraftTests(unittest.TestCase):
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',return_value={'id':7,'draft':True,'prerelease':True}) as write:
                 if mode!='ok':
                     with self.assertRaises(ValueError):nightly.draft(root,discovery)
-                    if mode in ['unsigned','existing']:write.assert_not_called()
+                    if mode in ['unsigned','existing','bad-checksum','forbidden-json']:write.assert_not_called()
                     if mode=='bad-upload':self.assertEqual(write.call_count,1)
                 else:
                     result=nightly.draft(root,discovery)
@@ -189,6 +193,8 @@ class NightlyDraftTests(unittest.TestCase):
                     for call in write.call_args_list:
                         self.assertTrue(call.args[2]['draft']);self.assertTrue(call.args[2]['prerelease'])
                     self.assertIn('automation_state=complete',write.call_args.args[2]['body'])
+                    self.assertIn('<!-- rustdesk-custom-release-metadata',write.call_args.args[2]['body'])
+                    self.assertIn('SHA256SUMS',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)
                     self.assertTrue(result['tag'].startswith('nightly-v1.5.1-custom.v2-'))
 
@@ -196,6 +202,8 @@ class NightlyDraftTests(unittest.TestCase):
     def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
     def test_existing_release_never_overwritten(self):self.perform('existing')
     def test_bad_upload_digest_cannot_mark_draft_complete(self):self.perform('bad-upload')
+    def test_bad_checksums_block_publication(self):self.perform('bad-checksum')
+    def test_nonpublic_json_blocks_publication(self):self.perform('forbidden-json')
 
     def test_wrong_branch_event_or_mode_blocks_before_validation(self):
         for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),('RELEASE_MODE','dry-run')]:
