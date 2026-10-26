@@ -1,117 +1,71 @@
-# 构建与验证原理
+# Build and validation
 
-## 1. 平台矩阵是唯一平台清单
+[English](build-and-validation.md) · [简体中文](build-and-validation-zh.md)
 
-`metadata/platform/matrix.json` 定义平台、架构、变体、Runner、启用状态、支持状态和是否为必需目标。不要仅凭 README 中的表格判断目标是否会参与构建。
+## Platform support
 
-`metadata/platform/adapter-profiles.json` 保存经过审查的上游构建参数/适配器配置。资格验证会检查启用目标与审查配置之间的一致性。
+`metadata/platform/matrix.json` is the authoritative list of platforms, architectures, variants, runners, enabled targets, support states, and required targets. Reviewed upstream build parameters are recorded in `metadata/platform/adapter-profiles.json`.
 
-支持状态的含义：
+- **SUPPORTED** means the target meets the repository's current build and artifact checks. It does not claim that every UI, remote session, or runtime scenario was tested.
+- **EXPERIMENTAL** means the target can be included through an explicit or experimental build path; it is not automatically a required Stable target.
+- **PLANNED** means activation requirements are not yet met.
+- **BLOCKED / UNSUPPORTED / DISABLED** targets must not be presented as normally available.
 
-- **SUPPORTED**：满足仓库当前定义的构建/产物验证要求；不自动代表用户界面、远程会话或运行时行为已经验证。
-- **EXPERIMENTAL**：可按明确选项纳入实验构建，不应自动提升为必需的 Stable 目标。
-- **PLANNED**：尚未满足启用条件。
-- **BLOCKED / UNSUPPORTED / DISABLED**：不能当作可用的正常目标。
+## Build stages
 
-## 2. 构建分层
+1. `scripts/release/qualification.py` plans targets from the platform matrix.
+2. `scripts/build/` invokes the platform toolchains.
+3. `scripts/platform/` builds, packages, and collects sanitized diagnostics.
+4. Artifact checks validate target, architecture, checksums, build information, source identity, and configuration.
+5. Aggregation checks the required target set and confirms that artifacts share one source/build identity.
+6. CI Qualification binds a successful result to the exact custom commit and upstream version for Stable workflows.
 
-1. `scripts/release/qualification.py` 根据矩阵生成目标计划。
-2. `scripts/build/` 的平台脚本负责调用对应工具链。
-3. `scripts/platform/` 执行构建、采集脱敏诊断信息并处理打包。
-4. 产物验证检查 target、架构、校验和、构建信息、来源身份及配置。
-5. 聚合步骤核对所需目标是否齐全，以及产物是否属于同一组上游/补丁/构建身份。
-6. CI Qualification 把成功结果与准确的自定义提交和上游版本关联，供 Stable 流程消费。
+Build failures must remain visible and provide enough sanitized information to diagnose the first failing step.
 
-构建脚本不得把失败伪装成成功；失败应保留足够的脱敏诊断信息，并归类到可排查的错误类别。
+## Validation layers
 
-## 3. 验证层次
+| Layer | What it checks |
+| --- | --- |
+| Repository contract | Structure, metadata, workflow boundaries, and required files |
+| Upstream compatibility | Upstream definitions, patch application, and build interfaces |
+| Prepared source | Commit SHA, patch identity, submodules, and clean source state |
+| Target build | Compilation, platform configuration, and packaging |
+| Artifact validation | ABI, package, checksum, build info, and provenance |
+| Aggregation and qualification | Required targets and shared source identity |
+| Stable release gate | Qualification for the exact custom commit and upstream version |
 
-| 层次 | 验证对象 | 解决的问题 |
-| --- | --- | --- |
-| 仓库契约 | 目录、元数据、工作流边界和功能结构 | 仓库是否满足约定 |
-| 上游兼容性 | 上游定义、补丁应用和构建接口 | 补丁是否适用于目标上游 |
-| 准备源码验证 | SHA、补丁身份、子模块、工作区状态 | 构建输入是否可信 |
-| 单目标构建 | 编译、平台配置和打包 | 单个目标是否能生成产物 |
-| 产物验证 | ABI、包、校验和、build-info、来源 | 产物是否完整且身份正确 |
-| 聚合与资格验证 | 必需目标集合及统一来源身份 | 是否达到 CI Qualification 门槛 |
-| Stable 发布门禁 | 同一自定义提交和上游版本的资格记录 | 是否允许进入发布流程 |
-
-## 4. 常用检查命令
-
-仓库级契约：
+## Useful checks
 
 ~~~bash
 python3 scripts/validation/repository_contract.py
+python3 -m scripts.release.channel_contract
+python3 -m scripts.release.qualification_contract
+python3 -m scripts.release.production_contract
+python3 -m scripts.build.config_mir_contract
+python3 -m scripts.validation.native_config_contract
+python3 -m scripts.signing.android_signing_contract
 ~~~
 
-针对改动区域，还应检查对应的契约脚本，例如：
+Check that a contract exists and inspect its CLI before running it. Do not invoke a release or signing entry point as a substitute for a contract.
 
-~~~bash
-python3 scripts/release/channel_contract.py
-python3 scripts/release/qualification_contract.py
-python3 scripts/release/production_contract.py
-python3 scripts/build/config_mir_contract.py
-python3 scripts/validation/native_config_contract.py
-python3 scripts/signing/android_signing_contract.py
-~~~
+## Interpreting results
 
-具体命令是否适用于当前分支，应以文件存在情况和脚本 CLI 为准；先查看脚本的参数说明，不要盲目执行发布或签名入口。
+- A successful job does not mean the entire workflow passed.
+- A successful build does not mean aggregation or qualification passed.
+- CI Qualification does not mean a Draft or public release exists.
+- Android ABI build success does not validate production certificate compatibility or device upgrade behavior.
+- Mark a check PASS only when it was actually run and succeeded.
 
-## 5. 如何理解“通过”
+## Reviewed upstream interfaces
 
-- 单个 Job 通过，不等于整个 Workflow 通过。
-- 构建通过，不等于聚合和资格验证通过。
-- CI Qualification 通过，不等于已创建 Draft 或正式发布。
-- Android ABI 构建通过，不等于生产证书兼容性或应用覆盖安装升级已验证。
-- 只有实际执行并成功的验证，才能标记为 PASS。
+The 1.5.1 development snapshot `1297da6d186e58d9096be24072ae3998cdbbf8fe` has reviewed critical signature `fead600e14fce31e0d4f16df77bf86ab2166f01f80464c59b0714c05f53c96f2`. Toolchains and the Windows helper pin match the reviewed 1.5.0 baseline; changes add tests, optional update metadata, a non-Flutter Sciter branch update, and an optional DRM dependency. This is an interface review, not proof of a successful build or runtime behavior. The separate unattended workflow remains bound to its own reviewed DRM policy.
 
-## Reviewed 1.5.1 CI interface
+The Windows ARM64 lane uses a native `windows-11-arm` runner, Flutter 3.44, and same-source ARM64 bridge. It validates the Dart, Flutter engine, Rust output, helper DLL, EXE, and MSI architecture. Tag and Nightly include it by default; ordinary CI remains x86_64-only. Runtime qualification is still required before calling it supported.
 
-The upstream CI snapshot `1297da6d186e58d9096be24072ae3998cdbbf8fe` has
-reviewed critical signature `fead600e14fce31e0d4f16df77bf86ab2166f01f80464c59b0714c05f53c96f2`.
-Rust/Flutter/LLVM/vcpkg, bridge generation and the Windows helper pin are unchanged
-from reviewed 1.5.0. The changed Windows job adds tests and opt-in update-metadata
-steps. `build.rs` changes the non-Flutter Sciter branch; `build.py` updates the
-optional DRM dependency. The custom workflow does not inherit upstream signing
-or publication credentials. This is an interface review, not build/runtime proof.
+## Upstream test-key fixture
 
-`build_adapter_contract.py` checks that missing reviews, critical-file changes,
-toolchain drift and unreviewed runners still fail closed. The separate unattended
-workflow remains pinned to its own reviewed 1.5.0 DRM policy; this profile does not
-authorize a new libdrmtap pin or new unattended packages.
+The prepared-source scanner permits only `libs/hbb_common/tests/data/websocket-key.pem` with the reviewed complete SHA-256 `95cf7a0a6890435c98bb3f644678d4fd20d80ff4a296d438a515802e233c6ec9`. This is a path-and-content-specific exception for an upstream test fixture. It does not exempt test directories, PEM files, other paths, or changed content. Production input and package scanners remain strict.
 
-Windows ARM64 is a separate experimental lane on the native `windows-11-arm`
-runner. It uses Flutter 3.44 and a same-source ARM64 bridge, validates the Dart,
-Flutter engine, Rust output, helper DLL, EXE and MSI architecture, then emits
-architecture-specific Standard/SOS installer assets. Tag and Nightly include this
-lane by default; normal CI remains x86_64-only. Exact-run compilation and runtime
-qualification are still needed before promoting it to supported.
+## Native platform recipe review
 
-## Public upstream test-key fixture during source preparation
-
-Nightly run 40198211193 reached official bridge generation successfully but its
-source scan rejected `libs/hbb_common/tests/data/websocket-key.pem`, an upstream
-WebSocket TLS integration-test fixture. Reviewed upstream 1297da6d pins hbb_common
-edefa08b; the fixture was introduced by upstream hbb_common commit 3aade011.
-Source preparation permits only that source-relative path with complete SHA256
-`95cf7a0a6890435c98bb3f644678d4fd20d80ff4a296d438a515802e233c6ec9`.
-It does not exempt tests directories, PEM files, other paths or modified secret
-content. Failures now identify only the filename and withhold the value.
-The global production input/package/log scanner remains strict, without this
-source-only exception. Regression contracts cover changed content, relocated keys
-and ASCII/UTF-16 tokens.
-
-## 1.5.1 native platform recipe review
-
-Run 40199720676 passed prepared-source scanning, then Linux/macOS/Android stopped
-at their independent platform adapter gates. The Windows/bridge profile approval
-was not a platform recipe approval. `metadata/platform/adapter-profiles.json` now
-records the exact native signatures for upstream 1297da6d, seven supported native
-architecture profiles, baseline comparison, critical file hashes and review scope.
-Linux/Android job definitions and toolchains remain unchanged; the global version
-and shared source/build file fingerprints changed. macOS also adds conditional
-tests, deployment-target export and opt-in official signing/update routing. Only
-the named setup/build scripts are inherited; custom macOS packages remain unsigned.
-The separate Wayland DRM policy is not expanded by this review. Signature approval
-is not package/runtime validation; unknown future files/tools/recipes and disabled
-jobs remain blocked, with regression tests for those cases.
+The current 1.5.1 adapter profile records reviewed native signatures for supported platform architectures and critical file hashes. The macOS profile includes conditional tests, deployment-target export, and optional upstream signing/update routing; custom macOS packages remain unsigned. Approval of a build recipe is not package or runtime validation. Unknown future files, tools, recipes, and disabled jobs remain blocked.

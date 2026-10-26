@@ -1,70 +1,69 @@
-# 故障排查手册
+# Troubleshooting
 
-先确认失败的 Workflow、Job、commit SHA、上游 SHA 和实际报错，再定位到具体步骤。不要仅凭最后一行错误猜测根因。
+[English](troubleshooting.md) · [简体中文](troubleshooting-zh.md)
 
-## 1. Python 找不到仓库模块
+Start by recording the workflow, job, custom commit SHA, upstream SHA, and first actual error. Do not infer the cause from the last line alone.
 
-**现象：** `ModuleNotFoundError: No module named 'scripts'`。
+## Python cannot import repository modules
 
-**检查：**
-- 是否从仓库根目录运行；
-- Workflow 顶层或对应步骤是否需要 `PYTHONPATH: .`；
-- 是否用文件路径直接执行依赖 `scripts.*` 包导入的脚本。
+**Symptom:** `ModuleNotFoundError: No module named 'scripts'`.
 
-**处理：** 修复执行上下文或模块路径配置，并增加相应验证；不要把缺失模块误判为依赖包未安装。
+**Check:** Run from the repository root; verify the workflow sets `PYTHONPATH: .` where needed; avoid invoking an importing script by a path that changes its module context.
 
-## 2. 上游 SHA 或来源清单不一致
+**Fix:** Correct the working directory or module path and add a check. Do not mistake a missing module path for a missing dependency.
 
-**现象：** 上游解析 SHA 与预期 SHA 不一致，或产物来源身份校验失败。
+## Upstream SHA or provenance mismatch
 
-**检查：** 上游 ref 是否移动、调用方是否把 tag 与 SHA 混用、准备源码是否使用同一 SHA、Standard/SOS 是否来自同一来源身份。
+**Symptom:** The resolved upstream SHA differs from the expected SHA, or artifact provenance checks fail.
 
-**处理：** 重新解析上游 ref，固定准确 SHA，并从准备源码阶段重新执行；不能手工改写来源清单来伪造匹配。
+**Check:** Whether the ref moved, a tag was confused with a SHA, prepared source used another SHA, or Standard/SOS came from different source identities.
 
-## 3. 补丁应用失败
+**Fix:** Resolve and lock the exact SHA, then restart from source preparation. Never edit a manifest to manufacture a match.
 
-**现象：** patch 无法应用、补丁哈希不匹配或 patchset 校验失败。
+## Patch application fails
 
-**检查：** 补丁是否针对当前上游提交、补丁顺序和 patchset 元数据是否正确、是否存在未提交的手工修改。
+**Symptom:** A patch cannot be applied, its hash differs, or patchset validation fails.
 
-**处理：** 在独立干净工作区修复补丁，并重新跑兼容性检查。不要忽略失败后继续构建。
+**Check:** Whether the patch targets this upstream commit, patch order and metadata are correct, or uncommitted edits are present.
 
-## 4. 目标没有进入构建矩阵
+**Fix:** Repair the patch in a clean isolated tree and rerun compatibility checks. Do not continue after ignoring the failure.
 
-**现象：** 某个平台没有对应 Job，或计划阶段拒绝目标。
+## A target is missing from the build matrix
 
-**检查：** `metadata/platform/matrix.json` 中的 `enabled`、`support_status`、`required` 和 Runner；再核对 `metadata/platform/adapter-profiles.json` 是否有匹配的审查配置。
+**Symptom:** A platform job is absent or target planning rejects it.
 
-**处理：** 只有完成平台适配、上游定义审查和相应证据验证后才能更新矩阵。不要仅改 `enabled: true`。
+**Check:** `enabled`, `support_status`, `required`, and runner in `metadata/platform/matrix.json`; then check for a matching reviewed profile in `metadata/platform/adapter-profiles.json`.
 
-## 5. 构建通过但 Qualification 失败
+**Fix:** Update the matrix only after platform adaptation, upstream recipe review, and evidence checks. Changing only `enabled: true` is insufficient.
 
-**现象：** 个别 build Job 成功，但聚合或资格验证失败。
+## Build succeeds but qualification fails
 
-**检查：** 必需目标是否全部完成、产物是否缺失、架构/校验和/build-info 是否正确、所有产物是否关联同一上游 SHA、patchset 和构建身份。
+**Symptom:** Build jobs pass but aggregation or qualification fails.
 
-**处理：** 从首个失败的验证步骤修复，并重新生成受影响产物。不要用旧产物补齐不匹配的构建批次。
+**Check:** Required targets, missing artifacts, architecture/checksum/build-info, and whether every artifact shares the same upstream SHA, patchset, and build identity.
 
-## 6. Stable 发布被阻止
+**Fix:** Repair the first failing validation and regenerate affected artifacts. Do not fill a batch with artifacts from a different run.
 
-**现象：** Stable preflight 或 qualification gate 失败。
+## Stable release is blocked
 
-**检查：** 当前自定义提交是否与资格记录完全一致、上游 Stable 版本和 SHA 是否匹配、目标 revision 是否已存在 Draft/Release、预检是否发现重复或身份信息不完整。
+**Symptom:** Stable preflight or qualification rejects the run.
 
-**处理：** 对准确的提交和版本重新运行资格流程，按预检结果处理既有 revision；不要通过删除现有 Release 或随意提高 revision 来绕过门禁。
+**Check:** Exact custom commit, upstream version and SHA, existing revision Draft/Release, and duplicate or incomplete identity evidence.
 
-## 7. Android 生产签名未启动或失败
+**Fix:** Run qualification for the exact commit/version and follow preflight results. Do not delete an existing Release or arbitrarily increase a revision to bypass a gate.
 
-**现象：** `android-sign` 被跳过、找不到 Runner、PIN 预检失败或证书身份不匹配。
+## Android production signing does not start or fails
 
-**检查：** Workflow 是否运行在允许的仓库/分支/事件上下文；前置构建与 Qualification 是否成功；Runner 标签、Environment 和 Secret 是否配置正确；身份元数据与真实硬件是否一致。
+**Symptom:** `android-sign` is skipped, the runner is unavailable, PIN preflight fails, or certificate identity mismatches.
 
-**处理：** 先修复权限、Runner 或身份配置。PIN 不可用时停止流程；证书指纹不匹配时停止签名。禁止把 PIN 写入日志进行调试。
+**Check:** Repository/branch/event context, preceding build and qualification results, runner labels, Environment, Secret, and hardware identity metadata.
 
-## 8. 文档 PR 触发了完整功能 CI
+**Fix:** Repair permissions, runner, or identity configuration. Stop if PIN is unavailable or certificate fingerprints differ. Never print the PIN to debug.
 
-**现象：** 纯文档修改运行了昂贵的构建任务。
+## Documentation changes trigger full feature CI
 
-**检查：** 变更分类器是否将所有改动识别为文档类，是否误改了脚本、工作流、元数据或依赖文件。
+**Symptom:** A documentation-only change runs expensive build jobs.
 
-**处理：** 修正变更分类或实际混入的功能改动。不要通过降低必需检查、使用宽泛 paths-ignore 或关闭契约来规避 CI。
+**Check:** Whether the classifier sees only documentation paths, or whether scripts, workflows, metadata, or dependencies were also changed.
+
+**Fix:** Correct the classification or remove unintended functional changes. Do not weaken required checks, add broad `paths-ignore`, or disable contracts to avoid CI.

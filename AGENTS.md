@@ -87,7 +87,7 @@ These are baseline records, not a promise that every current upstream commit or 
 | `metadata/signing/android-standard.json` | Android Standard package and signing identity evidence | Package/certificate/legacy-identity claims change |
 | `metadata/baselines/` | Known build/source/UI baselines used by checks | A regression baseline changes |
 | `requirements.txt` | Python tooling dependencies | Python dependency/import failures occur |
-| `docs/README.md` | Documentation index | You need the detailed explanation of a subsystem |
+| `docs/README.md`, `docs/README-zh.md` | English / Chinese documentation indexes | You need the detailed explanation of a subsystem |
 
 The tree may evolve. Check whether a path exists at the target revision before relying on it. Do not resurrect removed files or old workflow names just because an older document mentions them.
 
@@ -310,8 +310,8 @@ Creating a PR does not merge it. A green PR check does not merge it. A merged PR
 
 ## 11. Documentation rules and project terminology
 
-- `README.md` and `README.zh-CN.md` are separate English/Chinese landing pages with working language links. Do not merge them into one page or move them into `docs/`.
-- `docs/README.md` is the documentation index. Update the relevant guide when implementation behavior changes.
+- `README.md` and `README-zh.md` are separate English/Chinese project landing pages with working language links. Keep the README focused on the project and user-facing capabilities; link engineering detail to `docs/`.
+- `docs/README.md` and `docs/README-zh.md` are the English/Chinese documentation indexes. Pair every guide as `name.md` and `name-zh.md`, add language links at the top, and link to the same language version from each page. Update both versions when implementation behavior changes.
 - Documentation-only changes should not alter runtime or workflow behavior.
 - Describe current behavior from live source. Remove stale paths, inputs, and assumptions rather than preserving obsolete workflow names.
 - Distinguish configured support, CI-tested behavior, a real successful run, validated artifacts, production signing, publication, and device/runtime validation.

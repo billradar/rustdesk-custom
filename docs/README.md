@@ -1,25 +1,27 @@
-# 文档入口
+# Documentation
 
-本文档集解释 RustDesk Custom 的**实现原理、运行边界和实际操作步骤**。历史阶段报告不再作为主文档保留；当前文档以代码、工作流和机器可读元数据为准。
+[English](README.md) · [简体中文](README-zh.md)
 
-## 按任务阅读
+This guide set explains how to use, maintain, and troubleshoot RustDesk Custom. Source code, workflows, and machine-readable metadata define current behavior; the guides provide context and operating instructions.
 
-1. [系统架构与设计原则](architecture.md)：仓库解决什么问题、模块如何协作、哪些数据是事实来源。
-2. [源码与补丁实现原理](source-and-patches.md)：如何锁定上游源码、选择补丁、生成可追溯的准备源码。
-3. [构建与验证原理](build-and-validation.md)：平台矩阵、构建适配器、产物校验和资格验证。
-4. [工作流与发布流程](workflows-and-release.md)：CI、上游兼容性检查和 Stable 发布各自负责什么，如何安全执行发布。
-5. [日常操作手册](operations.md)：环境准备、修改、验证、提交流程，以及 Stable/Nightly 的 GitHub Actions 实际操作和安全重试步骤。
-6. [Android 生产签名](android-production-signing.md)：生产签名的安全边界、授权条件和执行步骤。
-7. [故障排查](troubleshooting.md)：按症状定位常见失败原因。
+## Guides
 
-## 阅读和修改规则
+- [Project architecture](architecture.md): repository scope, components, and source-of-truth rules.
+- [Source and patches](source-and-patches.md): upstream revision locking, patch selection, and prepared source.
+- [Build and validation](build-and-validation.md): platform support, build gates, and how to read validation results.
+- [Workflows and releases](workflows-and-release.md): CI, Stable, Nightly, and release operations.
+- [Operations](operations.md): local setup, contribution process, and safe workflow usage.
+- [Android production signing](android-production-signing.md): signing requirements, safeguards, and verification.
+- [Troubleshooting](troubleshooting.md): common failures and diagnostic steps.
+- [Wayland unattended builds](wayland-unattended.md): experimental Linux package scope and gates.
+- [CI/CD flow](architecture/ci-cd-flow.md): high-level workflow dependencies.
 
-- 文档用于解释系统，不替代代码或机器可读配置。
-- 当前行为以本分支实际代码和工作流为准；平台支持以 `metadata/platform/matrix.json` 为准，签名身份以 `metadata/signing/android-standard.json` 及签名工作流实际使用的身份元数据为准。
-- 不得把“构建成功”写成“运行验证通过”，也不得把 Android 构建支持写成生产签名身份兼容已验证。
-- 修改功能逻辑时同步检查对应文档；仅修改文档不应触发完整构建、生产签名或发布。
-- 所有生产签名和发布操作必须遵循工作流授权门禁，不允许为了复现问题绕过门禁。
+Chinese readers can use the matching `-zh.md` pages, starting at [the Chinese index](README-zh.md).
 
-- [Wayland unattended build flow and gates](wayland-unattended.md)
+## Documentation rules
 
-- Nightly 同步、触发时间和构建门禁见 [工作流与发布流程](workflows-and-release.md#nightly-同步与构建)。
+- Keep English and Chinese guides paired: the English page uses `name.md`; its Chinese counterpart uses `name-zh.md`.
+- Link to the same language version as the current page.
+- Update both versions when behavior or instructions change, and keep their claims aligned.
+- Treat code, workflows, and metadata as authoritative when documentation differs.
+- Separate build support from runtime validation and clearly identify experimental features.

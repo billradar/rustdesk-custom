@@ -1,5 +1,7 @@
 # Wayland unattended builds inside Tag and Nightly
 
+[English](wayland-unattended.md) · [简体中文](wayland-unattended-zh.md)
+
 `wayland.yml` is now a **reusable internal workflow**, without a separate manual
 entry point. `tag.yml` and `nightly.yml` call it with their own locked upstream
 SHA, version, channel, patchset and same-run prepared Standard artifact. Common

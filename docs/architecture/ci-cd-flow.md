@@ -1,5 +1,7 @@
 # CI/CD Architecture Flow
 
+[English](ci-cd-flow.md) · [简体中文](ci-cd-flow-zh.md)
+
 ## 1. Source-of-truth rules
 
 - Official upstream SHA is the source identity.
