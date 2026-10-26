@@ -125,17 +125,22 @@ Android 仍仅 Standard。Windows ARM64 作为实验性目标由平台矩阵默�
 DRM/Wayland 实验构建已作为默认开启的子流程接入，保留独立审核策略和资格结果，不冒充普通 Standard 目标。
 v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口继续阻断。
 
-自动路由仅从本仓库 main 执行，按官方运行 ID 与自定义提交 SHA 去重；
-成功或活动批次不重复构建，同一身份累计失败三次后停止自动重试。
-手动运行支持指定官方成功运行 ID，并可用 `expected_sha` 校验提交。
-更新自定义代码会形成新的构建身份。
+自动路由仅从本仓库 main 执行，按官方上游 SHA、自定义提交 SHA、发布模式和
+Wayland 选择去重；官方运行 ID 只作为来源记录，不会让相同 SHA 重复构建。
+手动 Nightly 也在源码解析后执行相同检查。相同身份仍在运行或已成功时跳过；
+失败最多自动尝试三次。自定义代码、上游 SHA 或 Wayland 构建选择变化都会形成新身份。
+旧运行标题和同运行 discovery 产物会用于迁移期识别；无法安全确认的历史身份不会用于复用产物。
 
 全矩阵和同批来源验证通过后，安装包、SHA256SUMS 与验证报告出现在
 `nightly-qualification-<run-id>` Actions 产物中；单目标失败不会发布完整批次。
 Nightly 的 `release_mode` 默认 `draft`：仅主分支的直接签名 job 绑定 Android
 生产签名 Environment 与 YubiKey，全部构建和签名验证通过后创建 prerelease Draft。
-普通构建 job 不接触 PIN，Draft job 也不接触 PIN；没有自动公开发布环节。
+普通构建 job 不接触 PIN，Draft job 也不接触 PIN；公开 Nightly 预发布版只能通过明确选择
+`release` 手动触发。
 `dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
+重复的完整 Draft 保持不变，不重建或覆盖；明确选择 `release` 时，只有上游/自定义
+SHA、补丁集、Wayland 配置、完成状态、资产清单及远端 SHA-256 全部匹配，才复用该 Draft
+并转为公开 Nightly 预发布版。身份或远端资产有任何不一致时均停止，不覆盖原发布。
 运行时与真实远程连接状态保持未测试，构建成功不能证明锁屏兼容。
 
 定时工作流需要合入 main 后才会生效；代码/契约检查通过与真实全平台构建成功应分别报告。
@@ -143,22 +148,25 @@ Nightly 的 `release_mode` 默认 `draft`：仅主分支的直接签名 job 绑�
 ### Nightly signing and Draft contract
 
 The user explicitly requested Tag-equivalent signing and Draft stages. The router
-now requests `release_mode=draft`. Signing/draft mode is restricted to repository
-main, the exact Nightly workflow reference and workflow_dispatch; development must
-use dry-run. The direct Android signing job shares Tag's Environment, runner labels,
+requests `release_mode=draft`; public prerelease requires an explicit manual
+`release_mode=release` dispatch. Signing and release writes are restricted to
+repository main, the exact Nightly workflow reference and workflow_dispatch;
+development must use dry-run. The direct Android signing job shares Tag's Environment, runner labels,
 PIV identity, v2/v3 requirements and physical-key concurrency lock. The input APK
 channel must match `SIGNING_CHANNEL`; Nightly receipts also record the channel.
 
 The complete parent aggregate requires all three production-signed Android ABIs
-in Draft mode. A separate contents-write job downloads the exact same-run signed
-packages and optional Wayland pair and revalidates them before any write. It scans
-completed build logs, creates an immutable Nightly-specific prerelease Draft,
-uploads packages and SHA256SUMS, verifies remote names, sizes and SHA256 digests,
-and only then records automation_state=complete. Upload failures leave an incomplete
-private Draft; an existing tag/release/draft is never overwritten. Public publication
-is absent. Windows/macOS signing status remains the same as Tag (not enabled).
+in Draft and release modes. A separate contents-write job downloads the exact
+same-run signed packages and optional Wayland pair and revalidates them before any
+write. It scans completed build logs, creates an immutable Nightly-specific
+prerelease Draft, uploads packages and SHA256SUMS, verifies remote names, sizes and
+SHA256 digests, and only then records automation_state=complete. Explicit release
+mode reuses a complete matching Draft only after verifying its metadata, inventory,
+remote sizes and SHA256 digests; mismatched or incomplete releases are never
+overwritten. Windows/macOS signing status remains the same as Tag (not enabled).
 
-Run titles/dedup distinguish Draft from dry-run and Wayland-on from Wayland-off,
-so a successful build-only run cannot suppress the router's signed Draft batch.
-This workflow must be merged to main before production signing/Draft can execute;
-unit and CI checks do not prove a hardware signing operation occurred.
+Run titles include the upstream SHA, custom SHA, mode and Wayland selection. The
+workflow serializes matching custom/mode/Wayland batches, and the resolve job checks
+prior runs before source preparation. A successful dry-run cannot suppress a signed
+Draft batch. This workflow must be merged to main before production signing/Draft
+can execute; unit and CI checks do not prove a hardware signing operation occurred.
