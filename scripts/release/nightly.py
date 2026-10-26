@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import urllib.error
 try:
     import tomllib
 except ImportError:
@@ -62,6 +63,29 @@ def route_state(rows, upstream_sha, custom_sha, release_mode='draft', wayland='t
     return 'EXHAUSTED' if len(matched) >= 3 else 'RETRY'
 
 
+def prior_history(rows, current_run_id=''):
+    """Return only runs older than this run, excluding later queued dispatches."""
+    if not current_run_id:
+        return rows
+    current = next((r for r in rows if str(r.get('id')) == str(current_run_id)), None)
+    if current is None:
+        raise ValueError('Current Nightly run is missing from workflow history; refusing unsafe deduplication')
+    try:
+        current_number = int(current['run_number'])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError('Current Nightly run has no valid run number; refusing unsafe deduplication')
+    prior = []
+    for row in rows:
+        if str(row.get('id')) == str(current_run_id):
+            continue
+        try:
+            if int(row['run_number']) < current_number:
+                prior.append(row)
+        except (KeyError, TypeError, ValueError):
+            continue
+    return prior
+
+
 def source_sha_from_run(row):
     """Recover source identity for historical titles while migrating to SHA-based names."""
     title = row.get('display_title', '')
@@ -70,7 +94,11 @@ def source_sha_from_run(row):
         return match.group(1)
     match = re.fullmatch(r'Nightly ([1-9][0-9]*) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)', title)
     if match:
-        return discover(match.group(1))['upstream_sha']
+        try:
+            return discover(match.group(1))['upstream_sha']
+        except (ValueError, KeyError, urllib.error.HTTPError) as error:
+            print(f"Nightly dedup: cannot recover historical official run {match.group(1)}: {error}")
+            return ''
     # Older runs named "latest" retain a same-run discovery artifact. Read it
     # when available so migration does not rebuild a completed identical batch.
     if title.startswith('Nightly latest / ') and row.get('id'):
@@ -145,6 +173,7 @@ def dedup():
             break
     else:
         raise ValueError('Nightly history exhausted; refusing unsafe deduplication')
+    rows = prior_history(rows, current)
     annotate_history(rows)
     state = route_state(rows, os.environ['UPSTREAM_EXPECTED_SHA'], os.environ['GITHUB_SHA'],
                         mode, wayland, current)

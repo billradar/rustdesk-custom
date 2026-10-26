@@ -71,6 +71,18 @@ class NightlyTests(unittest.TestCase):
         modern=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true')
         self.assertEqual(nightly.source_sha_from_run(modern),'b'*40)
 
+    def test_prior_history_ignores_later_queued_run(self):
+        current=dict(id=10,run_number=10)
+        later=dict(id=11,run_number=11,status='queued')
+        self.assertEqual(nightly.prior_history([current,later],'10'),[])
+        with self.assertRaisesRegex(ValueError,'missing from workflow history'):
+            nightly.prior_history([later],'10')
+
+    def test_unresolvable_legacy_official_run_does_not_abort_history(self):
+        row=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
+        with patch.object(nightly,'discover',side_effect=ValueError('missing run')):
+            self.assertEqual(nightly.source_sha_from_run(row),'')
+
     def test_manual_dedup_skips_active_or_successful_batch(self):
         env=dict(GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
                  GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
@@ -78,8 +90,12 @@ class NightlyTests(unittest.TestCase):
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
                  _upstream_sha='b'*40,head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                  status='completed',conclusion='success',id=21)
+        current=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+                     head_sha='a'*40,event='workflow_dispatch',head_branch='main',
+                     status='in_progress',conclusion='',id=99,run_number=12)
+        row['run_number']=11
         with tempfile.TemporaryDirectory() as td, patch.dict(os.environ,dict(env,GITHUB_OUTPUT=str(Path(td)/'out'))), \
-             patch.object(nightly,'api',return_value={'workflow_runs':[row]}):
+             patch.object(nightly,'api',return_value={'workflow_runs':[row,current]}):
             nightly.dedup()
             self.assertIn('skip=true',(Path(td)/'out').read_text())
 
