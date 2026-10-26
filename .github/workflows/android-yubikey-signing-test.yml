@@ -158,18 +158,6 @@ jobs:
           print("YubiKey identity metadata: PASS")
           PY
 
-      - name: Environment Secret Binding Preflight
-        shell: bash
-        env:
-          YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
-            printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
-            exit 1
-          fi
-          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
-
       - name: Sign and verify all three Android APKs
         uses: ./.github/actions/android-yubikey-sign
         env:

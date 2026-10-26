@@ -238,6 +238,9 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         self.assertEqual(smoke["jobs"]["build"]["with"]["signing_smoke_test"], True)
         sign_step = next(step for step in smoke["jobs"]["android-sign"]["steps"] if step.get("name") == "Sign and verify all three Android APKs")
         self.assertEqual(sign_step["with"]["arches"], "aarch64,armv7,x86_64")
+        self.assertEqual(sign_step["env"]["YUBIKEY_PIV_PIN"], "$" + "{{ secrets.YUBIKEY_PIV_PIN }}")
+        self.assertFalse(any(step.get("name") == "Environment Secret Binding Preflight"
+                             for step in smoke["jobs"]["android-sign"]["steps"]))
         self.assertEqual(smoke["jobs"]["android-sign"]["environment"]["name"], "android-production-signing")
         build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text())
         build_on = build.get("on", build.get(True))
