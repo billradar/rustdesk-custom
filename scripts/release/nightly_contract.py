@@ -286,6 +286,7 @@ class NightlyDraftTests(unittest.TestCase):
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
+                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 first=nightly.draft(root,discovery)
@@ -320,6 +321,7 @@ class NightlyDraftTests(unittest.TestCase):
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
+                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 nightly.draft(root,discovery)
