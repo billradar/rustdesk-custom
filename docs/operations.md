@@ -7,7 +7,7 @@
 ~~~bash
 git clone https://github.com/billradar/rustdesk-custom.git
 cd rustdesk-custom
-git checkout test/development
+git checkout development
 python3 -m pip install -r requirements.txt
 ~~~
 
@@ -16,9 +16,9 @@ python3 -m pip install -r requirements.txt
 本仓库的两个长期分支是：
 
 - `main`：受保护的稳定集成和发布基线。
-- `test/development`：共享开发与集成分支。
+- `development`：共享开发与集成分支。
 
-常规修改直接在 `test/development` 上进行，完成检查后创建从 `test/development` 指向 `main` 的 PR。除非用户明确要求或平台限制确有必要，不创建 `feature/*`、`fix/*` 等临时分支。不要直接写入受保护的 `main`。
+常规修改直接在 `development` 上进行，完成检查后创建从 `development` 指向 `main` 的 PR。除非用户明确要求或平台限制确有必要，不创建 `feature/*`、`fix/*` 等临时分支。不要直接写入受保护的 `main`。
 
 开始工作前检查两个分支的 HEAD、merge-base、ahead/behind 和相关提交。不要把文件树相同误认为 Git 历史相同。不得擅自重置、强推、rebase、删除或替换共享分支引用；任何破坏性历史操作都必须先获得明确授权并核对目标 SHA。
 
@@ -46,13 +46,50 @@ python3 scripts/validation/repository_contract.py
 
 ## 5. 提交、PR 与验证记录
 
-1. 在 `test/development` 完成范围明确的修改。
+1. 在 `development` 完成范围明确的修改。
 2. 检查完整 diff，确认没有无关功能变更、密钥材料或过期路径。
 3. 执行相关验证，记录真实结果和运行链接。
-4. 创建从 `test/development` 到 `main` 的 PR。
+4. 创建从 `development` 到 `main` 的 PR。
 5. 检查所有必需 CI 结果、文档链接和 PR 描述。
 6. 按授权进行审查与合并；不要把“已创建 PR”描述为“已合并”。
 7. 合并后核实最终提交 SHA 和两个分支的实际状态。
+
+## 8. GitHub Actions 发布操作
+
+所有生产发布都从 GitHub 仓库的 **Actions** 页面启动。选择工作流后点击 **Run workflow**，发布操作选择 `main` 分支；发布/签名门禁会拒绝不符合条件的分支和事件。`development` 只用于开发验证，Nightly 在该分支仅允许 `dry-run`。
+
+### Stable
+
+1. 打开 **Stable Release Pipeline**（`.github/workflows/tag.yml`）。
+2. `upstream_ref` 填官方 Stable tag（例如 `1.5.1` 或仓库实际使用的 `v1.5.1` 格式）；留空表示自动解析当前官方 Stable。以工作流解析结果中的版本和 SHA 为准。
+3. `include_wayland` 默认开启；启用时两个 Wayland DEB 会参与验证并随发布附加。该变体仍是实验性构建。
+4. 初次验证使用 `dry-run`。确认来源 SHA、patchset、revision、必需平台和聚合资格均匹配后，选择 `draft` 创建 GitHub Draft Release；只有明确准备公开发布时才选择 `release`。
+5. 正式发布会重新校验准确身份和远端资产。若已有完整、身份完全匹配的 Draft，流程会复核后发布该 Draft；不匹配或不完整时会停止，不能通过删 Release、改身份字段或手动覆盖资产来绕过。
+
+Stable router（`.github/workflows/upstream-stable.yml`）每 15 分钟发现官方最新 Stable，并自动对 `main` 触发 Stable `dry-run`。它不创建 Draft，也不公开发布。需要手动检查路由时，可在 Actions 页面手动运行 **Upstream Stable Router**。
+
+### Nightly
+
+1. 自动同步由 **Upstream Nightly Router**（`.github/workflows/upstream-nightly.yml`）按每小时 UTC 的 :07、:22、:37、:52 轮询官方成功完成的 Nightly；GitHub schedule 可能延迟。路由只会从官方 Nightly 成功运行中选取固定 SHA。
+2. 手动构建时运行 **Nightly Build Pipeline**（`.github/workflows/nightly.yml`），选择 `main` 分支。`official_run_id` 可留空（解析最新官方成功运行），或填官方 `flutter-nightly.yml` 成功运行 ID；`expected_sha` 可选，用于要求解析结果必须与指定的 40 位 SHA 一致。
+3. `release_mode` 选 `dry-run` 做无发布验证，`draft` 创建私有 prerelease Draft，`release` 仅用于明确公开已验证的 Nightly prerelease。生产模式要求所有平台与 Android 生产签名门禁通过。`include_wayland` 默认开启。
+4. development 分支只允许 `dry-run`，用于开发验证；不得把 development 的构建结果当作 main 的发布资格。
+5. 相同来源 SHA、自定义提交、模式和 Wayland 选择正在运行或已经成功时，重复 Nightly 会跳过。自动失败最多尝试三次；达到上限后先读日志并定位首个失败步骤，再决定是否用新身份或修复后重跑。不要为了强制重建而更改历史记录或伪造 SHA。
+6. Nightly `release` 会先要求存在身份和资产均匹配的完整 Draft，再发布为公开 prerelease。Draft 不完整或身份不一致时流程停止；不能手动补造 `automation_state=complete` 或用旧批次产物拼装。
+
+### Wayland 变体
+
+`wayland.yml` 是被 Stable/Nightly 调用的 reusable workflow，不能作为独立手动发布入口。通过父工作流的 `include_wayland` 开关控制。启用时 x86_64 与 aarch64 两个 DEB 都必须完成来源、包内容及聚合检查；任一目标失败则父流程不能发布完整批次。见 [Wayland 操作和门禁](wayland-unattended.md)。
+
+### 检查结果与重试
+
+- 在 Actions 运行摘要中记录 workflow URL、分支/提交 SHA、上游版本及 SHA、patchset、Wayland 选择和最终 mode。区分“job 成功”“资格验证通过”“Draft 已创建”“Release 已公开”。
+- 打开失败 Job 的日志，从第一个失败步骤开始排查，并同时核对构建身份；入口见[故障排查手册](troubleshooting.md)。
+- 若只有临时 Runner/网络问题，使用该次运行的 **Re-run failed jobs**，保留原身份并只重试失败部分。若代码、上游 SHA、patchset 或构建选项改变，重新 dispatch 新运行并重新验证，不混用旧产物。
+- 工作流显示跳过时先看前置 gate 的输出和原因。去重命中不是失败；确认已有成功运行/完整 Draft 对应同一身份后再继续。
+- 生产签名、Draft 创建和公开 Release 必须由受保护 GitHub Actions 完成。不要下载密钥/PIN 到普通 Runner、个人机器或日志；签名身份或远端资产校验不通过就停止并调查。
+
+工作流的真实输入、授权条件和最终行为以当前 `.github/workflows/*.yml` 及相应契约脚本为准；本节是操作步骤，不授权绕过门禁。
 
 ## 6. 文档变更要求
 

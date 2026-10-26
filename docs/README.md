@@ -8,7 +8,7 @@
 2. [源码与补丁实现原理](source-and-patches.md)：如何锁定上游源码、选择补丁、生成可追溯的准备源码。
 3. [构建与验证原理](build-and-validation.md)：平台矩阵、构建适配器、产物校验和资格验证。
 4. [工作流与发布流程](workflows-and-release.md)：CI、上游兼容性检查和 Stable 发布各自负责什么，如何安全执行发布。
-5. [日常操作手册](operations.md)：环境准备、修改、验证和提交流程。
+5. [日常操作手册](operations.md)：环境准备、修改、验证、提交流程，以及 Stable/Nightly 的 GitHub Actions 实际操作和安全重试步骤。
 6. [Android 生产签名](android-production-signing.md)：生产签名的安全边界、授权条件和执行步骤。
 7. [故障排查](troubleshooting.md)：按症状定位常见失败原因。
 
