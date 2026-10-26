@@ -190,7 +190,7 @@ class NightlyDraftTests(unittest.TestCase):
                         self.assertTrue(call.args[2]['draft']);self.assertTrue(call.args[2]['prerelease'])
                     self.assertIn('automation_state=complete',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)
-                    self.assertTrue(result['tag'].startswith('nightly-1.5.1-17-'))
+                    self.assertTrue(result['tag'].startswith('nightly-v1.5.1-custom.v2-'))
 
     def test_create_verified_draft_only(self):self.perform()
     def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
