@@ -47,16 +47,57 @@ class NightlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.discover(r)
 
     def test_dedup_and_bounded_retries(self):
-        row=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true', head_sha='a'*40, event='workflow_dispatch',
-                 head_branch='main', status='completed', conclusion='failure')
-        state=lambda rows:nightly.route_state(rows,'17','a'*40)
+        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+                 _upstream_sha='b'*40, head_sha='a'*40, event='workflow_dispatch',
+                 head_branch='main', status='completed', conclusion='failure', id=21)
+        state=lambda rows:nightly.route_state(rows,'b'*40,'a'*40)
         self.assertEqual(state([]),'RETRY')
         self.assertEqual(state([row]*3),'EXHAUSTED')
         self.assertEqual(state([dict(row,conclusion='success')]),'SUCCESS')
         self.assertEqual(state([dict(row,status='queued')]),'ACTIVE')
-        self.assertEqual(state([dict(row,head_sha='c'*40)]),'RETRY')
+        # An upstream rebuild with a different official run ID has the same
+        # source identity and must not trigger another custom build.
+        self.assertEqual(state([dict(row,display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+                                     id=22,conclusion='success')]),'SUCCESS')
+        self.assertEqual(state([dict(row,_upstream_sha='c'*40)]),'RETRY')
         self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
         self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'RETRY')
+        self.assertEqual(nightly.route_state([dict(row,id=99)],'b'*40,'a'*40,current_run_id='99'),'RETRY')
+
+    def test_legacy_run_titles_recover_source_sha(self):
+        old=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
+        with patch.object(nightly,'discover',return_value={'upstream_sha':'b'*40}):
+            self.assertEqual(nightly.source_sha_from_run(old),'b'*40)
+        modern=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true')
+        self.assertEqual(nightly.source_sha_from_run(modern),'b'*40)
+
+    def test_prior_history_ignores_later_queued_run(self):
+        current=dict(id=10,run_number=10)
+        later=dict(id=11,run_number=11,status='queued')
+        self.assertEqual(nightly.prior_history([current,later],'10'),[])
+        with self.assertRaisesRegex(ValueError,'missing from workflow history'):
+            nightly.prior_history([later],'10')
+
+    def test_unresolvable_legacy_official_run_does_not_abort_history(self):
+        row=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
+        with patch.object(nightly,'discover',side_effect=ValueError('missing run')):
+            self.assertEqual(nightly.source_sha_from_run(row),'')
+
+    def test_manual_dedup_skips_active_or_successful_batch(self):
+        env=dict(GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
+                 GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
+                 RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
+        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+                 _upstream_sha='b'*40,head_sha='a'*40,event='workflow_dispatch',head_branch='main',
+                 status='completed',conclusion='success',id=21)
+        current=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+                     head_sha='a'*40,event='workflow_dispatch',head_branch='main',
+                     status='in_progress',conclusion='',id=99,run_number=12)
+        row['run_number']=11
+        with tempfile.TemporaryDirectory() as td, patch.dict(os.environ,dict(env,GITHUB_OUTPUT=str(Path(td)/'out'))), \
+             patch.object(nightly,'api',return_value={'workflow_runs':[row,current]}):
+            nightly.dedup()
+            self.assertIn('skip=true',(Path(td)/'out').read_text())
 
     def test_route_rejects_non_main_before_dispatch(self):
         with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
@@ -94,6 +135,24 @@ class NightlyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):nightly.aggregate(root,d)
                 gate.assert_not_called()
 
+    def test_release_mode_requires_signed_android_aggregate(self):
+        env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.1',PATCHSET='v2',
+                 GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='release')
+        discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
+                       official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
+            root=Path(td);(root/'.work/qualification-aggregate').mkdir(parents=True)
+            (root/'discovery.json').write_text(json.dumps(discovery))
+            for arch in ('aarch64','armv7','x86_64'):
+                folder=root/arch;folder.mkdir()
+                (folder/'build-info.json').write_text(json.dumps(dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
+                    custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='',platform='android',
+                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3])))
+            with patch.object(nightly,'ROOT',root),patch.object(qualification,'aggregate',return_value=dict(result='PASS')):
+                report=nightly.aggregate(root,root/'discovery.json')
+            self.assertTrue(report['android_production_signing'])
+            self.assertEqual(os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING'],'true')
+
     def test_workflows_reuse_tag_cores_with_isolated_signing_and_draft(self):
         w=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
         self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
@@ -101,6 +160,11 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['default'],'draft')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['options'],['dry-run','draft','release'])
         self.assertIn('github.repository',w['jobs']['resolve']['if'])
+        self.assertIn('inputs.expected_sha',w['run-name'])
+        self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
+        self.assertIn('dedup',w['jobs']['resolve']['steps'][next(i for i,s in enumerate(w['jobs']['resolve']['steps']) if s.get('id')=='dedup')]['run'])
+        self.assertIn('needs.resolve.outputs.dedup_skip',w['jobs']['prepare']['if'])
+        self.assertIn('production',w['concurrency']['group'])
         for family in ['windows','platforms','android']:
             j=w['jobs'][family+'-build']
             self.assertEqual(j['uses'],'./.github/workflows/build-stable-'+family+'.yml')
@@ -200,6 +264,64 @@ class NightlyDraftTests(unittest.TestCase):
                     self.assertTrue(result['tag'].startswith('nightly-v1.5.1-custom.v2-'))
 
     def test_create_verified_draft_only(self):self.perform()
+
+    def test_complete_matching_draft_is_reused_unchanged(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env):
+            root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
+            (assets/'client.apk').write_bytes(b'validated package fixture')
+            digest=hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()
+            (assets/'SHA256SUMS').write_text(digest+'  client.apk\n')
+            discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
+            remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
+            create_payload={}
+            def first_request(method,path,payload):
+                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True}
+                if method=='PATCH':create_payload['body']=payload['body']
+                return {'id':7,'draft':True,'prerelease':True}
+            def first_api(path,missing=False):
+                if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
+                if '/actions/runs/' in path:return {'jobs':[]}
+                if '/assets?' in path:return remote
+                raise AssertionError(path)
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
+                first=nightly.draft(root,discovery)
+            reused_api=lambda path,missing=False: ({'id':7,'draft':True,'prerelease':True,'body':create_payload['body']} if '/releases/tags/' in path else {'jobs':[]} if '/actions/runs/' in path else remote if '/assets?' in path else None)
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request') as write:
+                second=nightly.draft(root,discovery)
+                self.assertTrue(second['reused'])
+                self.assertEqual(second['tag'],first['tag'])
+                write.assert_not_called()
+
+    def test_release_mode_promotes_only_a_complete_matching_draft(self):
+        import hashlib
+        env=dict(self.env)
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
+            root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
+            (assets/'client.apk').write_bytes(b'validated package fixture')
+            digest=hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()
+            (assets/'SHA256SUMS').write_text(digest+'  client.apk\n')
+            discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
+            remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
+            create_payload={}
+            def first_request(method,path,payload):
+                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True}
+                if method=='PATCH':create_payload['body']=payload['body']
+                return {'id':7,'draft':True,'prerelease':True}
+            def first_api(path,missing=False):
+                if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
+                if '/actions/runs/' in path:return {'jobs':[]}
+                if '/assets?' in path:return remote
+                raise AssertionError(path)
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
+                nightly.draft(root,discovery)
+            reused_api=lambda path,missing=False: ({'id':7,'draft':True,'prerelease':True,'body':create_payload['body']} if '/releases/tags/' in path else {'jobs':[]} if '/actions/runs/' in path else remote if '/assets?' in path else None)
+            with patch.dict(os.environ,RELEASE_MODE='release'),patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request',return_value={'draft':False,'prerelease':True}) as write:
+                result=nightly.draft(root,discovery)
+                self.assertTrue(result['reused'])
+                self.assertFalse(result['draft'])
+                write.assert_called_once()
+                self.assertEqual(write.call_args.args[0],'PATCH')
 
     def test_release_mode_publishes_only_after_verified_upload(self):
         import hashlib

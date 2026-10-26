@@ -46,17 +46,26 @@ class SourceBoundaryTests(unittest.TestCase):
 
 class ChannelPolicyTests(unittest.TestCase):
     def setUp(self):
+        self._env=patch.dict(os.environ,GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false');self._env.start()
         self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
         self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
-        self.addCleanup(self._verify.stop);self.addCleanup(self._hash.stop)
+        self._assets=patch.object(channel,'verify_release_asset_checksums',return_value=True);self._assets.start()
+        self.addCleanup(self._verify.stop);self.addCleanup(self._hash.stop);self.addCleanup(self._assets.stop);self.addCleanup(self._env.stop)
     def discovery(self, patchset='v999999'):
         return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,patchset=patchset)
 
     def draft_fixture(self, patchset='v999999', revision='1'):
         tag=f'v1.4.9-custom.{patchset}.{revision}'
+        included,policy=channel.wayland_identity()
+        identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,'b'*40,included,policy)
+        assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+        if included:assets += ['unattended-wayland-rustdesk-unattended-wayland-1.4.9-x86_64.deb','unattended-wayland-rustdesk-unattended-wayland-1.4.9-aarch64.deb']
+        lines=['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
+               'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'c'*64,'Custom Repository SHA: '+'b'*40,
+               'Wayland Included: '+str(included).lower(),'Build Identity: '+identity,'Asset Inventory: '+json.dumps(assets)]
+        if policy:lines.append('Wayland Policy SHA256: '+policy)
         return dict(name=tag,tag_name='untagged-123',draft=True,prerelease=False,
-            body='Automation-State: complete\nUpstream SHA: '+'a'*40+'\nPatch Set: '+patchset+'\nPatch Revision: v'+patchset[1:]+'.'+revision+'\nCommon Patch Hash: '+'c'*64+'\nSOS Patch Hash: '+'c'*64+'\nBuild Identity: '+channel.build_identity('a'*40,patchset,'c'*64,'c'*64)+'\nAsset Inventory: ["SHA256SUMS", "rustdesk-1.4.9-standard-windows-x86_64.zip", "rustdesk-1.4.9-sos-windows-x86_64.zip"]',
-            assets=[dict(name=n,state='uploaded') for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']])
+            body='\n'.join(lines),assets=[dict(name=n,state='uploaded',size=1,digest='sha256:'+'a'*64) for n in assets])
 
     def test_existing_release_cannot_gain_wayland_without_new_identity(self):
         existing=self.draft_fixture()
@@ -89,6 +98,53 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(data['patch_revision'],'v1.2')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v1.2')
 
+    def test_matching_draft_requires_exact_remote_asset_digests(self):
+        existing=self.draft_fixture('v1','2')
+        existing['assets'][0]['digest']=''
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            with self.assertRaisesRegex(ValueError,'Existing release incomplete'):
+                channel.release_preflight(self.discovery('v1'))
+
+    def test_published_same_identity_is_idempotently_skipped(self):
+        existing=self.draft_fixture('v1','2')
+        existing.update(draft=False)
+        existing['body']=existing['body'].replace('Automation-State: complete','automation_state=published')
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            data=channel.release_preflight(self.discovery('v1'))
+            self.assertFalse(data['build_needed'])
+            self.assertFalse(data['draft_needed'])
+            self.assertFalse(data['publish_existing'])
+
+    def test_remote_sha256_manifest_must_match_github_asset_digests(self):
+        import hashlib
+        self._assets.stop()
+        package=b'package';package_hash=hashlib.sha256(package).hexdigest()
+        sums=(package_hash+'  package.deb\n').encode();sums_hash=hashlib.sha256(sums).hexdigest()
+        assets=[{'name':'SHA256SUMS','state':'uploaded','size':len(sums),'digest':'sha256:'+sums_hash},
+                {'name':'package.deb','state':'uploaded','size':len(package),'digest':'sha256:'+package_hash}]
+        def download(args,**kwargs):
+            Path(args[-1],'SHA256SUMS').write_bytes(sums)
+        try:
+            with patch.object(channel.subprocess,'run',side_effect=download):
+                self.assertTrue(channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',assets))
+            bad=[dict(assets[0]),dict(assets[1],digest='sha256:'+'0'*64)]
+            with patch.object(channel.subprocess,'run',side_effect=download):
+                with self.assertRaisesRegex(ValueError,'do not match'):
+                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',bad)
+        finally:
+            self._assets.start()
+
+    def test_custom_commit_and_wayland_selection_change_build_identity(self):
+        base=self.discovery('v1')
+        with patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
+            first=channel.release_preflight(base)
+        with patch.dict(os.environ,GITHUB_SHA='d'*40),patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
+            changed_commit=channel.release_preflight(self.discovery('v1'))
+        with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
+            changed_wayland=channel.release_preflight(self.discovery('v1'))
+        self.assertNotEqual(first['build_identity'],changed_commit['build_identity'])
+        self.assertNotEqual(first['build_identity'],changed_wayland['build_identity'])
+
     def test_switching_patchset_allocates_its_own_counter(self):
         existing_v1=self.draft_fixture('v1','2')
         rows=[existing_v1]
@@ -99,14 +155,12 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(data['patch_revision'],'v2.1')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.1')
 
-    def test_legacy_complete_draft_without_automation_marker_is_accepted(self):
+    def test_legacy_draft_without_automation_marker_is_rejected(self):
         draft=self.draft_fixture()
         draft['body']=draft['body'].replace('Automation-State: complete\n','')
         with patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'api',return_value=draft):
-            data=channel.release_preflight(self.discovery())
-            self.assertFalse(data['build_needed'])
-            self.assertFalse(data['draft_needed'])
-            self.assertTrue(data['publish_existing'])
+            with self.assertRaisesRegex(ValueError,'missing its automation completion marker'):
+                channel.release_preflight(self.discovery())
 
     def test_incomplete_or_mismatched_draft_blocks_before_build(self):
         draft=self.draft_fixture()
@@ -121,6 +175,10 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
+        self.assertIn('wayland_included',jobs['draft-preflight']['outputs'])
+        self.assertIn('github.sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
+        self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
+        self.assertIn('github.sha',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
         self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
@@ -144,7 +202,8 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_stable_concurrency_and_ci_contract(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        self.assertEqual(tag['concurrency']['group'],"stable-${{ inputs.upstream_ref || format('manual-{0}', github.run_id) }}")
+        self.assertIn('github.sha',tag['concurrency']['group'])
+        self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
         self.assertFalse(tag['concurrency']['cancel-in-progress'])
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
         concurrency=ci['concurrency']
@@ -263,10 +322,14 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_new_metadata_automation_state_is_accepted(self):
         sha='a'*40; common='c'*64
+        identity=channel.build_identity(sha,'v999999',common,common,'b'*40,False)
         existing={
             'name':'v1.4.9-custom.v999999.1','tag_name':'v1.4.9-custom.v999999.1','draft':True,'prerelease':False,
-            'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}','automation_state=complete']),
-            'assets':[{'name':n,'state':'uploaded'} for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
+            'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}',
+                'Custom Repository SHA: '+'b'*40,'Wayland Included: false','Patch Revision: v999999.1',
+                'Build Identity: '+identity,'Asset Inventory: '+json.dumps(['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']),
+                'automation_state=complete']),
+            'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
         }
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
             data=channel.release_preflight(self.discovery())
