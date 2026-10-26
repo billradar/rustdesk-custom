@@ -183,7 +183,7 @@ def draft(root, discovery):
                          sos_patch_hash=patch_hash('sos', data['patchset']),
                          wayland_policy=report.get('wayland', {}).get('policy_sha256'))
     identity = hashlib.sha256(json.dumps(identity_data, sort_keys=True).encode()).hexdigest()
-    tag = 'nightly-' + data['upstream_version'] + '-' + run_id + '-' + identity[:16]
+    tag = 'nightly-v' + data['upstream_version'] + '-custom.' + data['patchset'] + '-' + identity[:12]
     if api(f'repos/{REPO}/releases/tags/{tag}', missing=True) or api(f'repos/{REPO}/git/ref/tags/{tag}', missing=True):
         raise ValueError('Immutable Nightly tag/release already exists; never overwrite')
     for page in range(1, 11):
@@ -214,8 +214,8 @@ def draft(root, discovery):
                 'automation_state=uploading']
     if identity_data['wayland_policy']:
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy'])
-    notes = 'Nightly ' + data['upstream_version'] + '\n\nOfficial successful run: ' + data['official_run_url'] + '\n\n' + '\n'.join(metadata) + '\n'
-    created = request('POST', f'repos/{REPO}/releases', dict(tag_name=tag, name=tag,
+    notes = ('## RustDesk Custom Nightly ' + data['upstream_version'] + '\n\n' + 'Official successful Nightly run: ' + data['official_run_url'] + '\n\n' + '### Build provenance\n\n' + '\n'.join(metadata) + '\n')
+    created = request('POST', f'repos/{REPO}/releases', dict(tag_name=tag, name='RustDesk ' + data['upstream_version'] + ' Custom Nightly (' + data['patchset'] + ', ' + identity[:12] + ')',
                       target_commitish=os.environ['GITHUB_SHA'], body=notes, draft=True, prerelease=True))
     if created.get('draft') is not True:
         raise ValueError('Nightly must remain a draft')
