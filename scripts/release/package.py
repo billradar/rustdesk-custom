@@ -95,8 +95,12 @@ def build_windows_installers(tree, release, packages, version):
         raise ValueError('Generated Windows MSI is empty')
     msi_out = packages / windows_installer_name(version, os.environ.get('BUILD_VARIANT', 'standard'), 'msi', WINDOWS_ARCH)
     if WINDOWS_ARCH=='aarch64':
-        script = "$i=New-Object -ComObject WindowsInstaller.Installer; $d=$i.OpenDatabase($args[0],0); $t=$d.SummaryInformation(0).Property(7); if ($t -notmatch '^Arm64;') { throw 'MSI template is not ARM64' }"
-        subprocess.run(['powershell.exe','-NoProfile','-Command',script,str(msi.resolve())],check=True)
+        # PowerShell treats arguments after a string passed to -Command as part
+        # of the command text; they are not reliably bound to $args. Pass the
+        # MSI path through the child environment instead.
+        env['RUSTDESK_MSI_PATH'] = str(msi.resolve())
+        script = "$ErrorActionPreference='Stop'; $i=New-Object -ComObject WindowsInstaller.Installer; $d=$i.OpenDatabase($env:RUSTDESK_MSI_PATH,0); if (-not $d) { throw 'Unable to open generated MSI' }; $t=$d.SummaryInformation(0).Property(7); if ($t -notmatch '^Arm64;') { throw 'MSI template is not ARM64' }"
+        subprocess.run(['powershell.exe','-NoProfile','-Command',script],check=True,env=env)
     shutil.copy2(msi, msi_out)
     return exe, msi_out
 
