@@ -1,8 +1,8 @@
 name: Upstream Nightly Router
 'on':
   schedule:
-    # Official starts 00:00 UTC. Poll completion at :07/:22/:37/:52 (UTC).
-    - cron: '7,22,37,52 * * * *'
+    # Official Nightly starts at 00:00 UTC; check daily at 05:00 UTC.
+    - cron: '0 5 * * *'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -14,7 +14,7 @@ jobs:
   route:
     if: github.repository == 'billradar/rustdesk-custom' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 180
     permissions:
       contents: read
       actions: write

@@ -278,6 +278,9 @@ jobs:
   draft:
     name: Create qualified Nightly draft or publish prerelease
     needs: [resolve, aggregate]
+    concurrency:
+      group: rustdesk-nightly-release-write
+      cancel-in-progress: false
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
