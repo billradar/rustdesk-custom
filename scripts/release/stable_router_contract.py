@@ -28,15 +28,17 @@ class StableRouterContract(unittest.TestCase):
 
     def test_run_lookup_matches_only_target_stable_variant(self):
         rows = [
-            {'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main', 'event': 'workflow_dispatch'},
+            {'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
             {'display_title': 'Stable v1.5.1 / release / wayland=true', 'head_branch': 'main', 'event': 'workflow_dispatch'},
             {'display_title': 'Stable v1.5.1 / draft / wayland=false', 'head_branch': 'main', 'event': 'workflow_dispatch'},
-            {'display_title': 'Stable v1.5.1 / draft', 'head_branch': 'main', 'event': 'workflow_dispatch'},
-            {'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'feature', 'event': 'workflow_dispatch'},
+            {'display_title': 'Stable v1.5.1 / draft', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'c' * 40},
+            {'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'feature', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
         ]
+        rows.append({'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main',
+                     'event': 'workflow_dispatch', 'head_sha': 'b' * 40})
         with patch.object(router, 'api', return_value={'workflow_runs': rows}):
-            selected = router.workflow_runs('v1.5.1')
-        self.assertEqual(len(selected), 2)
+            selected = router.workflow_runs('v1.5.1', 'a' * 40)
+        self.assertEqual(len(selected), 1)
 
     def test_existing_build_delegates_to_unified_preflight(self):
         data = {'channel': 'stable'}

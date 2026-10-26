@@ -237,6 +237,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn("'release_mode=draft'",router)
         self.assertIn("'include_wayland=true'",router)
         self.assertIn('release_preflight(data)',router)
+        self.assertIn("row.get('head_sha') == custom_sha",router)
         self.assertIn('wayland=${{ inputs.include_wayland',tag)
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)

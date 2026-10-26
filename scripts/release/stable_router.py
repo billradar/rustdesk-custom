@@ -44,8 +44,8 @@ def existing_build(data):
     return not release_preflight(data)['build_needed']
 
 
-def workflow_runs(tag):
-    """Find prior exact tag.yml dispatches; fail closed if pagination is incomplete."""
+def workflow_runs(tag, custom_sha):
+    """Find prior exact tag.yml dispatches for this complete source identity."""
     runs = []
     for page in range(1, 11):
         batch = api(f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/runs?branch=main&event=workflow_dispatch&per_page=100&page={page}') or {}
@@ -53,6 +53,7 @@ def workflow_runs(tag):
         if len(batch.get('workflow_runs', [])) < 100:
             return [row for row in runs if row.get('head_branch') == 'main'
                     and row.get('event') == 'workflow_dispatch'
+                    and row.get('head_sha') == custom_sha
                     and row.get('display_title') in (
                         f'Stable {tag} / draft / wayland=true',
                         # Older router runs did not include Wayland in run-name.
@@ -85,7 +86,7 @@ def route():
         print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
         return
 
-    state = run_state(workflow_runs(data['upstream_tag']))
+    state = run_state(workflow_runs(data['upstream_tag'], os.environ['GITHUB_SHA']))
     if state == 'ACTIVE':
         print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
         return
