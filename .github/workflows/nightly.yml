@@ -8,8 +8,8 @@ env:
       release_mode:
         type: choice
         default: draft
-        description: draft signs Android and creates a private prerelease draft on main; dry-run builds only
-        options: [dry-run, draft]
+        description: dry-run builds only; draft creates a private prerelease; release publishes a verified Nightly prerelease
+        options: [dry-run, draft, release]
       include_wayland:
         type: boolean
         default: true
@@ -49,7 +49,7 @@ jobs:
       env:
         RELEASE_MODE: ${{ inputs.release_mode }}
       run: |
-        if [[ "$RELEASE_MODE" == draft && "$GITHUB_REF" != refs/heads/main ]]; then
+        if [[ "$RELEASE_MODE" != dry-run && "$GITHUB_REF" != refs/heads/main ]]; then
           echo 'Draft/signing mode requires main; use dry-run to test development.' >&2
           exit 1
         fi
@@ -139,7 +139,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
-      inputs.release_mode == 'draft' &&
+      (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
       needs.android-build.result == 'success'
     runs-on:
       - self-hosted
@@ -232,7 +232,7 @@ jobs:
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
       BUILD_CONFIGURATION: PRODUCTION
       RELEASE_MODE: ${{ inputs.release_mode }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode == 'draft' && 'true' || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -272,13 +272,13 @@ jobs:
         if-no-files-found: error
         retention-days: 30
   draft:
-    name: Create qualified Nightly prerelease draft
+    name: Create qualified Nightly draft or publish prerelease
     needs: [resolve, aggregate]
     if: >-
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
-      github.event_name == 'workflow_dispatch' && inputs.release_mode == 'draft' &&
+      github.event_name == 'workflow_dispatch' && (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
@@ -286,7 +286,7 @@ jobs:
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_MODE: draft
+      RELEASE_MODE: ${{ inputs.release_mode }}
       REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       BUILD_CHANNEL: nightly
@@ -318,5 +318,5 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
-    - name: Revalidate signed matrix and create draft only
+    - name: Revalidate signed matrix and create draft or public prerelease
       run: python3 scripts/release/nightly.py draft --discovery .work/discovery/nightly-discovery.json
