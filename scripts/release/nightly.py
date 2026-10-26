@@ -448,10 +448,11 @@ def draft(root, discovery):
         if api(f'repos/{REPO}/releases/{release_id}/assets?per_page=100'):
             raise ValueError('Could not clear prior Nightly assets before replacement')
     ref_path = f'repos/{REPO}/git/ref/tags/{tag}'
+    ref_update_path = f'repos/{REPO}/git/refs/tags/{tag}'
     current_ref = api(ref_path, missing=True)
     if current_ref:
         if current_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
-            updated_ref = request('PATCH', ref_path, dict(sha=os.environ['GITHUB_SHA'], force=True))
+            updated_ref = request('PATCH', ref_update_path, dict(sha=os.environ['GITHUB_SHA'], force=True))
             if updated_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
                 raise ValueError('Nightly tag did not move to the validated custom source commit')
     elif existing:
