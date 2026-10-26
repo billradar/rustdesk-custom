@@ -2,10 +2,10 @@
 
 [English](README.md) · 中文
 
-[![Stable Release Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
-[![Nightly Build Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
-[![Upstream Main Compatibility](https://github.com/billradar/rustdesk-custom/actions/workflows/upstream-main-compatibility.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/upstream-main-compatibility.yml)
-[![CI - Patch and Build compatibility](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
+[![Stable Release](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/tag.yml?branch=main&style=flat-square&label=Stable%20Release)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
+[![Nightly](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/nightly.yml?branch=main&style=flat-square&label=Nightly)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
+[![Upstream Main Compatibility](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/upstream-main-compatibility.yml?branch=main&style=flat-square&label=Upstream%20Main%20Compatibility)](https://github.com/billradar/rustdesk-custom/actions/workflows/upstream-main-compatibility.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
 
 ## 项目简介
 
