@@ -341,6 +341,7 @@ jobs:
     needs: [resolve, draft-preflight]
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
       inputs.release_mode == 'release' &&
       needs.draft-preflight.outputs.build_needed == 'false' &&
       needs.draft-preflight.outputs.draft_needed == 'false' &&
@@ -369,6 +370,7 @@ jobs:
     needs: aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
       needs.aggregate.outputs.draft_needed == 'true' &&
       needs.aggregate.outputs.build_needed == 'true' &&
       inputs.release_mode == 'release' &&
@@ -422,6 +424,7 @@ jobs:
     needs: aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
       needs.aggregate.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'draft' &&
       needs.aggregate.result == 'success'

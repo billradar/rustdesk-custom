@@ -20,6 +20,7 @@ jobs:
     env:
       PYTHONPATH: .
       GH_TOKEN: ${{ github.token }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
