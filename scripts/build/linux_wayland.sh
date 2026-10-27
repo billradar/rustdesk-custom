@@ -7,7 +7,7 @@ python3 scripts/signing/production_config.py inputs
 export BUILD_FLAVOR=unattended-wayland
 [[ "$VARIANT" == standard || "$VARIANT" == sos ]] || { echo 'PROVENANCE: unreviewed source variant'; exit 1; }
 python3 scripts/platform/wayland.py recipe --tree "$source" --arch "$PLATFORM_ARCH" --variant "$VARIANT" --out .work/linux-recipe
-python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --variant "$VARIANT" --output .work/platform-profile.json
+python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --output .work/platform-profile.json
 triplet=$(python3 -c 'import json;print(json.load(open(".work/platform-profile.json"))["triplet"])')
 # Same small crate-type adjustment as the official Linux job, after input verification.
 python3 - "$source/Cargo.toml" <<'PY'

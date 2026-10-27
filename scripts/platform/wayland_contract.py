@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Negative contracts for unattended builds, independent of expensive native builds."""
 import copy
+import contextlib
+import io
+import runpy
+import shlex
 import json
 import os
 from pathlib import Path
@@ -156,6 +160,61 @@ class WorkflowContract(unittest.TestCase):
                     if folder.parts[-2]=='sos':(folder/'build-info.json').unlink()
                 with self.assertRaisesRegex(ValueError,'all four'):
                     wayland.aggregate(root/'targets',root/'legacy.json')
+
+
+class BuildEntrypointContract(unittest.TestCase):
+    def test_shell_adapter_command_matches_real_cli_for_every_target(self):
+        from scripts.platform.platform_adapter import parse_args
+        lines=(ROOT/'scripts/build/linux_wayland.sh').read_text().splitlines()
+        command=next(line for line in lines if line.startswith('python3 scripts/platform/platform_adapter.py '))
+        recipe=next(line for line in lines if line.startswith('python3 scripts/platform/wayland.py recipe '))
+        self.assertIn('--variant "$VARIANT"',recipe)
+        for variant in ('standard','sos'):
+            for arch in ('x86_64','aarch64'):
+                with self.subTest(variant=variant,arch=arch):
+                    tokens=shlex.split(command)
+                    substitutions={'$source':'/fixture/source','$PLATFORM_ARCH':arch,'$VARIANT':variant}
+                    args=[substitutions.get(token,token) for token in tokens[2:]]
+                    parsed=parse_args(args)
+                    self.assertEqual(parsed.platform,'linux')
+                    self.assertEqual(parsed.arch,arch)
+                    self.assertEqual(parsed.tree,Path('/fixture/source'))
+                    self.assertEqual(parsed.output,Path('.work/platform-profile.json'))
+
+    def run_entrypoint(self,folder,platform,variant,flavor,arch='x86_64'):
+        env={'PLATFORM':platform,'PLATFORM_ARCH':arch,'VARIANT':variant,
+             'BUILD_FLAVOR':flavor,'GITHUB_RUN_ID':'42','GITHUB_JOB':'fixture',
+             'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v2'}
+        previous=Path.cwd()
+        try:
+            os.chdir(folder)
+            with patch.dict(os.environ,env,clear=True),patch('subprocess.Popen') as spawn,contextlib.redirect_stdout(io.StringIO()):
+                spawn.return_value.stdout=iter(['fixture build completed\n'])
+                spawn.return_value.wait.return_value=0
+                try:
+                    runpy.run_path(str(ROOT/'scripts/platform/run_platform.py'),run_name='__main__')
+                except SystemExit as done:
+                    self.assertEqual(done.code,0)
+                return spawn
+        finally:
+            os.chdir(previous)
+
+    def test_platform_runner_dispatches_both_variants_to_wayland_builder(self):
+        for variant in ('standard','sos'):
+            for arch in ('x86_64','aarch64'):
+                with self.subTest(variant=variant,arch=arch),tempfile.TemporaryDirectory() as td:
+                    root=Path(td);spawn=self.run_entrypoint(root,'linux',variant,'unattended-wayland',arch)
+                    self.assertEqual(spawn.call_args.args[0],['bash','scripts/build/linux_wayland.sh'])
+                    report=json.loads((root/'.work/target-diagnostic/diagnostic.json').read_text())
+                    self.assertEqual(report['result'],'PASS')
+                    self.assertEqual(report['target'],'linux-'+arch+'-'+variant)
+
+    def test_runner_still_blocks_wrong_platform_variant_and_flavor(self):
+        for platform,variant,flavor in [('macos','sos','unattended-wayland'),
+                                         ('linux','unknown','unattended-wayland'),('linux','sos','unknown')]:
+            with tempfile.TemporaryDirectory() as td:
+                with self.assertRaisesRegex(ValueError,'forbidden build flavor'):
+                    self.run_entrypoint(Path(td),platform,variant,flavor)
 
 
 class SourceContract(unittest.TestCase):
