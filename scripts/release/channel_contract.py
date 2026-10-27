@@ -134,7 +134,7 @@ class ChannelPolicyTests(unittest.TestCase):
         finally:
             self._assets.start()
 
-    def test_custom_commit_and_wayland_selection_change_build_identity(self):
+    def test_custom_commit_does_not_change_identity_but_wayland_does(self):
         base=self.discovery('v1')
         with patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
             first=channel.release_preflight(base)
@@ -142,7 +142,7 @@ class ChannelPolicyTests(unittest.TestCase):
             changed_commit=channel.release_preflight(self.discovery('v1'))
         with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
             changed_wayland=channel.release_preflight(self.discovery('v1'))
-        self.assertNotEqual(first['build_identity'],changed_commit['build_identity'])
+        self.assertEqual(first['build_identity'],changed_commit['build_identity'])
         self.assertNotEqual(first['build_identity'],changed_wayland['build_identity'])
 
     def test_signing_toggle_changes_stable_build_identity(self):

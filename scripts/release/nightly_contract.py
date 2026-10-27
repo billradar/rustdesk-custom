@@ -47,22 +47,26 @@ class NightlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.discover(r)
 
     def test_dedup_and_bounded_retries(self):
+        data=dict(upstream_sha='b'*40,patchset='v2',common_patch_hash='c'*64,
+                  sos_patch_hash='d'*64,wayland_policy_sha256='e'*64)
+        identity=nightly.nightly_identity(data,'draft')
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
-                 _upstream_sha='b'*40, head_sha='a'*40, event='workflow_dispatch',
+                 _upstream_sha='b'*40, _nightly_identity=identity, head_sha='a'*40, event='workflow_dispatch',
                  head_branch='main', status='completed', conclusion='failure', id=21)
-        state=lambda rows:nightly.route_state(rows,'b'*40,'a'*40)
+        state=lambda rows, build_id=identity:nightly.route_state(rows,build_id)
         self.assertEqual(state([]),'RETRY')
         self.assertEqual(state([row]*3),'EXHAUSTED')
         self.assertEqual(state([dict(row,conclusion='success')]),'SUCCESS')
         self.assertEqual(state([dict(row,status='queued')]),'ACTIVE')
-        # An upstream rebuild with a different official run ID has the same
-        # source identity and must not trigger another custom build.
-        self.assertEqual(state([dict(row,display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
-                                     id=22,conclusion='success')]),'SUCCESS')
+        # A different custom commit or official run ID does not change patch identity.
+        self.assertEqual(state([dict(row,head_sha='f'*40,id=22,conclusion='success')]),'SUCCESS')
         self.assertEqual(state([dict(row,_upstream_sha='c'*40)]),'RETRY')
+        changed_patch=dict(data,common_patch_hash='f'*64)
+        self.assertEqual(state([row],nightly.nightly_identity(changed_patch)),'RETRY')
+        self.assertEqual(nightly.nightly_identity(data),nightly.nightly_identity(dict(data,custom_repository_sha='f'*40)))
         self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
         self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'RETRY')
-        self.assertEqual(nightly.route_state([dict(row,id=99)],'b'*40,'a'*40,current_run_id='99'),'RETRY')
+        self.assertEqual(nightly.route_state([dict(row,id=99)],identity,current_run_id='99'),'RETRY')
 
     def test_legacy_run_titles_recover_source_sha(self):
         old=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
@@ -94,8 +98,12 @@ class NightlyTests(unittest.TestCase):
                      head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                      status='in_progress',conclusion='',id=99,run_number=12)
         row['run_number']=11
+        artifact=dict(upstream_sha='b'*40,patchset='v2',common_patch_hash=nightly.patch_hash('common','v2'),
+                      sos_patch_hash=nightly.patch_hash('sos','v2'),
+                      wayland_policy_sha256=nightly.wayland_policy_hash(True))
         with tempfile.TemporaryDirectory() as td, patch.dict(os.environ,dict(env,GITHUB_OUTPUT=str(Path(td)/'out'))), \
-             patch.object(nightly,'api',return_value={'workflow_runs':[row,current]}):
+             patch.object(nightly,'api',return_value={'workflow_runs':[row,current]}), \
+             patch.object(nightly,'discovery_from_run',return_value=artifact):
             nightly.dedup()
             self.assertIn('skip=true',(Path(td)/'out').read_text())
 
@@ -168,7 +176,8 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
         self.assertIn('dedup',w['jobs']['resolve']['steps'][next(i for i,s in enumerate(w['jobs']['resolve']['steps']) if s.get('id')=='dedup')]['run'])
         self.assertIn('needs.resolve.outputs.dedup_skip',w['jobs']['prepare']['if'])
-        self.assertIn('production',w['concurrency']['group'])
+        self.assertIn('inputs.expected_sha',w['concurrency']['group'])
+        self.assertNotIn('github.sha',w['concurrency']['group'])
         for family in ['windows','platforms','android']:
             j=w['jobs'][family+'-build']
             self.assertEqual(j['uses'],'./.github/workflows/build-stable-'+family+'.yml')

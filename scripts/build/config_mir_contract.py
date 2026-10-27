@@ -25,6 +25,10 @@ class CompilerConfigTests(unittest.TestCase):
         from scripts.signing.production_config import configured
         with patch.dict(os.environ,VALUES,clear=True):self.assertEqual(configured(),VALUES)
     def test_short_password_checked_in_compiled_function(self):config_mir.verify(MIR,VALUES)
+    def test_missing_relay_override_preserves_upstream_discovery(self):
+        optional={**VALUES,'RUSTDESK_RELAY_SERVER':''}
+        config_mir.verify(MIR.replace('    _5 = const "relay-server";\n    _6 = const "relay.example.com";\n',''),optional)
+        with self.assertRaises(ValueError):config_mir.verify(MIR,optional)
     def test_rustc_trimmed_module_paths(self):config_mir.verify(MIR.replace('common::',''),VALUES)
     def test_ambiguous_function_names_fail_closed(self):
         for extra in [MIR,MIR.replace('common::','')]:

@@ -38,14 +38,54 @@ def discovery():
     return data
 
 
+def version_tuple(value):
+    match = re.fullmatch(r'v?([0-9]+)\.([0-9]+)\.([0-9]+)', str(value))
+    if not match:
+        raise ValueError('Stable router received an invalid numeric version')
+    return tuple(int(part) for part in match.groups())
+
+
+def latest_completed_version():
+    """Return the newest Stable version with a completed downstream release record."""
+    rows = []
+    for page in range(1, 101):
+        batch = api(f'repos/{REPOSITORY}/releases?per_page=100&page={page}') or []
+        rows.extend(batch)
+        if len(batch) < 100:
+            break
+    else:
+        raise ValueError('Stable release pagination limit reached; refusing version routing')
+
+    completed = []
+    tag_pattern = re.compile(r'^v([0-9]+\.[0-9]+\.[0-9]+)-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}$')
+    for row in rows:
+        if row.get('prerelease'):
+            continue
+        tag = row.get('tag_name') or row.get('name') or ''
+        match = tag_pattern.fullmatch(tag)
+        if not match:
+            continue
+        body = row.get('body') or ''
+        if ('Automation-State: complete' not in body
+                and 'automation_state=complete' not in body
+                and 'automation_state=published' not in body):
+            continue
+        assets = {item.get('name') for item in row.get('assets', [])
+                  if item.get('state') == 'uploaded' and item.get('size', 0) > 0}
+        if 'SHA256SUMS' not in assets:
+            continue
+        completed.append(match.group(1))
+    return max(completed, key=version_tuple) if completed else None
+
+
 def existing_build(data):
     """Use the downstream release gate as the sole authority for reuse."""
     os.environ['INCLUDE_WAYLAND'] = 'true'
     return not release_preflight(data)['build_needed']
 
 
-def workflow_runs(tag, custom_sha, signing_enabled=False):
-    """Find prior exact tag.yml dispatches for this complete source identity."""
+def workflow_runs(tag, signing_enabled=False):
+    """Find prior tag.yml dispatches for the release version and signing mode."""
     runs = []
     for page in range(1, 11):
         batch = api(f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/runs?branch=main&event=workflow_dispatch&per_page=100&page={page}') or {}
@@ -57,7 +97,6 @@ def workflow_runs(tag, custom_sha, signing_enabled=False):
                 if signing_enabled else set())
             return [row for row in runs if row.get('head_branch') == 'main'
                     and row.get('event') == 'workflow_dispatch'
-                    and row.get('head_sha') == custom_sha
                     and row.get('display_title') in ({current_title} | legacy_signed_titles)]
     raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
 
@@ -82,12 +121,19 @@ def dispatch(tag):
 def route():
     verify_context()
     data = discovery()
+    completed_version = latest_completed_version()
+    allow_same_version = (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+                          and os.environ.get('ALLOW_SAME_VERSION', 'false').lower() == 'true')
+    if (completed_version and version_tuple(data['version']) <= version_tuple(completed_version)
+            and not allow_same_version):
+        print(f"Official Stable version {data['version']} has not advanced beyond completed version {completed_version}; skip.")
+        return
     if existing_build(data):
         print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
         return
 
     signing_enabled = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower() == 'true'
-    state = run_state(workflow_runs(data['upstream_tag'], os.environ['GITHUB_SHA'], signing_enabled))
+    state = run_state(workflow_runs(data['upstream_tag'], signing_enabled))
     if state == 'ACTIVE':
         print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
         return

@@ -22,17 +22,23 @@ def outputs(data):
 
 def build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha=None,
                    wayland_included=None, wayland_policy_sha256='', android_signing_enabled=False):
-    # Keep the four-field form only for reading historical Stable records.
-    if custom_sha is None and wayland_included is None and not wayland_policy_sha256:
-        return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
-    if not re.fullmatch(r'[0-9a-f]{40}', str(custom_sha or '')):
-        raise ValueError('Stable identity requires the exact custom repository SHA')
     if not isinstance(wayland_included, bool):
         raise ValueError('Stable identity requires an explicit Wayland selection')
     if wayland_included and not re.fullmatch(r'[0-9a-f]{64}', wayland_policy_sha256):
         raise ValueError('Stable Wayland identity requires the policy SHA-256')
     if not wayland_included and wayland_policy_sha256:
         raise ValueError('Wayland policy hash supplied while Wayland is disabled')
+    identity = dict(schema='stable-build-identity-v4', upstream_sha=upstream_sha,
+                    patchset=patchset, common_patch_hash=common_hash, sos_patch_hash=sos_hash,
+                    wayland_included=wayland_included,
+                    wayland_policy_sha256=wayland_policy_sha256,
+                    android_signing_enabled=bool(android_signing_enabled))
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def legacy_build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha,
+                          wayland_included, wayland_policy_sha256, android_signing_enabled):
+    """Reconstruct v3 identities so complete releases remain reusable after migration."""
     identity = dict(schema='stable-build-identity-v3', upstream_sha=upstream_sha,
                     patchset=patchset, common_patch_hash=common_hash, sos_patch_hash=sos_hash,
                     custom_repository_sha=custom_sha, wayland_included=wayland_included,
@@ -123,6 +129,35 @@ def same_identity_release(version, identity):
         if match and match.group(1)==identity: return row
     return None
 
+
+def same_legacy_identity_release(data, common_hash, sos_hash, wayland_included,
+                                 wayland_policy_sha256, android_signing_enabled):
+    """Find a complete v3 release whose only obsolete identity input was repo commit SHA."""
+    expected = {
+        'Upstream SHA': data['upstream_sha'],
+        'Patch Set': data['patchset'],
+        'Common Patch Hash': common_hash,
+        'SOS Patch Hash': sos_hash,
+        'Wayland Included': str(wayland_included).lower(),
+    }
+    if wayland_policy_sha256:
+        expected['Wayland Policy SHA256'] = wayland_policy_sha256
+    for row in release_rows(data['version']):
+        body = row.get('body') or ''
+        fields = dict(re.findall(r'^([^:\n]+): (.*)$', body, re.M))
+        if any(fields.get(key) != value for key, value in expected.items()):
+            continue
+        custom_sha = fields.get('Custom Repository SHA', '')
+        if not re.fullmatch(r'[0-9a-f]{40}', custom_sha):
+            continue
+        recorded = re.search(r'^Build Identity: ([0-9a-f]{64})$', body, re.M)
+        expected_legacy = legacy_build_identity(data['upstream_sha'], data['patchset'], common_hash,
+                                               sos_hash, custom_sha, wayland_included,
+                                               wayland_policy_sha256, android_signing_enabled)
+        if recorded and recorded.group(1) == expected_legacy:
+            return row, expected_legacy
+    return None, None
+
 def matching_drafts(tag):
     drafts=[]
     for page in range(1,101):
@@ -143,10 +178,19 @@ def release_preflight(data):
     wayland_included,wayland_policy_sha256=wayland_identity()
     data.update(custom_repository_sha=custom_sha,wayland_included=wayland_included,
                 wayland_policy_sha256=wayland_policy_sha256)
-    current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),
-                                    patch_hash('sos',data['patchset']),custom_sha,wayland_included,wayland_policy_sha256,
-                                    os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED','false').lower()=='true')
+    common_hash=patch_hash('common',data['patchset'])
+    sos_hash=patch_hash('sos',data['patchset'])
+    signing_enabled=os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED','false').lower()=='true'
+    current_identity=build_identity(data['upstream_sha'],data['patchset'],common_hash,
+                                    sos_hash,None,wayland_included,wayland_policy_sha256,
+                                    signing_enabled)
     same=same_identity_release(data['version'],current_identity)
+    accepted_build_identity=current_identity
+    if not same:
+        same,legacy_identity=same_legacy_identity_release(data,common_hash,sos_hash,wayland_included,
+                                                          wayland_policy_sha256,signing_enabled)
+        if same:
+            accepted_build_identity=legacy_identity
     if same:
         data['release_tag']=require_release_tag(same,data['version'])
         data['patch_revision']=parse_patch_revision(data['release_tag'],data['version'])
@@ -181,7 +225,6 @@ def release_preflight(data):
                        (f'Common Patch Hash: {patch_hash("common",name)}',f'common_patch_hash={patch_hash("common",name)}'),
                        (f'SOS Patch Hash: {patch_hash("sos",name)}',f'sos_patch_hash={patch_hash("sos",name)}'),
                        (f'Patch Revision: {data["patch_revision"]}',f'custom_release_revision={data["patch_revision"]}'),
-                       (f'Custom Repository SHA: {custom_sha}',f'custom_repository_sha={custom_sha}'),
                        (f'Wayland Included: {str(wayland_included).lower()}',f'wayland_included={str(wayland_included).lower()}')]
     if wayland_policy_sha256:
         expected_identity.append(('Wayland Policy SHA256: '+wayland_policy_sha256,'wayland_policy_sha256='+wayland_policy_sha256))
@@ -206,7 +249,7 @@ def release_preflight(data):
     metadata_lines_set=set(body.splitlines())
     missing_identity=[values for values in expected_identity if not any(value in metadata_lines_set for value in values)]
     recorded=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
-    identity_ok=not missing_identity and recorded is not None and recorded.group(1)==current_identity
+    identity_ok=not missing_identity and recorded is not None and recorded.group(1)==accepted_build_identity
     if identity_ok and not has_inventory:
         raise ValueError('Existing Stable release missing its exact asset inventory')
     if has_inventory:
@@ -298,7 +341,7 @@ def draft(root):
         f'Wayland Included: {str(wayland_included).lower()}',
         *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
         f'Patch Revision: {info["patch_revision"]}',
-        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],info["custom_repository_sha"],wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true")}',
+        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],None,wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true")}',
         f'Asset Inventory: {inventory}',
         'automation_state=complete',
         '-->'

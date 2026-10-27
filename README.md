@@ -127,7 +127,7 @@ After cloning this repository, configure its own values under **Settings → Sec
 | --- | --- | --- |
 | `RUSTDESK_API_SERVER` | Yes | HTTPS URL for the custom API server. Do not put credentials in the URL. |
 | `RUSTDESK_ID_SERVER` | Yes | Host name or address of the custom ID/rendezvous server. |
-| `RUSTDESK_RELAY_SERVER` | No | Custom relay host. Leave empty to retain upstream relay discovery. |
+| `RUSTDESK_RELAY_SERVER` | No | Relay override. Omit it when the relay uses the ID server's host and standard port; upstream discovery supplies the relay address, with a same-host fallback when needed. Set it only for a client-specific relay host or port. |
 | `ANDROID_PRODUCTION_SIGNING_ENABLED` | No; defaults to `false` | Set to `true` only after configuring the clone's own production signing identity and runner. |
 
 ### Repository secrets

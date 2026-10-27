@@ -26,7 +26,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-${{ github.sha }}-${{ inputs.release_mode == 'dry-run' && 'dry-run' || 'production' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+  group: nightly-${{ inputs.expected_sha || inputs.official_run_id || 'latest' }}-${{ inputs.release_mode }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 jobs:
   resolve:
@@ -60,6 +60,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
         EXPECTED_SHA: ${{ inputs.expected_sha }}
+        INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       run: python3 scripts/release/nightly.py resolve --official-run-id "$OFFICIAL_RUN_ID" --expected-sha "$EXPECTED_SHA"
     - id: dedup
       name: Skip an active or completed identical Nightly batch
