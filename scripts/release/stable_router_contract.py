@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Offline contracts for the scheduled Stable router."""
 import os
+import json
+from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -53,6 +56,42 @@ class StableRouterContract(unittest.TestCase):
             selected=router.workflow_runs('v1.5.1','e'*64)
         self.assertEqual(selected,[active])
 
+    def test_automatic_run_dedup_uses_recorded_identity_and_blocks_unknown_active(self):
+        base = dict(display_title='Stable latest / draft / wayland=true / android-signing=false',
+                    head_branch='main', event='workflow_dispatch', status='completed')
+        matching, different, active = [dict(base, id=i) for i in (1, 2, 3)]
+        active['status'] = 'queued'
+        with patch.object(router, 'api', return_value={'workflow_runs': [matching, different, active]}), patch.object(router, 'recorded_identity', side_effect=['e'*64, 'f'*64]) as read:
+            self.assertEqual(router.workflow_runs('v1.5.1', 'e'*64), [matching, active])
+            self.assertEqual(read.call_count, 2)
+        with patch.object(router, 'api', return_value={'workflow_runs': [matching]}), patch.object(router, 'recorded_identity', side_effect=ValueError('missing lock')):
+            with self.assertRaisesRegex(ValueError, 'missing lock'):
+                router.workflow_runs('v1.5.1', 'e'*64)
+
+    def test_historical_lock_reads_latest_attempt_and_checks_run_binding(self):
+        from scripts.release.stable_lock import SCHEMA
+        data = dict(schema=SCHEMA, channel='stable', workflow_run='123',
+                    custom_repository_sha='a'*40, upstream_sha='b'*40, version='1.5.1',
+                    patchset='v2', common_patch_hash='c'*64, sos_patch_hash='d'*64,
+                    wayland_included=True, wayland_policy_sha256='f'*64,
+                    android_signing_enabled=False)
+        data['build_identity'] = router.build_identity(data['upstream_sha'], 'v2', 'c'*64, 'd'*64,
+            wayland_included=True, wayland_policy_sha256='f'*64, android_signing_enabled=False)
+        def download(args, **kwargs):
+            root = Path(args[args.index('--dir')+1])
+            for attempt in (1, 2):
+                folder = root / f'stable-build-lock-123-{attempt}'
+                folder.mkdir()
+                (folder/'stable-lock.json').write_text(json.dumps(data if attempt == 2 else {}))
+            return SimpleNamespace(returncode=0)
+        row = dict(id=123, head_sha='a'*40)
+        with patch.object(router.subprocess, 'run', side_effect=download):
+            self.assertEqual(router.recorded_identity(row), data['build_identity'])
+            with self.assertRaisesRegex(ValueError, 'provenance'):
+                router.recorded_identity(dict(row, head_sha='e'*40))
+        with patch.object(router.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+            with self.assertRaisesRegex(ValueError, 'unavailable'): router.recorded_identity(row)
+
     def test_existing_build_delegates_to_unified_preflight(self):
         data = {'channel': 'stable'}
         with patch.object(router, 'release_preflight', return_value={'build_needed': False}) as gate:
@@ -103,11 +142,11 @@ class StableRouterContract(unittest.TestCase):
         existing.assert_called_once()
         dispatch.assert_called_once()
         self.assertEqual(dispatch.call_args.args[0], '1.5.0')
-        self.assertEqual(len(dispatch.call_args.args[1]), 64)
+        self.assertEqual(dispatch.call_args.args, ('1.5.0',))
 
     def test_dispatch_pins_official_tag_and_private_draft_mode(self):
         with patch.object(router.subprocess, 'run') as run:
-            router.dispatch('v1.5.1', 'e' * 64)
+            router.dispatch('v1.5.1')
         args = run.call_args.args[0]
         self.assertEqual(args[:4], ['gh', 'workflow', 'run', 'tag.yml'])
         self.assertIn('--ref', args)
@@ -115,7 +154,7 @@ class StableRouterContract(unittest.TestCase):
         self.assertIn('upstream_ref=v1.5.1', args)
         self.assertIn('release_mode=draft', args)
         self.assertIn('include_wayland=true', args)
-        self.assertIn('expected_build_identity=' + 'e' * 64, args)
+        self.assertFalse(any(x.startswith('expected_build_identity=') for x in args))
         self.assertTrue(run.call_args.kwargs['check'])
 
 

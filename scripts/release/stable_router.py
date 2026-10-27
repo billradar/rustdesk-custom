@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Route the latest official Stable release to a complete private Draft build."""
 import os
+import json
+from pathlib import Path
+import tempfile
 import re
 import subprocess
 
@@ -84,24 +87,73 @@ def existing_build(data):
     return not release_preflight(data)['build_needed']
 
 
+def recorded_identity(row):
+    """Recover automatically computed identity from the run's latest lock attempt."""
+    run_id = str(row.get('id', ''))
+    if not re.fullmatch(r'[1-9][0-9]*', run_id):
+        raise ValueError('Stable run identity missing; manual review required')
+    with tempfile.TemporaryDirectory(prefix='stable-dedup-') as temp:
+        result = subprocess.run(['gh', 'run', 'download', run_id, '--repo', REPOSITORY,
+                                 '--pattern', f'stable-build-lock-{run_id}-*', '--dir', temp],
+                                text=True, capture_output=True)
+        candidates = []
+        for path in Path(temp).glob('stable-build-lock-*/stable-lock.json'):
+            match = re.fullmatch(r'stable-build-lock-' + run_id + r'-([1-9][0-9]*)', path.parent.name)
+            if match:
+                candidates.append((int(match.group(1)), path))
+        if result.returncode != 0 or not candidates:
+            raise ValueError('Stable build lock unavailable; manual review required')
+        data = json.loads(max(candidates)[1].read_text())
+    from scripts.release.stable_lock import SCHEMA
+    if (data.get('schema') != SCHEMA or data.get('channel') != 'stable'
+            or data.get('workflow_run') != run_id
+            or data.get('custom_repository_sha') != row.get('head_sha')
+            or type(data.get('wayland_included')) is not bool
+            or type(data.get('android_signing_enabled')) is not bool):
+        raise ValueError('Invalid historical Stable lock provenance')
+    for key, size in (('upstream_sha', 40), ('common_patch_hash', 64), ('sos_patch_hash', 64)):
+        if not re.fullmatch('[0-9a-f]{' + str(size) + '}', str(data.get(key, ''))):
+            raise ValueError('Invalid historical Stable source identity')
+    if data.get('patchset') != patchset_for_version(data.get('version', '')):
+        raise ValueError('Invalid historical Stable patchset')
+    identity = build_identity(data['upstream_sha'], data['patchset'], data['common_patch_hash'],
+                              data['sos_patch_hash'], wayland_included=data['wayland_included'],
+                              wayland_policy_sha256=data.get('wayland_policy_sha256', ''),
+                              android_signing_enabled=data['android_signing_enabled'])
+    if data.get('build_identity') != identity:
+        raise ValueError('Invalid historical Stable build identity')
+    return identity
+
+
 def workflow_runs(tag, identity, signing_enabled=False):
-    """Find prior tag.yml dispatches for the exact Stable build identity."""
+    """Find matching locked batches; unknown active dispatches block duplicate work."""
     runs = []
     for page in range(1, 11):
         batch = api(f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/runs?branch=main&event=workflow_dispatch&per_page=100&page={page}') or {}
         runs.extend(batch.get('workflow_runs', []))
         if len(batch.get('workflow_runs', [])) < 100:
-            current_title = (f'Stable {tag} / draft / wayland=true / android-signing='
-                             f'{str(signing_enabled).lower()} / identity={identity}')
-            manual_titles = {
-                f'Stable {tag} / draft / wayland=true / android-signing={str(signing_enabled).lower()} / identity=manual',
-                f'Stable latest / draft / wayland=true / android-signing={str(signing_enabled).lower()} / identity=manual',
-            }
-            return [row for row in runs if row.get('head_branch') == 'main'
-                    and row.get('event') == 'workflow_dispatch'
-                    and (row.get('display_title') == current_title
-                         or (row.get('display_title') in manual_titles and row.get('status') != 'completed'))]
-    raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
+            break
+    else:
+        raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
+    suffix = f' / draft / wayland=true / android-signing={str(signing_enabled).lower()}'
+    legacy_title = f'Stable {tag}' + suffix + f' / identity={identity}'
+    selected = []
+    for row in runs:
+        if row.get('head_branch') != 'main' or row.get('event') != 'workflow_dispatch':
+            continue
+        title = row.get('display_title', '')
+        if title == legacy_title:
+            selected.append(row)
+            continue
+        auto_titles = {f'Stable {source}' + suffix + ending
+                       for source in (tag, 'latest') for ending in ('', ' / identity=auto')}
+        manual_titles = {f'Stable {source}' + suffix + ' / identity=manual' for source in (tag, 'latest')}
+        if title in auto_titles:
+            if row.get('status') != 'completed' or recorded_identity(row) == identity:
+                selected.append(row)
+        elif title in manual_titles and row.get('status') != 'completed':
+            selected.append(row)
+    return selected
 
 
 def run_state(rows):
@@ -110,7 +162,7 @@ def run_state(rows):
     return 'EXHAUSTED' if len(rows) >= MAX_ATTEMPTS else 'RETRY'
 
 
-def dispatch(tag, identity):
+def dispatch(tag):
     subprocess.run([
         'gh', 'workflow', 'run', WORKFLOW,
         '--repo', REPOSITORY,
@@ -118,7 +170,6 @@ def dispatch(tag, identity):
         '-f', f'upstream_ref={tag}',
         '-f', 'release_mode=draft',
         '-f', 'include_wayland=true',
-        '-f', f'expected_build_identity={identity}',
     ], check=True)
 
 
@@ -149,7 +200,7 @@ def route():
     if state == 'EXHAUSTED':
         raise ValueError('Stable Draft retry budget exhausted; manual review required')
 
-    dispatch(data['upstream_tag'], identity)
+    dispatch(data['upstream_tag'])
     print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
 
 
