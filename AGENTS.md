@@ -32,9 +32,11 @@ A green compile is only one stage. It does not by itself prove a valid artifact,
 - Do not assume SOS exists for every platform. The platform matrix, not the variant name or README table alone, determines enabled/required targets.
 
 Current patchset layout:
-- `patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`.
+- `patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`, `0004-cm-background-window.patch`.
 - `patchsets/v1/sos/`: `0001-sos-mode.patch`, `0002-sos-home.patch`, `0003-sos-settings.patch`.
 - `patchsets/v2/` contains the corresponding common and SOS customization generation for the newer upstream API boundary.
+
+Common `0004` gives the Flutter CM a hidden native startup, serialized manual-only visibility policy and a local tray “Current connections” command. It keeps the main window on upstream logic. Manual requests are latched in CM Rust state and polled through the existing bridge; no bridge API regeneration is needed. `scripts/validation/cm_window_contract.py` guards prepared-source wiring and executes the pure-Dart policy when Dart is available. Native UI/real remote sessions remain unverified until exact-package testing.
 
 These filenames are useful orientation, not a complete semantic specification. Read the patch before changing or describing its behavior.
 

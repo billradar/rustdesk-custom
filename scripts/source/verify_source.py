@@ -100,14 +100,17 @@ fn main() {
     let mut defaults = config::DEFAULT_SETTINGS.write().unwrap();
     assert_eq!(defaults["allow-remote-config-modification"], "Y");
     assert_eq!(defaults["allow-hide-cm"], "Y");
+    assert_eq!(defaults["approve-mode"], "password");
     match std::env::var("RUSTDESK_RELAY_SERVER") {
         Ok(relay) if !relay.is_empty() => assert_eq!(defaults["relay-server"], relay),
         _ => assert!(!defaults.contains_key("relay-server"), "Missing relay override must preserve upstream discovery"),
     }
     defaults.insert("allow-hide-cm".to_owned(), "N".to_owned());
+    defaults.insert("approve-mode".to_owned(), "click".to_owned());
     drop(defaults);
     apply_custom_build_defaults();
     assert_eq!(config::DEFAULT_SETTINGS.write().unwrap()["allow-hide-cm"], "N");
+    assert_eq!(config::DEFAULT_SETTINGS.write().unwrap()["approve-mode"], "click");
     assert_eq!(config::BUILTIN_SETTINGS.write().unwrap().get("sos-mode").map(String::as_str), SOS_EXPECTED);
     println!("Native injected defaults: PASS (values withheld)");
 }

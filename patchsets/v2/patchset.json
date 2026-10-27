@@ -18,11 +18,11 @@
     }
   },
   "hashes": {
-    "common": "d0400a8bbd15cb3a116b1266b5c04148145a695482c474a3ea0c89b2b354506c",
+    "common": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "runtime_ui": {
-    "status": "skipped_by_user"
+    "status": "not_tested"
   },
   "real_remote_session": {
     "status": "not_tested"
@@ -72,5 +72,20 @@
       "common_patch_hash": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7",
       "scope": "Historical pre-render-policy patch hash only"
     }
-  ]
+  ],
+  "cm_background_window": {
+    "status": "native_runtime_validation_pending",
+    "display_policy": "manual_only",
+    "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+    "runtime_ui": "not_tested",
+    "real_remote_session": "not_tested",
+    "native_package_build": "not_run",
+    "local_validation": {
+      "patch_apply_standard_and_sos": "pass",
+      "prepared_source_contracts": "pass",
+      "compiled_configuration_helper": "pass",
+      "dart_policy_sequences": "pass",
+      "flutter_analyze_snapshot_standard": "pass_with_existing_same_upstream_generated_bridge"
+    }
+  }
 }

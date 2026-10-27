@@ -65,3 +65,54 @@ allowed EGL 1.5 initialization and a user-confirmed locked-screen remote session
 That is local configuration evidence for the previous package, not validation of
 new packages. New Common hashes require fresh build/qualification evidence; old
 validation entries remain explicitly historical.
+
+
+## Connection manager background window
+
+Common `0004-cm-background-window.patch` is shared by Standard and SOS in both
+patch generations. It adds `approve-mode=password` as a default (saved approval
+choices remain effective). CM visibility is an independent, manual-only policy;
+password verification and click approval remain backend authentication decisions.
+Saved hide preferences and approval modes cannot enable automatic display.
+
+The CM starts as a hidden native window. Its hide operation never minimizes it;
+Windows creates it as a tool window, Linux realizes the Flutter GL view without
+mapping the top-level window, and macOS gates order-in before Cocoa shows it.
+The serialized Dart visibility policy blocks automatic show/focus from connection
+and chat events. The main window's startup and tray Open action retain upstream
+behaviour. The CM's custom close/minimize controls hide it without disconnecting;
+per-session Disconnect buttons remain available after manual opening. OS/session
+shutdown and automatic teardown after the last connection still use upstream
+cleanup, rather than keeping an orphan CM alive.
+
+With the service/tray running, use the new **Current connections** tray menu item
+to show an existing CM. It sends local control IPC on a separate, unassociated
+stream; it does not spawn a duplicate manager, bypass authentication, or accept a
+pending session. Rust latches the request until the CM's timer consumes it, so
+requests arriving during Flutter initialization are retained. No CM means there
+is no current manager to show. If the desktop shell has no tray indicator, running `rustdesk --show-cm`
+manually sends the same local request without opening the main window. Use the
+installed executable name/path if it differs. Neither entry starts a new CM.
+
+The settings page reports the enforced “Open connection manager manually” policy
+with a checked, disabled control. Existing hide preferences remain stored but do
+not control CM visibility in these builds. A saved click-approval mode still
+requires acceptance: the operator must open Current connections or `--show-cm`
+and accept the pending request. Hiding is not approval; unanswered requests may
+time out under upstream rules. System permission dialogs and UAC are outside
+this CM window policy.
+
+Validation commands:
+
+```bash
+python3 scripts/validation/cm_window_contract.py --source /path/to/prepared-source --dart dart
+python3 scripts/validation/repository_contract.py
+```
+
+The compatibility workflow runs the prepared-source checks and the pure-Dart
+policy sequences, and analyzes all changed Dart files. Native package/runtime
+validation must separately cover cold start, first connection, reconnect,
+multiple peers, incoming chat, tray open/hide/reopen, manual disconnect, last
+session cleanup, and the main window remaining usable. Check both desktop and
+taskbar visibility and focus, on Windows, Linux X11/Wayland and macOS. Passing
+source checks is not evidence of zero-flash native-window behaviour.
