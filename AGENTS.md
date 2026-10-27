@@ -190,10 +190,10 @@ Workflow names and interfaces are live contracts. Read the YAML and the scripts 
 - `.github/workflows/build-stable-windows.yml`, `build-stable-platforms.yml`, and `build-stable-android.yml`: Stable target-build entry points.
 - `.github/workflows/tag.yml`: Stable resolve/preflight/build/aggregate/qualification and release-mode routing. Current manual release modes are `dry-run`, `draft`, and `release`. Default is `dry-run`.
 - Nightly was explicitly restored and then requested to match Tag signing/Draft behavior by the user on 2026-10-25. `nightly.yml` reuses the Tag build cores; protected-main `draft` mode uses the same direct Environment-bound YubiKey signer and creates an immutable prerelease Draft. `dry-run` stays build-only. Public Nightly prerelease mode is an explicit manual choice and may promote only the exact complete matching Draft after revalidating its identity and remote asset digests. `nightly_contract.py` enforces these boundaries.
-- `.github/workflows/upstream-stable.yml`: polls/detects official Stable release and routes a deduplicated Stable dry-run only. It is not publication authorization.
+- `.github/workflows/upstream-stable.yml`: polls official Stable releases and routes the newest eligible tag to a signed private Draft build. It reuses the Stable release preflight for identity and asset verification, skips complete matching builds, deduplicates active runs, and never authorizes public publication.
 - The upstream-main monitor also generates unknown-interface review packets in a read-only job and can create report-only draft PRs from protected `main`. It never changes approved profiles or runs unknown upstream build scripts. `scripts/upstream/interface_review.py` and its contract own this boundary.
 - Automation exception to the two-branch rule: `automation/upstream-interface-<interface-signature>` branches may contain only a generated JSON report under `docs/upstream-interface-reviews/`, are deduplicated, and are never reset or auto-merged. This isolation is required to propose a report without modifying `main` or shared `development`.
-- `upstream-nightly.yml` polls every 15 minutes at :07/:22/:37/:52 UTC, following the latest successful official `flutter-nightly.yml` run on the official default branch. Use its exact head SHA, never the moving `nightly` tag. Deduplicate by upstream SHA, custom SHA, release mode, and Wayland selection; the official run ID is provenance only. Active or successful identical batches are skipped, failures are retried at most three times, and a complete exact Draft may be reused for an explicitly requested promotion only after metadata and remote asset digests match.
+- `upstream-nightly.yml` polls daily at 12:00 UTC, following the latest successful official `flutter-nightly.yml` run on the official default branch. Use its exact head SHA, never the moving `nightly` tag. Deduplicate by upstream SHA, selected patchset and Common/SOS content hashes, release mode, Wayland policy, and signing mode; custom SHA and official run ID are provenance only. Active or successful identical batches are skipped, failures are retried at most three times, and a complete exact Draft may be reused for an explicitly requested promotion only after metadata and remote asset digests match.
 - `.github/workflows/upstream-main-compatibility.yml`: periodic compatibility signal for the official upstream default branch; it does not build or publish Nightly artifacts.
 - `.github/workflows/android-yubikey-signing-test.yml`: manually and explicitly authorized signing smoke test; it is not a Stable release and must not publish one.
 - `.github/actions/android-yubikey-sign/`: local reusable signing action implementation.
@@ -203,7 +203,7 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 ### Channel rules
 
 - **CI qualification** is tied to the exact custom commit and upstream identity used by the qualification run.
-- **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, and deduplicates on upstream SHA, custom repository SHA, patchset/hash pair, and Wayland selection/policy. A complete matching revision skips the build; an existing Draft is published only after rechecking identity, completion, exact inventory, uploaded state, sizes, and GitHub SHA-256 digests. Old metadata without the expanded identity is not silently reused.
+- **Stable** resolves an official Stable version/ref and its exact SHA, selects the patchset by version, and deduplicates on upstream SHA, selected patchset and its Common/SOS content hashes, plus Wayland and signing policies. The custom repository SHA remains provenance metadata, not a build identity input. A complete matching revision skips the build; an existing Draft is published only after rechecking identity, completion, exact inventory, uploaded state, sizes, and GitHub SHA-256 digests. Legacy complete releases are reusable only after their recorded v3 identity and current selected patch content are verified.
 - Windows ARM64 is opt-in by canonical matrix metadata as an experimental `default_build`: Tag and Nightly run it by default and include successful ARM64 EXE/MSI assets, while CI's normal target plan remains x86_64-only. Do not call it fully supported until exact-run package and runtime evidence justify promotion.
 - **Nightly** follows completed official Nightly runs, prepares independent Standard/SOS sources, builds the supported Tag matrix, and aggregates exact-run artifact evidence. It is not Stable qualification. Protected-main draft/release modes require production-signed Android artifacts (both v2 and v3); the write-permission job revalidates the complete package set. Draft mode creates a prerelease Draft. Public prerelease mode is an explicit manual choice and can promote only a complete matching Draft after its remote asset inventory and digests are revalidated. Generic `channel.py resolve` remains CI/Stable-only; use `nightly.py` for verified-run resolution.
 - **Upstream default-branch compatibility** is a compatibility signal only. It does not automatically mean Stable publication.
@@ -257,7 +257,7 @@ Current intended configuration, which must be rechecked against live workflow an
 - Production signing must remain behind the intended Tag or protected-main Nightly draft workflow's explicit authorization, branch/event/qualification conditions, dedicated runner and Environment protections.
 - The manual signing smoke test is separately gated and must never publish/promote a release.
 - Never commit a keystore, private key, PIN, password, token, PKCS#11 credential, or sensitive signing output.
-- Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.
+- Never pass the PIN in command-line arguments, echo it, print it in logs, put it in PR comments, or upload it as an artifact. Remove it from the signing script environment before child tools start, pass it to the signer only through standard input, and clear mutable buffers after use. Scope the secret to the minimum step and use the approved Environment secret; do not add a fallback to ordinary repository secrets.
 - Do not replace hardware signing with an undisclosed software key or weaken gates to make a run pass.
 - A failed PIN preflight, missing device, unavailable key, unexpected certificate, or invalid APK is a stop condition. Do not retry by weakening checks.
 
@@ -307,6 +307,18 @@ Before branch-sensitive operations, inspect both branch heads, merge base, ahead
 Never reset, force-push, rebase, replace a ref, delete a shared branch, or rewrite history without explicit authorization. For any authorized destructive operation, inspect the exact expected target SHA and use an expected-old-SHA guard where available.
 
 Creating a PR does not merge it. A green PR check does not merge it. A merged PR does not prove every desired workflow ran. Verify the actual merge state, resulting commit, CI run, and branch comparison. Do not merge a PR unless the user explicitly authorizes merging.
+
+### Codex review for follow-up PR commits
+
+Codex does not necessarily review each new commit pushed to an already-open PR automatically. After pushing a change to an existing PR, request one Code Review for the new PR head by posting the exact comment `@codex review`.
+
+Before posting, read the PR's current head SHA and the latest Codex review summary:
+- If a review is already running for that exact head SHA, wait for it; do not post a duplicate request.
+- If a review completed for that exact head SHA, do not repeat it unless the user explicitly requests another review.
+- If there is no review for the current head, or the latest review targets an older SHA, post `@codex review` once.
+- When several commits are pushed together, review the resulting head once. Do not request reviews for intermediate local commits that were never pushed.
+
+Treat a review as current only when its recorded commit SHA matches the PR head. After addressing findings and pushing a follow-up commit, repeat this check for the new head. Report if Codex review cannot be triggered or remains pending; do not infer that an older review covers new commits. Use `@codex security review` only when a security review is specifically needed.
 
 ## 11. Documentation rules and project terminology
 

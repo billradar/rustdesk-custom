@@ -84,7 +84,7 @@ class ProductionInterfaceTest {
             System.setErr(originalError);
         }
         String diagnostic = errors.toString(StandardCharsets.UTF_8);
-        assertEquals("PIN SOURCE: ENVIRONMENT\nENVIRONMENT PIN AVAILABLE: FAIL\nFAILURE STAGE: PIN SOURCE\n", diagnostic);
+        assertEquals("PIN SOURCE: UNAVAILABLE\nFAILURE STAGE: PIN SOURCE\n", diagnostic);
         assertFalse(diagnostic.contains("dummy-test-pin"));
         assertThrows(IllegalArgumentException.class, () -> PinSources.select("automatic-fallback"));
     }

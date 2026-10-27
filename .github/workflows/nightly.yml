@@ -1,5 +1,5 @@
 name: Nightly Build Pipeline
-run-name: Nightly ${{ inputs.expected_sha || inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }}
+run-name: Nightly ${{ inputs.expected_sha || inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
 env:
   PYTHONPATH: .
 'on':
@@ -26,12 +26,11 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-${{ github.sha }}-${{ inputs.release_mode == 'dry-run' && 'dry-run' || 'production' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}
+  group: nightly-${{ inputs.expected_sha || inputs.official_run_id || 'latest' }}-${{ inputs.release_mode }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 jobs:
   resolve:
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.event_name == 'workflow_dispatch' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
     runs-on: ubuntu-22.04
@@ -61,6 +60,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
         EXPECTED_SHA: ${{ inputs.expected_sha }}
+        INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       run: python3 scripts/release/nightly.py resolve --official-run-id "$OFFICIAL_RUN_ID" --expected-sha "$EXPECTED_SHA"
     - id: dedup
       name: Skip an active or completed identical Nightly batch
@@ -68,14 +68,18 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         RELEASE_MODE: ${{ inputs.release_mode }}
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+        ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         UPSTREAM_EXPECTED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+        PATCHSET: ${{ steps.resolve.outputs.patchset }}
       run: python3 scripts/release/nightly.py dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: steps.dedup.outputs.skip != 'true'
+      # Keep discovery evidence even when this run intentionally skips a build.
+      # On early failures there may be no file; warn so the router can fail closed.
+      if: always()
       with:
         name: nightly-discovery-${{ github.run_id }}
         path: .work/nightly-discovery.json
-        if-no-files-found: error
+        if-no-files-found: warn
   prepare:
     needs: resolve
     if: needs.resolve.outputs.dedup_skip != 'true'
@@ -149,12 +153,12 @@ jobs:
     name: 'Sign Nightly Android production artifacts (YubiKey PIV 9C)'
     needs: [resolve, android-build]
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
-      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' &&
       needs.resolve.outputs.dedup_skip != 'true' &&
       (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
+      vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' &&
       needs.android-build.result == 'success'
     runs-on:
       - self-hosted
@@ -210,17 +214,6 @@ jobs:
         grep -Fxq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
         grep -Fxq 'PRIVATE KEY OPERATION: NO' <<< "$CAPABILITIES"
         printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: PASS'
-    - name: Environment Secret Binding Preflight
-      shell: bash
-      env:
-        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
-      run: |
-        set -euo pipefail
-        if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
-          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
-          exit 1
-        fi
-        printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
     - name: Production Android signing
       uses: ./.github/actions/android-yubikey-sign
       env:
@@ -237,7 +230,7 @@ jobs:
       always() && needs.resolve.outputs.dedup_skip != 'true' && needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' && needs.android-build.result == 'success' &&
       (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
-      (inputs.release_mode == 'dry-run' || needs.android-sign.result == 'success')
+      (inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true' || needs.android-sign.result == 'success')
     runs-on: ubuntu-22.04
     env:
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
@@ -247,7 +240,8 @@ jobs:
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
       BUILD_CONFIGURATION: PRODUCTION
       RELEASE_MODE: ${{ inputs.release_mode }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && 'true' || 'false' }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -268,7 +262,7 @@ jobs:
         path: .work/wayland-targets
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      if: inputs.release_mode == 'dry-run'
+      if: inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
       with:
         pattern: android-build-input-nightly-*
         path: .work/all-targets/unsigned-android
@@ -289,10 +283,12 @@ jobs:
   draft:
     name: Create qualified Nightly draft or publish prerelease
     needs: [resolve, aggregate]
+    concurrency:
+      group: rustdesk-nightly-release-write
+      cancel-in-progress: false
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
-      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' && (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
       needs.resolve.outputs.dedup_skip != 'true' &&
       needs.aggregate.result == 'success'
@@ -303,7 +299,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_MODE: ${{ inputs.release_mode }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       BUILD_CHANNEL: nightly
       BUILD_CONFIGURATION: PRODUCTION
@@ -325,6 +322,12 @@ jobs:
       with:
         pattern: rustdesk-wayland-*
         path: .work/wayland-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      with:
+        pattern: android-build-input-nightly-*
+        path: .work/all-targets/unsigned-android
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:

@@ -193,7 +193,7 @@ class ProductionInputTests(unittest.TestCase):
                     RUSTDESK_API_SERVER='https://api.example.com', RUSTDESK_KEY='AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
                     RUSTDESK_PASSWORD='UNIT-TEST-PASSWORD-NOT-A-PRODUCTION-CREDENTIAL')
 
-    def test_empty_relay_preserves_historical_discovery(self):
+    def test_missing_or_empty_relay_is_optional_for_upstream_discovery(self):
         for relay in ('', None):
             values = self.values()
             if relay is None:

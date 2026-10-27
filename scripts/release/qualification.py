@@ -82,11 +82,16 @@ def aggregate(root,channel,experimental):
                 results[name]['result']='FAIL: Standard pair missing'
                 errors.append('SOS source pairing missing: '+name)
     required_pass=not errors
+    android_infos=[i for i in found.values() if i['platform']=='android']
+    android_signed=bool(android_infos) and all(
+        i.get('signed_status')=='PRODUCTION SIGNED / IDENTITY VERIFIED'
+        and i.get('signing_identity_verified') is True
+        and {2,3}.issubset(set(i.get('signing_schemes',[]))) for i in android_infos)
     report={'result':'PASS' if required_pass and len(found)==len(expected) else 'PARTIAL' if required_pass else 'FAIL',
             'required_gate':'PASS' if required_pass else 'FAIL','targets':results,'errors':errors,
             'channel':channel,'upstream_sha':os.environ['UPSTREAM_EXPECTED_SHA'],'patchset':os.environ['PATCHSET'],
             'build_run':os.environ['GITHUB_RUN_ID'],'custom_repository_sha':os.environ['GITHUB_SHA'],
-            'runtime_ui':'SKIPPED BY USER','real_remote_session':'NOT TESTED','code_signing':'DESKTOP NOT ENABLED; ANDROID '+('PRODUCTION IDENTITY VERIFIED' if all(i.get('signing_identity_verified') for i in found.values() if i['platform']=='android') and any(i['platform']=='android' for i in found.values()) else 'TEST ONLY')}
+            'runtime_ui':'SKIPPED BY USER','real_remote_session':'NOT TESTED','code_signing':'DESKTOP NOT ENABLED; ANDROID '+('PRODUCTION IDENTITY VERIFIED' if android_signed else 'NOT ENABLED')}
     out=ROOT/'.work/qualification-aggregate';out.mkdir(parents=True,exist_ok=True)
     (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
     rows=[]
@@ -362,7 +367,6 @@ def _release(root, publish, channel='stable', experimental=False):
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
     if os.environ.get('GITHUB_REPOSITORY')!=repo:raise ValueError('Wrong release repository')
-    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING']='true' if channel=='stable' else 'false'
     report=aggregate(root,channel,experimental)
     if report['result']!='PASS':raise ValueError('No complete supported aggregate')
     infos=[json.loads(p.read_text()) for p in root.rglob('build-info.json')]
@@ -370,6 +374,11 @@ def _release(root, publish, channel='stable', experimental=False):
     sos=next(i for i in infos if i['variant']=='sos' and i['platform']=='windows-x86_64')
     version=standard['upstream_version']
     upstream_sha=standard['upstream_sha']
+    android_infos=[i for i in infos if i['platform']=='android']
+    android_signed=bool(android_infos) and all(
+        i.get('signed_status')=='PRODUCTION SIGNED / IDENTITY VERIFIED'
+        and i.get('signing_identity_verified') is True
+        and {2,3}.issubset(set(i.get('signing_schemes',[]))) for i in android_infos)
     tag=f'v{version}-custom.{standard["patch_revision"]}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
@@ -384,7 +393,8 @@ def _release(root, publish, channel='stable', experimental=False):
     wayland_included=os.environ.get('INCLUDE_WAYLAND') == 'true'
     wayland_policy=report.get('wayland',{}).get('policy_sha256','')
     identity=build_identity(standard['upstream_sha'],standard['patchset'],standard['common_patch_hash'],
-                            sos['sos_patch_hash'],standard['custom_repository_sha'],wayland_included,wayland_policy)
+                            sos['sos_patch_hash'],standard['custom_repository_sha'],wayland_included,wayland_policy,
+                            os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING','false').lower()=='true')
     metadata=[
         'upstream_repository=rustdesk/rustdesk',
         f'upstream_tag={standard["upstream_tag"]}',
@@ -404,7 +414,7 @@ def _release(root, publish, channel='stable', experimental=False):
         'runtime_ui_validation=SKIPPED BY USER',
         'real_remote_session_validation=NOT TESTED',
         'desktop_code_signing=NOT ENABLED',
-        'android_signing=PRODUCTION SIGNED / IDENTITY VERIFIED',
+        'android_signing='+('PRODUCTION SIGNED / IDENTITY VERIFIED' if android_signed else 'NOT ENABLED'),
         'password_security_v2=DEFERRED',
         'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
         'automation_state=complete',

@@ -2,8 +2,10 @@
 
 English · [中文](README.zh-CN.md)
 
-[![Stable Release Pipeline](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml/badge.svg)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
-[![CI - Patch and Build compatibility](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
+[![Stable Release](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/tag.yml?branch=main&style=flat-square&label=Stable%20Release)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)
+[![Nightly](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/nightly.yml?branch=main&style=flat-square&label=Nightly)](https://github.com/billradar/rustdesk-custom/actions/workflows/nightly.yml)
+[![Upstream Main Compatibility](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/upstream-main-compatibility.yml?branch=main&style=flat-square&label=Upstream%20Main%20Compatibility)](https://github.com/billradar/rustdesk-custom/actions/workflows/upstream-main-compatibility.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/billradar/rustdesk-custom/actions/workflows/ci.yml)
 
 RustDesk Custom is a maintained RustDesk distribution built from upstream RustDesk with a reviewed set of custom patches.
 
@@ -114,6 +116,41 @@ Install the repository Python dependencies with:
 ~~~bash
 python3 -m pip install -r requirements.txt
 ~~~
+
+## Customize a cloned repository
+
+After cloning this repository, configure its own values under **Settings → Secrets and variables → Actions**. The workflows read these settings at build time; values from the original repository are not copied automatically.
+
+### Repository variables
+
+| Name | Required | Purpose |
+| --- | --- | --- |
+| `RUSTDESK_API_SERVER` | Yes | HTTPS URL for the custom API server. Do not put credentials in the URL. |
+| `RUSTDESK_ID_SERVER` | Yes | Host name or address of the custom ID/rendezvous server. |
+| `RUSTDESK_RELAY_SERVER` | No | Relay override. Omit it when the relay uses the ID server's host and standard port; upstream discovery supplies the relay address, with a same-host fallback when needed. Set it only for a client-specific relay host or port. |
+| `ANDROID_PRODUCTION_SIGNING_ENABLED` | No; defaults to `false` | Set to `true` only after configuring the clone's own production signing identity and runner. |
+
+### Repository secrets
+
+| Name | Required | Purpose |
+| --- | --- | --- |
+| `RUSTDESK_KEY` | Yes | Base64-encoded 32-byte public key for the custom RustDesk server. The workflows consume it as a repository secret. |
+| `RUSTDESK_PASSWORD` | Yes | Default permanent password injected into built clients. It is embedded in the client, so users who obtain that build should be treated as able to recover this shared default; choose it accordingly. |
+
+The server addresses and public key must belong to the same custom server deployment. Build validation checks the server configuration and its compiled presence without printing the configured values.
+
+### Optional Android production signing
+
+Production signing is separate from ordinary builds. To enable it in a clone:
+
+1. Create a GitHub Environment named `android-production-signing` and add its `YUBIKEY_PIV_PIN` secret.
+2. Provision a dedicated self-hosted Linux ARM64 runner with the labels `self-hosted`, `linux`, `arm64`, `rustdesk-signing`, `android-signing`, and `yubikey`, plus the reviewed signing bridge and attached YubiKey.
+3. Set the repository variable `ANDROID_PRODUCTION_SIGNING_ENABLED` to `true`.
+4. Configure the Environment's deployment protection and restrict signing workflows to the protected `main` branch.
+
+This repository currently pins its own Android signing certificate fingerprint in `metadata/signing/android-standard.json`, `scripts/signing/android_yubikey_sign.py`, workflow checks, and contracts. A clone using a different certificate must update those identity checks and related contracts to its own certificate before enabling signing. The signer requires APK signature schemes v2 and v3. Do not copy the original PIN or signing identity.
+
+Keep secrets out of source files, command-line arguments, logs, and artifacts. Repository secrets are not provided to workflows triggered from forks' pull requests; do not run trusted builds of unreviewed code with production credentials.
 
 ## Development
 

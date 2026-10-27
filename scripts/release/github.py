@@ -44,7 +44,8 @@ def validate(folder):
     if info['runtime_ui_validation'] != 'SKIPPED BY USER' or info['real_remote_session_validation'] != 'NOT TESTED':
         raise ValueError('Runtime status must not imply validation')
     if os.environ.get('BUILD_CONFIGURATION') == 'PRODUCTION':
-        if info.get('custom_repository') != 'billradar/rustdesk-custom' or info.get('architecture') != arch:
+        expected_repository = os.environ.get('GITHUB_REPOSITORY', 'billradar/rustdesk-custom')
+        if info.get('custom_repository') != expected_repository or info.get('architecture') != arch:
             raise ValueError('Production repository/architecture provenance missing')
         from scripts.signing.production_config import payload
         payload(folder)

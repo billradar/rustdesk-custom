@@ -98,6 +98,23 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(data['patch_revision'],'v1.2')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v1.2')
 
+    def test_legacy_key_value_metadata_is_normalized(self):
+        fields = channel.release_metadata(
+            'upstream_sha=' + 'a' * 40 + '\npatchset=v1\ncustom_repository_sha=' + 'b' * 40
+            + '\nbuild_identity=' + 'c' * 64)
+        self.assertEqual(fields['Upstream SHA'], 'a' * 40)
+        self.assertEqual(fields['Patch Set'], 'v1')
+        self.assertEqual(fields['Custom Repository SHA'], 'b' * 40)
+        self.assertEqual(fields['Build Identity'], 'c' * 64)
+
+    def test_reused_draft_keeps_recorded_custom_commit_provenance(self):
+        existing=self.draft_fixture('v1','2')
+        existing['body']=existing['body'].replace('Custom Repository SHA: '+'b'*40,
+                                                  'Custom Repository SHA: '+'c'*40)
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            data=channel.release_preflight(self.discovery('v1'))
+        self.assertEqual(data['custom_repository_sha'], 'c' * 40)
+
     def test_matching_draft_requires_exact_remote_asset_digests(self):
         existing=self.draft_fixture('v1','2')
         existing['assets'][0]['digest']=''
@@ -134,7 +151,7 @@ class ChannelPolicyTests(unittest.TestCase):
         finally:
             self._assets.start()
 
-    def test_custom_commit_and_wayland_selection_change_build_identity(self):
+    def test_custom_commit_does_not_change_identity_but_wayland_does(self):
         base=self.discovery('v1')
         with patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
             first=channel.release_preflight(base)
@@ -142,8 +159,13 @@ class ChannelPolicyTests(unittest.TestCase):
             changed_commit=channel.release_preflight(self.discovery('v1'))
         with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'release_rows',return_value=[]),patch.object(channel,'api',return_value=None):
             changed_wayland=channel.release_preflight(self.discovery('v1'))
-        self.assertNotEqual(first['build_identity'],changed_commit['build_identity'])
+        self.assertEqual(first['build_identity'],changed_commit['build_identity'])
         self.assertNotEqual(first['build_identity'],changed_wayland['build_identity'])
+
+    def test_signing_toggle_changes_stable_build_identity(self):
+        args=('a'*40,'v1','c'*64,'d'*64,'b'*40,False)
+        self.assertNotEqual(channel.build_identity(*args,android_signing_enabled=False),
+                            channel.build_identity(*args,android_signing_enabled=True))
 
     def test_switching_patchset_allocates_its_own_counter(self):
         existing_v1=self.draft_fixture('v1','2')
@@ -176,9 +198,9 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertIn('wayland_included',jobs['draft-preflight']['outputs'])
-        self.assertIn('github.sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
+        self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
         self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
-        self.assertIn('github.sha',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
+        self.assertIn('inputs.upstream_ref',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
         self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
@@ -202,7 +224,9 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_stable_concurrency_and_ci_contract(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        self.assertIn('github.sha',tag['concurrency']['group'])
+        self.assertIn('inputs.upstream_ref',tag['concurrency']['group'])
+        inputs=tag['on']
+        self.assertIn('expected_build_identity',json.loads(json.dumps(inputs))['workflow_dispatch']['inputs'])
         self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
         self.assertFalse(tag['concurrency']['cancel-in-progress'])
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
@@ -229,9 +253,18 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotIn('promote_stable',ci['on']['workflow_dispatch']['inputs'])
         self.assertNotIn('gh workflow run tag.yml',ci_text)
         stable_run=stable['jobs']['route']['steps'][-1].get('run','')
-        self.assertNotIn('ci-qualification-',stable_run)
-        self.assertNotIn('workflow run ci.yml',stable_run)
-        self.assertIn('gh workflow run tag.yml',stable_run)
+        self.assertEqual(stable_run,'python3 -m scripts.release.stable_router')
+        router=(ROOT/'scripts/release/stable_router.py').read_text()
+        self.assertNotIn('ci-qualification-',router)
+        self.assertNotIn('workflow run ci.yml',router)
+        self.assertIn("'gh', 'workflow', 'run', WORKFLOW",router)
+        self.assertIn("'release_mode=draft'",router)
+        self.assertIn("'include_wayland=true'",router)
+        self.assertIn('release_preflight(data)',router)
+        self.assertNotIn("row.get('head_sha') == custom_sha",router)
+        self.assertIn('latest_completed_version()',router)
+        self.assertIn("version_tuple(data['version']) <= version_tuple(completed_version)",router)
+        self.assertIn('wayland=${{ inputs.include_wayland',tag)
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)
         self.assertIn('Select Stable patchset by version boundary',tag)

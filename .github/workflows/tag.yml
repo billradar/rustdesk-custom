@@ -1,5 +1,5 @@
 name: Stable Release Pipeline
-run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }}
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }} / identity=${{ inputs.expected_build_identity || 'manual' }}
 env:
   PYTHONPATH: .
 'on':
@@ -21,11 +21,15 @@ env:
           - draft
           - release
         default: dry-run
+      expected_build_identity:
+        type: string
+        description: Stable router-provided build identity; leave empty for manual dispatch
+        default: ''
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: stable-${{ github.sha }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}
+  group: stable-${{ inputs.upstream_ref || 'latest' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 
 jobs:
@@ -104,9 +108,10 @@ jobs:
       name: Validate existing revision before any build
       env:
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+        ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         GH_TOKEN: ${{ github.token }}
       run: |
-        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}'
+        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}' --expected-build-identity '${{ inputs.expected_build_identity }}'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -197,11 +202,11 @@ jobs:
     name: '05 · Sign Stable Android production artifacts (YubiKey PIV 9C)'
     needs: [resolve, android-build]
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
-      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/tag.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' &&
       inputs.release_mode != 'dry-run' &&
+      vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' &&
       needs.android-build.result == 'success'
     runs-on:
       - self-hosted
@@ -257,17 +262,6 @@ jobs:
         grep -Fxq 'PIN REQUESTED: NO' <<< "$CAPABILITIES"
         grep -Fxq 'PRIVATE KEY OPERATION: NO' <<< "$CAPABILITIES"
         printf '%s\n' 'ANDROID SIGNING RUNTIME PREFLIGHT: PASS'
-    - name: Environment Secret Binding Preflight
-      shell: bash
-      env:
-        YUBIKEY_PIV_PIN: ${{ secrets.YUBIKEY_PIV_PIN }}
-      run: |
-        set -euo pipefail
-        if [[ -z "${YUBIKEY_PIV_PIN:-}" ]]; then
-          printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: FAIL'
-          exit 1
-        fi
-        printf '%s\n' 'ENVIRONMENT PIN AVAILABLE: PASS'
     - name: Production Android signing
       uses: ./.github/actions/android-yubikey-sign
       env:
@@ -298,7 +292,7 @@ jobs:
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
-      (needs.android-sign.result == 'success' || inputs.release_mode == 'dry-run')
+      (needs.android-sign.result == 'success' || inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true')
     runs-on: ubuntu-22.04
     env:
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
@@ -310,7 +304,8 @@ jobs:
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
       EXPERIMENTAL: 'false'
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && 'true' || 'false' }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -324,6 +319,12 @@ jobs:
       with:
         pattern: rustdesk-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
         path: .work/all-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      with:
+        pattern: android-build-input-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
+        path: .work/all-targets/unsigned-android
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       if: inputs.include_wayland
@@ -344,6 +345,7 @@ jobs:
     needs: [resolve, draft-preflight]
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
       inputs.release_mode == 'release' &&
       needs.draft-preflight.outputs.build_needed == 'false' &&
       needs.draft-preflight.outputs.draft_needed == 'false' &&
@@ -358,7 +360,7 @@ jobs:
       BUILD_IDENTITY: ${{ needs.draft-preflight.outputs.build_identity }}
       UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
-      CUSTOM_REPOSITORY_SHA: ${{ github.sha }}
+      CUSTOM_REPOSITORY_SHA: ${{ needs.draft-preflight.outputs.custom_repository_sha }}
       WAYLAND_INCLUDED: ${{ inputs.include_wayland && 'true' || 'false' }}
       WAYLAND_POLICY_SHA256: ${{ needs.draft-preflight.outputs.wayland_policy_sha256 }}
     steps:
@@ -372,6 +374,7 @@ jobs:
     needs: aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
       needs.aggregate.outputs.draft_needed == 'true' &&
       needs.aggregate.outputs.build_needed == 'true' &&
       inputs.release_mode == 'release' &&
@@ -390,6 +393,7 @@ jobs:
       UPSTREAM_EXPECTED_SHA: ${{ needs.aggregate.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.aggregate.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -400,6 +404,12 @@ jobs:
       with:
         pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      with:
+        pattern: android-build-input-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
+        path: .work/collected/unsigned-android
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       if: inputs.include_wayland
@@ -418,6 +428,7 @@ jobs:
     needs: aggregate
     if: >-
       github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
       needs.aggregate.outputs.draft_needed == 'true' &&
       inputs.release_mode == 'draft' &&
       needs.aggregate.result == 'success'
@@ -434,6 +445,7 @@ jobs:
       UPSTREAM_EXPECTED_SHA: ${{ needs.aggregate.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.aggregate.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -444,6 +456,12 @@ jobs:
       with:
         pattern: rustdesk-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      with:
+        pattern: android-build-input-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
+        path: .work/collected/unsigned-android
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       if: inputs.include_wayland

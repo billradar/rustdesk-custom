@@ -19,8 +19,8 @@ public final class DryRunSigningCli {
                     default -> throw new IllegalArgumentException();
                 }
             }
-            if (input == null || output == null || !"env".equals(pinSource)) {
-                throw new IllegalArgumentException("usage: --dry-run --input <input.apk> --output <mock-output.apk> --pin-source env");
+            if (input == null || output == null || !"stdin".equals(pinSource)) {
+                throw new IllegalArgumentException("usage: --dry-run --input <input.apk> --output <mock-output.apk> --pin-source stdin");
             }
             String digest = new MockSigningFlow().run(input, output, PinSources.select(pinSource));
             System.out.println("MOCK SIGNING: PASS");

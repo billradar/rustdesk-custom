@@ -89,12 +89,12 @@ def validate_patch_revision(info):
         raise ValueError('Artifact patch revision mismatch')
 
 
-def scan_job_log(job_id):
+def scan_job_log(job_id, repository=None):
     # gh rejects ANSI controls by default; permit them only into captured memory.
     # Never render or print downloaded logs. Scan raw and de-coloured text so
     # terminal formatting cannot hide a known credential pattern.
     text = gh('api', '--allow-escape-sequences',
-              f'repos/{REPOSITORY}/actions/jobs/{job_id}/logs')
+              f'repos/{repository or REPOSITORY}/actions/jobs/{job_id}/logs')
     scan_bytes(text.encode())
     normalized = re.sub(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))', '', text)
     scan_bytes(normalized.encode())

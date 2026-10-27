@@ -1,13 +1,35 @@
 #!/usr/bin/env python3
-import hashlib, json, os, re, shutil, subprocess, zipfile
+import atexit, hashlib, json, os, re, shutil, subprocess, zipfile
 from pathlib import Path
 
 EXPECTED_FINGERPRINT = "559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5"
 EXPECTED_PACKAGE = "com.carriez.flutter_hbb"
 ABI_BY_ARCH = {"aarch64": "arm64-v8a", "armv7": "armeabi-v7a", "x86_64": "x86_64"}
 
+# Remove the secret from this process environment before starting any child tools.
+_pin_value = os.environ.pop("YUBIKEY_PIV_PIN", None)
+try:
+    PIN_BUFFER = bytearray(_pin_value.encode("ascii")) if _pin_value is not None else bytearray()
+except UnicodeEncodeError:
+    PIN_BUFFER = bytearray()
+    raise SystemExit("SIGNING PIN FORMAT: FAIL (PIN must be ASCII)")
+del _pin_value
+
+def clear_pin():
+    PIN_BUFFER[:] = b"\0" * len(PIN_BUFFER)
+
+atexit.register(clear_pin)
+
 def fail(message):
     raise SystemExit(message)
+
+def is_ascii_alphanumeric_pin(value):
+    return bool(value) and all(
+        ord("0") <= char <= ord("9")
+        or ord("A") <= char <= ord("Z")
+        or ord("a") <= char <= ord("z")
+        for char in value
+    )
 
 def parse_arches(value):
     entries = value.split(",")
@@ -33,23 +55,41 @@ def validate_signing_context(channel, env):
     if channel not in ('stable', 'nightly'):
         fail('SIGNING: unsupported production signing channel')
     if channel == 'nightly':
-        expected = {
-            'GITHUB_REPOSITORY': 'billradar/rustdesk-custom',
-            'GITHUB_REF': 'refs/heads/main',
-            'GITHUB_EVENT_NAME': 'workflow_dispatch',
-            'GITHUB_WORKFLOW_REF': 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main',
-        }
-        if any(env.get(k) != v for k, v in expected.items()):
+        repo = env.get('GITHUB_REPOSITORY', '')
+        if (not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo)
+                or env.get('GITHUB_REF') != 'refs/heads/main'
+                or env.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+                or env.get('GITHUB_WORKFLOW_REF') != repo + '/.github/workflows/nightly.yml@refs/heads/main'):
             fail('SIGNING: Nightly requires protected main workflow context')
 
 
 channel = os.environ.get('SIGNING_CHANNEL', 'stable')
 validate_signing_context(channel, os.environ)
 arches = parse_arches(os.environ["ARCHES"])
-if not os.environ.get("YUBIKEY_PIV_PIN"):
-    print("ENVIRONMENT PIN AVAILABLE: FAIL")
+if not PIN_BUFFER:
+    print("SIGNING PIN AVAILABLE: FAIL")
     raise SystemExit(1)
-print("ENVIRONMENT PIN AVAILABLE: PASS")
+if not is_ascii_alphanumeric_pin(PIN_BUFFER):
+    clear_pin()
+    raise SystemExit("SIGNING PIN FORMAT: FAIL (PIN must contain ASCII letters and digits)")
+print("SIGNING PIN AVAILABLE: PASS")
+
+def sign_with_yubikey(apk, out_apk):
+    process = subprocess.Popen([
+        "/usr/local/bin/rustdesk-sign", "--input", str(apk),
+        "--output", str(out_apk), "--pin-source", "stdin"
+    ], stdin=subprocess.PIPE)
+    try:
+        process.stdin.write(PIN_BUFFER)
+        process.stdin.write(b"\n")
+        process.stdin.close()
+        status = process.wait()
+    except BaseException:
+        process.kill()
+        process.wait()
+        raise
+    if status:
+        raise subprocess.CalledProcessError(status, process.args)
 
 root = Path(".work/android-input").resolve()
 signed_root = Path(".work/signed").resolve()
@@ -130,10 +170,7 @@ for arch in arches:
     out_dir.mkdir(mode=0o700, parents=True)
     out_apk = out_dir / "signed.apk"
     print(f"Signing {arch} with YubiKey PIV 9C...")
-    subprocess.run([
-        "/usr/local/bin/rustdesk-sign", "--input", str(apk),
-        "--output", str(out_apk), "--pin-source", "env"
-    ], check=True, env=os.environ.copy())
+    sign_with_yubikey(apk, out_apk)
     out_apk.chmod(0o600)
 
     destination = signed_root / arch
@@ -197,3 +234,5 @@ for arch in arches:
             rows.append(hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.relative_to(destination).as_posix())
     (destination / "SHA256SUMS").write_text("\n".join(rows) + "\n")
     print(f"{arch}: APK signature, fingerprint, package, ABI and provenance gates: PASS")
+
+clear_pin()
