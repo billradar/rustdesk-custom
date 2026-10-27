@@ -63,15 +63,16 @@ Dry-run / Draft / Release
 2. 预检发现同版本/同 revision 的既有产物时，按门禁结果处理；不要手动覆盖或删除以绕过防重。
 3. Dry-run 不代表 Release 已创建或发布。
 4. Draft 和正式 Release 是不同操作；正式发布必须明确请求并通过完整聚合门禁。
-5. Stable router 仅触发已签名的私有 Draft，不会公开发布。它复用 Stable 发布预检校验完整构建身份、资产清单和 SHA-256 摘要；相同完整构建已存在时跳过，活动构建时不重复派发。
+5. Stable router 仅在官方版本高于最近一个已完成 Stable 版本时自动触发已签名的私有 Draft，不会公开发布。手动运行默认使用同一版本门槛；显式设置 `allow_same_version` 后才继续检查同版本身份。Stable 发布预检校验完整构建身份、资产清单和 SHA-256 摘要；相同完整构建已存在时跳过，活动构建时不重复派发。
 6. Android 生产签名属于受保护的独立 Job，不是普通构建的一部分。
 
-Stable 去重身份现在包括上游 SHA、自定义仓库提交 SHA、补丁集及 Common/SOS 补丁哈希、
-Wayland 开关和启用时的策略 SHA-256。身份相同才复用版本修订号；修订号仍使用
+Stable 去重身份包括上游 SHA、按 Stable 版本边界选中的补丁集及其 Common/SOS 补丁哈希、
+Wayland 开关和启用时的策略 SHA-256，以及 Android 签名策略。自定义仓库提交 SHA 仍记录为来源信息，
+但普通仓库提交不改变构建身份。身份相同才复用版本修订号；修订号仍使用
 `v版本-custom.v补丁集.序号`，不同身份会取得新的序号。复用前检查完成标记、身份字段、
 准确资产清单、已上传状态、大小及 GitHub 提供的 SHA-256 摘要；不完整或不匹配时停止。
 正式发布已有 Draft 时，会再次核对身份和资产，再执行 Draft 到正式 Release 的状态转换。
-旧格式记录缺少新身份字段时不会被直接当作相同身份复用，会走新的修订号。
+旧版 v3 记录会在核对其记录的来源 SHA、所选补丁内容哈希及其他构建策略后复用；不符合时不会复用。
 
 ## 5. 推荐的 Stable 操作顺序
 
@@ -133,10 +134,11 @@ Android 仍仅 Standard。Windows ARM64 作为实验性目标由平台矩阵默�
 DRM/Wayland 实验构建已作为默认开启的子流程接入，保留独立审核策略和资格结果，不冒充普通 Standard 目标。
 v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口继续阻断。
 
-自动路由仅从本仓库 main 执行，按官方上游 SHA、自定义提交 SHA、发布模式和
-Wayland 选择去重；官方运行 ID 只作为来源记录，不会让相同 SHA 重复构建。
+自动路由仅从本仓库 main 执行，按官方上游 SHA、所选 patchset 的 Common/SOS 补丁哈希、
+发布模式、Wayland 策略和签名模式去重；自定义提交 SHA 与官方运行 ID 只作为来源记录，
+不会因无关仓库提交或同一源码的上游重跑而重复构建。
 手动 Nightly 也在源码解析后执行相同检查。相同身份仍在运行或已成功时跳过；
-失败最多自动尝试三次。自定义代码、上游 SHA 或 Wayland 构建选择变化都会形成新身份。
+失败最多自动尝试三次。上游 SHA、所选补丁内容或相关构建策略变化会形成新身份。
 旧运行标题和同运行 discovery 产物会用于迁移期识别；无法安全确认的历史身份不会用于复用产物。
 
 全矩阵和同批来源验证通过后，安装包、SHA256SUMS 与验证报告出现在
@@ -179,7 +181,7 @@ lock prevents overlapping builds from replacing each other's assets. Windows/mac
 signing status remains the same as Tag (not enabled).
 
 Run titles include the upstream SHA, custom SHA, mode and Wayland selection. The
-workflow serializes matching custom/mode/Wayland batches, and the resolve job checks
+workflow serializes matching upstream/mode/Wayland batches, and the resolve job checks
 prior runs before source preparation. A successful dry-run cannot suppress a signed
 Draft batch. This workflow must be merged to main before production signing/Draft
 can execute; unit and CI checks do not prove a hardware signing operation occurred.

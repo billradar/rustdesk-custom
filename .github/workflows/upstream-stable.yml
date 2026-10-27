@@ -2,7 +2,13 @@ name: Upstream Stable Router
 'on':
   schedule:
     - cron: '19 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      allow_same_version:
+        description: 'Allow a same-version Stable build when its patch/config identity changed'
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -21,6 +27,7 @@ jobs:
       PYTHONPATH: .
       GH_TOKEN: ${{ github.token }}
       ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+      ALLOW_SAME_VERSION: ${{ inputs.allow_same_version || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:

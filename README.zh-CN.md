@@ -88,7 +88,7 @@ python3 -m pip install -r requirements.txt
 | --- | --- | --- |
 | `RUSTDESK_API_SERVER` | 是 | 自建 API 服务的 HTTPS 地址；不要在 URL 中放入认证信息。 |
 | `RUSTDESK_ID_SERVER` | 是 | 自建 ID/rendezvous 服务的主机名或地址。 |
-| `RUSTDESK_RELAY_SERVER` | 否 | 自建 relay 主机；留空时保留上游 relay 自动发现行为。 |
+| `RUSTDESK_RELAY_SERVER` | 否 | 中继地址覆盖项。中继与 ID 服务器同主机并使用标准端口时可省略；上游会自动发现中继地址，未提供时也会回退到同一主机。只有客户端需要指定不同中继主机或端口时才设置。 |
 | `ANDROID_PRODUCTION_SIGNING_ENABLED` | 否，默认 `false` | 只有配置好自己的生产签名身份和 Runner 后才设为 `true`。 |
 
 ### 仓库密钥

@@ -100,8 +100,9 @@ fn main() {
     let mut defaults = config::DEFAULT_SETTINGS.write().unwrap();
     assert_eq!(defaults["allow-remote-config-modification"], "Y");
     assert_eq!(defaults["allow-hide-cm"], "Y");
-    if let Ok(relay) = std::env::var("RUSTDESK_RELAY_SERVER") {
-        if !relay.is_empty() { assert_eq!(defaults["relay-server"], relay); }
+    match std::env::var("RUSTDESK_RELAY_SERVER") {
+        Ok(relay) if !relay.is_empty() => assert_eq!(defaults["relay-server"], relay),
+        _ => assert!(!defaults.contains_key("relay-server"), "Missing relay override must preserve upstream discovery"),
     }
     defaults.insert("allow-hide-cm".to_owned(), "N".to_owned());
     drop(defaults);

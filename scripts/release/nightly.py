@@ -86,9 +86,30 @@ def discover_scheduled():
         time.sleep(60)
 
 
-def route_state(rows, upstream_sha, custom_sha, release_mode='draft', wayland='true', current_run_id='', signing='false'):
-    matched = [r for r in rows if r.get('_upstream_sha') == upstream_sha and r['head_sha'] == custom_sha
-               and r['display_title'].endswith(f' / {release_mode} / wayland={wayland} / android-signing={signing}')
+def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
+    identity = dict(upstream_sha=data['upstream_sha'], patchset=data['patchset'],
+                    common_patch_hash=data['common_patch_hash'], sos_patch_hash=data['sos_patch_hash'],
+                    wayland=wayland, signing=signing,
+                    wayland_policy_sha256=data.get('wayland_policy_sha256', '') if wayland == 'true' else '')
+    if release_mode is not None:
+        identity['release_mode'] = release_mode
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false', upstream_sha=''):
+    title_suffix = f' / {release_mode} / wayland={wayland} / android-signing={signing}'
+    unresolved = [r for r in rows if r.get('_nightly_identity_unresolved')
+                  and (r.get('_upstream_sha') == upstream_sha
+                       or (not r.get('_upstream_sha') and r.get('display_title', '').startswith('Nightly latest /')))
+                  and r.get('display_title', '').endswith(title_suffix)
+                  and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
+                  and str(r['id']) != str(current_run_id)]
+    if any(r.get('status') != 'completed' for r in unresolved):
+        return 'ACTIVE'
+    if unresolved:
+        return 'UNKNOWN'
+    matched = [r for r in rows if r.get('_nightly_identity') == identity
+               and r['display_title'].endswith(title_suffix)
                and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
                and str(r['id']) != str(current_run_id)]
     if any(r['status'] != 'completed' for r in matched):
@@ -152,9 +173,46 @@ def source_sha_from_run(row):
     return ''
 
 
-def annotate_history(rows):
+def discovery_from_run(row):
+    """Read the run's immutable discovery artifact, which records selected patch hashes."""
+    if not row.get('id'):
+        return None
+    with tempfile.TemporaryDirectory(prefix='nightly-dedup-') as temp:
+        artifact = f'nightly-discovery-{row["id"]}'
+        result = subprocess.run(['gh', 'run', 'download', str(row['id']), '--repo', repository(),
+                                 '--name', artifact, '--dir', temp], text=True, capture_output=True)
+        if result.returncode != 0:
+            return None
+        candidates = list(Path(temp).rglob('nightly-discovery.json'))
+        if len(candidates) != 1:
+            return None
+        try:
+            data = json.loads(candidates[0].read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        required = ('upstream_sha', 'patchset', 'common_patch_hash', 'sos_patch_hash')
+        if (not re.fullmatch(r'[0-9a-f]{40}', str(data.get('upstream_sha', '')))
+                or not re.fullmatch(r'v[1-9][0-9]*', str(data.get('patchset', '')))
+                or any(not re.fullmatch(r'[0-9a-f]{64}', str(data.get(key, ''))) for key in required[2:])):
+            return None
+        return data
+
+
+def annotate_history(rows, upstream_sha=None):
     for row in rows:
         row['_upstream_sha'] = source_sha_from_run(row)
+        title = row.get('display_title', '')
+        if upstream_sha and row['_upstream_sha'] != upstream_sha and not title.startswith('Nightly latest /'):
+            continue
+        match = re.fullmatch(r'Nightly (?:[0-9a-f]{40}|[1-9][0-9]*|latest) / [0-9a-f]{40} / (dry-run|draft|release) / wayland=(true|false)(?: / android-signing=(true|false))?', title)
+        if not match:
+            continue
+        data = discovery_from_run(row)
+        if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
+                or (upstream_sha and data and data['upstream_sha'] != upstream_sha)):
+            row['_nightly_identity_unresolved'] = True
+            continue
+        row['_nightly_identity'] = nightly_identity(data, match.group(1), match.group(2), match.group(3) or 'false')
     return rows
 
 
@@ -171,14 +229,18 @@ def route(data):
             break
     else:
         raise ValueError('Route history exhausted; refusing unsafe deduplication')
-    annotate_history(rows)
     signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
     if signing not in ('true', 'false'):
         raise ValueError('Invalid Android signing toggle')
-    state = route_state(rows, data['upstream_sha'], os.environ['GITHUB_SHA'], signing=signing)
+    identity_data = dict(data, wayland_policy_sha256=wayland_policy_hash(True))
+    identity = nightly_identity(identity_data, 'draft', 'true', signing)
+    annotate_history(rows, data['upstream_sha'])
+    state = route_state(rows, identity, signing=signing, upstream_sha=data['upstream_sha'])
     print('Nightly route: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed; inspect logs or dispatch manually')
+    if state == 'UNKNOWN':
+        raise ValueError('A matching Nightly run has no discovery artifact; inspect it before dispatching again')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'official_run_id=' + data['official_run_id'],
@@ -215,12 +277,19 @@ def dedup():
     else:
         raise ValueError('Nightly history exhausted; refusing unsafe deduplication')
     rows = prior_history(rows, current)
-    annotate_history(rows)
-    state = route_state(rows, os.environ['UPSTREAM_EXPECTED_SHA'], os.environ['GITHUB_SHA'],
-                        mode, wayland, current, signing)
+    identity_data = dict(upstream_sha=os.environ['UPSTREAM_EXPECTED_SHA'],
+                         patchset=os.environ['PATCHSET'],
+                         common_patch_hash=patch_hash('common', os.environ['PATCHSET']),
+                         sos_patch_hash=patch_hash('sos', os.environ['PATCHSET']),
+                         wayland_policy_sha256=wayland_policy_hash(wayland == 'true'))
+    identity = nightly_identity(identity_data, mode, wayland, signing)
+    annotate_history(rows, identity_data['upstream_sha'])
+    state = route_state(rows, identity, mode, wayland, current, signing, identity_data['upstream_sha'])
     print('Nightly dedup: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed for this exact source/build identity; inspect logs before retrying')
+    if state == 'UNKNOWN':
+        raise ValueError('A matching Nightly run has no discovery artifact; inspect it before retrying')
     skip = state in ('ACTIVE', 'SUCCESS')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
@@ -230,6 +299,8 @@ def dedup():
 
 def save(data):
     Path('.work').mkdir(exist_ok=True)
+    data['wayland_policy_sha256'] = wayland_policy_hash(
+        os.environ.get('INCLUDE_WAYLAND', 'true').lower() == 'true')
     Path('.work/nightly-discovery.json').write_text(json.dumps(data, indent=2) + '\n')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
@@ -238,6 +309,13 @@ def save(data):
                     raise ValueError('Unsafe Nightly output')
                 f.write(k + '=' + v + '\n')
     print(json.dumps(data, indent=2))
+
+
+def wayland_policy_hash(enabled):
+    if not enabled:
+        return ''
+    from scripts.platform.wayland import POLICY
+    return hashlib.sha256(POLICY.read_bytes()).hexdigest()
 
 
 def preflight(tree):
@@ -339,13 +417,21 @@ def draft(root, discovery):
     if not re.fullmatch(r'[1-9][0-9]*', run_id):
         raise ValueError('Invalid official run identity')
     identity_data = dict(upstream_repository=OFFICIAL, upstream_sha=data['upstream_sha'],
-                         custom_sha=os.environ['GITHUB_SHA'], patchset=data['patchset'],
+                         patchset=data['patchset'],
                          common_patch_hash=patch_hash('common', data['patchset']),
                          sos_patch_hash=patch_hash('sos', data['patchset']),
                          wayland_included=os.environ.get('INCLUDE_WAYLAND', 'true').lower() == 'true',
-                         build_profile='production-signed' if signing_required else 'unsigned',
-                         wayland_policy=report.get('wayland', {}).get('policy_sha256'))
-    identity = hashlib.sha256(json.dumps(identity_data, sort_keys=True).encode()).hexdigest()
+                         wayland_policy_sha256=report.get('wayland', {}).get('policy_sha256', ''),
+                         release_mode=release_mode,
+                         signing='true' if signing_required else 'false')
+    identity_source = dict(upstream_sha=identity_data['upstream_sha'],
+                           patchset=identity_data['patchset'],
+                           common_patch_hash=identity_data['common_patch_hash'],
+                           sos_patch_hash=identity_data['sos_patch_hash'],
+                           wayland_policy_sha256=identity_data['wayland_policy_sha256'])
+    identity = nightly_identity(identity_source,
+                                wayland=str(identity_data['wayland_included']).lower(),
+                                signing=identity_data['signing'])
     tag = 'nightly'
     jobs_path = f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100'
     for attempt in range(5):
@@ -392,8 +478,8 @@ def draft(root, discovery):
                 'desktop_code_signing=NOT ENABLED', 'runtime_ui_validation=NOT TESTED',
                 'real_remote_session=NOT TESTED', 'release_policy=' + ('PUBLIC NIGHTLY PRERELEASE; NOT STABLE' if release_mode == 'release' else 'DRAFT ONLY; NOT PUBLIC'),
                 'automation_state=uploading']
-    if identity_data['wayland_policy']:
-        metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy'])
+    if identity_data['wayland_policy_sha256']:
+        metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy_sha256'])
     notes = (upstream_notes + '\n\n'
              '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n')
 
