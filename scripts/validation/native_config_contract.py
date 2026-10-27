@@ -53,6 +53,13 @@ Obj *wire_main_get_hard_option(Bytes *key) {
     if(mode && strcmp(mode,"wrong-type")==0)data->type=0;
     discard(key);return pair(data,success);
 }
+Obj *wire_main_get_buildin_option(Bytes *key) {
+    Obj *data=calloc(1,sizeof(Obj)),*success=calloc(1,sizeof(Obj));
+    data->type=5;success->type=1;success->value.boolean=true;
+    const char *sos=getenv("BRIDGE_TEST_SOS");
+    data->value.string=sos ? sos : "";
+    discard(key);return pair(data,success);
+}
 void wire_main_get_api_server(int64_t port) {
     Obj *code=calloc(1,sizeof(Obj)),*data=calloc(1,sizeof(Obj));
     code->type=3;data->type=5;data->value.string="https://api.example.com";
@@ -91,6 +98,13 @@ class NativeBridgeTests(unittest.TestCase):
         with patch.dict(os.environ,RUSTDESK_PASSWORD='tst',BRIDGE_TEST_MODE='',RUSTDESK_API_SERVER='https://wrong.example.com'):
             with self.assertRaisesRegex(ValueError,'API server'):probe.inspect_library(self.library,self.root,check_api=True)
 
+    def test_compiled_source_variant_must_match(self):
+        for sos, variant in [('', 'standard'), ('Y', 'sos')]:
+            with patch.dict(os.environ,RUSTDESK_PASSWORD='tst',BRIDGE_TEST_MODE='',BRIDGE_TEST_SOS=sos):
+                probe.inspect_library(self.library,self.root,expected_variant=variant)
+                with self.assertRaisesRegex(ValueError,'variant'):
+                    probe.inspect_library(self.library,self.root,expected_variant='sos' if variant=='standard' else 'standard')
+
     def test_wrong_password_blocks_without_disclosure(self):
         for expected in ('bad', 'a-long-fictional-password', '虚构密码'):
             with self.assertRaises(ValueError) as err:
@@ -109,6 +123,12 @@ class NativeBridgeTests(unittest.TestCase):
         with patch.object(probe.threading.Event, 'wait', return_value=False):
             with self.assertRaisesRegex(ValueError, 'initialization'):
                 self.inspect(mode='timeout')
+
+    def test_decoder_accepts_empty_string_but_not_null(self):
+        obj=probe.Object();obj.type=5;obj.value.string=b''
+        self.assertEqual(probe.decode(C.pointer(obj)), '')
+        obj.value.string=None
+        with self.assertRaises(ValueError):probe.decode(C.pointer(obj))
 
     def test_decoder_rejects_null_and_invalid_array(self):
         with self.assertRaises(ValueError):probe.decode(probe.ObjectPtr())

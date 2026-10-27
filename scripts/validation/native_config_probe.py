@@ -52,7 +52,7 @@ def decode(ptr, depth=0):
     if obj.type == 3:
         return obj.value.int64
     if obj.type == 5:
-        if not obj.value.string:
+        if obj.value.string is None:
             raise ValueError('Invalid Bridge string')
         return obj.value.string.decode('utf-8')
     if obj.type == 6:
@@ -70,7 +70,7 @@ def check_values(read_option, expected):
         raise ValueError('Built verification method mismatch')
 
 
-def inspect_library(library, app_dir, check_api=False):
+def inspect_library(library, app_dir, check_api=False, expected_variant=None):
     dll = C.CDLL(str(Path(library).resolve()))
     alloc = dll.new_uint_8_list_0
     alloc.argtypes, alloc.restype = [C.c_int32], C.POINTER(WireBytes)
@@ -116,8 +116,8 @@ def inspect_library(library, app_dir, check_api=False):
     if not done.wait(20) or success != [True]:
         raise ValueError('Bridge configuration initialization failed')
 
-    def read_option(key):
-        result = get(wire(key))
+    def read_option(key, reader=get):
+        result = reader(wire(key))
         try:
             value = decode(result)
             if not isinstance(value, list) or len(value) != 2 or value[1] is not True or not isinstance(value[0], str):
@@ -128,6 +128,15 @@ def inspect_library(library, app_dir, check_api=False):
                 free(result)
 
     check_values(read_option, os.environ.get('RUSTDESK_PASSWORD', ''))
+    if expected_variant is not None:
+        if expected_variant not in ('standard', 'sos'):
+            raise ValueError('Invalid expected variant')
+        builtin = dll.wire_main_get_buildin_option
+        builtin.argtypes, builtin.restype = [C.POINTER(WireBytes)], ObjectPtr
+        actual = read_option('sos-mode', builtin)
+        if actual != ('Y' if expected_variant == 'sos' else ''):
+            raise ValueError('Built source variant mismatch')
+
     if check_api:
         query = dll.wire_main_get_api_server
         query.argtypes, query.restype = [C.c_int64], None
@@ -137,7 +146,7 @@ def inspect_library(library, app_dir, check_api=False):
             raise ValueError('Built API server query mismatch (value withheld)')
 
 
-def verify(library, check_api=False):
+def verify(library, check_api=False, expected_variant=None):
     library = Path(library).resolve()
     if C.sizeof(C.c_void_p) != 8 or sys.platform not in ('win32', 'linux', 'darwin'):
         raise ValueError('Native configuration probe requires a supported 64-bit desktop host')
@@ -148,6 +157,7 @@ def verify(library, check_api=False):
         env = dict(os.environ, APPDATA=app_dir, LOCALAPPDATA=app_dir,
                    USERPROFILE=app_dir, HOME=app_dir, XDG_CONFIG_HOME=app_dir, XDG_DATA_HOME=app_dir)
         env['RUSTDESK_PROBE_API'] = '1' if check_api else '0'
+        env['RUSTDESK_PROBE_VARIANT'] = expected_variant or ''
         if sys.platform == 'linux':
             env['LD_LIBRARY_PATH'] = str(library.parent) + ':' + env.get('LD_LIBRARY_PATH', '')
         try:
@@ -159,7 +169,7 @@ def verify(library, check_api=False):
             raise ValueError('Built DLL configuration probe timed out') from None
         if result.returncode != 0:
             stages = {10: 'dynamic-library-load', 11: 'bridge-symbol',
-                      12: 'bridge-initialization', 13: 'password-or-verification', 14: 'api-query'}
+                      12: 'bridge-initialization', 13: 'password-or-verification', 14: 'api-query', 15: 'source-variant'}
             stage = stages.get(result.returncode, 'native-process')
             if sys.platform == 'linux' and stage == 'dynamic-library-load':
                 # Fixed library names only; never publish arbitrary loader exception text.
@@ -181,14 +191,15 @@ if __name__ == '__main__':
     try:
         if os.name == 'nt':
             directory = os.add_dll_directory(str(Path(sys.argv[2]).resolve().parent))
-        inspect_library(sys.argv[2], sys.argv[3], os.environ.get('RUSTDESK_PROBE_API') == '1')
+        inspect_library(sys.argv[2], sys.argv[3], os.environ.get('RUSTDESK_PROBE_API') == '1',
+                        os.environ.get('RUSTDESK_PROBE_VARIANT') or None)
     except OSError:
         os._exit(10)
     except AttributeError:
         os._exit(11)
     except ValueError as error:
         message = str(error)
-        os._exit(14 if 'API server' in message else 13 if 'password' in message or 'verification' in message else 12)
+        os._exit(15 if 'variant' in message else 14 if 'API server' in message else 13 if 'password' in message or 'verification' in message else 12)
     except BaseException:
         os._exit(1)
     # Terminate initialized library worker threads before deleting disposable files.

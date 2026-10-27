@@ -43,7 +43,7 @@ permissions:
   contents: read
 jobs:
   platform-build:
-    name: unattended-wayland-${{ inputs.arch }}
+    name: unattended-wayland-${{ inputs.variant }}-${{ inputs.arch }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 240
     defaults:
@@ -102,9 +102,9 @@ jobs:
     - name: Fail-closed DRM source and native architecture preflight
       run: |
         set -euo pipefail
-        [[ "$PLATFORM" == linux && "$VARIANT" == standard && ( "$BUILD_CHANNEL" == stable || "$BUILD_CHANNEL" == nightly ) ]] || exit 1
+        [[ "$PLATFORM" == linux && ( "$VARIANT" == standard || "$VARIANT" == sos ) && ( "$BUILD_CHANNEL" == stable || "$BUILD_CHANNEL" == nightly ) ]] || exit 1
         [[ "$(uname -m)" == "$PLATFORM_ARCH" ]] || { echo 'ARCH: native runner required'; exit 1; }
-        python3 scripts/platform/wayland.py preflight --tree "$PREPARED_SOURCE_DIR" --arch "$PLATFORM_ARCH"
+        python3 scripts/platform/wayland.py preflight --tree "$PREPARED_SOURCE_DIR" --arch "$PLATFORM_ARCH" --variant "$VARIANT"
       id: drm
     - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       id: rust
@@ -133,7 +133,7 @@ jobs:
       id: upload
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: rustdesk-wayland-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ inputs.arch }}
+        name: rustdesk-wayland-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-${{ inputs.variant }}-${{ inputs.arch }}
         path: artifacts/rustdesk-*/
         if-no-files-found: error
         retention-days: 14
@@ -163,7 +163,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: diagnostic-wayland-${{ inputs.arch }}-${{ github.run_id }}
+        name: diagnostic-wayland-${{ inputs.variant }}-${{ inputs.arch }}-${{ github.run_id }}
         path: .work/target-diagnostic/
         if-no-files-found: warn
         retention-days: 14

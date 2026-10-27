@@ -44,7 +44,7 @@ def verify_checksums(folder):
 
 def validate(folder):
  folder=Path(folder);i=json.loads((folder/'build-info.json').read_text());
- if i.get('build_flavor') and (i['platform']!='linux' or i['variant']!='standard' or i['build_flavor']!='unattended-wayland'):raise ValueError('PACKAGE: invalid build flavor')
+ if i.get('build_flavor') and (i['platform']!='linux' or i['variant'] not in ('standard','sos') or i['build_flavor']!='unattended-wayland'):raise ValueError('PACKAGE: invalid build flavor')
  verify(i['patchset']);verify_checksums(folder)
  if i['variant']=='sos' and i['platform'] not in ('linux','macos'):raise ValueError('Forbidden SOS platform')
  for k,e in [('upstream_sha','UPSTREAM_EXPECTED_SHA'),('custom_repository_sha','GITHUB_SHA'),('build_run','GITHUB_RUN_ID'),('patchset','PATCHSET')]:
@@ -125,10 +125,12 @@ def validate_wayland_deb(deb, root, info):
  p=policy_for_pin(info.get('libdrmtap_sha'))
  if info.get('wayland_policy_sha256')!=sha(POLICY) or info.get('libdrmtap_sha')!=p['libdrmtap_sha'] or info.get('drm_tests')!='PASS':raise ValueError('PROVENANCE: DRM pin, test or policy gate missing')
  if info.get('drm_test_groups')!=p['drm_test_groups'] or info.get('drm_test_count',0)<p['drm_test_groups']:raise ValueError('PROVENANCE: DRM tests did not execute')
- if info['variant']!='standard' or info['channel'] not in ('stable','nightly'):raise ValueError('PROVENANCE: DRM source/channel mismatch')
- if not deb.name.startswith('unattended-wayland-rustdesk-unattended-wayland-'):raise ValueError('PACKAGE: ambiguous artifact filename')
- control={k:subprocess.check_output(['dpkg-deb','-f',str(deb),k],text=True).strip() for k in ['Package','Conflicts','Provides','Replaces','Depends']}
+ if info['variant'] not in ('standard','sos') or info['channel'] not in ('stable','nightly'):raise ValueError('PROVENANCE: DRM source/channel mismatch')
+ from scripts.platform.wayland import package_name
+ if deb.name != package_name(info['upstream_version'], info['variant'], info['architecture']):raise ValueError('PACKAGE: ambiguous artifact filename')
+ control={k:subprocess.check_output(['dpkg-deb','-f',str(deb),k],text=True).strip() for k in ['Package','Conflicts','Provides','Replaces','Depends','Description']}
  if control['Package']!='rustdesk-unattended-wayland':raise ValueError('PACKAGE: misleading DRM package name')
+ if not control['Description'].splitlines() or control['Description'].splitlines()[0] != 'RustDesk Wayland unattended (' + info['variant'].upper() + ')':raise ValueError('PACKAGE: source variant description mismatch')
  for k in ['Conflicts','Provides','Replaces']:
   if not re.search(r'(?:^|,)\s*rustdesk(?:\s|,|$)',control[k]):raise ValueError('PACKAGE: missing stock package relationship: '+k)
  for dep in ['libdrm2','libegl1','libgles2']:
@@ -164,7 +166,7 @@ def create(tree,platform,arch,variant):
   if value.encode() not in data:raise ValueError('PLATFORM_API: compiled input missing: '+name+' (withheld)')
  if platform in ('macos','linux'):
   from scripts.validation.native_config_probe import verify as probe
-  probe(library,check_api=True)
+  probe(library,check_api=True,expected_variant=variant if os.environ.get('BUILD_FLAVOR') else None)
  if platform=='android':
   from scripts.build.config_mir import verify as verify_mir
   folder=Path(os.environ['CONFIG_MIR_DIR'])
@@ -172,8 +174,8 @@ def create(tree,platform,arch,variant):
   if receipt!={'result':'PASS','target':arch,'method':'compiler-mir'}:raise ValueError('PLATFORM_API: compiler receipt mismatch')
   verify_mir((folder/'client.mir').read_text(),values)
  version=os.environ['UPSTREAM_VERSION'];channel=os.environ['BUILD_CHANNEL'];flavor=os.environ.get('BUILD_FLAVOR')
- if flavor and (flavor!='unattended-wayland' or platform!='linux' or variant!='standard'):raise ValueError('PACKAGE: invalid build flavor')
- artifact_variant=flavor or variant
+ if flavor and (flavor!='unattended-wayland' or platform!='linux' or variant not in ('standard','sos')):raise ValueError('PACKAGE: invalid build flavor')
+ artifact_variant=(flavor+'-'+variant) if flavor else variant
  dest=ROOT/'artifacts'/f'rustdesk-{channel}-{version}-{m["upstream_sha"]}-{artifact_variant}-{platform}-{arch}'
  dest.mkdir(parents=True,exist_ok=False);(dest/'packages').mkdir();(dest/'validation').mkdir()
  validation_name='librustdesk.so' if platform=='android' else library.name
@@ -182,7 +184,13 @@ def create(tree,platform,arch,variant):
  elif platform=='macos':packages=list(tree.glob('rustdesk*unsigned.dmg'));kind='unsigned-dmg'
  else:packages=list((tree/'signed-apk').glob('*.apk'));kind='debug-signed-apk'
  if not packages:raise ValueError('PACKAGE: official package absent')
- for p in packages:shutil.copy2(p,dest/'packages'/f'{artifact_variant}-{p.name}')
+ for p in packages:
+  if flavor:
+   from scripts.platform.wayland import label_package,package_name
+   label_package(p,variant)
+   name=package_name(version,variant,arch)
+  else:name=f'{artifact_variant}-{p.name}'
+  shutil.copy2(p,dest/'packages'/name)
  if platform=='macos':
   # Validate the actual DMG bundle against the built Rust library on the macOS runner.
   with tempfile.TemporaryDirectory() as mount:

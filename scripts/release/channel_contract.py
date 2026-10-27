@@ -59,7 +59,9 @@ class ChannelPolicyTests(unittest.TestCase):
         included,policy=channel.wayland_identity()
         identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,'b'*40,included,policy)
         assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
-        if included:assets += ['unattended-wayland-rustdesk-unattended-wayland-1.4.9-x86_64.deb','unattended-wayland-rustdesk-unattended-wayland-1.4.9-aarch64.deb']
+        if included:
+            from scripts.platform.wayland import asset_names
+            assets += sorted(asset_names('1.4.9'))
         lines=['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
                'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'c'*64,'Custom Repository SHA: '+'b'*40,
                'Wayland Included: '+str(included).lower(),'Build Identity: '+identity,'Asset Inventory: '+json.dumps(assets)]
@@ -72,6 +74,15 @@ class ChannelPolicyTests(unittest.TestCase):
         with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
             with self.assertRaisesRegex(ValueError,'immutable revision lacks matching Wayland'):
                 channel.release_preflight(self.discovery())
+
+    def test_two_old_wayland_assets_cannot_satisfy_four_target_release(self):
+        with patch.dict(os.environ,INCLUDE_WAYLAND='true'):
+            existing=self.draft_fixture()
+            names=['unattended-wayland-rustdesk-unattended-wayland-1.4.9-'+a+'.deb' for a in ('x86_64','aarch64')]
+            existing['assets']=[dict(name=n,state='uploaded',size=1) for n in names]
+            with patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
+                with self.assertRaisesRegex(ValueError,'immutable revision lacks matching Wayland'):
+                    channel.release_preflight(self.discovery())
 
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:

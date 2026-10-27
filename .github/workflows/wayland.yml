@@ -22,6 +22,9 @@ env:
       standard_artifact:
         type: string
         required: true
+      sos_artifact:
+        type: string
+        required: true
     secrets:
       RUSTDESK_KEY:
         required: true
@@ -37,21 +40,29 @@ jobs:
       matrix:
         include:
         - arch: x86_64
+          variant: standard
           runner: ubuntu-22.04
         - arch: aarch64
+          variant: standard
+          runner: ubuntu-22.04-arm
+        - arch: x86_64
+          variant: sos
+          runner: ubuntu-22.04
+        - arch: aarch64
+          variant: sos
           runner: ubuntu-22.04-arm
     uses: ./.github/workflows/build-wayland-target.yml
     with:
       platform: linux
       arch: ${{ matrix.arch }}
-      variant: standard
+      variant: ${{ matrix.variant }}
       runner: ${{ matrix.runner }}
       upstream_ref: ${{ inputs.upstream_ref }}
       upstream_sha: ${{ inputs.upstream_sha }}
       upstream_version: ${{ inputs.upstream_version }}
       patchset: ${{ inputs.patchset }}
       channel: ${{ inputs.channel }}
-      source_artifact: ${{ inputs.standard_artifact }}
+      source_artifact: ${{ matrix.variant == 'sos' && inputs.sos_artifact || inputs.standard_artifact }}
     secrets:
       RUSTDESK_KEY: ${{ secrets.RUSTDESK_KEY }}
       RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
@@ -73,7 +84,7 @@ jobs:
         pattern: rustdesk-wayland-${{ inputs.upstream_version }}-${{ inputs.upstream_sha }}-*
         path: .work/wayland-targets
         merge-multiple: false
-    - name: Both architectures, package and exact provenance gate
+    - name: All four targets, package and exact provenance gate
       run: python3 scripts/platform/wayland.py aggregate --root .work/wayland-targets --output .work/wayland-qualification.json
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:

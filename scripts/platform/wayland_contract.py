@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import struct
+import subprocess
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,6 +15,28 @@ from scripts.platform import wayland
 from scripts.platform.platform_package import validate_wayland_deb, sha
 
 ROOT = wayland.ROOT
+
+
+def batch(root, channel='stable'):
+    env = {'BUILD_CHANNEL': channel, 'UPSTREAM_EXPECTED_SHA': 'a'*40,
+           'GITHUB_SHA': 'b'*40, 'GITHUB_RUN_ID': '42', 'UPSTREAM_VERSION': '1.5.0', 'PATCHSET': 'v2'}
+    infos, peers = {}, {}
+    for variant in ('standard', 'sos'):
+        for arch in ('x86_64', 'aarch64'):
+            folder = root / variant / arch
+            (folder / 'packages').mkdir(parents=True)
+            (folder / 'build-info.json').write_text('{}')
+            (folder / 'packages' / wayland.package_name('1.5.0', variant, arch)).write_bytes((variant+arch).encode())
+            info = dict(build_flavor='unattended-wayland', platform='linux', variant=variant,
+                        architecture=arch, channel=channel, upstream_sha='a'*40, upstream_version='1.5.0',
+                        custom_repository_sha='b'*40, build_run='42', patchset='v2', prepare_run='42',
+                        common_patch_hash=wayland.patch_hash('common','v2'),
+                        sos_patch_hash=wayland.patch_hash('sos','v2') if variant=='sos' else None,
+                        prepared_source_identity='manifest-'+variant, server_config_fingerprint='config',
+                        libdrmtap_sha=wayland.policy()['libdrmtap_sha'], wayland_policy_sha256=sha(wayland.POLICY))
+            infos[folder] = info
+            peers[(variant, arch)] = dict(info, build_flavor=None)
+    return infos, peers, env
 
 
 class WorkflowContract(unittest.TestCase):
@@ -24,10 +48,10 @@ class WorkflowContract(unittest.TestCase):
         b = w['jobs']['build']
         self.assertFalse(b['strategy']['fail-fast'])
         self.assertEqual(b['strategy']['matrix']['include'],
-            [{'arch':t['arch'],'runner':t['runner']} for t in wayland.policy()['targets']])
-        self.assertEqual(b['with']['source_artifact'], '${{ inputs.standard_artifact }}')
+            [{'arch':t['arch'],'variant':t['source_variant'],'runner':t['runner']} for t in wayland.policy()['targets']])
+        self.assertEqual(b['with']['source_artifact'], "${{ matrix.variant == 'sos' && inputs.sos_artifact || inputs.standard_artifact }}")
         self.assertEqual(b['with']['channel'], '${{ inputs.channel }}')
-        self.assertEqual(b['with']['variant'], 'standard')
+        self.assertEqual(b['with']['variant'], '${{ matrix.variant }}')
         self.assertEqual(w['jobs']['aggregate']['needs'], 'build')
         for job in w['jobs'].values():
             self.assertNotIn('environment',job)
@@ -39,6 +63,7 @@ class WorkflowContract(unittest.TestCase):
             self.assertEqual(call['uses'],'./.github/workflows/wayland.yml')
             self.assertEqual(call['with']['channel'],channel)
             self.assertEqual(call['with']['standard_artifact'],'${{ needs.prepare.outputs.standard_artifact }}')
+            self.assertEqual(call['with']['sos_artifact'],'${{ needs.prepare.outputs.sos_artifact }}')
             self.assertEqual(set(call['needs']),{'resolve','prepare'})
             self.assertIn('wayland-build',parent['jobs']['aggregate']['needs'])
             self.assertIn("needs.wayland-build.result == 'success'",parent['jobs']['aggregate']['if'])
@@ -77,62 +102,60 @@ class WorkflowContract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'dedicated build flavor'):
                 qualification.aggregate(root,'stable',False)
 
-    def test_release_assets_require_both_arches_parent_source_and_channel(self):
-        template={'build_flavor':'unattended-wayland','platform':'linux','variant':'standard',
-                  'wayland_policy_sha256':sha(wayland.POLICY),'upstream_sha':'a'*40,
-                  'upstream_version':'1.5.1','custom_repository_sha':'b'*40,'build_run':'42',
-                  'patchset':'v2','common_patch_hash':'common','prepared_source_identity':'manifest',
-                  'prepare_run':'42','server_config_fingerprint':'config'}
-        env={'UPSTREAM_EXPECTED_SHA':'a'*40,'UPSTREAM_VERSION':'1.5.1','GITHUB_SHA':'b'*40,'GITHUB_RUN_ID':'42','PATCHSET':'v2'}
-        canonical=wayland.policy()
-        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
-            root=Path(td);packages=root/'targets';infos={}
-            for arch in ['x86_64','aarch64']:
-                d=packages/arch;d.mkdir(parents=True);(d/'packages').mkdir()
-                (d/'packages'/('client-'+arch+'.deb')).write_bytes(arch.encode())
-                (d/'build-info.json').write_text('{}');infos[d]=dict(template,architecture=arch)
-            with patch.object(wayland,'ROOT',root),patch.object(wayland,'policy',return_value=canonical),patch.object(wayland,'validate',side_effect=lambda d:infos[d]):
-                for channel in ['stable','nightly']:
-                    for i in infos.values():i['channel']=channel
-                    with patch.dict(os.environ,BUILD_CHANNEL=channel):
-                        assets=root/channel;assets.mkdir()
-                        report=wayland.attach_assets(packages,assets,template,channel)
-                        self.assertEqual(len(list(assets.glob('*.deb'))),2)
-                        self.assertEqual(report['channel'],channel)
-                        for key in ['prepared_source_identity','prepare_run','common_patch_hash','server_config_fingerprint']:
-                            bad=root/(channel+'-'+key);bad.mkdir()
-                            with self.assertRaisesRegex(ValueError,'source or configuration mismatch'):
-                                wayland.attach_assets(packages,bad,dict(template,**{key:'other'}),channel)
-                        with self.assertRaisesRegex(ValueError,'collision'):wayland.attach_assets(packages,assets,template,channel)
-                with patch.dict(os.environ,BUILD_CHANNEL='nightly'),self.assertRaises(ValueError):
-                    wayland.attach_assets(packages,root,template,'stable')
-                (packages/'aarch64/build-info.json').unlink()
-                with patch.dict(os.environ,BUILD_CHANNEL='nightly'),self.assertRaises(ValueError):
-                    wayland.attach_assets(packages,root,template,'nightly')
+    def test_release_assets_require_four_targets_and_matching_variant_peers(self):
+        for channel in ('stable','nightly'):
+            with tempfile.TemporaryDirectory() as td:
+                root=Path(td);infos,peers,env=batch(root/'targets',channel)
+                assets=root/'assets';assets.mkdir();canonical=wayland.policy()
+                with patch.object(wayland,'policy',return_value=canonical),patch.dict(os.environ,env),patch.object(wayland,'ROOT',root),patch.object(wayland,'validate',side_effect=lambda d:infos[d]):
+                    report=wayland.attach_assets(root/'targets',assets,peers,channel)
+                    self.assertEqual(set(p.name for p in assets.iterdir()),wayland.asset_names('1.5.0'))
+                    self.assertEqual(len(report['targets']),4)
+                    self.assertEqual(report['schema'],'wayland-qualification-v2')
+                    for key in ['prepared_source_identity','prepare_run','common_patch_hash','sos_patch_hash','server_config_fingerprint']:
+                        bad=root/key;bad.mkdir()
+                        wrong=copy.deepcopy(peers);wrong[('sos','aarch64')][key]='other'
+                        with self.assertRaisesRegex(ValueError,'source or configuration mismatch'):
+                            wayland.attach_assets(root/'targets',bad,wrong,channel)
+                        self.assertFalse(list(bad.iterdir()),'failure must not copy a partial set')
+                    bad=root/'missing-peer';bad.mkdir()
+                    wrong=dict(peers);wrong.pop(('sos','aarch64'))
+                    with self.assertRaisesRegex(ValueError,'peer missing'):
+                        wayland.attach_assets(root/'targets',bad,wrong,channel)
+                    with self.assertRaisesRegex(ValueError,'collision'):
+                        wayland.attach_assets(root/'targets',assets,peers,channel)
+                    with self.assertRaisesRegex(ValueError,'channel mismatch'):
+                        wayland.attach_assets(root/'targets',assets,peers,'nightly' if channel=='stable' else 'stable')
 
-    def test_aggregate_rejects_missing_duplicate_stale_and_flavor(self):
-        env={'BUILD_CHANNEL':'stable','UPSTREAM_EXPECTED_SHA':'a'*40,'GITHUB_SHA':'b'*40,'GITHUB_RUN_ID':'42',
-             'UPSTREAM_VERSION':'1.5.0','PATCHSET':'v2'}
-        template={'build_flavor':'unattended-wayland','platform':'linux','variant':'standard',
-            'channel':'stable','wayland_policy_sha256':sha(wayland.POLICY),'upstream_sha':'a'*40,
-            'custom_repository_sha':'b'*40,'build_run':'42','patchset':'v2',
-            'upstream_version':'1.5.0','common_patch_hash':'common'}
-        with tempfile.TemporaryDirectory() as td, patch.dict(os.environ,env):
-            root=Path(td)
-            infos={}
-            for arch in ['x86_64','aarch64']:
-                d=root/arch;d.mkdir();(d/'packages').mkdir();(d/'packages/client.deb').write_bytes(b'package')
-                (d/'build-info.json').write_text('{}')
-                infos[d]=dict(template,architecture=arch)
-            def valid(d):return infos[d]
-            with patch.object(wayland,'validate',side_effect=valid):
-                wayland.aggregate(root,root/'result.json')
-                for field,value in [('channel','nightly'),('build_flavor','standard'),('build_run','41'),('architecture','x86_64'),('wayland_policy_sha256','wrong')]:
-                    original=infos[root/'aarch64'];infos[root/'aarch64']=dict(original,**{field:value})
-                    with self.assertRaises(ValueError):wayland.aggregate(root,root/'bad.json')
-                    infos[root/'aarch64']=original
-                (root/'aarch64/build-info.json').unlink()
-                with self.assertRaises(ValueError):wayland.aggregate(root,root/'missing.json')
+    def test_aggregate_rejects_missing_duplicate_stale_and_cross_variant(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);infos,peers,env=batch(root/'targets')
+            with patch.dict(os.environ,env),patch.object(wayland,'validate',side_effect=lambda d:infos[d]):
+                wayland.aggregate(root/'targets',root/'result.json')
+                folder=root/'targets/sos/aarch64'
+                for field,value in [('channel','nightly'),('build_flavor','standard'),('build_run','41'),
+                                    ('architecture','x86_64'),('wayland_policy_sha256','wrong'),
+                                    ('sos_patch_hash',None),('variant','standard'),
+                                    ('prepared_source_identity','manifest-standard'),('libdrmtap_sha','other')]:
+                    with self.subTest(field=field):
+                        original=infos[folder];infos[folder]=dict(original,**{field:value})
+                        with self.assertRaises(ValueError):wayland.aggregate(root/'targets',root/'bad.json')
+                        infos[folder]=original
+                for folder in list(infos):
+                    infofile=folder/'build-info.json';infofile.unlink()
+                    with self.assertRaises(ValueError):wayland.aggregate(root/'targets',root/'missing.json')
+                    infofile.write_text('{}')
+                duplicate=root/'targets/duplicate';duplicate.mkdir();(duplicate/'build-info.json').write_text('{}')
+                infos[duplicate]=dict(next(iter(infos.values())))
+                (duplicate/'packages').mkdir()
+                (duplicate/'packages'/wayland.package_name('1.5.0','standard','x86_64')).write_bytes(b'duplicate')
+                with self.assertRaisesRegex(ValueError,'duplicate'):
+                    wayland.aggregate(root/'targets',root/'duplicate.json')
+                (duplicate/'build-info.json').unlink()
+                for folder in infos:
+                    if folder.parts[-2]=='sos':(folder/'build-info.json').unlink()
+                with self.assertRaisesRegex(ValueError,'all four'):
+                    wayland.aggregate(root/'targets',root/'legacy.json')
 
 
 class SourceContract(unittest.TestCase):
@@ -164,6 +187,28 @@ class SourceContract(unittest.TestCase):
                 (tree/'source-manifest.json').write_text(json.dumps(bad))
                 with self.assertRaisesRegex(ValueError,'prepared inventory'):wayland.policy_for_built_tree(tree,'aarch64')
 
+    def test_prepared_variant_mismatch_is_rejected_before_recipe(self):
+        with tempfile.TemporaryDirectory() as td:
+            tree=Path(td);(tree/'source-manifest.json').write_text('{"variant":"standard"}')
+            with self.assertRaisesRegex(ValueError,'variant mismatch'):
+                wayland.preflight(tree,'x86_64','sos')
+
+    def test_standard_and_sos_recipes_keep_drm_wake_tests_and_deb_only(self):
+        for variant in ('standard','sos'):
+            with tempfile.TemporaryDirectory() as td:
+                tree=Path(td);out=tree/'recipe'
+                def base(*args):
+                    out.mkdir()
+                    (out/'build.sh').write_text('cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release\npython3 ./build.py --flutter --skip-cargo\n# rpm package\nunreviewed RPM command\n')
+                with patch.object(wayland,'preflight') as gate,patch.object(wayland.adapter,'linux_scripts',side_effect=base),patch.object(wayland,'policy_for_tree',return_value=wayland.policy()):
+                    wayland.recipe(tree,'x86_64',out,variant)
+                    gate.assert_called_once_with(tree,'x86_64',variant)
+                script=(out/'build.sh').read_text()
+                self.assertIn('for want in drm drm-wake',script)
+                self.assertIn('test "$ran" -gt 0',script)
+                self.assertIn('build.py --flutter --drm',script)
+                self.assertNotIn('RPM command',script)
+
     def test_unknown_architecture_fails(self):
         with self.assertRaisesRegex(ValueError,'ARCH:'):
             wayland.preflight(Path('/nonexistent'), 'armv7')
@@ -181,11 +226,46 @@ class SourceContract(unittest.TestCase):
                         wayland.preflight(tree,'x86_64')
 
 
+class DebianLabelContract(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb needed for real package round-trip')
+    def test_variant_switch_keeps_package_identity_payload_and_service_scripts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);stage=root/'stage';(stage/'DEBIAN').mkdir(parents=True)
+            (stage/'usr/bin').mkdir(parents=True)
+            (stage/'usr/bin/rustdesk').write_bytes(b'fictional unchanged client payload')
+            control='Package: rustdesk-unattended-wayland\nVersion: 1.5.0\nArchitecture: amd64\nMaintainer: Fixture <fixture@example.invalid>\nConflicts: rustdesk\nProvides: rustdesk\nReplaces: rustdesk\nDescription: RustDesk\n Original long description.\n'
+            (stage/'DEBIAN/control').write_text(control)
+            postinst=stage/'DEBIAN/postinst';postinst.write_text('#!/bin/sh\nexit 0\n');postinst.chmod(0o755)
+            package=root/'client.deb'
+            subprocess.run(['dpkg-deb','-Zxz','--build','--root-owner-group',str(stage),str(package)],check=True,stdout=subprocess.DEVNULL)
+            for attempt,variant in enumerate(('standard','sos','standard')):
+                wayland.label_package(package,variant)
+                values=subprocess.check_output(['dpkg-deb','-f',str(package)],text=True)
+                for line in control.splitlines():
+                    if not line.startswith(('Description:',' ')):self.assertIn(line,values)
+                self.assertIn('Description: RustDesk Wayland unattended ('+variant.upper()+')',values)
+                self.assertIn(' Original long description.',values)
+                unpack=root/(variant+str(attempt))
+                subprocess.run(['dpkg-deb','--raw-extract',str(package),str(unpack)],check=True)
+                self.assertEqual((unpack/'usr/bin/rustdesk').read_bytes(),b'fictional unchanged client payload')
+                self.assertEqual((unpack/'DEBIAN/postinst').read_bytes(),postinst.read_bytes())
+                self.assertEqual((unpack/'DEBIAN/postinst').stat().st_mode & 0o777,0o755)
+            with self.assertRaises(ValueError):wayland.label_package(package,'unknown')
+
+    def test_asset_names_are_unique_and_not_old_two_package_names(self):
+        names=wayland.asset_names('1.5.0')
+        self.assertEqual(len(names),4)
+        for variant in ('standard','sos'):
+            for arch in ('x86_64','aarch64'):
+                self.assertIn(f'rustdesk-unattended-wayland-{variant}-1.5.0-{arch}.deb',names)
+        with self.assertRaises(ValueError):wayland.package_name('../bad','sos','x86_64')
+
+
 class PackageContract(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name)
-        self.info={'architecture':'x86_64','variant':'standard','channel':'stable',
+        self.info={'architecture':'x86_64','variant':'standard','channel':'stable','upstream_version':'1.5.0',
             'wayland_policy_sha256':sha(wayland.POLICY),'libdrmtap_sha':wayland.policy()['libdrmtap_sha'],
             'drm_tests':'PASS','drm_test_groups':8,'drm_test_count':8}
         lib=self.root/'usr/lib/rustdesk/libdrmtap.so.0.5.8';lib.parent.mkdir(parents=True)
@@ -196,14 +276,23 @@ class PackageContract(unittest.TestCase):
         self.native=self.root/'usr/share/rustdesk/lib/librustdesk.so';self.native.parent.mkdir(parents=True)
         self.native.write_bytes(b'/usr/lib/rustdesk/libdrmtap.so.0\0enable-drm-display-wake')
         self.fields={'Package':'rustdesk-unattended-wayland','Conflicts':'rustdesk','Provides':'rustdesk',
-            'Replaces':'rustdesk','Depends':'libc6 (>= 2.35), libdrm2 (>= 2.4.101), libegl1, libgles2'}
-        self.deb=Path('unattended-wayland-rustdesk-unattended-wayland-1.5.0.deb')
+            'Replaces':'rustdesk','Description':'RustDesk Wayland unattended (STANDARD)','Depends':'libc6 (>= 2.35), libdrm2 (>= 2.4.101), libegl1, libgles2'}
+        self.deb=Path(wayland.package_name('1.5.0','standard','x86_64'))
 
     def check(self):
         with patch('scripts.platform.platform_package.subprocess.check_output',side_effect=lambda a,**kw:self.fields[a[-1]]):
             validate_wayland_deb(self.deb,self.root,self.info)
 
     def test_correct_package_passes(self):self.check()
+
+    def test_sos_package_must_be_labeled_and_named_for_sos(self):
+        self.info['variant']='sos'
+        with self.assertRaisesRegex(ValueError,'filename'):self.check()
+        self.deb=Path(wayland.package_name('1.5.0','sos','x86_64'))
+        with self.assertRaisesRegex(ValueError,'description'):self.check()
+        self.fields['Description']='RustDesk Wayland unattended (SOS)'
+        self.check()
+
 
     def test_nightly_profile_requires_its_exact_capture_library_version(self):
         self.info['channel']='nightly'

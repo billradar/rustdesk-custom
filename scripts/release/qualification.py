@@ -128,8 +128,8 @@ def aggregate(root,channel,experimental):
                     shutil.copy2(package,assets/filename)
         if os.environ.get('INCLUDE_WAYLAND') == 'true':
             from scripts.platform.wayland import attach_assets
-            peer = next(i for i in found.values() if i['variant'] == 'standard')
-            report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peer, channel)
+            peers = {(i['variant'], i['architecture']): i for i in found.values() if i['platform'] == 'linux'}
+            report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peers, channel)
         from scripts.platform.platform_package import checksums
         checksums(assets)
         public_assets=sorted(p.name for p in assets.iterdir())
