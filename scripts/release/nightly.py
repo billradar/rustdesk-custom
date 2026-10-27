@@ -296,6 +296,16 @@ def require_draft_context():
         raise ValueError('Nightly release writes require the protected main workflow and qualified mode')
 
 
+def upstream_nightly_release():
+    """Return the official Nightly title and visible release notes verbatim."""
+    release = api(f'repos/{OFFICIAL}/releases/tags/nightly')
+    name = release.get('name') or 'nightly'
+    body = release.get('body') or ''
+    if not body.strip():
+        raise ValueError('Official upstream Nightly release description is unavailable')
+    return name, body.rstrip()
+
+
 def draft(root, discovery):
     from scripts.release.github import request, gh
     from scripts.release.production import scan_job_log
@@ -305,6 +315,7 @@ def draft(root, discovery):
     if report['result'] != 'PASS' or not report['android_production_signing']:
         raise ValueError('Incomplete signed Nightly aggregate')
     data = json.loads(discovery.read_text())
+    release_name, upstream_notes = upstream_nightly_release()
     run_id = str(data['official_run_id'])
     if not re.fullmatch(r'[1-9][0-9]*', run_id):
         raise ValueError('Invalid official run identity')
@@ -363,12 +374,7 @@ def draft(root, discovery):
                 'automation_state=uploading']
     if identity_data['wayland_policy']:
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy'])
-    notes = ('## RustDesk Custom Nightly\n\n'
-             'This moving Nightly release is replaced after each successful, fully qualified build.\n\n'
-             'Based on the [verified upstream Nightly build](' + data['official_run_url'] + ').\n\n'
-             '### Downloads\n\nUse the attached packages and `SHA256SUMS` to verify integrity.\n\n'
-             '### Verification\n\nAndroid APK v2/v3 signatures verified; desktop code signing not enabled. '
-             'Runtime UI and remote sessions have not been tested.\n\n'
+    notes = (upstream_notes + '\n\n'
              '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n')
 
     # A single moving release is intentional. Hide an existing published
@@ -403,6 +409,8 @@ def draft(root, discovery):
             prior_inventory = None
         complete_match = (
             existing.get('prerelease') is True
+            and existing.get('name') == release_name
+            and body.startswith(upstream_notes + '\n\n<!-- rustdesk-custom-release-metadata')
             and tag_matches_source
             and all(value in set(body.splitlines()) for value in expected_metadata)
             and len(remote) == len(remote_rows)
@@ -432,7 +440,7 @@ def draft(root, discovery):
         release_id = existing['id']
         staged = request('PATCH', f'repos/{REPO}/releases/{release_id}',
                          dict(tag_name=tag, target_commitish=os.environ['GITHUB_SHA'],
-                              name='RustDesk Custom Nightly', body=notes, draft=True, prerelease=True))
+                              name=release_name, body=notes, draft=True, prerelease=True))
         if staged.get('draft') is not True or staged.get('prerelease') is not True:
             raise ValueError('Could not hide existing Nightly release before replacing assets')
         old_assets = []
@@ -462,7 +470,7 @@ def draft(root, discovery):
             raise ValueError('Nightly tag could not be recreated at the validated custom source commit')
     if not existing:
         created = request('POST', f'repos/{REPO}/releases',
-                          dict(tag_name=tag, name='RustDesk Custom Nightly',
+                          dict(tag_name=tag, name=release_name,
                                target_commitish=os.environ['GITHUB_SHA'], body=notes,
                                draft=True, prerelease=True))
         if created.get('tag_name') != tag or created.get('target_commitish') != os.environ['GITHUB_SHA']:
@@ -486,7 +494,7 @@ def draft(root, discovery):
     # Publication is the final irreversible step, only after every signed asset digest matches.
     final = request('PATCH', f'repos/{REPO}/releases/{release_id}',
                     dict(tag_name=tag, target_commitish=os.environ['GITHUB_SHA'],
-                         name='RustDesk Custom Nightly', draft=release_mode != 'release', prerelease=True,
+                         name=release_name, draft=release_mode != 'release', prerelease=True,
                          body=notes.replace('automation_state=uploading', 'automation_state=complete')))
     if final.get('draft') is not (release_mode != 'release') or final.get('prerelease') is not True:
         raise ValueError('Nightly release state mismatch')
