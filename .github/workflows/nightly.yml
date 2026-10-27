@@ -1,5 +1,5 @@
 name: Nightly Build Pipeline
-run-name: Nightly ${{ inputs.expected_sha || inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+run-name: Nightly latest / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
 env:
   PYTHONPATH: .
 'on':
@@ -13,20 +13,12 @@ env:
       include_wayland:
         type: boolean
         default: true
-        description: Build both experimental Wayland DEBs and include validated packages
-      official_run_id:
-        type: string
-        default: ''
-        description: Successful official flutter-nightly run ID; empty = latest successful
-      expected_sha:
-        type: string
-        default: ''
-        description: Optional exact SHA guard, required by the automatic router
+        description: Build all four experimental Wayland DEBs and include validated packages
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-${{ inputs.expected_sha || inputs.official_run_id || 'latest' }}-${{ inputs.release_mode }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+  group: nightly-latest-${{ inputs.release_mode }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 jobs:
   resolve:
@@ -58,10 +50,8 @@ jobs:
     - id: resolve
       env:
         GH_TOKEN: ${{ github.token }}
-        OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
-        EXPECTED_SHA: ${{ inputs.expected_sha }}
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
-      run: python3 scripts/release/nightly.py resolve --official-run-id "$OFFICIAL_RUN_ID" --expected-sha "$EXPECTED_SHA"
+      run: python3 scripts/release/nightly.py resolve
     - id: dedup
       name: Skip an active or completed identical Nightly batch
       env:

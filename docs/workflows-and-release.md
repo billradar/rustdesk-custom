@@ -119,8 +119,9 @@ compatibility path. Nothing is automatically approved, merged or published.
 
 官方 `flutter-nightly.yml` 每天 UTC 00:00（香港时间 08:00）启动。
 `upstream-nightly.yml` 每天 UTC 12:00（香港时间 20:00）检查官方成功完成的构建，
-即比上游计划启动时间晚十二小时。路由等待当天上游运行实际完成，只有成功后才触发
-`nightly.yml`；GitHub 定时任务可能延迟，因此使用官方运行状态而非猜测完成时间。
+即比上游计划启动时间晚十二小时。手动和自动构建都在解析阶段选择最新成功的官方运行，
+不等待当天运行，不提供运行 ID/SHA 输入；选定后锁定运行 ID 和完整源码 SHA，供下游统一使用。
+GitHub 定时任务可能延迟，因此使用官方运行状态而非猜测完成时间。
 官方计划见 https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-nightly.yml 。
 
 来源绑定官方仓库、默认分支、工作流路径、成功状态、运行 ID 和完整 40 位 SHA；
@@ -200,3 +201,5 @@ variables → Actions → Variables**. Enabling the switch does not provision a 
 the clone also needs its own protected runner, Environment, PIN secret, and
 reviewed Android signing identity. Never claim the original repository's
 certificate identity for a different key.
+
+Stable 手动构建会自动计算并锁定构建身份，无需填写 `expected_build_identity`；该输入仅供自动路由传入预期身份并交叉校验。锁文件绑定本次运行、仓库提交、上游版本/SHA、补丁哈希、Wayland 和签名策略，以下游必需的摘要校验防止漂移。强制重建/覆盖旧发布开关暂不恢复，旧发布保持不可覆盖。

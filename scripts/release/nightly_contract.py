@@ -135,20 +135,28 @@ class NightlyTests(unittest.TestCase):
             nightly.dedup()
             self.assertIn('skip=true',(Path(td)/'out').read_text())
 
+    def test_manual_and_scheduled_entrypoints_both_resolve_latest(self):
+        for mode, event in [('resolve', 'workflow_dispatch'), ('route', 'schedule'), ('route', 'workflow_dispatch')]:
+            with self.subTest(mode=mode, event=event), patch.dict(os.environ, GITHUB_EVENT_NAME=event), patch.object(nightly, 'discover', return_value={'upstream_sha': 'b'*40}) as discover, patch.object(nightly, 'save') as save, patch.object(nightly, 'route') as route:
+                nightly.main([mode])
+                discover.assert_called_once_with()
+                save.assert_called_once_with({'upstream_sha': 'b'*40})
+                self.assertEqual(route.call_count, int(mode == 'route'))
+
     def test_route_rejects_non_main_before_dispatch(self):
         with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
             with self.assertRaises(ValueError):nightly.route({})
             api.assert_not_called()
 
-    def test_route_dispatches_only_pinned_official_run(self):
+    def test_route_dispatches_latest_successful_source(self):
         clone='example/rustdesk-custom'
         env=dict(GITHUB_REPOSITORY=clone,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
         with patch.dict(os.environ,env),patch.object(nightly,'api',return_value={'workflow_runs':[]}),patch.object(nightly.subprocess,'run') as dispatch:
             nightly.route({'official_run_id':'17','upstream_sha':'b'*40,'patchset':'v2',
                            'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
-            self.assertIn('official_run_id=17',args)
-            self.assertIn('expected_sha='+'b'*40,args)
+            self.assertFalse(any(x.startswith(('official_run_id=', 'expected_sha=')) for x in args))
+            self.assertIn('release_mode=draft',args)
             self.assertEqual(args[args.index('--repo')+1],clone)
             self.assertEqual(args[args.index('--ref')+1],'main')
 
@@ -201,14 +209,17 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['options'],['dry-run','draft','release'])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['resolve']['if'])
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
-        self.assertIn('inputs.expected_sha',w['run-name'])
+        self.assertTrue(w['run-name'].startswith('Nightly latest /'))
+        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland'})
+        resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
+        self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
         self.assertIn('dedup',w['jobs']['resolve']['steps'][next(i for i,s in enumerate(w['jobs']['resolve']['steps']) if s.get('id')=='dedup')]['run'])
         discovery_upload=next(s for s in w['jobs']['resolve']['steps'] if s.get('uses','').startswith('actions/upload-artifact@'))
         self.assertEqual(discovery_upload['if'],'always()')
         self.assertEqual(discovery_upload['with']['if-no-files-found'],'warn')
         self.assertIn('needs.resolve.outputs.dedup_skip',w['jobs']['prepare']['if'])
-        self.assertIn('inputs.expected_sha',w['concurrency']['group'])
+        self.assertTrue(w['concurrency']['group'].startswith('nightly-latest-'))
         self.assertNotIn('github.sha',w['concurrency']['group'])
         for family in ['windows','platforms','android']:
             j=w['jobs'][family+'-build']

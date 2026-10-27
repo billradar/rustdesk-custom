@@ -1,5 +1,5 @@
 name: Stable Release Pipeline
-run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }} / identity=${{ inputs.expected_build_identity || 'manual' }}
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }} / identity=${{ inputs.expected_build_identity || 'auto' }}
 env:
   PYTHONPATH: .
 'on':
@@ -8,7 +8,7 @@ env:
       include_wayland:
         type: boolean
         default: true
-        description: Build both experimental Wayland DEBs and include validated packages
+        description: Build all four experimental Wayland DEBs and include validated packages
       upstream_ref:
         type: string
         description: Official stable tag; empty = latest stable
@@ -23,7 +23,7 @@ env:
         default: dry-run
       expected_build_identity:
         type: string
-        description: Stable router-provided build identity; leave empty for manual dispatch
+        description: Internal router guard; manual runs automatically calculate and lock the identity
         default: ''
 permissions:
   contents: read
@@ -41,6 +41,10 @@ jobs:
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       upstream_version: ${{ steps.resolve.outputs.version }}
       patchset: ${{ steps.patchset.outputs.patchset }}
+      build_identity: ${{ steps.lock.outputs.build_identity }}
+      lock_sha256: ${{ steps.lock.outputs.lock_sha256 }}
+      lock_artifact: ${{ steps.lock.outputs.lock_artifact }}
+      signing_enabled: ${{ steps.lock.outputs.signing_enabled }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -70,12 +74,19 @@ jobs:
         printf '  upstream_sha = %s\n' "$UPSTREAM_SHA"
         printf '  patchset     = %s\n' "$PATCHSET"
         printf '  version      = %s\n' "$VERSION"
+    - id: lock
+      name: Automatically freeze Stable build identity
+      env:
+        INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+        ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+        ROUTER_BUILD_IDENTITY: ${{ inputs.expected_build_identity }}
+        SELECTED_PATCHSET: ${{ steps.patchset.outputs.patchset }}
+      run: python3 -m scripts.release.stable_lock create --discovery .work/channel.json --patchset "$SELECTED_PATCHSET"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always()
       with:
-        name: channel-discovery-${{ github.run_id }}
-        path: .work/channel.json
-        if-no-files-found: warn
+        name: ${{ steps.lock.outputs.lock_artifact }}
+        path: .work/stable-lock.json
+        if-no-files-found: error
   draft-preflight:
     name: '02 · Release preflight / existing-draft decision'
     needs: resolve
@@ -102,16 +113,18 @@ jobs:
         persist-credentials: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        name: channel-discovery-${{ github.run_id }}
-        path: .work/discovery
+        name: ${{ needs.resolve.outputs.lock_artifact }}
+        path: .work/stable-lock
     - id: gate
-      name: Validate existing revision before any build
+      name: Verify locked identity before release preflight
       env:
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
         ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         GH_TOKEN: ${{ github.token }}
-      run: |
-        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}' --expected-build-identity '${{ inputs.expected_build_identity }}'
+        STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
+        STABLE_LOCK_SHA256: ${{ needs.resolve.outputs.lock_sha256 }}
+        EXPECTED_BUILD_IDENTITY: ${{ needs.resolve.outputs.build_identity }}
+      run: python3 -m scripts.release.stable_lock preflight
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -208,6 +221,7 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.release_mode != 'dry-run' &&
       vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' &&
+      needs.resolve.outputs.signing_enabled == 'true' &&
       needs.android-build.result == 'success'
     runs-on:
       - self-hosted
@@ -286,6 +300,10 @@ jobs:
       patch_revision: ${{ needs.draft-preflight.outputs.patch_revision }}
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       patchset: ${{ needs.resolve.outputs.patchset }}
+      build_identity: ${{ needs.resolve.outputs.build_identity }}
+      lock_sha256: ${{ needs.resolve.outputs.lock_sha256 }}
+      lock_artifact: ${{ needs.resolve.outputs.lock_artifact }}
+      signing_enabled: ${{ needs.resolve.outputs.signing_enabled }}
     if: >-
       always() &&
       github.event_name == 'workflow_dispatch' &&
@@ -293,9 +311,13 @@ jobs:
       needs.platforms-build.result == 'success' &&
       needs.android-build.result == 'success' &&
       (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
-      (needs.android-sign.result == 'success' || inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true')
+      (needs.android-sign.result == 'success' || inputs.release_mode == 'dry-run' || needs.resolve.outputs.signing_enabled != 'true')
     runs-on: ubuntu-22.04
     env:
+      STABLE_LOCK_REQUIRED: 'true'
+      STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
+      STABLE_LOCK_SHA256: ${{ needs.resolve.outputs.lock_sha256 }}
+      EXPECTED_BUILD_IDENTITY: ${{ needs.resolve.outputs.build_identity }}
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       BUILD_CHANNEL: stable
       UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
@@ -305,12 +327,16 @@ jobs:
       BUILD_CONFIGURATION: PRODUCTION
       CHANNEL: stable
       EXPERIMENTAL: 'false'
-      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ needs.resolve.outputs.signing_enabled }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && needs.resolve.outputs.signing_enabled == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: ${{ needs.resolve.outputs.lock_artifact }}
+        path: .work/stable-lock
     - run: python3 -m pip install -r requirements.txt
     - name: Package inspectors
       run: |
@@ -322,7 +348,7 @@ jobs:
         path: .work/all-targets
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      if: inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      if: inputs.release_mode == 'dry-run' || needs.resolve.outputs.signing_enabled != 'true'
       with:
         pattern: android-build-input-stable-${{ needs.resolve.outputs.upstream_version }}-${{ needs.resolve.outputs.upstream_sha }}-*
         path: .work/all-targets/unsigned-android
@@ -356,6 +382,12 @@ jobs:
       contents: write
       actions: read
     env:
+      STABLE_LOCK_REQUIRED: 'true'
+      STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
+      STABLE_LOCK_SHA256: ${{ needs.resolve.outputs.lock_sha256 }}
+      EXPECTED_BUILD_IDENTITY: ${{ needs.resolve.outputs.build_identity }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ needs.resolve.outputs.signing_enabled }}
+      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: v${{ needs.resolve.outputs.upstream_version }}-custom.${{ needs.draft-preflight.outputs.patch_revision }}
       BUILD_IDENTITY: ${{ needs.draft-preflight.outputs.build_identity }}
@@ -368,6 +400,10 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: ${{ needs.resolve.outputs.lock_artifact }}
+        path: .work/stable-lock
     - name: Publish verified existing Stable draft
       run: python3 scripts/release/qualification.py publish-existing --channel stable
   release:
@@ -385,6 +421,11 @@ jobs:
       contents: write
       actions: read
     env:
+      STABLE_LOCK_REQUIRED: 'true'
+      STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
+      STABLE_LOCK_SHA256: ${{ needs.aggregate.outputs.lock_sha256 }}
+      EXPECTED_BUILD_IDENTITY: ${{ needs.aggregate.outputs.build_identity }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ needs.aggregate.outputs.signing_enabled }}
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       BUILD_CHANNEL: stable
       UPSTREAM_VERSION: ${{ needs.aggregate.outputs.upstream_version }}
@@ -394,11 +435,15 @@ jobs:
       UPSTREAM_EXPECTED_SHA: ${{ needs.aggregate.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.aggregate.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ needs.aggregate.outputs.signing_enabled == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: ${{ needs.aggregate.outputs.lock_artifact }}
+        path: .work/stable-lock
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
@@ -407,7 +452,7 @@ jobs:
         path: .work/collected
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      if: vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      if: needs.aggregate.outputs.signing_enabled != 'true'
       with:
         pattern: android-build-input-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected/unsigned-android
@@ -438,6 +483,11 @@ jobs:
       contents: write
       actions: read
     env:
+      STABLE_LOCK_REQUIRED: 'true'
+      STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
+      STABLE_LOCK_SHA256: ${{ needs.aggregate.outputs.lock_sha256 }}
+      EXPECTED_BUILD_IDENTITY: ${{ needs.aggregate.outputs.build_identity }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ needs.aggregate.outputs.signing_enabled }}
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       BUILD_CHANNEL: stable
       UPSTREAM_VERSION: ${{ needs.aggregate.outputs.upstream_version }}
@@ -446,11 +496,15 @@ jobs:
       UPSTREAM_EXPECTED_SHA: ${{ needs.aggregate.outputs.upstream_sha }}
       UPSTREAM_TAG: ${{ needs.aggregate.outputs.upstream_ref }}
       BUILD_CONFIGURATION: PRODUCTION
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ needs.aggregate.outputs.signing_enabled == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      with:
+        name: ${{ needs.aggregate.outputs.lock_artifact }}
+        path: .work/stable-lock
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
@@ -459,7 +513,7 @@ jobs:
         path: .work/collected
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      if: vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      if: needs.aggregate.outputs.signing_enabled != 'true'
       with:
         pattern: android-build-input-stable-${{ needs.aggregate.outputs.upstream_version }}-${{ needs.aggregate.outputs.upstream_sha }}-*
         path: .work/collected/unsigned-android
