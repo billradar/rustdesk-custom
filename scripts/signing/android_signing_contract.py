@@ -29,6 +29,10 @@ class StableAndroidSigningContractTests(unittest.TestCase):
         env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','GITHUB_REF':'refs/heads/main',
              'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main'}
         namespace['validate_signing_context']('nightly',env)
+        clone='example/rustdesk-custom'
+        clone_env={'GITHUB_REPOSITORY':clone,'GITHUB_REF':'refs/heads/main',
+                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':clone+'/.github/workflows/nightly.yml@refs/heads/main'}
+        namespace['validate_signing_context']('nightly',clone_env)
         for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),('GITHUB_REPOSITORY','foreign/repo'),('GITHUB_WORKFLOW_REF','foreign/workflow')]:
             with self.assertRaises(SystemExit):namespace['validate_signing_context']('nightly',dict(env,**{key:value}))
         self.assertIn('"channel": channel',self.script)
