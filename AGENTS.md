@@ -308,6 +308,18 @@ Never reset, force-push, rebase, replace a ref, delete a shared branch, or rewri
 
 Creating a PR does not merge it. A green PR check does not merge it. A merged PR does not prove every desired workflow ran. Verify the actual merge state, resulting commit, CI run, and branch comparison. Do not merge a PR unless the user explicitly authorizes merging.
 
+### Codex review for follow-up PR commits
+
+Codex does not necessarily review each new commit pushed to an already-open PR automatically. After pushing a change to an existing PR, request one Code Review for the new PR head by posting the exact comment `@codex review`.
+
+Before posting, read the PR's current head SHA and the latest Codex review summary:
+- If a review is already running for that exact head SHA, wait for it; do not post a duplicate request.
+- If a review completed for that exact head SHA, do not repeat it unless the user explicitly requests another review.
+- If there is no review for the current head, or the latest review targets an older SHA, post `@codex review` once.
+- When several commits are pushed together, review the resulting head once. Do not request reviews for intermediate local commits that were never pushed.
+
+Treat a review as current only when its recorded commit SHA matches the PR head. After addressing findings and pushing a follow-up commit, repeat this check for the new head. Report if Codex review cannot be triggered or remains pending; do not infer that an older review covers new commits. Use `@codex security review` only when a security review is specifically needed.
+
 ## 11. Documentation rules and project terminology
 
 - `README.md` and `README.zh-CN.md` are separate English/Chinese landing pages with working language links. Do not merge them into one page or move them into `docs/`.
