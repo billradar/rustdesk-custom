@@ -9,7 +9,7 @@ def redact(text):
     for value in values:text=text.replace(value,'[REDACTED]')
     scan_bytes(text.encode());return text
 flavor=os.environ.get('BUILD_FLAVOR')
-if flavor and (flavor!='unattended-wayland' or platform!='linux' or variant!='standard'):raise ValueError('BUILD_COMPAT: forbidden build flavor')
+if flavor and (flavor!='unattended-wayland' or platform!='linux' or variant not in ('standard','sos')):raise ValueError('BUILD_COMPAT: forbidden build flavor')
 script='linux_wayland' if flavor else platform
 lines=[];p=subprocess.Popen(['bash','scripts/build/'+script+'.sh'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
 try:

@@ -49,8 +49,12 @@ def linux_scripts(tree,arch,out):
  (out/'install.sh').write_text('set -euo pipefail\n'+render(s['with']['install'],p))
  (out/'build.sh').write_text('set -euo pipefail\ncd /workspace\n'+render(s['with']['run'],p)+'\n')
  return p
+def parse_args(argv=None):
+ a=argparse.ArgumentParser();a.add_argument('tree',type=Path);a.add_argument('--platform',required=True,choices=JOBS);a.add_argument('--arch',required=True);a.add_argument('--output',type=Path,required=True);a.add_argument('--linux-scripts',type=Path)
+ return a.parse_args(argv)
+
 if __name__=='__main__':
- a=argparse.ArgumentParser();a.add_argument('tree',type=Path);a.add_argument('--platform',required=True,choices=JOBS);a.add_argument('--arch',required=True);a.add_argument('--output',type=Path,required=True);a.add_argument('--linux-scripts',type=Path);a=a.parse_args()
+ a=parse_args()
  p,j=check(a.tree,a.platform,a.arch)
  if a.linux_scripts:linux_scripts(a.tree,a.arch,a.linux_scripts)
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(p,indent=2)+'\n')

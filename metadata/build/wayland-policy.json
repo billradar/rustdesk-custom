@@ -1,7 +1,5 @@
 {
-  "schema": "wayland-build-policy-v1",
-  "variant": "unattended-wayland",
-  "source_variant": "standard",
+  "schema": "wayland-build-policy-v2",
   "publication": false,
   "upstream_drm_job_sha256": "e5f3c17fd76e912421562a139c2145f64af05ed87f87aa010865c23a89328741",
   "build_py_sha256": "88445cdf48d214fd9ff73d7fe2c878ad277f84c31839bb6ac94563d37f281708",
@@ -10,7 +8,9 @@
   "reviewed_upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17",
   "target_ids": [
     "linux-x86_64-unattended-wayland",
-    "linux-aarch64-unattended-wayland"
+    "linux-aarch64-unattended-wayland",
+    "linux-x86_64-sos-unattended-wayland",
+    "linux-aarch64-sos-unattended-wayland"
   ],
   "channels": [
     "stable",
@@ -30,5 +30,12 @@
       "drm_test_groups": 12
     }
   ],
-  "drm_test_groups": 8
+  "drm_test_groups": 8,
+  "source_variants": [
+    "standard",
+    "sos"
+  ],
+  "package_name": "rustdesk-unattended-wayland",
+  "asset_naming": "rustdesk-unattended-wayland-{variant}-{version}-{arch}.deb",
+  "build_flavor": "unattended-wayland"
 }

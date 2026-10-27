@@ -5,8 +5,8 @@ root=$PWD
 source=$PREPARED_SOURCE_DIR
 python3 scripts/signing/production_config.py inputs
 export BUILD_FLAVOR=unattended-wayland
-[[ "$VARIANT" == standard ]] || { echo 'PROVENANCE: only common-patched source is allowed'; exit 1; }
-python3 scripts/platform/wayland.py recipe --tree "$source" --arch "$PLATFORM_ARCH" --out .work/linux-recipe
+[[ "$VARIANT" == standard || "$VARIANT" == sos ]] || { echo 'PROVENANCE: unreviewed source variant'; exit 1; }
+python3 scripts/platform/wayland.py recipe --tree "$source" --arch "$PLATFORM_ARCH" --variant "$VARIANT" --out .work/linux-recipe
 python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --output .work/platform-profile.json
 triplet=$(python3 -c 'import json;print(json.load(open(".work/platform-profile.json"))["triplet"])')
 # Same small crate-type adjustment as the official Linux job, after input verification.

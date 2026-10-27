@@ -235,7 +235,8 @@ def release_preflight(data):
     if wayland_included:
         from scripts.platform.wayland import POLICY
         expected_policy = wayland_policy_sha256
-        required_wayland = {'unattended-wayland-rustdesk-unattended-wayland-' + data['version'] + '-' + arch + '.deb' for arch in ['x86_64', 'aarch64']}
+        from scripts.platform.wayland import asset_names
+        required_wayland = asset_names(data['version'])
         uploaded_wayland = {a['name'] for a in existing.get('assets', []) if a.get('state') == 'uploaded'}
         if (('wayland_policy_sha256=' + expected_policy not in body and 'Wayland Policy SHA256: ' + expected_policy not in body)
                 or not required_wayland <= uploaded_wayland):

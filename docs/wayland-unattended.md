@@ -2,18 +2,19 @@
 
 `wayland.yml` is now a **reusable internal workflow**, without a separate manual
 entry point. `tag.yml` and `nightly.yml` call it with their own locked upstream
-SHA, version, channel, patchset and same-run prepared Standard artifact. Common
+SHA, version, channel, patchset and same-run prepared Standard and SOS artifacts. Common
 patch policy, including forced-off software rendering, is shared with the normal
 builds. No second resolve/fetch/prepare occurs in the Wayland lane.
 
 Both parent workflows expose `include_wayland` (boolean, default **true**).
-It builds native amd64 (`ubuntu-22.04`) and ARM64 (`ubuntu-22.04-arm`) DEBs. To build
+It builds Standard and SOS DEBs on native amd64 (`ubuntu-22.04`) and ARM64
+(`ubuntu-22.04-arm`) runners, for four targets in total. To build
 an older unsupported source such as 1.4.9, explicitly disable this option. A
 missing or unreviewed DRM interface fails before bridge dependencies are installed.
 
 The matrix rows remain experimental and `enabled: false` for the ordinary matrix;
 `workflow_enabled: true` selects only the reusable Wayland lane. They are not
-replacements for ordinary Standard/SOS qualification. Source variant is Standard;
+replacements for ordinary Standard/SOS qualification. Source variant is `standard` or `sos`;
 `build_flavor: unattended-wayland` identifies the distinct captured feature set.
 
 ## Reviewed interfaces and package gates
@@ -34,33 +35,51 @@ CRTC refresh, loader and clipboard tests. Each must
 execute at least one test. DEBs must pass architecture, libc floor, EGL/capture/wake
 markers, stock-package Conflicts/Provides/Replaces, exact library/soname, checksum,
 configuration, credential and prepared-source provenance checks. There is no RPM
-output for this flavor. Both architectures must validate in the same workflow run.
+output for this flavor. All four variant/architecture combinations must validate in the same workflow run.
+The native ABI probe reads the compiled `sos-mode` flag, requiring `Y` for SOS and
+an empty value for Standard, before the DEB is labeled or uploaded.
 
 ## Aggregate and Release behavior
 
 When enabled, both parents wait for the Wayland lane before their final aggregate.
 The packages download into a separate directory so they cannot accidentally satisfy
-ordinary platform targets. The final aggregate validates both DEBs again and binds
+ordinary platform targets. The final aggregate validates all four DEBs again and binds
 their source-manifest identity, prepare run, Common patch hash and configuration
-fingerprint to the ordinary Standard build. Missing, duplicate, stale, cross-channel
+fingerprint to the ordinary Linux build with the same source variant and architecture,
+including its SOS patch hash when applicable. Missing, duplicate, stale, cross-channel
 or mismatched-source packages block aggregation.
 
-Tag draft/release jobs download and revalidate the Wayland pair again in the
-publication job, add both DEBs to the normal asset directory, and regenerate the
+Tag draft/release jobs download and revalidate the Wayland set again in the
+publication job, add all four DEBs to the normal asset directory, and regenerate the
 public SHA256SUMS. Release metadata records the Wayland policy digest and its
 experimental scope. Existing immutable releases/drafts are never appended to or
 overwritten: requesting Wayland while reusing an older revision without matching
 Wayland evidence fails. Disable the option to reuse that old revision, or build a
 new patch identity through the existing revision mechanism.
 
-Nightly includes both DEBs in its aggregated Actions package artifact and, in
+Nightly includes all four DEBs in its aggregated Actions package artifact and, in
 protected-main draft mode, its prerelease Draft. Android signing in that mode uses
 the same separately protected direct YubiKey job as Tag. Wayland itself never
-receives a PIN or signing-host access; Nightly never publishes publicly.
+receives a PIN or signing-host access; public Nightly publication requires its
+separate explicit release mode and verified-draft gates.
 
-Per-target artifacts remain `rustdesk-wayland-<version>-<upstream-sha>-<arch>`;
-`wayland-qualification-<run-id>` records the pair, with `stable`/`nightly` channel
+Per-target artifacts remain `rustdesk-wayland-<version>-<upstream-sha>-<variant>-<arch>`;
+`wayland-qualification-<run-id>` records all four targets, with `stable`/`nightly` channel
 identity. Parent aggregate reports also contain this separate Wayland result.
+
+Downloads are named `rustdesk-unattended-wayland-<standard|sos>-<version>-<arch>.deb`.
+The DEB's Description names its source variant; the Debian Package field remains
+`rustdesk-unattended-wayland` for both. Installing Standard or SOS replaces the
+other variant because they share service and configuration paths; parallel
+installation is not supported. Labeling changes only the package description,
+not the executable payload, maintainer scripts or upstream packaging source.
+Actual installed upgrades, configuration retention and service restart behaviour
+still require device tests. SOS reuses the existing UI-focused patches; it is not
+a new backend restriction against all outgoing connections.
+
+Policy schema v2 binds the four-target requirement and naming convention into the
+Stable/Nightly build identity. An old two-package release cannot satisfy this
+new policy, and existing releases are never appended to in place.
 
 The package conflicts with ordinary RustDesk. The earlier 1.5.0 package worked in
 one user-confirmed locked-screen session after disabling forced software rendering;

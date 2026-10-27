@@ -501,7 +501,8 @@
       "dedicated_workflow": "wayland.yml",
       "workflow_enabled": true,
       "support_scope": "CONFIGURED ONLY; BUILD AND RUNTIME NOT VALIDATED",
-      "real_remote_session_validation": "NOT TESTED"
+      "real_remote_session_validation": "NOT TESTED",
+      "build_flavor": "unattended-wayland"
     },
     {
       "id": "linux-aarch64-unattended-wayland",
@@ -518,7 +519,44 @@
       "dedicated_workflow": "wayland.yml",
       "workflow_enabled": true,
       "support_scope": "CONFIGURED ONLY; BUILD AND RUNTIME NOT VALIDATED",
-      "real_remote_session_validation": "NOT TESTED"
+      "real_remote_session_validation": "NOT TESTED",
+      "build_flavor": "unattended-wayland"
+    },
+    {
+      "id": "linux-x86_64-sos-unattended-wayland",
+      "platform": "linux",
+      "arch": "x86_64",
+      "deb_arch": "amd64",
+      "variant": "sos-unattended-wayland",
+      "source_variant": "sos",
+      "runner": "ubuntu-22.04",
+      "enabled": false,
+      "required": false,
+      "experimental": true,
+      "support_status": "EXPERIMENTAL",
+      "dedicated_workflow": "wayland.yml",
+      "workflow_enabled": true,
+      "support_scope": "CONFIGURED ONLY; BUILD AND RUNTIME NOT VALIDATED",
+      "real_remote_session_validation": "NOT TESTED",
+      "build_flavor": "unattended-wayland"
+    },
+    {
+      "id": "linux-aarch64-sos-unattended-wayland",
+      "platform": "linux",
+      "arch": "aarch64",
+      "deb_arch": "arm64",
+      "variant": "sos-unattended-wayland",
+      "source_variant": "sos",
+      "runner": "ubuntu-22.04-arm",
+      "enabled": false,
+      "required": false,
+      "experimental": true,
+      "support_status": "EXPERIMENTAL",
+      "dedicated_workflow": "wayland.yml",
+      "workflow_enabled": true,
+      "support_scope": "CONFIGURED ONLY; BUILD AND RUNTIME NOT VALIDATED",
+      "real_remote_session_validation": "NOT TESTED",
+      "build_flavor": "unattended-wayland"
     }
   ],
   "promotion": {

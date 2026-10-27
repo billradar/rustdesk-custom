@@ -42,10 +42,11 @@ These filenames are useful orientation, not a complete semantic specification. R
 
 ### Wayland unattended build flavor
 
-- `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard source. No separate manual trigger remains. Tag draft/release revalidates and attaches both DEBs; Nightly aggregates them as Actions artifacts and includes them in its signed prerelease Draft.
-- `build-wayland-target.yml` reuses verified Standard source and records `build_flavor: unattended-wayland` separately from the source variant.
+- `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard and SOS sources. No separate manual trigger remains. Tag draft/release revalidates and attaches all four DEBs; Nightly aggregates them as Actions artifacts and includes them in its signed prerelease Draft.
+- `build-wayland-target.yml` reuses the matching verified Standard/SOS source and records `build_flavor: unattended-wayland` separately from the source variant.
 - Canonical x86_64/ARM64 targets remain experimental in `metadata/platform/matrix.json`, excluded from the generic planner (`enabled: false`) and explicitly opted into this workflow (`workflow_enabled: true`). Do not promote without real build evidence.
-- `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and two-target aggregate gates.
+- `metadata/build/wayland-policy.json` pins the DRM job, packaging interface and libdrmtap dependency. `scripts/platform/wayland.py` and `wayland_contract.py` own recipe, source, package and four-target aggregate gates.
+- `include_wayland` selects Standard/SOS × x86_64/ARM64 together. Variant-aware filenames, Actions artifacts and source-peer checks prevent collisions or a Standard binary being labeled SOS. Both variants keep the same Debian package identity and replace one another; never claim parallel installation. The native ABI probe checks the compiled `sos-mode` flag before packaging. Policy schema v2 and its digest require a fresh four-target batch; old two-package releases remain immutable.
 - Follow `docs/wayland-unattended.md`; run the new contract and affected release contracts. ARM means ARM64 here; upstream's dedicated DRM job directly defines only x86_64.
 
 Both Common patch generations force `allow-always-software-render=N` via `OVERWRITE_SETTINGS`, overriding saved/custom settings in all variants and platforms. Keep the structural, native-helper and compiled-MIR gates aligned; do not reduce this to a default that persisted `Y` can override.
