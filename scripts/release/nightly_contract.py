@@ -90,7 +90,7 @@ class NightlyTests(unittest.TestCase):
     def test_manual_dedup_skips_active_or_successful_batch(self):
         env=dict(GITHUB_REPOSITORY='example/rustdesk-custom',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
                  GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
-                 RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
+                 UPSTREAM_VERSION='1.5.1',PATCHSET='v2',RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                  _upstream_sha='b'*40,head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                  status='completed',conclusion='success',id=21)
@@ -116,7 +116,8 @@ class NightlyTests(unittest.TestCase):
         clone='example/rustdesk-custom'
         env=dict(GITHUB_REPOSITORY=clone,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
         with patch.dict(os.environ,env),patch.object(nightly,'api',return_value={'workflow_runs':[]}),patch.object(nightly.subprocess,'run') as dispatch:
-            nightly.route({'official_run_id':'17','upstream_sha':'b'*40})
+            nightly.route({'official_run_id':'17','upstream_sha':'b'*40,'patchset':'v2',
+                           'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
             self.assertIn('official_run_id=17',args)
             self.assertIn('expected_sha='+'b'*40,args)

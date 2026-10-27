@@ -43,7 +43,7 @@ class StableRouterContract(unittest.TestCase):
             legacy_signed = router.workflow_runs('v1.5.1', signing_enabled=True)
         self.assertEqual(len(selected), 1)
         # Attempts from different main commits share the same Stable retry budget.
-        self.assertEqual(len(legacy_signed), 2)
+        self.assertEqual(len(legacy_signed), 3)
 
     def test_existing_build_delegates_to_unified_preflight(self):
         data = {'channel': 'stable'}

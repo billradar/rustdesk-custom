@@ -408,7 +408,12 @@ def draft(root, discovery):
                          wayland_policy_sha256=report.get('wayland', {}).get('policy_sha256', ''),
                          release_mode=release_mode,
                          signing='true' if signing_required else 'false')
-    identity = nightly_identity(data | {'wayland_policy_sha256': identity_data['wayland_policy_sha256']},
+    identity_source = dict(upstream_sha=identity_data['upstream_sha'],
+                           patchset=identity_data['patchset'],
+                           common_patch_hash=identity_data['common_patch_hash'],
+                           sos_patch_hash=identity_data['sos_patch_hash'],
+                           wayland_policy_sha256=identity_data['wayland_policy_sha256'])
+    identity = nightly_identity(identity_source,
                                 wayland=str(identity_data['wayland_included']).lower(),
                                 signing=identity_data['signing'])
     tag = 'nightly'

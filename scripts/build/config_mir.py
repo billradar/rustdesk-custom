@@ -31,6 +31,8 @@ def verify(text,values):
     relay=values.get('RUSTDESK_RELAY_SERVER')
     if relay and not {'relay-server',relay}<=defaults:
         raise ValueError('PLATFORM_API: compiled relay MIR mismatch (values withheld)')
+    if not relay and 'relay-server' in defaults:
+        raise ValueError('PLATFORM_API: unexpected compiled relay override (values withheld)')
     if values['RUSTDESK_API_SERVER'] not in literals(function(text,'common::get_api_server_')):
         raise ValueError('PLATFORM_API: compiled API MIR mismatch (values withheld)')
 

@@ -70,6 +70,7 @@ jobs:
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
         ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         UPSTREAM_EXPECTED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+        PATCHSET: ${{ steps.resolve.outputs.patchset }}
       run: python3 scripts/release/nightly.py dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: steps.dedup.outputs.skip != 'true'
