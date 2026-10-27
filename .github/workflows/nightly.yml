@@ -73,11 +73,13 @@ jobs:
         PATCHSET: ${{ steps.resolve.outputs.patchset }}
       run: python3 scripts/release/nightly.py dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: steps.dedup.outputs.skip != 'true'
+      # Keep discovery evidence even when this run intentionally skips a build.
+      # On early failures there may be no file; warn so the router can fail closed.
+      if: always()
       with:
         name: nightly-discovery-${{ github.run_id }}
         path: .work/nightly-discovery.json
-        if-no-files-found: error
+        if-no-files-found: warn
   prepare:
     needs: resolve
     if: needs.resolve.outputs.dedup_skip != 'true'

@@ -45,6 +45,14 @@ class StableRouterContract(unittest.TestCase):
         self.assertEqual(len(selected), 1)
         self.assertEqual(other_identity, [])
 
+    def test_matching_manual_stable_run_is_included_only_while_active(self):
+        active={'display_title':'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity=manual',
+                'head_branch':'main','event':'workflow_dispatch','status':'in_progress'}
+        completed=dict(active,status='completed')
+        with patch.object(router,'api',return_value={'workflow_runs':[active,completed]}):
+            selected=router.workflow_runs('v1.5.1','e'*64)
+        self.assertEqual(selected,[active])
+
     def test_existing_build_delegates_to_unified_preflight(self):
         data = {'channel': 'stable'}
         with patch.object(router, 'release_preflight', return_value={'build_needed': False}) as gate:

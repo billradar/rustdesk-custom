@@ -93,9 +93,14 @@ def workflow_runs(tag, identity, signing_enabled=False):
         if len(batch.get('workflow_runs', [])) < 100:
             current_title = (f'Stable {tag} / draft / wayland=true / android-signing='
                              f'{str(signing_enabled).lower()} / identity={identity}')
+            manual_titles = {
+                f'Stable {tag} / draft / wayland=true / android-signing={str(signing_enabled).lower()} / identity=manual',
+                f'Stable latest / draft / wayland=true / android-signing={str(signing_enabled).lower()} / identity=manual',
+            }
             return [row for row in runs if row.get('head_branch') == 'main'
                     and row.get('event') == 'workflow_dispatch'
-                    and row.get('display_title') == current_title]
+                    and (row.get('display_title') == current_title
+                         or (row.get('display_title') in manual_titles and row.get('status') != 'completed'))]
     raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
 
 

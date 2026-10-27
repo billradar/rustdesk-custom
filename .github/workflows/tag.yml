@@ -29,7 +29,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: stable-${{ inputs.expected_build_identity || inputs.upstream_ref || 'latest' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+  group: stable-${{ inputs.upstream_ref || 'latest' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 
 jobs:

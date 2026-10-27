@@ -99,7 +99,8 @@ def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
 def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false', upstream_sha=''):
     title_suffix = f' / {release_mode} / wayland={wayland} / android-signing={signing}'
     unresolved = [r for r in rows if r.get('_nightly_identity_unresolved')
-                  and r.get('_upstream_sha') == upstream_sha
+                  and (r.get('_upstream_sha') == upstream_sha
+                       or (not r.get('_upstream_sha') and r.get('display_title', '').startswith('Nightly latest /')))
                   and r.get('display_title', '').endswith(title_suffix)
                   and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
                   and str(r['id']) != str(current_run_id)]
@@ -200,14 +201,15 @@ def discovery_from_run(row):
 def annotate_history(rows, upstream_sha=None):
     for row in rows:
         row['_upstream_sha'] = source_sha_from_run(row)
-        if upstream_sha and row['_upstream_sha'] != upstream_sha:
-            continue
         title = row.get('display_title', '')
+        if upstream_sha and row['_upstream_sha'] != upstream_sha and not title.startswith('Nightly latest /'):
+            continue
         match = re.fullmatch(r'Nightly (?:[0-9a-f]{40}|[1-9][0-9]*|latest) / [0-9a-f]{40} / (dry-run|draft|release) / wayland=(true|false)(?: / android-signing=(true|false))?', title)
         if not match:
             continue
         data = discovery_from_run(row)
-        if not data or data['upstream_sha'] != row['_upstream_sha']:
+        if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
+                or (upstream_sha and data and data['upstream_sha'] != upstream_sha)):
             row['_nightly_identity_unresolved'] = True
             continue
         row['_nightly_identity'] = nightly_identity(data, match.group(1), match.group(2), match.group(3) or 'false')

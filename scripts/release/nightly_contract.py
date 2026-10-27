@@ -106,6 +106,15 @@ class NightlyTests(unittest.TestCase):
             nightly.annotate_history([row], 'b'*40)
         self.assertTrue(row['_nightly_identity_unresolved'])
 
+    def test_legacy_latest_without_discovery_stops_retries_conservatively(self):
+        row=dict(display_title='Nightly latest / '+'a'*40+' / draft / wayland=true / android-signing=false',
+                 event='workflow_dispatch',head_branch='main',status='completed',id=21)
+        with patch.object(nightly,'source_sha_from_run',return_value=''), \
+             patch.object(nightly,'discovery_from_run',return_value=None):
+            nightly.annotate_history([row], 'b'*40)
+        self.assertTrue(row['_nightly_identity_unresolved'])
+        self.assertEqual(nightly.route_state([row],'f'*64,upstream_sha='b'*40), 'UNKNOWN')
+
     def test_manual_dedup_skips_active_or_successful_batch(self):
         env=dict(GITHUB_REPOSITORY='example/rustdesk-custom',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
                  GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
@@ -195,6 +204,9 @@ class NightlyTests(unittest.TestCase):
         self.assertIn('inputs.expected_sha',w['run-name'])
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
         self.assertIn('dedup',w['jobs']['resolve']['steps'][next(i for i,s in enumerate(w['jobs']['resolve']['steps']) if s.get('id')=='dedup')]['run'])
+        discovery_upload=next(s for s in w['jobs']['resolve']['steps'] if s.get('uses','').startswith('actions/upload-artifact@'))
+        self.assertEqual(discovery_upload['if'],'always()')
+        self.assertEqual(discovery_upload['with']['if-no-files-found'],'warn')
         self.assertIn('needs.resolve.outputs.dedup_skip',w['jobs']['prepare']['if'])
         self.assertIn('inputs.expected_sha',w['concurrency']['group'])
         self.assertNotIn('github.sha',w['concurrency']['group'])

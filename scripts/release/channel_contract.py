@@ -200,7 +200,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('wayland_included',jobs['draft-preflight']['outputs'])
         self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
         self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
-        self.assertIn('inputs.expected_build_identity',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
+        self.assertIn('inputs.upstream_ref',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
         self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
@@ -224,7 +224,7 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_stable_concurrency_and_ci_contract(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        self.assertIn('inputs.expected_build_identity',tag['concurrency']['group'])
+        self.assertIn('inputs.upstream_ref',tag['concurrency']['group'])
         inputs=tag['on']
         self.assertIn('expected_build_identity',json.loads(json.dumps(inputs))['workflow_dispatch']['inputs'])
         self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
