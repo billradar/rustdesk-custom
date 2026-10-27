@@ -44,21 +44,21 @@ def existing_build(data):
     return not release_preflight(data)['build_needed']
 
 
-def workflow_runs(tag, custom_sha):
+def workflow_runs(tag, custom_sha, signing_enabled=False):
     """Find prior exact tag.yml dispatches for this complete source identity."""
     runs = []
     for page in range(1, 11):
         batch = api(f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/runs?branch=main&event=workflow_dispatch&per_page=100&page={page}') or {}
         runs.extend(batch.get('workflow_runs', []))
         if len(batch.get('workflow_runs', [])) < 100:
+            current_title = f'Stable {tag} / draft / wayland=true / android-signing={str(signing_enabled).lower()}'
+            legacy_signed_titles = (
+                {f'Stable {tag} / draft / wayland=true', f'Stable {tag} / draft'}
+                if signing_enabled else set())
             return [row for row in runs if row.get('head_branch') == 'main'
                     and row.get('event') == 'workflow_dispatch'
                     and row.get('head_sha') == custom_sha
-                    and row.get('display_title') in (
-                        f'Stable {tag} / draft / wayland=true',
-                        # Older router runs did not include Wayland in run-name.
-                        f'Stable {tag} / draft',
-                    )]
+                    and row.get('display_title') in ({current_title} | legacy_signed_titles)]
     raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
 
 
@@ -86,7 +86,8 @@ def route():
         print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
         return
 
-    state = run_state(workflow_runs(data['upstream_tag'], os.environ['GITHUB_SHA']))
+    signing_enabled = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower() == 'true'
+    state = run_state(workflow_runs(data['upstream_tag'], os.environ['GITHUB_SHA'], signing_enabled))
     if state == 'ACTIVE':
         print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
         return
