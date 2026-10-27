@@ -1,5 +1,5 @@
 name: Stable Release Pipeline
-run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }} / identity=${{ inputs.expected_build_identity || 'auto' }}
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
 env:
   PYTHONPATH: .
 'on':
@@ -21,10 +21,6 @@ env:
           - draft
           - release
         default: dry-run
-      expected_build_identity:
-        type: string
-        description: Internal router guard; manual runs automatically calculate and lock the identity
-        default: ''
 permissions:
   contents: read
   actions: read
@@ -79,7 +75,6 @@ jobs:
       env:
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
         ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
-        ROUTER_BUILD_IDENTITY: ${{ inputs.expected_build_identity }}
         SELECTED_PATCHSET: ${{ steps.patchset.outputs.patchset }}
       run: python3 -m scripts.release.stable_lock create --discovery .work/channel.json --patchset "$SELECTED_PATCHSET"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

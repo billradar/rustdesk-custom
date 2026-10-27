@@ -202,4 +202,4 @@ the clone also needs its own protected runner, Environment, PIN secret, and
 reviewed Android signing identity. Never claim the original repository's
 certificate identity for a different key.
 
-Stable 手动构建会自动计算并锁定构建身份，无需填写 `expected_build_identity`；该输入仅供自动路由传入预期身份并交叉校验。锁文件绑定本次运行、仓库提交、上游版本/SHA、补丁哈希、Wayland 和签名策略，以下游必需的摘要校验防止漂移。强制重建/覆盖旧发布开关暂不恢复，旧发布保持不可覆盖。
+Stable 手动和自动构建均自动计算并锁定构建身份，不提供身份输入框。自动路由读取同一运行生成的身份锁进行去重和重试计数；活动运行尚未生成锁时保守跳过，已结束运行缺少锁时停止并要求检查。锁文件绑定本次运行、仓库提交、上游版本/SHA、补丁哈希、Wayland 和签名策略，以下游必需的摘要校验防止漂移。强制重建/覆盖旧发布开关暂不恢复，旧发布保持不可覆盖。

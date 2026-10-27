@@ -237,7 +237,7 @@ class ChannelPolicyTests(unittest.TestCase):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         self.assertIn('inputs.upstream_ref',tag['concurrency']['group'])
         inputs=tag['on']
-        self.assertIn('expected_build_identity',json.loads(json.dumps(inputs))['workflow_dispatch']['inputs'])
+        self.assertEqual(set(inputs['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland'})
         self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
         self.assertFalse(tag['concurrency']['cancel-in-progress'])
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())

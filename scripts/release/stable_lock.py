@@ -49,10 +49,8 @@ def plan(data, patchset):
                 android_signing_enabled=signing, build_identity=identity)
 
 
-def create(data, patchset, output, router_identity=''):
+def create(data, patchset, output):
     lock = plan(data, patchset)
-    if router_identity and router_identity != lock['build_identity']:
-        raise ValueError('Router build identity differs from automatically locked Stable identity')
     raw = (json.dumps(lock, indent=2, sort_keys=True) + '\n').encode()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(raw)
@@ -134,8 +132,7 @@ def main():
     if args.mode == 'create':
         if args.discovery is None or not args.patchset:
             parser.error('create requires discovery and patchset')
-        result = create(json.loads(args.discovery.read_text()), args.patchset, args.output,
-                        os.environ.get('ROUTER_BUILD_IDENTITY', ''))
+        result = create(json.loads(args.discovery.read_text()), args.patchset, args.output)
     else:
         result = preflight()
     channel.outputs(result)

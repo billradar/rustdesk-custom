@@ -29,12 +29,9 @@ class LockTests(unittest.TestCase):
                           EXPECTED_BUILD_IDENTITY=result['build_identity'])
         return result
 
-    def test_manual_computes_and_router_checks_same_identity(self):
+    def test_identity_is_automatically_computed_without_external_guard(self):
         result = self.create()
         self.assertEqual(lock.current()['build_identity'], result['build_identity'])
-        lock.create(self.data, 'v2', self.path, result['build_identity'])
-        with self.assertRaisesRegex(ValueError, 'Router build identity'):
-            lock.create(self.data, 'v2', self.path, 'f'*64)
 
     def test_missing_or_tampered_lock_fails(self):
         with self.assertRaises(ValueError): lock.current()
@@ -85,7 +82,8 @@ class LockTests(unittest.TestCase):
     def test_workflow_makes_lock_mandatory_and_freezes_signing(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/tag.yml').read_text())
         jobs = workflow['jobs']
-        self.assertIn('auto', workflow['run-name'])
+        self.assertNotIn('identity=', workflow['run-name'])
+        self.assertEqual(set(workflow['on']['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland'})
         for name in ('aggregate', 'publish-existing', 'release', 'draft'):
             with self.subTest(job=name):
                 job = jobs[name]
