@@ -71,9 +71,9 @@ validation entries remain explicitly historical.
 
 Common `0004-cm-background-window.patch` is shared by Standard and SOS in both
 patch generations. It adds `approve-mode=password` as a default (saved approval
-choices remain effective), and uses upstream's fixed-password/hide predicate
-without requiring Pro or a renamed executable. An unknown IPC result keeps CM
-hidden until the user opens it from the local tray.
+choices remain effective). CM visibility is an independent, manual-only policy;
+password verification and click approval remain backend authentication decisions.
+Saved hide preferences and approval modes cannot enable automatic display.
 
 The CM starts as a hidden native window. Its hide operation never minimizes it;
 Windows creates it as a tool window, Linux realizes the Flutter GL view without
@@ -94,11 +94,13 @@ is no current manager to show. If the desktop shell has no tray indicator, runni
 manually sends the same local request without opening the main window. Use the
 installed executable name/path if it differs. Neither entry starts a new CM.
 
-`allow-hide-cm` remains a default, not an enforced overwrite of saved preferences.
-Settings changes apply to the next CM process; the settings checkbox reports the
-effective configuration. A previously saved click-approval mode continues to show
-the approval window. This is necessary to preserve the user's approval choice.
-System permission dialogs and UAC are outside this CM window policy.
+The settings page reports the enforced “Open connection manager manually” policy
+with a checked, disabled control. Existing hide preferences remain stored but do
+not control CM visibility in these builds. A saved click-approval mode still
+requires acceptance: the operator must open Current connections or `--show-cm`
+and accept the pending request. Hiding is not approval; unanswered requests may
+time out under upstream rules. System permission dialogs and UAC are outside
+this CM window policy.
 
 Validation commands:
 

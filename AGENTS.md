@@ -36,7 +36,7 @@ Current patchset layout:
 - `patchsets/v1/sos/`: `0001-sos-mode.patch`, `0002-sos-home.patch`, `0003-sos-settings.patch`.
 - `patchsets/v2/` contains the corresponding common and SOS customization generation for the newer upstream API boundary.
 
-Common `0004` gives the Flutter CM a hidden native startup, serialized visibility policy and a local tray “Current connections” command. It keeps the main window on upstream logic. Manual requests are latched in CM Rust state and polled through the existing bridge; no bridge API regeneration is needed. `scripts/validation/cm_window_contract.py` guards prepared-source wiring and executes the pure-Dart policy when Dart is available. Native UI/real remote sessions remain unverified until exact-package testing.
+Common `0004` gives the Flutter CM a hidden native startup, serialized manual-only visibility policy and a local tray “Current connections” command. It keeps the main window on upstream logic. Manual requests are latched in CM Rust state and polled through the existing bridge; no bridge API regeneration is needed. `scripts/validation/cm_window_contract.py` guards prepared-source wiring and executes the pure-Dart policy when Dart is available. Native UI/real remote sessions remain unverified until exact-package testing.
 
 These filenames are useful orientation, not a complete semantic specification. Read the patch before changing or describing its behavior.
 

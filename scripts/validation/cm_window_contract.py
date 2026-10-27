@@ -34,20 +34,31 @@ def source_contract(tree):
             'CM must remain excluded from the taskbar')
     require(cm.index('windowManager.hide()') < cm.index('initEnv(kAppTypeConnectionManager)'),
             'CM must be hidden before timers and IPC initialize')
-    require("configure(value != 'false')" in cm, 'unknown IPC state must stay hidden')
+    require('_cmWindowPolicy.initialize()' in cm and "cmGetConfig(name: 'hide_cm')" not in cm,
+            'visibility must be initialized independently of authentication/hide preferences')
     require('requestShow(manual: manual)' in cm and '_queueCmWindow' in cm,
             'show/hide operations must be gated and serialized')
     common = read('flutter/lib/common.dart')
-    require('desktopType == DesktopType.cm && !cmMayAutoShow' in common,
+    require('if (desktopType == DesktopType.cm) return;' in common,
             'direct focus/show bypass must be blocked for the CM only')
     chat = read('flutter/lib/models/chat_model.dart')
     side = chat.split('toggleCMSidePage() async {', 1)[1].split('changeCurrentKey(', 1)[0]
-    require('!cmMayAutoShow && !cmIsVisible' in side and 'windowManager.show()' not in side,
+    require('desktopType == DesktopType.cm && !cmIsVisible' in side and 'windowManager.show()' not in side,
             'incoming chat must not map or resize a hidden CM')
     model = read('flutter/lib/models/server_model.dart')
     require("cmGetConfig(name: 'custom-cm-show')" in model and 'showCmWindow(manual: true)' in model,
             'latched tray request must be polled and manually displayed')
     require('bool hideCm = true;' in model, 'model startup must be conservative')
+    require('gFFI.serverModel.hideCm = true;' in cm and 'if (!manual) return;' in cm,
+            'saved preferences must never enable automatic window display')
+    page = read('flutter/lib/desktop/pages/server_page.dart')
+    close = page.split('Future<bool> handleWindowCloseButton() async {', 1)[1].split('\n  }', 1)[0]
+    require('hideCmWindow()' in close and 'windowManager.close()' not in close,
+            'the CM close control must always hide without ending sessions')
+    settings = read('flutter/lib/desktop/pages/desktop_setting_page.dart')
+    setting = settings.split('Widget hide_cm(bool enabled) {', 1)[1].split('\n  }', 1)[0]
+    require('Open connection manager manually' in setting and 'onChanged: null' in setting,
+            'settings must report the enforced manual-only display policy')
     require('Data::CmShow if self.conn_id == 0' in read('src/ui_cm_interface.rs'),
             'only the separate local control stream may request a window')
     ffi = read('src/flutter_ffi.rs')
@@ -58,8 +69,8 @@ def source_contract(tree):
             'approval must default to password without overriding saved consent mode')
     ipc = read('src/ipc.rs')
     branch = ipc.split('name == "hide_cm"', 1)[1].split('} else if', 1)[0]
-    require('password_security::hide_cm()' in branch and 'is_pro()' not in branch,
-            'custom builds must use the upstream password predicate without branding dependency')
+    require('password_security::hide_cm()' in branch,
+            'the upstream hide predicate must remain intact and separate from visibility')
     tray = read('src/tray.rs')
     require('connections_i' in tray and 'send_to_cm(&crate::ipc::Data::CmShow)' in tray,
             'tray must target an existing CM, not start a second manager')
@@ -83,22 +94,22 @@ void check(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 void main() {
-  for (final background in [false, true]) {
+  for (var session = 0; session < 3; session++) {
     final p = CmWindowPolicy();
-    check(!p.requestShow(), 'startup may not display before configuration');
-    check(!p.requestShow(manual: true), 'early manual request must wait for readiness');
+    check(!p.requestShow(), 'startup must stay hidden');
+    check(!p.requestShow(manual: true), 'early tray request must wait for readiness');
     check(p.manualRequested, 'early tray request must be retained');
-    p.configure(background);
-    check(p.requestShow(manual: p.manualRequested), 'manual recovery must always work');
+    p.initialize();
+    check(p.requestShow(manual: p.manualRequested), 'pending tray request must work');
+    p.visible = true;
     for (var event = 0; event < 100; event++) {
-      check(p.requestShow() == !background, 'automatic event violated hidden policy');
+      check(!p.requestShow(), 'timer, connection, chat or call stole focus');
     }
     p.hide();
-    check(!p.manualRequested, 'hide must clear pending manual request');
-    check(p.requestShow() == !background, 'automatic event reopened a hidden CM');
-    check(p.requestShow(manual: true), 'second tray open must work');
-    p.configure(true);
-    check(!p.requestShow(), 'background policy must stop automatic focus after manual open');
+    check(!p.visible && !p.manualRequested, 'hide must clear visible/pending state');
+    check(!p.requestShow(), 'automatic event reopened the hidden CM');
+    check(p.requestShow(manual: true), 'manual reopen must still work');
+    check(!p.requestShow(), 'manual reopen must not enable automatic display');
   }
   print('CM visibility policy sequences: PASS');
 }

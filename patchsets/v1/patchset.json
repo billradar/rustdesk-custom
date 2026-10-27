@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "3e47115ae59c74f0d2c5c1ce2cc3cc6b46b05e58a95362a99d16d9ede261fe1f",
+    "common": "597c9a5ed0e4c4c6b8d202246eef4778093e88948979038bee78189fb6748a9f",
     "sos": "d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34"
   },
   "runtime_ui": {
@@ -40,18 +40,16 @@
   },
   "cm_background_window": {
     "status": "native_runtime_validation_pending",
-    "common_patch_hash": "3e47115ae59c74f0d2c5c1ce2cc3cc6b46b05e58a95362a99d16d9ede261fe1f",
+    "display_policy": "manual_only",
+    "common_patch_hash": "597c9a5ed0e4c4c6b8d202246eef4778093e88948979038bee78189fb6748a9f",
+    "runtime_ui": "not_tested",
+    "real_remote_session": "not_tested",
+    "native_package_build": "not_run",
     "local_validation": {
       "patch_apply_standard_and_sos": "pass",
       "prepared_source_contracts": "pass",
       "compiled_configuration_helper": "pass",
       "dart_policy_sequences": "pass"
-    },
-    "tested_upstream_shas": [
-      "6c578292e8ebbbec708b76986ba8c4bc7c509747"
-    ],
-    "runtime_ui": "not_tested",
-    "real_remote_session": "not_tested",
-    "native_package_build": "not_run"
+    }
   }
 }

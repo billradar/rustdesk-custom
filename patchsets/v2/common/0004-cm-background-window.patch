@@ -1,17 +1,69 @@
 diff --git a/flutter/lib/common.dart b/flutter/lib/common.dart
-index b80e0b5..292a2d2 100644
+index b80e0b5..29fa939 100644
 --- a/flutter/lib/common.dart
 +++ b/flutter/lib/common.dart
 @@ -731,6 +731,7 @@ closeConnection({String? id}) {
  }
  
  Future<void> windowOnTop(int? id) async {
-+  if (desktopType == DesktopType.cm && !cmMayAutoShow) return;
++  if (desktopType == DesktopType.cm) return;
    if (!isDesktop) {
      return;
    }
+diff --git a/flutter/lib/desktop/pages/desktop_setting_page.dart b/flutter/lib/desktop/pages/desktop_setting_page.dart
+index 276b2ae..db58122 100644
+--- a/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -1601,43 +1601,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
+   }
+ 
+   Widget hide_cm(bool enabled) {
+-    return ChangeNotifierProvider.value(
+-        value: gFFI.serverModel,
+-        child: Consumer<ServerModel>(builder: (context, model, child) {
+-          final enableHideCm = model.approveMode == 'password' &&
+-              model.verificationMethod == kUsePermanentPassword;
+-          onHideCmChanged(bool? b) {
+-            if (b != null) {
+-              bind.mainSetOption(
+-                  key: 'allow-hide-cm', value: bool2option('allow-hide-cm', b));
+-            }
+-          }
+-
+-          return Tooltip(
+-              message: enableHideCm ? "" : translate('hide_cm_tip'),
+-              child: GestureDetector(
+-                onTap:
+-                    enableHideCm ? () => onHideCmChanged(!model.hideCm) : null,
+-                child: Row(
+-                  children: [
+-                    Checkbox(
+-                            value: model.hideCm,
+-                            onChanged: enabled && enableHideCm
+-                                ? onHideCmChanged
+-                                : null)
+-                        .marginOnly(right: 5),
+-                    Expanded(
+-                      child: Text(
+-                        translate('Hide connection management window'),
+-                        style: TextStyle(
+-                            color: disabledTextColor(
+-                                context, enabled && enableHideCm)),
+-                      ),
+-                    ),
+-                  ],
+-                ),
+-              ));
+-        }));
++    return Row(children: [
++      const Checkbox(value: true, onChanged: null).marginOnly(right: 5),
++      Expanded(child: Text(translate('Open connection manager manually'))),
++    ]);
+   }
+ 
+   List<Widget> autoDisconnect(BuildContext context) {
 diff --git a/flutter/lib/desktop/pages/server_page.dart b/flutter/lib/desktop/pages/server_page.dart
-index eeb51b6..eeec051 100644
+index eeb51b6..a679949 100644
 --- a/flutter/lib/desktop/pages/server_page.dart
 +++ b/flutter/lib/desktop/pages/server_page.dart
 @@ -1,6 +1,7 @@
@@ -22,58 +74,68 @@ index eeb51b6..eeec051 100644
  import 'dart:math';
  
  import 'package:flutter/material.dart';
-@@ -335,6 +336,10 @@ class ConnectionManagerState extends State<ConnectionManager>
+@@ -335,29 +336,10 @@ class ConnectionManagerState extends State<ConnectionManager>
    }
  
    Future<bool> handleWindowCloseButton() async {
-+    if (gFFI.serverModel.hideCm) {
-+      await hideCmWindow();
-+      return false;
-+    }
-     var tabController = gFFI.serverModel.tabController;
-     final connLength = tabController.length;
-     if (connLength <= 1) {
-@@ -1023,7 +1028,11 @@ class _CmControlPanel extends StatelessWidget {
+-    var tabController = gFFI.serverModel.tabController;
+-    final connLength = tabController.length;
+-    if (connLength <= 1) {
+-      _cmClosedByOperator = true;
+-      windowManager.close();
+-      return true;
+-    } else {
+-      final bool res;
+-      if (!option2bool(kOptionEnableConfirmClosingTabs,
+-          bind.mainGetLocalOption(key: kOptionEnableConfirmClosingTabs))) {
+-        res = true;
+-      } else {
+-        res = await closeConfirmDialog();
+-      }
+-      if (res) {
+-        // After the dialog, never before it: an external close while it is open must not
+-        // inherit an intent the user had not expressed yet.
+-        _cmClosedByOperator = true;
+-        windowManager.close();
+-      }
+-      return res;
+-    }
++    await hideCmWindow();
++    return false;
+   }
++
+ }
+ 
+ Widget buildConnectionCard(Client client) {
+@@ -1023,7 +1005,7 @@ class _CmControlPanel extends StatelessWidget {
              color: MyTheme.accent,
              onClick: () {
                handleElevate(context);
 -              windowManager.minimize();
-+              if (gFFI.serverModel.hideCm) {
-+                hideCmWindow();
-+              } else {
-+                windowManager.minimize();
-+              }
++              hideCmWindow();
              },
              icon: Icon(
                Icons.security_rounded,
-@@ -1086,7 +1095,11 @@ class _CmControlPanel extends StatelessWidget {
+@@ -1086,7 +1068,7 @@ class _CmControlPanel extends StatelessWidget {
            child: buildButton(context, color: Colors.green[700], onClick: () {
              handleAccept(context);
              handleElevate(context);
 -            windowManager.minimize();
-+            if (gFFI.serverModel.hideCm) {
-+                hideCmWindow();
-+              } else {
-+                windowManager.minimize();
-+              }
++            hideCmWindow();
            },
                text: 'Accept and Elevate',
                icon: Icon(
-@@ -1109,7 +1122,11 @@ class _CmControlPanel extends StatelessWidget {
+@@ -1109,7 +1091,7 @@ class _CmControlPanel extends StatelessWidget {
                        color: MyTheme.accent,
                        onClick: () {
                          handleAccept(context);
 -                        windowManager.minimize();
-+                        if (gFFI.serverModel.hideCm) {
-+                hideCmWindow();
-+              } else {
-+                windowManager.minimize();
-+              }
++                        hideCmWindow();
                        },
                        text: 'Accept',
                        textColor: Colors.white,
 diff --git a/flutter/lib/desktop/widgets/tabbar_widget.dart b/flutter/lib/desktop/widgets/tabbar_widget.dart
-index 9ef7d38..7c632c2 100644
+index 9ef7d38..d0f4601 100644
 --- a/flutter/lib/desktop/widgets/tabbar_widget.dart
 +++ b/flutter/lib/desktop/widgets/tabbar_widget.dart
 @@ -774,7 +774,9 @@ class WindowActionPanelState extends State<WindowActionPanel> {
@@ -81,14 +143,14 @@ index 9ef7d38..7c632c2 100644
                    icon: IconFont.min,
                    onTap: () {
 -                    if (widget.isMainWindow) {
-+                    if (desktopType == DesktopType.cm && gFFI.serverModel.hideCm) {
++                    if (desktopType == DesktopType.cm) {
 +                      hideCmWindow();
 +                    } else if (widget.isMainWindow) {
                        windowManager.minimize();
                      } else {
                        WindowController.fromWindowId(kWindowId!).minimize();
 diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
-index 5f234cb..16ee601 100644
+index 5f234cb..c764877 100644
 --- a/flutter/lib/main.dart
 +++ b/flutter/lib/main.dart
 @@ -29,6 +29,8 @@ import 'mobile/pages/home_page.dart';
@@ -100,13 +162,12 @@ index 5f234cb..16ee601 100644
  
  /// Basic window and launch properties.
  int? kWindowId;
-@@ -282,72 +284,68 @@ void runMultiWindow(
+@@ -282,72 +284,63 @@ void runMultiWindow(
    WindowController.fromWindowId(kWindowId!).show();
  }
  
 +final _cmWindowPolicy = CmWindowPolicy();
 +Future<void> _cmWindowOperations = Future<void>.value();
-+bool get cmMayAutoShow => _cmWindowPolicy.allowAutomaticShow;
 +bool get cmIsVisible => _cmWindowPolicy.visible;
 +
 +Future<void> _queueCmWindow(Future<void> Function() operation) {
@@ -139,15 +200,12 @@ index 5f234cb..16ee601 100644
 -    await hideCmWindow(isStartup: true);
 -  } else {
 -    await showCmWindow(isStartup: true);
-+  final value = await bind.cmGetConfig(name: 'hide_cm');
-+  // Missing/failed IPC is not permission to display an unattended window.
-+  _cmWindowPolicy.configure(value != 'false');
-+  gFFI.serverModel.hideCm = _cmWindowPolicy.background;
++  // Display policy never changes password verification or click approval.
++  _cmWindowPolicy.initialize();
++  gFFI.serverModel.hideCm = true;
 +  _runApp('', const DesktopServerPage(), MyTheme.currentThemeMode());
 +  if (_cmWindowPolicy.manualRequested) {
 +    await showCmWindow(manual: true);
-+  } else if (cmMayAutoShow) {
-+    await showCmWindow();
    }
    setResizable(false);
 -  // Start the uni links handler and redirect links to Native, not for Flutter.
@@ -184,8 +242,7 @@ index 5f234cb..16ee601 100644
 +Future<void> showCmWindow({bool isStartup = false, bool manual = false}) async {
 +  if (!_cmWindowPolicy.requestShow(manual: manual)) return;
 +  await _queueCmWindow(() async {
-+    // Recheck after queued hides/configuration changes.
-+    if (!manual && !cmMayAutoShow) return;
++    if (!manual) return; // Only a local tray/CLI request may show the CM.
 +    if (isMacOS) await RdPlatformChannel.instance.setCmWindowVisible(true);
 +    await windowManager.setSkipTaskbar(true);
 +    await windowManager.setAlwaysOnTop(false);
@@ -226,14 +283,14 @@ index 5f234cb..16ee601 100644
  
  void _runApp(
 diff --git a/flutter/lib/models/chat_model.dart b/flutter/lib/models/chat_model.dart
-index d79c9f0..95311e0 100644
+index d79c9f0..5bab753 100644
 --- a/flutter/lib/models/chat_model.dart
 +++ b/flutter/lib/models/chat_model.dart
 @@ -292,12 +292,13 @@ class ChatModel with ChangeNotifier {
  
    var _togglingCMSidePage = false; // protect order for await
    toggleCMSidePage() async {
-+    if (desktopType == DesktopType.cm && !cmMayAutoShow && !cmIsVisible) return false;
++    if (desktopType == DesktopType.cm && !cmIsVisible) return false;
      if (_togglingCMSidePage) return false;
      _togglingCMSidePage = true;
      if (_isShowCMSidePage) {
@@ -255,27 +312,23 @@ index d79c9f0..95311e0 100644
        _isShowCMSidePage = !_isShowCMSidePage;
 diff --git a/flutter/lib/models/cm_window_policy.dart b/flutter/lib/models/cm_window_policy.dart
 new file mode 100644
-index 0000000..c1eee2e
+index 0000000..4c199f7
 --- /dev/null
 +++ b/flutter/lib/models/cm_window_policy.dart
-@@ -0,0 +1,24 @@
-+/// Visibility policy for the CM isolate only. Unknown startup state stays hidden.
+@@ -0,0 +1,20 @@
++/// CM visibility is independent of authentication and saved hide preferences.
 +class CmWindowPolicy {
 +  bool ready = false;
-+  bool background = true;
 +  bool manualRequested = false;
 +  bool visible = false;
 +
-+  bool get allowAutomaticShow => ready && !background;
-+
-+  void configure(bool hide) {
-+    background = hide;
++  void initialize() {
 +    ready = true;
 +  }
 +
 +  bool requestShow({bool manual = false}) {
 +    if (manual) manualRequested = true;
-+    return ready && (manual || allowAutomaticShow);
++    return ready && manual;
 +  }
 +
 +  void hide() {
@@ -512,7 +565,7 @@ index f9cc2d6..9b47926 100644
      {
          if let Ok(Some(v)) = crate::ipc::get_config(&name) {
 diff --git a/src/ipc.rs b/src/ipc.rs
-index fdb1e14..f28a452 100644
+index fdb1e14..78ce1d4 100644
 --- a/src/ipc.rs
 +++ b/src/ipc.rs
 @@ -383,6 +383,8 @@ pub enum Data {
@@ -524,29 +577,16 @@ index fdb1e14..f28a452 100644
      Theme(String),
      Language(String),
      Empty,
-@@ -970,12 +972,7 @@ async fn handle(data: Data, stream: &mut Connection) {
-                         None
-                     };
-                 } else if name == "hide_cm" {
--                    value = if crate::hbbs_http::sync::is_pro() || crate::common::is_custom_client()
--                    {
--                        Some(hbb_common::password_security::hide_cm().to_string())
--                    } else {
--                        None
--                    };
-+                    value = Some(hbb_common::password_security::hide_cm().to_string());
-                 } else if name == "voice-call-input" {
-                     value = crate::audio_service::get_voice_call_input_device();
-                 } else if name == "unlock-pin" {
 diff --git a/src/lang/cn.rs b/src/lang/cn.rs
-index 1ac1ede..e5aee1f 100644
+index 1ac1ede..cd5978a 100644
 --- a/src/lang/cn.rs
 +++ b/src/lang/cn.rs
-@@ -484,6 +484,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
+@@ -484,6 +484,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
          ("Outgoing connection", "发起的连接"),
          ("Exit", "退出"),
          ("Open", "打开"),
 +        ("Current connections", "当前连接"),
++        ("Open connection manager manually", "仅手动打开连接管理窗口"),
          ("logout_tip", "确定要退出登录吗？"),
          ("Service", "服务"),
          ("Start", "启动"),
