@@ -130,6 +130,24 @@ def same_identity_release(version, identity):
     return None
 
 
+def release_metadata(body):
+    """Normalize current human-readable and legacy key=value release metadata."""
+    fields = dict(re.findall(r'^([^:\n]+): (.*)$', body, re.M))
+    names = {
+        'upstream_sha': 'Upstream SHA', 'patchset': 'Patch Set',
+        'common_patch_hash': 'Common Patch Hash', 'sos_patch_hash': 'SOS Patch Hash',
+        'custom_repository_sha': 'Custom Repository SHA',
+        'wayland_included': 'Wayland Included',
+        'wayland_policy_sha256': 'Wayland Policy SHA256',
+        'build_identity': 'Build Identity',
+    }
+    for line in body.splitlines():
+        key, separator, value = line.partition('=')
+        if separator and key in names:
+            fields[names[key]] = value
+    return fields
+
+
 def same_legacy_identity_release(data, common_hash, sos_hash, wayland_included,
                                  wayland_policy_sha256, android_signing_enabled):
     """Find a complete v3 release whose only obsolete identity input was repo commit SHA."""
@@ -144,7 +162,7 @@ def same_legacy_identity_release(data, common_hash, sos_hash, wayland_included,
         expected['Wayland Policy SHA256'] = wayland_policy_sha256
     for row in release_rows(data['version']):
         body = row.get('body') or ''
-        fields = dict(re.findall(r'^([^:\n]+): (.*)$', body, re.M))
+        fields = release_metadata(body)
         if any(fields.get(key) != value for key, value in expected.items()):
             continue
         custom_sha = fields.get('Custom Repository SHA', '')
@@ -209,6 +227,11 @@ def release_preflight(data):
         data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
         return data
     body=existing.get('body') or ''
+    recorded_custom_sha=release_metadata(body).get('Custom Repository SHA', '')
+    if re.fullmatch(r'[0-9a-f]{40}', recorded_custom_sha):
+        # Reused artifacts retain their original commit as provenance. This SHA
+        # is validated by the publication gate but does not define build identity.
+        data['custom_repository_sha']=recorded_custom_sha
     if wayland_included:
         from scripts.platform.wayland import POLICY
         expected_policy = wayland_policy_sha256
@@ -358,9 +381,11 @@ def draft(root):
     print('Draft created; automatic publication disabled.')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--patchset',default='');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--patchset',default='');p.add_argument('--expected-build-identity',default='');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()
     if a.mode=='resolve':resolve(a.channel,a.ref,a.discovery_only)
     elif a.mode=='release-preflight':
-        data=json.loads(a.discovery.read_text());data['patchset']=a.patchset or data.get('patchset','');outputs(release_preflight(data))
+        data=json.loads(a.discovery.read_text());data['patchset']=a.patchset or data.get('patchset','');result=release_preflight(data)
+        if a.expected_build_identity and result.get('build_identity')!=a.expected_build_identity:raise ValueError('Router build identity differs from Stable preflight')
+        outputs(result)
     elif a.mode=='validate':validate(a.root,a.channel)
     else:draft(a.root)

@@ -4,8 +4,8 @@ import os
 import re
 import subprocess
 
-from scripts.release.channel import release_preflight
-from scripts.upstream.patchsets import patchset_for_version
+from scripts.release.channel import build_identity, release_preflight, wayland_identity
+from scripts.upstream.patchsets import patch_hash, patchset_for_version
 from scripts.upstream.resolve import api, choose_stable
 
 REPOSITORY = 'billradar/rustdesk-custom'
@@ -84,20 +84,18 @@ def existing_build(data):
     return not release_preflight(data)['build_needed']
 
 
-def workflow_runs(tag, signing_enabled=False):
-    """Find prior tag.yml dispatches for the release version and signing mode."""
+def workflow_runs(tag, identity, signing_enabled=False):
+    """Find prior tag.yml dispatches for the exact Stable build identity."""
     runs = []
     for page in range(1, 11):
         batch = api(f'repos/{REPOSITORY}/actions/workflows/{WORKFLOW}/runs?branch=main&event=workflow_dispatch&per_page=100&page={page}') or {}
         runs.extend(batch.get('workflow_runs', []))
         if len(batch.get('workflow_runs', [])) < 100:
-            current_title = f'Stable {tag} / draft / wayland=true / android-signing={str(signing_enabled).lower()}'
-            legacy_signed_titles = (
-                {f'Stable {tag} / draft / wayland=true', f'Stable {tag} / draft'}
-                if signing_enabled else set())
+            current_title = (f'Stable {tag} / draft / wayland=true / android-signing='
+                             f'{str(signing_enabled).lower()} / identity={identity}')
             return [row for row in runs if row.get('head_branch') == 'main'
                     and row.get('event') == 'workflow_dispatch'
-                    and row.get('display_title') in ({current_title} | legacy_signed_titles)]
+                    and row.get('display_title') == current_title]
     raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
 
 
@@ -107,7 +105,7 @@ def run_state(rows):
     return 'EXHAUSTED' if len(rows) >= MAX_ATTEMPTS else 'RETRY'
 
 
-def dispatch(tag):
+def dispatch(tag, identity):
     subprocess.run([
         'gh', 'workflow', 'run', WORKFLOW,
         '--repo', REPOSITORY,
@@ -115,6 +113,7 @@ def dispatch(tag):
         '-f', f'upstream_ref={tag}',
         '-f', 'release_mode=draft',
         '-f', 'include_wayland=true',
+        '-f', f'expected_build_identity={identity}',
     ], check=True)
 
 
@@ -133,14 +132,19 @@ def route():
         return
 
     signing_enabled = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower() == 'true'
-    state = run_state(workflow_runs(data['upstream_tag'], signing_enabled))
+    wayland_enabled, policy_sha256 = wayland_identity()
+    identity = build_identity(data['upstream_sha'], data['patchset'],
+                              patch_hash('common', data['patchset']),
+                              patch_hash('sos', data['patchset']), None,
+                              wayland_enabled, policy_sha256, signing_enabled)
+    state = run_state(workflow_runs(data['upstream_tag'], identity, signing_enabled))
     if state == 'ACTIVE':
         print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
         return
     if state == 'EXHAUSTED':
         raise ValueError('Stable Draft retry budget exhausted; manual review required')
 
-    dispatch(data['upstream_tag'])
+    dispatch(data['upstream_tag'], identity)
     print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
 
 

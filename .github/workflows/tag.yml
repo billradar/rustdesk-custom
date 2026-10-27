@@ -1,5 +1,5 @@
 name: Stable Release Pipeline
-run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }} / identity=${{ inputs.expected_build_identity || 'manual' }}
 env:
   PYTHONPATH: .
 'on':
@@ -21,11 +21,15 @@ env:
           - draft
           - release
         default: dry-run
+      expected_build_identity:
+        type: string
+        description: Stable router-provided build identity; leave empty for manual dispatch
+        default: ''
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: stable-${{ github.sha }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+  group: stable-${{ inputs.expected_build_identity || inputs.upstream_ref || 'latest' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 
 jobs:
@@ -107,7 +111,7 @@ jobs:
         ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         GH_TOKEN: ${{ github.token }}
       run: |
-        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}'
+        python3 scripts/release/channel.py release-preflight --discovery .work/discovery/channel.json --patchset '${{ needs.resolve.outputs.patchset }}' --expected-build-identity '${{ inputs.expected_build_identity }}'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -356,7 +360,7 @@ jobs:
       BUILD_IDENTITY: ${{ needs.draft-preflight.outputs.build_identity }}
       UPSTREAM_SHA: ${{ needs.resolve.outputs.upstream_sha }}
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
-      CUSTOM_REPOSITORY_SHA: ${{ github.sha }}
+      CUSTOM_REPOSITORY_SHA: ${{ needs.draft-preflight.outputs.custom_repository_sha }}
       WAYLAND_INCLUDED: ${{ inputs.include_wayland && 'true' || 'false' }}
       WAYLAND_POLICY_SHA256: ${{ needs.draft-preflight.outputs.wayland_policy_sha256 }}
     steps:

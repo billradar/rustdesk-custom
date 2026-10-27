@@ -96,9 +96,19 @@ def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false'):
+def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false', upstream_sha=''):
+    title_suffix = f' / {release_mode} / wayland={wayland} / android-signing={signing}'
+    unresolved = [r for r in rows if r.get('_nightly_identity_unresolved')
+                  and r.get('_upstream_sha') == upstream_sha
+                  and r.get('display_title', '').endswith(title_suffix)
+                  and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
+                  and str(r['id']) != str(current_run_id)]
+    if any(r.get('status') != 'completed' for r in unresolved):
+        return 'ACTIVE'
+    if unresolved:
+        return 'UNKNOWN'
     matched = [r for r in rows if r.get('_nightly_identity') == identity
-               and r['display_title'].endswith(f' / {release_mode} / wayland={wayland} / android-signing={signing}')
+               and r['display_title'].endswith(title_suffix)
                and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
                and str(r['id']) != str(current_run_id)]
     if any(r['status'] != 'completed' for r in matched):
@@ -198,6 +208,7 @@ def annotate_history(rows, upstream_sha=None):
             continue
         data = discovery_from_run(row)
         if not data or data['upstream_sha'] != row['_upstream_sha']:
+            row['_nightly_identity_unresolved'] = True
             continue
         row['_nightly_identity'] = nightly_identity(data, match.group(1), match.group(2), match.group(3) or 'false')
     return rows
@@ -222,10 +233,12 @@ def route(data):
     identity_data = dict(data, wayland_policy_sha256=wayland_policy_hash(True))
     identity = nightly_identity(identity_data, 'draft', 'true', signing)
     annotate_history(rows, data['upstream_sha'])
-    state = route_state(rows, identity, signing=signing)
+    state = route_state(rows, identity, signing=signing, upstream_sha=data['upstream_sha'])
     print('Nightly route: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed; inspect logs or dispatch manually')
+    if state == 'UNKNOWN':
+        raise ValueError('A matching Nightly run has no discovery artifact; inspect it before dispatching again')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'official_run_id=' + data['official_run_id'],
@@ -269,11 +282,12 @@ def dedup():
                          wayland_policy_sha256=wayland_policy_hash(wayland == 'true'))
     identity = nightly_identity(identity_data, mode, wayland, signing)
     annotate_history(rows, identity_data['upstream_sha'])
-    state = route_state(rows, identity,
-                        mode, wayland, current, signing)
+    state = route_state(rows, identity, mode, wayland, current, signing, identity_data['upstream_sha'])
     print('Nightly dedup: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed for this exact source/build identity; inspect logs before retrying')
+    if state == 'UNKNOWN':
+        raise ValueError('A matching Nightly run has no discovery artifact; inspect it before retrying')
     skip = state in ('ACTIVE', 'SUCCESS')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:

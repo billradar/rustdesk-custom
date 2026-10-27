@@ -98,6 +98,23 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(data['patch_revision'],'v1.2')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v1.2')
 
+    def test_legacy_key_value_metadata_is_normalized(self):
+        fields = channel.release_metadata(
+            'upstream_sha=' + 'a' * 40 + '\npatchset=v1\ncustom_repository_sha=' + 'b' * 40
+            + '\nbuild_identity=' + 'c' * 64)
+        self.assertEqual(fields['Upstream SHA'], 'a' * 40)
+        self.assertEqual(fields['Patch Set'], 'v1')
+        self.assertEqual(fields['Custom Repository SHA'], 'b' * 40)
+        self.assertEqual(fields['Build Identity'], 'c' * 64)
+
+    def test_reused_draft_keeps_recorded_custom_commit_provenance(self):
+        existing=self.draft_fixture('v1','2')
+        existing['body']=existing['body'].replace('Custom Repository SHA: '+'b'*40,
+                                                  'Custom Repository SHA: '+'c'*40)
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            data=channel.release_preflight(self.discovery('v1'))
+        self.assertEqual(data['custom_repository_sha'], 'c' * 40)
+
     def test_matching_draft_requires_exact_remote_asset_digests(self):
         existing=self.draft_fixture('v1','2')
         existing['assets'][0]['digest']=''
@@ -181,9 +198,9 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertIn('wayland_included',jobs['draft-preflight']['outputs'])
-        self.assertIn('github.sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
+        self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
         self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
-        self.assertIn('github.sha',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
+        self.assertIn('inputs.expected_build_identity',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
         self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
@@ -207,7 +224,9 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_stable_concurrency_and_ci_contract(self):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        self.assertIn('github.sha',tag['concurrency']['group'])
+        self.assertIn('inputs.expected_build_identity',tag['concurrency']['group'])
+        inputs=tag['on']
+        self.assertIn('expected_build_identity',json.loads(json.dumps(inputs))['workflow_dispatch']['inputs'])
         self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
         self.assertFalse(tag['concurrency']['cancel-in-progress'])
         ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())

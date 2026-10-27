@@ -68,6 +68,17 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'RETRY')
         self.assertEqual(nightly.route_state([dict(row,id=99)],identity,current_run_id='99'),'RETRY')
 
+    def test_matching_run_without_discovery_fails_closed(self):
+        suffix=' / draft / wayland=true / android-signing=false'
+        unknown=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+suffix,
+                     _upstream_sha='b'*40,_nightly_identity_unresolved=True,
+                     event='workflow_dispatch',head_branch='main',status='completed',id=23)
+        self.assertEqual(nightly.route_state([unknown], 'f'*64, upstream_sha='b'*40), 'UNKNOWN')
+        active=dict(unknown,status='in_progress')
+        self.assertEqual(nightly.route_state([active], 'f'*64, upstream_sha='b'*40), 'ACTIVE')
+        other_source=dict(unknown,_upstream_sha='c'*40)
+        self.assertEqual(nightly.route_state([other_source], 'f'*64, upstream_sha='b'*40), 'RETRY')
+
     def test_legacy_run_titles_recover_source_sha(self):
         old=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
         with patch.object(nightly,'discover',return_value={'upstream_sha':'b'*40}):
@@ -86,6 +97,14 @@ class NightlyTests(unittest.TestCase):
         row=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
         with patch.object(nightly,'discover',side_effect=ValueError('missing run')):
             self.assertEqual(nightly.source_sha_from_run(row),'')
+
+    def test_annotate_marks_runs_without_discovery_as_unresolved(self):
+        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
+                 event='workflow_dispatch',head_branch='main',id=21)
+        with patch.object(nightly,'source_sha_from_run',return_value='b'*40), \
+             patch.object(nightly,'discovery_from_run',return_value=None):
+            nightly.annotate_history([row], 'b'*40)
+        self.assertTrue(row['_nightly_identity_unresolved'])
 
     def test_manual_dedup_skips_active_or_successful_batch(self):
         env=dict(GITHUB_REPOSITORY='example/rustdesk-custom',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',

@@ -27,8 +27,9 @@ class StableRouterContract(unittest.TestCase):
         self.assertEqual(router.run_state([{'status': 'queued'}]), 'ACTIVE')
 
     def test_run_lookup_matches_only_target_stable_variant(self):
+        identity = 'e' * 64
         rows = [
-            {'display_title': 'Stable v1.5.1 / draft / wayland=true / android-signing=false', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
+            {'display_title': f'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity={identity}', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
             {'display_title': 'Stable v1.5.1 / release / wayland=true', 'head_branch': 'main', 'event': 'workflow_dispatch'},
             {'display_title': 'Stable v1.5.1 / draft / wayland=false', 'head_branch': 'main', 'event': 'workflow_dispatch'},
             {'display_title': 'Stable v1.5.1 / draft', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'c' * 40},
@@ -39,11 +40,10 @@ class StableRouterContract(unittest.TestCase):
         rows.append({'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main',
                      'event': 'workflow_dispatch', 'head_sha': 'd' * 40})
         with patch.object(router, 'api', return_value={'workflow_runs': rows}):
-            selected = router.workflow_runs('v1.5.1')
-            legacy_signed = router.workflow_runs('v1.5.1', signing_enabled=True)
+            selected = router.workflow_runs('v1.5.1', identity)
+            other_identity = router.workflow_runs('v1.5.1', 'f' * 64)
         self.assertEqual(len(selected), 1)
-        # Attempts from different main commits share the same Stable retry budget.
-        self.assertEqual(len(legacy_signed), 3)
+        self.assertEqual(other_identity, [])
 
     def test_existing_build_delegates_to_unified_preflight(self):
         data = {'channel': 'stable'}
@@ -85,18 +85,21 @@ class StableRouterContract(unittest.TestCase):
     def test_manual_router_can_check_same_version_when_explicitly_enabled(self):
         with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'ALLOW_SAME_VERSION': 'true'}), \
              patch.object(router, 'verify_context'), \
-             patch.object(router, 'discovery', return_value={'version': '1.5.0', 'upstream_tag': '1.5.0'}), \
+             patch.object(router, 'discovery', return_value={'version': '1.5.0', 'upstream_tag': '1.5.0',
+                                                              'upstream_sha': 'a' * 40, 'patchset': 'v2'}), \
              patch.object(router, 'latest_completed_version', return_value='1.5.0'), \
              patch.object(router, 'existing_build', return_value=False) as existing, \
              patch.object(router, 'workflow_runs', return_value=[]), \
              patch.object(router, 'dispatch') as dispatch:
             router.route()
         existing.assert_called_once()
-        dispatch.assert_called_once_with('1.5.0')
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.args[0], '1.5.0')
+        self.assertEqual(len(dispatch.call_args.args[1]), 64)
 
     def test_dispatch_pins_official_tag_and_private_draft_mode(self):
         with patch.object(router.subprocess, 'run') as run:
-            router.dispatch('v1.5.1')
+            router.dispatch('v1.5.1', 'e' * 64)
         args = run.call_args.args[0]
         self.assertEqual(args[:4], ['gh', 'workflow', 'run', 'tag.yml'])
         self.assertIn('--ref', args)
@@ -104,6 +107,7 @@ class StableRouterContract(unittest.TestCase):
         self.assertIn('upstream_ref=v1.5.1', args)
         self.assertIn('release_mode=draft', args)
         self.assertIn('include_wayland=true', args)
+        self.assertIn('expected_build_identity=' + 'e' * 64, args)
         self.assertTrue(run.call_args.kwargs['check'])
 
 
