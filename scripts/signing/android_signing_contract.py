@@ -2,6 +2,7 @@
 import json
 import ast
 import os
+import re
 import tempfile
 from unittest.mock import patch
 from pathlib import Path
@@ -25,7 +26,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
     def test_nightly_signing_context_rejects_foreign_branches_and_events(self):
         module=ast.parse(self.script)
         nodes=[n for n in module.body if isinstance(n,ast.FunctionDef) and n.name in ['fail','validate_signing_context']]
-        namespace={};exec(compile(ast.Module(body=nodes,type_ignores=[]),'context-test','exec'),namespace)
+        namespace={'re': re};exec(compile(ast.Module(body=nodes,type_ignores=[]),'context-test','exec'),namespace)
         env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','GITHUB_REF':'refs/heads/main',
              'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main'}
         namespace['validate_signing_context']('nightly',env)
