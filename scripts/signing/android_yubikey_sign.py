@@ -23,6 +23,14 @@ atexit.register(clear_pin)
 def fail(message):
     raise SystemExit(message)
 
+def is_ascii_alphanumeric_pin(value):
+    return bool(value) and all(
+        ord("0") <= char <= ord("9")
+        or ord("A") <= char <= ord("Z")
+        or ord("a") <= char <= ord("z")
+        for char in value
+    )
+
 def parse_arches(value):
     entries = value.split(",")
     if not entries or any(not item.strip() for item in entries):
@@ -63,9 +71,9 @@ arches = parse_arches(os.environ["ARCHES"])
 if not PIN_BUFFER:
     print("SIGNING PIN AVAILABLE: FAIL")
     raise SystemExit(1)
-if any(value < ord("0") or value > ord("9") for value in PIN_BUFFER):
+if not is_ascii_alphanumeric_pin(PIN_BUFFER):
     clear_pin()
-    raise SystemExit("SIGNING PIN FORMAT: FAIL (PIN must contain ASCII digits)")
+    raise SystemExit("SIGNING PIN FORMAT: FAIL (PIN must contain ASCII letters and digits)")
 print("SIGNING PIN AVAILABLE: PASS")
 
 def sign_with_yubikey(apk, out_apk):
