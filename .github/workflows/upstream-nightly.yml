@@ -28,6 +28,7 @@ jobs:
     - name: Follow successful official run and deduplicate exact custom revision
       env:
         GH_TOKEN: ${{ github.token }}
+        ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
       run: python3 scripts/release/nightly.py route
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()

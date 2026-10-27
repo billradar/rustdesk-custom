@@ -47,7 +47,7 @@ class NightlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.discover(r)
 
     def test_dedup_and_bounded_retries(self):
-        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                  _upstream_sha='b'*40, head_sha='a'*40, event='workflow_dispatch',
                  head_branch='main', status='completed', conclusion='failure', id=21)
         state=lambda rows:nightly.route_state(rows,'b'*40,'a'*40)
@@ -57,7 +57,7 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(state([dict(row,status='queued')]),'ACTIVE')
         # An upstream rebuild with a different official run ID has the same
         # source identity and must not trigger another custom build.
-        self.assertEqual(state([dict(row,display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+        self.assertEqual(state([dict(row,display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                                      id=22,conclusion='success')]),'SUCCESS')
         self.assertEqual(state([dict(row,_upstream_sha='c'*40)]),'RETRY')
         self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
@@ -68,7 +68,7 @@ class NightlyTests(unittest.TestCase):
         old=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
         with patch.object(nightly,'discover',return_value={'upstream_sha':'b'*40}):
             self.assertEqual(nightly.source_sha_from_run(old),'b'*40)
-        modern=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true')
+        modern=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false')
         self.assertEqual(nightly.source_sha_from_run(modern),'b'*40)
 
     def test_prior_history_ignores_later_queued_run(self):
@@ -87,10 +87,10 @@ class NightlyTests(unittest.TestCase):
         env=dict(GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
                  GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
                  RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
-        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+        row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                  _upstream_sha='b'*40,head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                  status='completed',conclusion='success',id=21)
-        current=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true',
+        current=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                      head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                      status='in_progress',conclusion='',id=99,run_number=12)
         row['run_number']=11
@@ -137,7 +137,8 @@ class NightlyTests(unittest.TestCase):
 
     def test_release_mode_requires_signed_android_aggregate(self):
         env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.1',PATCHSET='v2',
-                 GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='release')
+                 GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='release',
+                 ANDROID_PRODUCTION_SIGNING_ENABLED='true')
         discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
@@ -186,9 +187,11 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(set(aggregate['needs']),{'resolve','windows-build','platforms-build','android-build','wayland-build','android-sign'})
         self.assertIn("needs.android-sign.result == 'success'",aggregate['if'])
         self.assertIn("inputs.release_mode != 'dry-run'",aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'])
+        self.assertIn("vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true'",aggregate['env']['REQUIRE_ANDROID_PRODUCTION_SIGNING'])
         self.assertTrue(any('nightly.py aggregate' in s.get('run','') for s in aggregate['steps']))
         unsigned=next(x for x in aggregate['steps'] if x.get('with',{}).get('pattern')=='android-build-input-nightly-*')
-        self.assertEqual(unsigned['if'],"inputs.release_mode == 'dry-run'")
+        self.assertIn("inputs.release_mode == 'dry-run'",unsigned['if'])
+        self.assertIn("vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'",unsigned['if'])
         draft=w['jobs']['draft']
         self.assertEqual(draft['permissions'],{'contents':'write','actions':'read'})
         self.assertEqual(draft['concurrency'],{'group':'rustdesk-nightly-release-write','cancel-in-progress':False})
@@ -223,7 +226,8 @@ class NightlyDraftTests(unittest.TestCase):
     def setUp(self):
         self.env={'GITHUB_REPOSITORY':nightly.REPO,'GITHUB_REF':'refs/heads/main',
                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':nightly.REPO+'/.github/workflows/nightly.yml@refs/heads/main',
-                  'RELEASE_MODE':'draft','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'9'}
+                  'RELEASE_MODE':'draft','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'9',
+                  'REQUIRE_ANDROID_PRODUCTION_SIGNING':'true'}
         self.data=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
         self.upstream_notes='# This is a nightly build, which is built every day with the latest code.\n\nChangelog\n\n# Added\n\n- [Example change #123](https://github.com/rustdesk/rustdesk/pull/123)'

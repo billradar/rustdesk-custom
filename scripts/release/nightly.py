@@ -78,9 +78,9 @@ def discover_scheduled():
         time.sleep(60)
 
 
-def route_state(rows, upstream_sha, custom_sha, release_mode='draft', wayland='true', current_run_id=''):
+def route_state(rows, upstream_sha, custom_sha, release_mode='draft', wayland='true', current_run_id='', signing='false'):
     matched = [r for r in rows if r.get('_upstream_sha') == upstream_sha and r['head_sha'] == custom_sha
-               and r['display_title'].endswith(f' / {release_mode} / wayland={wayland}')
+               and r['display_title'].endswith(f' / {release_mode} / wayland={wayland} / android-signing={signing}')
                and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
                and str(r['id']) != str(current_run_id)]
     if any(r['status'] != 'completed' for r in matched):
@@ -116,10 +116,10 @@ def prior_history(rows, current_run_id=''):
 def source_sha_from_run(row):
     """Recover source identity for historical titles while migrating to SHA-based names."""
     title = row.get('display_title', '')
-    match = re.fullmatch(r'Nightly ([0-9a-f]{40}) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)', title)
+    match = re.fullmatch(r'Nightly ([0-9a-f]{40}) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)(?: / android-signing=(?:true|false))?', title)
     if match:
         return match.group(1)
-    match = re.fullmatch(r'Nightly ([1-9][0-9]*) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)', title)
+    match = re.fullmatch(r'Nightly ([1-9][0-9]*) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)(?: / android-signing=(?:true|false))?', title)
     if match:
         try:
             return discover(match.group(1))['upstream_sha']
@@ -163,14 +163,18 @@ def route(data):
     else:
         raise ValueError('Route history exhausted; refusing unsafe deduplication')
     annotate_history(rows)
-    state = route_state(rows, data['upstream_sha'], os.environ['GITHUB_SHA'])
+    signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
+    if signing not in ('true', 'false'):
+        raise ValueError('Invalid Android signing toggle')
+    state = route_state(rows, data['upstream_sha'], os.environ['GITHUB_SHA'], signing=signing)
     print('Nightly route: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed; inspect logs or dispatch manually')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', REPO, '--ref', 'main',
                         '-f', 'official_run_id=' + data['official_run_id'],
-                        '-f', 'expected_sha=' + data['upstream_sha'], '-f', 'release_mode=draft'], check=True)
+                        '-f', 'expected_sha=' + data['upstream_sha'], '-f', 'release_mode=draft',
+                        '-f', 'include_wayland=true'], check=True)
 
 
 def dedup():
@@ -182,7 +186,8 @@ def dedup():
     current = os.environ.get('GITHUB_RUN_ID', '')
     mode = os.environ.get('RELEASE_MODE', 'draft')
     wayland = os.environ.get('INCLUDE_WAYLAND', 'true').lower()
-    if mode not in ('dry-run', 'draft', 'release') or wayland not in ('true', 'false'):
+    signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
+    if mode not in ('dry-run', 'draft', 'release') or wayland not in ('true', 'false') or signing not in ('true', 'false'):
         raise ValueError('Invalid Nightly dedup configuration')
     if os.environ['GITHUB_REF'] == 'refs/heads/development':
         if mode != 'dry-run':
@@ -203,7 +208,7 @@ def dedup():
     rows = prior_history(rows, current)
     annotate_history(rows)
     state = route_state(rows, os.environ['UPSTREAM_EXPECTED_SHA'], os.environ['GITHUB_SHA'],
-                        mode, wayland, current)
+                        mode, wayland, current, signing)
     print('Nightly dedup: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed for this exact source/build identity; inspect logs before retrying')
@@ -261,7 +266,8 @@ def aggregate(root, discovery):
     mode = os.environ.get('RELEASE_MODE', 'dry-run')
     if mode not in ('dry-run', 'draft', 'release'):
         raise ValueError('Unsupported Nightly release mode')
-    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING'] = 'true' if mode in ('draft', 'release') else 'false'
+    signing_required = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower() == 'true'
+    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING'] = 'true' if signing_required and mode in ('draft', 'release') else 'false'
     infos = []
     for p in root.rglob('build-info.json'):
         info = json.loads(p.read_text())
@@ -278,7 +284,7 @@ def aggregate(root, discovery):
             raise ValueError('Nightly must not claim a Stable tag')
     android = [i for i in infos if i.get('platform') == 'android']
     signed = len(android) == 3 and all(i.get('signed_status') == 'PRODUCTION SIGNED / IDENTITY VERIFIED' and i.get('signing_identity_verified') is True and {2, 3}.issubset(set(i.get('signing_schemes', []))) for i in android)
-    if mode in ('draft', 'release') and not signed:
+    if mode in ('draft', 'release') and signing_required and not signed:
         raise ValueError('Nightly draft/release requires all three production-signed Android targets with v2 and v3')
     report = qualify(root, 'nightly', False)
     if report['result'] != 'PASS':
@@ -311,8 +317,9 @@ def draft(root, discovery):
     from scripts.release.production import scan_job_log
     require_draft_context()
     release_mode = os.environ['RELEASE_MODE']
+    signing_required = os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING', 'false').lower() == 'true'
     report = aggregate(root, discovery)  # Revalidate downloaded binaries and signatures in write job.
-    if report['result'] != 'PASS' or not report['android_production_signing']:
+    if report['result'] != 'PASS' or (signing_required and not report['android_production_signing']):
         raise ValueError('Incomplete signed Nightly aggregate')
     data = json.loads(discovery.read_text())
     release_name, upstream_notes = upstream_nightly_release()
@@ -324,7 +331,7 @@ def draft(root, discovery):
                          common_patch_hash=patch_hash('common', data['patchset']),
                          sos_patch_hash=patch_hash('sos', data['patchset']),
                          wayland_included=os.environ.get('INCLUDE_WAYLAND', 'true').lower() == 'true',
-                         build_profile='production-signed',
+                         build_profile='production-signed' if signing_required else 'unsigned',
                          wayland_policy=report.get('wayland', {}).get('policy_sha256'))
     identity = hashlib.sha256(json.dumps(identity_data, sort_keys=True).encode()).hexdigest()
     tag = 'nightly'
@@ -368,7 +375,8 @@ def draft(root, discovery):
                 'sos_patch_hash=' + identity_data['sos_patch_hash'],
                 'wayland_included=' + str(identity_data['wayland_included']).lower(),
                 'asset_inventory=' + json.dumps(sorted(expected)),
-                'android_signing=PRODUCTION SIGNED / IDENTITY VERIFIED; APK v2 AND v3',
+                'android_signing=' + ('PRODUCTION SIGNED / IDENTITY VERIFIED; APK v2 AND v3'
+                                      if report['android_production_signing'] else 'NOT ENABLED'),
                 'desktop_code_signing=NOT ENABLED', 'runtime_ui_validation=NOT TESTED',
                 'real_remote_session=NOT TESTED', 'release_policy=' + ('PUBLIC NIGHTLY PRERELEASE; NOT STABLE' if release_mode == 'release' else 'DRAFT ONLY; NOT PUBLIC'),
                 'automation_state=uploading']

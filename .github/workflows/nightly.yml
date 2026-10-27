@@ -1,5 +1,5 @@
 name: Nightly Build Pipeline
-run-name: Nightly ${{ inputs.expected_sha || inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }}
+run-name: Nightly ${{ inputs.expected_sha || inputs.official_run_id || 'latest' }} / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
 env:
   PYTHONPATH: .
 'on':
@@ -26,12 +26,11 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-${{ github.sha }}-${{ inputs.release_mode == 'dry-run' && 'dry-run' || 'production' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}
+  group: nightly-${{ github.sha }}-${{ inputs.release_mode == 'dry-run' && 'dry-run' || 'production' }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
   cancel-in-progress: false
 jobs:
   resolve:
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.event_name == 'workflow_dispatch' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
     runs-on: ubuntu-22.04
@@ -68,6 +67,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         RELEASE_MODE: ${{ inputs.release_mode }}
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+        ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         UPSTREAM_EXPECTED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
       run: python3 scripts/release/nightly.py dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -149,12 +149,12 @@ jobs:
     name: 'Sign Nightly Android production artifacts (YubiKey PIV 9C)'
     needs: [resolve, android-build]
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
-      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' &&
       needs.resolve.outputs.dedup_skip != 'true' &&
       (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
+      vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' &&
       needs.android-build.result == 'success'
     runs-on:
       - self-hosted
@@ -226,7 +226,7 @@ jobs:
       always() && needs.resolve.outputs.dedup_skip != 'true' && needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' && needs.android-build.result == 'success' &&
       (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
-      (inputs.release_mode == 'dry-run' || needs.android-sign.result == 'success')
+      (inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true' || needs.android-sign.result == 'success')
     runs-on: ubuntu-22.04
     env:
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
@@ -236,7 +236,8 @@ jobs:
       PATCHSET: ${{ needs.resolve.outputs.patchset }}
       BUILD_CONFIGURATION: PRODUCTION
       RELEASE_MODE: ${{ inputs.release_mode }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && 'true' || 'false' }}
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -257,7 +258,7 @@ jobs:
         path: .work/wayland-targets
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      if: inputs.release_mode == 'dry-run'
+      if: inputs.release_mode == 'dry-run' || vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
       with:
         pattern: android-build-input-nightly-*
         path: .work/all-targets/unsigned-android
@@ -295,7 +296,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_MODE: ${{ inputs.release_mode }}
-      REQUIRE_ANDROID_PRODUCTION_SIGNING: 'true'
+      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+      REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
       INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
       BUILD_CHANNEL: nightly
       BUILD_CONFIGURATION: PRODUCTION
@@ -317,6 +319,12 @@ jobs:
       with:
         pattern: rustdesk-wayland-*
         path: .work/wayland-targets
+        merge-multiple: false
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'
+      with:
+        pattern: android-build-input-nightly-*
+        path: .work/all-targets/unsigned-android
         merge-multiple: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
