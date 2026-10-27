@@ -78,6 +78,41 @@ README.md
 python3 -m pip install -r requirements.txt
 ```
 
+## 自定义克隆仓库
+
+克隆本仓库后，请在 **Settings → Secrets and variables → Actions** 中为自己的仓库配置以下内容。工作流会在构建时读取这些设置；原仓库的配置不会自动复制过来。
+
+### 仓库变量
+
+| 名称 | 是否必需 | 用途 |
+| --- | --- | --- |
+| `RUSTDESK_API_SERVER` | 是 | 自建 API 服务的 HTTPS 地址；不要在 URL 中放入认证信息。 |
+| `RUSTDESK_ID_SERVER` | 是 | 自建 ID/rendezvous 服务的主机名或地址。 |
+| `RUSTDESK_RELAY_SERVER` | 否 | 自建 relay 主机；留空时保留上游 relay 自动发现行为。 |
+| `ANDROID_PRODUCTION_SIGNING_ENABLED` | 否，默认 `false` | 只有配置好自己的生产签名身份和 Runner 后才设为 `true`。 |
+
+### 仓库密钥
+
+| 名称 | 是否必需 | 用途 |
+| --- | --- | --- |
+| `RUSTDESK_KEY` | 是 | 自建 RustDesk 服务的 Base64 编码 32 字节公钥。工作流读取的是同名**仓库密钥**。 |
+| `RUSTDESK_PASSWORD` | 是 | 注入客户端的默认永久密码。它会编入客户端，因此取得该构建产物的用户可能恢复这个共享默认值，请据此选择。 |
+
+服务地址和公钥必须属于同一套自建服务。构建验证会检查服务配置及其是否编入产物，但不会打印配置值。
+
+### 可选：Android 生产签名
+
+生产签名与普通构建隔离。要在克隆仓库中启用：
+
+1. 创建名为 `android-production-signing` 的 GitHub Environment，并在其中添加 `YUBIKEY_PIV_PIN` 密钥。
+2. 配置专用自托管 Linux ARM64 Runner，标签为 `self-hosted`、`linux`、`arm64`、`rustdesk-signing`、`android-signing`、`yubikey`；部署经过审核的签名桥接程序并连接 YubiKey。
+3. 将仓库变量 `ANDROID_PRODUCTION_SIGNING_ENABLED` 设为 `true`。
+4. 配置 Environment 的部署保护规则，并将签名工作流限制在受保护的 `main` 分支。
+
+本仓库当前在 `metadata/signing/android-standard.json`、`scripts/signing/android_yubikey_sign.py`、工作流检查和契约中固定校验本项目的 Android 证书指纹。使用其他证书的克隆仓库必须先把这些身份校验及相关契约更新为自己的证书，再启用签名。签名器要求 APK 同时具有 v2 和 v3 签名方案。不要复制原仓库的 PIN 或签名身份。
+
+不要把密钥写入源文件、命令行参数、日志或构建产物。由 Fork 的 Pull Request 触发的工作流不会获得仓库密钥；不要让生产凭据参与构建未经审核的代码。
+
 ## 开发
 
 ```bash
