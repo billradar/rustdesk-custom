@@ -3,7 +3,7 @@ package com.billradar.rustdesk.signing.bridge;
 import java.io.IOException;
 import java.util.Arrays;
 
-/** Reads a non-echoed, newline-terminated numeric PIN from standard input. */
+/** Reads a non-echoed, newline-terminated ASCII alphanumeric PIN from standard input. */
 public final class StandardInputPinSource implements PinSource {
     private static final int MAX_PIN_LENGTH = 64;
 
@@ -17,7 +17,10 @@ public final class StandardInputPinSource implements PinSource {
                 int value = System.in.read();
                 if (value == -1 || value == '\n') break;
                 if (value == '\r') continue;
-                if (value < '0' || value > '9' || length == MAX_PIN_LENGTH) {
+                boolean asciiAlphanumeric = (value >= '0' && value <= '9')
+                        || (value >= 'A' && value <= 'Z')
+                        || (value >= 'a' && value <= 'z');
+                if (!asciiAlphanumeric || length == MAX_PIN_LENGTH) {
                     throw new IllegalArgumentException("standard input PIN format is invalid");
                 }
                 bytes[length] = (byte) value;
