@@ -68,6 +68,9 @@ def aggregate(root,channel,experimental):
         for variant in ('standard','sos'):
             sources={i.get('prepared_source_identity',i.get('prepared_source_manifest_hash')) for i in found.values() if i['variant']==variant}
             if len(sources)>1 or None in sources:raise ValueError('PROVENANCE: prepared variant identity mismatch')
+    if channel == 'stable':
+        from scripts.release.stable_lock import require
+        require(list(found.values()))
     results={}
     for name,e in expected.items():
         i=found.get(name)
@@ -443,6 +446,8 @@ def _release(root, publish, channel='stable', experimental=False):
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
 def publish_existing_draft(channel='stable'):
+    from scripts.release.stable_lock import require
+    require()
     if channel != 'stable':
         raise ValueError('Only Stable supports publishing an existing completed draft')
     from scripts.release.github import request

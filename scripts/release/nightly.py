@@ -2,7 +2,6 @@
 """Follow successful official Nightly runs; never infer source from its moving tag."""
 import argparse
 import base64
-from datetime import datetime, timezone
 import json
 import hashlib
 import time
@@ -59,31 +58,6 @@ def discover(run_id=''):
                 upstream_ref=sha, upstream_tag='', upstream_version=version, patchset=patchset,
                 official_run_id=str(run['id']), official_run_url=run['html_url'],
                 common_patch_hash=patch_hash('common', patchset), sos_patch_hash=patch_hash('sos', patchset))
-
-
-def discover_scheduled():
-    """Wait for today's upstream scheduled Nightly, then bind to its completed SHA."""
-    branch = api(f'repos/{OFFICIAL}')['default_branch']
-    utc_day = datetime.now(timezone.utc).date().isoformat()
-    deadline = time.monotonic() + 150 * 60
-    while True:
-        rows = api(f'repos/{OFFICIAL}/actions/workflows/flutter-nightly.yml/runs?per_page=100')['workflow_runs']
-        run = next((r for r in rows if r.get('created_at', '').startswith(utc_day)
-                    and r.get('head_branch') == branch and r.get('event') in ('schedule', 'workflow_dispatch')
-                    and r.get('path') == '.github/workflows/flutter-nightly.yml'
-                    and (r.get('head_repository') or {}).get('full_name') == OFFICIAL), None)
-        if run:
-            current = api(f'repos/{OFFICIAL}/actions/runs/{run["id"]}')
-            if current.get('status') == 'completed':
-                if current.get('conclusion') != 'success':
-                    raise ValueError('Today\'s official Nightly run completed without success')
-                return discover(str(run['id']))
-            print(f'Waiting for today\'s official Nightly run {run["id"]} to complete')
-        else:
-            print('Waiting for today\'s official Nightly run to start')
-        if time.monotonic() >= deadline:
-            raise TimeoutError('Today\'s official Nightly did not complete within the routing window')
-        time.sleep(60)
 
 
 def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
@@ -243,8 +217,7 @@ def route(data):
         raise ValueError('A matching Nightly run has no discovery artifact; inspect it before dispatching again')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
-                        '-f', 'official_run_id=' + data['official_run_id'],
-                        '-f', 'expected_sha=' + data['upstream_sha'], '-f', 'release_mode=draft',
+                        '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true'], check=True)
 
 
@@ -611,15 +584,13 @@ def draft(root, discovery):
     return result
 
 
-if __name__ == '__main__':
+def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument('mode', choices=['resolve', 'route', 'dedup', 'aggregate', 'preflight', 'draft'])
-    p.add_argument('--official-run-id', default='')
-    p.add_argument('--expected-sha', default='')
     p.add_argument('--root', type=Path, default=Path('.work/all-targets'))
     p.add_argument('--tree', type=Path)
     p.add_argument('--discovery', type=Path, default=Path('.work/nightly-discovery.json'))
-    a = p.parse_args()
+    a = p.parse_args(argv)
     if a.mode == 'preflight':
         if a.tree is None:
             p.error('preflight requires --tree')
@@ -631,12 +602,11 @@ if __name__ == '__main__':
     elif a.mode == 'aggregate':
         aggregate(a.root, a.discovery)
     else:
-        if a.mode == 'route' and os.environ.get('GITHUB_EVENT_NAME') == 'schedule':
-            data = discover_scheduled()
-        else:
-            data = discover(a.official_run_id)
-        if a.expected_sha and a.expected_sha != data['upstream_sha']:
-            raise ValueError('Official run/source SHA mismatch')
+        data = discover()
         save(data)
         if a.mode == 'route':
             route(data)
+
+
+if __name__ == '__main__':
+    main()
