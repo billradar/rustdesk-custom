@@ -55,13 +55,11 @@ def validate_signing_context(channel, env):
     if channel not in ('stable', 'nightly'):
         fail('SIGNING: unsupported production signing channel')
     if channel == 'nightly':
-        expected = {
-            'GITHUB_REPOSITORY': 'billradar/rustdesk-custom',
-            'GITHUB_REF': 'refs/heads/main',
-            'GITHUB_EVENT_NAME': 'workflow_dispatch',
-            'GITHUB_WORKFLOW_REF': 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main',
-        }
-        if any(env.get(k) != v for k, v in expected.items()):
+        repo = env.get('GITHUB_REPOSITORY', '')
+        if (not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo)
+                or env.get('GITHUB_REF') != 'refs/heads/main'
+                or env.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+                or env.get('GITHUB_WORKFLOW_REF') != repo + '/.github/workflows/nightly.yml@refs/heads/main'):
             fail('SIGNING: Nightly requires protected main workflow context')
 
 

@@ -270,6 +270,8 @@ class ParallelGateTests(unittest.TestCase):
         self.assertEqual(tag['release']['needs'],'aggregate')
         self.assertEqual(tag['publish-existing']['needs'],['resolve','draft-preflight'])
         self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
+        for name in ('publish-existing','release','draft'):
+            self.assertIn("github.ref == 'refs/heads/main'",tag[name]['if'])
         self.assertIn('build_needed',tag['aggregate']['outputs'])
         self.assertIn('draft_needed',tag['aggregate']['outputs'])
         self.assertIn('publish_existing',tag['aggregate']['outputs'])

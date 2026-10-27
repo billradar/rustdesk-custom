@@ -4,7 +4,7 @@
 
 Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI 的编译和打包分离。普通 CI 不应访问生产签名 Environment、YubiKey、PKCS#11 设备或生产 PIN。
 
-生产签名流程必须由明确授权的 Stable Workflow 触发，并满足工作流中的仓库、分支、事件、构建成功和资格验证条件。仅有构建成功不能触发生产签名。
+生产签名流程必须由 Stable 或 Nightly Workflow 在签名开关启用后触发，并满足工作流中的分支、事件、构建成功和资格验证条件。仅有构建成功不能触发生产签名。
 
 ## 2. 当前记录的身份
 
@@ -17,7 +17,16 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 
 当前仓库只维护上述 YubiKey 生产签名身份，不再保留旧签名证书指纹、旧 APK 校验和或旧 keystore 签名配置。**应用更新兼容性仍是独立验证项**：更换签名证书后，不得仅凭包名相同或 v3 签名存在，就宣称能够覆盖安装既有 APK；需要独立的设备升级验证证据。
 
-## 3. 执行结构
+## 3. 仓库级签名开关
+
+Stable Tag 和 Nightly 工作流读取 GitHub Actions 仓库变量 `ANDROID_PRODUCTION_SIGNING_ENABLED`：
+
+- `true`：在具备受保护 Environment、专用 YubiKey Runner 和 PIN Secret 时启用 Android 生产签名 Job。
+- `false` 或未设置：跳过硬件签名，使用已校验来源的未签名 APK，并在 Release 元数据中标记 `android_signing=NOT ENABLED`。
+
+在 GitHub 仓库的 **Settings → Secrets and variables → Actions → Variables** 中创建该变量。克隆仓库后未设置时默认不签名；设置为 `true` 只会启用签名 Job，不会提供签名硬件或密钥。克隆者必须配置自己的受保护 Runner、Environment、PIN Secret，并更新签名身份元数据及其证书校验；不能直接沿用本仓库固定的 YubiKey 证书身份。
+
+## 4. 执行结构
 
 1. 普通 Android build Job 生成待签名产物。
 2. 独立的 `android-sign` Job 只在工作流定义的受限条件下运行。
@@ -29,7 +38,7 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 
 专用 Runner、Environment 和 PIN 的真实配置状态应在 GitHub 设置中核实；文档只能说明仓库要求，不能代替在线配置检查。
 
-## 4. 操作前检查清单
+## 5. 操作前检查清单
 
 - [ ] 确认正在运行的是仓库官方 Stable Release Pipeline，而不是普通 CI 或 Nightly。
 - [ ] 确认目标自定义提交和上游 SHA 已通过对应资格验证。
@@ -39,7 +48,7 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 - [ ] 确认公开身份元数据中的证书指纹、slot 和 object ID 与真实硬件一致。
 - [ ] 确认签名产物来源、ABI、包名和校验和可追溯。
 
-## 5. 执行步骤
+## 6. 执行步骤
 
 1. 在 GitHub Actions 中打开 Stable Release Pipeline。
 2. 先核对当前分支、提交 SHA、上游版本和 release mode；生产签名只允许工作流实际定义的受限上下文执行。
@@ -48,7 +57,7 @@ Android Standard 的生产签名由专用硬件签名路径处理，与普通 CI
 5. 检查签名 Job 的结果、证书指纹验证、产物上传和最终聚合结果。
 6. 保存运行链接和非敏感验证摘要；不要保存 PIN 或可用于重放签名的敏感材料。
 
-## 6. 安全禁止事项
+## 7. 安全禁止事项
 
 - 不得将 `YUBIKEY_PIV_PIN` 放入仓库文件、命令行参数、日志、PR 评论或文档。
 - 不得把生产 Secret 暴露给普通 build、Nightly 或不受信任的 PR。

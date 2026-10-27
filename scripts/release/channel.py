@@ -21,7 +21,7 @@ def outputs(data):
     print(json.dumps(data,indent=2))
 
 def build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha=None,
-                   wayland_included=None, wayland_policy_sha256=''):
+                   wayland_included=None, wayland_policy_sha256='', android_signing_enabled=False):
     # Keep the four-field form only for reading historical Stable records.
     if custom_sha is None and wayland_included is None and not wayland_policy_sha256:
         return hashlib.sha256('|'.join((upstream_sha,patchset,common_hash,sos_hash)).encode()).hexdigest()
@@ -33,10 +33,11 @@ def build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha=Non
         raise ValueError('Stable Wayland identity requires the policy SHA-256')
     if not wayland_included and wayland_policy_sha256:
         raise ValueError('Wayland policy hash supplied while Wayland is disabled')
-    identity = dict(schema='stable-build-identity-v2', upstream_sha=upstream_sha,
+    identity = dict(schema='stable-build-identity-v3', upstream_sha=upstream_sha,
                     patchset=patchset, common_patch_hash=common_hash, sos_patch_hash=sos_hash,
                     custom_repository_sha=custom_sha, wayland_included=wayland_included,
-                    wayland_policy_sha256=wayland_policy_sha256)
+                    wayland_policy_sha256=wayland_policy_sha256,
+                    android_signing_enabled=bool(android_signing_enabled))
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -143,7 +144,8 @@ def release_preflight(data):
     data.update(custom_repository_sha=custom_sha,wayland_included=wayland_included,
                 wayland_policy_sha256=wayland_policy_sha256)
     current_identity=build_identity(data['upstream_sha'],data['patchset'],patch_hash('common',data['patchset']),
-                                    patch_hash('sos',data['patchset']),custom_sha,wayland_included,wayland_policy_sha256)
+                                    patch_hash('sos',data['patchset']),custom_sha,wayland_included,wayland_policy_sha256,
+                                    os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED','false').lower()=='true')
     same=same_identity_release(data['version'],current_identity)
     if same:
         data['release_tag']=require_release_tag(same,data['version'])
@@ -296,7 +298,7 @@ def draft(root):
         f'Wayland Included: {str(wayland_included).lower()}',
         *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
         f'Patch Revision: {info["patch_revision"]}',
-        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],info["custom_repository_sha"],wayland_included,wayland_policy_sha256)}',
+        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],info["custom_repository_sha"],wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true")}',
         f'Asset Inventory: {inventory}',
         'automation_state=complete',
         '-->'

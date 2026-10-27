@@ -2,6 +2,7 @@
 import json
 import ast
 import os
+import re
 import tempfile
 from unittest.mock import patch
 from pathlib import Path
@@ -25,10 +26,14 @@ class StableAndroidSigningContractTests(unittest.TestCase):
     def test_nightly_signing_context_rejects_foreign_branches_and_events(self):
         module=ast.parse(self.script)
         nodes=[n for n in module.body if isinstance(n,ast.FunctionDef) and n.name in ['fail','validate_signing_context']]
-        namespace={};exec(compile(ast.Module(body=nodes,type_ignores=[]),'context-test','exec'),namespace)
+        namespace={'re': re};exec(compile(ast.Module(body=nodes,type_ignores=[]),'context-test','exec'),namespace)
         env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','GITHUB_REF':'refs/heads/main',
              'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main'}
         namespace['validate_signing_context']('nightly',env)
+        clone='example/rustdesk-custom'
+        clone_env={'GITHUB_REPOSITORY':clone,'GITHUB_REF':'refs/heads/main',
+                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':clone+'/.github/workflows/nightly.yml@refs/heads/main'}
+        namespace['validate_signing_context']('nightly',clone_env)
         for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),('GITHUB_REPOSITORY','foreign/repo'),('GITHUB_WORKFLOW_REF','foreign/workflow')]:
             with self.assertRaises(SystemExit):namespace['validate_signing_context']('nightly',dict(env,**{key:value}))
         self.assertIn('"channel": channel',self.script)
@@ -56,6 +61,7 @@ class StableAndroidSigningContractTests(unittest.TestCase):
             self.assertIn(marker, signing["if"])
         self.assertNotIn("production_android_signing", signing["if"])
         self.assertIn("release_mode != 'dry-run'", signing["if"])
+        self.assertIn("vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true'", signing["if"])
 
     def test_secret_is_bound_only_to_production_signing_action(self):
         signing = self.tag["jobs"]["android-sign"]

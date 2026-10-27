@@ -145,6 +145,11 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertNotEqual(first['build_identity'],changed_commit['build_identity'])
         self.assertNotEqual(first['build_identity'],changed_wayland['build_identity'])
 
+    def test_signing_toggle_changes_stable_build_identity(self):
+        args=('a'*40,'v1','c'*64,'d'*64,'b'*40,False)
+        self.assertNotEqual(channel.build_identity(*args,android_signing_enabled=False),
+                            channel.build_identity(*args,android_signing_enabled=True))
+
     def test_switching_patchset_allocates_its_own_counter(self):
         existing_v1=self.draft_fixture('v1','2')
         rows=[existing_v1]

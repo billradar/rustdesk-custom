@@ -10,8 +10,8 @@
 | `.github/workflows/build.yml` / `build-platform.yml` | 规划构建目标、执行平台构建并传递产物身份 |
 | `.github/workflows/build-stable-windows.yml` | Stable Windows 构建入口 |
 | `.github/workflows/build-stable-platforms.yml` | Stable Linux / macOS 等平台构建入口 |
-| `.github/workflows/build-stable-android.yml` | Stable Android 构建入口；生产签名在独立的受保护 Job 中执行 |
-| `.github/workflows/tag.yml` | Stable 解析、revision 预检、构建、产物聚合、Android 生产签名门禁及 Dry-run / Draft / Release 决策 |
+| `.github/workflows/build-stable-android.yml` | Stable Android 构建入口；可选生产签名在独立的受保护 Job 中执行 |
+| `.github/workflows/tag.yml` | Stable 解析、revision 预检、构建、产物聚合、可选 Android 生产签名及 Dry-run / Draft / Release 决策 |
 | `.github/workflows/upstream-stable.yml` | 定期发现官方 Stable Release，并将最新版本路由到已签名的私有 Draft 构建 |
 | `.github/workflows/upstream-main-compatibility.yml` | 定期验证官方上游默认分支的兼容性；不构建或发布 Nightly 产物 |
 | `.github/workflows/android-yubikey-signing-test.yml` | 需要手动触发并明确授权的 YubiKey 签名冒烟测试，不发布或提升 Release |
@@ -50,7 +50,7 @@ Draft / Revision 预检
        ↓
 产物验证和聚合
        ↓
-Android 生产签名（仅满足所有授权门禁时）
+Android 生产签名（仓库变量开启且所有授权门禁满足时）
        ↓
 最终聚合与发布预检
        ↓
@@ -141,8 +141,8 @@ Wayland 选择去重；官方运行 ID 只作为来源记录，不会让相同 S
 
 全矩阵和同批来源验证通过后，安装包、SHA256SUMS 与验证报告出现在
 `nightly-qualification-<run-id>` Actions 产物中；单目标失败不会发布完整批次。
-Nightly 的 `release_mode` 默认 `draft`：仅主分支的直接签名 job 绑定 Android
-生产签名 Environment 与 YubiKey，全部构建和签名验证通过后创建 prerelease Draft。
+Nightly 的 `release_mode` 默认 `draft`：仓库变量开启时，主分支的直接签名 job 绑定 Android
+生产签名 Environment 与 YubiKey，全部构建和签名验证通过后创建 prerelease Draft。变量关闭或未设置时，跳过签名并在来源验证后附带未签名 APK。
 普通构建 job 不接触 PIN，Draft job 也不接触 PIN；公开 Nightly 预发布版只能通过明确选择
 `release` 手动触发。
 `dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
@@ -166,8 +166,9 @@ PIV identity, v2/v3 requirements and physical-key concurrency lock. The input AP
 channel must match `SIGNING_CHANNEL`; Nightly receipts also record the channel.
 
 The complete parent aggregate requires all three production-signed Android ABIs
-in Draft and release modes. A separate contents-write job downloads the exact
-same-run signed packages and optional Wayland pair and revalidates them before any
+in Draft and release modes when signing is enabled. If it is disabled, the aggregate
+uses validated unsigned Android build artifacts instead. A separate contents-write job downloads the exact
+same-run Android packages and optional Wayland pair and revalidates them before any
 write. It scans completed build logs, then refreshes the fixed `nightly` tag and
 Release only after validation succeeds. The existing Release is temporarily made a
 Draft, prior assets are removed, the tag is moved to the custom build commit, and
@@ -182,3 +183,18 @@ workflow serializes matching custom/mode/Wayland batches, and the resolve job ch
 prior runs before source preparation. A successful dry-run cannot suppress a signed
 Draft batch. This workflow must be merged to main before production signing/Draft
 can execute; unit and CI checks do not prove a hardware signing operation occurred.
+
+### Android production signing switch
+
+Stable Tag and Nightly read the GitHub Actions repository variable
+`ANDROID_PRODUCTION_SIGNING_ENABLED`. Set it to the string `true` to request the
+protected YubiKey signing job. Set it to `false`, or leave it undefined, to skip
+that job and publish validated unsigned Android packages. The switch is part of
+the Stable build identity, so a Draft made with one signing mode is not reused
+after changing modes.
+
+For a cloned repository, configure this variable under **Settings → Secrets and
+variables → Actions → Variables**. Enabling the switch does not provision a key:
+the clone also needs its own protected runner, Environment, PIN secret, and
+reviewed Android signing identity. Never claim the original repository's
+certificate identity for a different key.

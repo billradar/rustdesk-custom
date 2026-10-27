@@ -25,6 +25,14 @@ ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / '.work/qualification-aggregate/assets'
 
 
+def repository():
+    """Use the repository that owns this workflow, including user clones."""
+    repo = os.environ.get('GITHUB_REPOSITORY', REPO)
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
+        raise ValueError('Invalid custom repository identity')
+    return repo
+
+
 def discover(run_id=''):
     branch = api(f'repos/{OFFICIAL}')['default_branch']
     if run_id:
@@ -78,9 +86,9 @@ def discover_scheduled():
         time.sleep(60)
 
 
-def route_state(rows, upstream_sha, custom_sha, release_mode='draft', wayland='true', current_run_id=''):
+def route_state(rows, upstream_sha, custom_sha, release_mode='draft', wayland='true', current_run_id='', signing='false'):
     matched = [r for r in rows if r.get('_upstream_sha') == upstream_sha and r['head_sha'] == custom_sha
-               and r['display_title'].endswith(f' / {release_mode} / wayland={wayland}')
+               and r['display_title'].endswith(f' / {release_mode} / wayland={wayland} / android-signing={signing}')
                and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
                and str(r['id']) != str(current_run_id)]
     if any(r['status'] != 'completed' for r in matched):
@@ -116,10 +124,10 @@ def prior_history(rows, current_run_id=''):
 def source_sha_from_run(row):
     """Recover source identity for historical titles while migrating to SHA-based names."""
     title = row.get('display_title', '')
-    match = re.fullmatch(r'Nightly ([0-9a-f]{40}) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)', title)
+    match = re.fullmatch(r'Nightly ([0-9a-f]{40}) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)(?: / android-signing=(?:true|false))?', title)
     if match:
         return match.group(1)
-    match = re.fullmatch(r'Nightly ([1-9][0-9]*) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)', title)
+    match = re.fullmatch(r'Nightly ([1-9][0-9]*) / [0-9a-f]{40} / (?:dry-run|draft|release) / wayland=(?:true|false)(?: / android-signing=(?:true|false))?', title)
     if match:
         try:
             return discover(match.group(1))['upstream_sha']
@@ -131,7 +139,7 @@ def source_sha_from_run(row):
     if title.startswith('Nightly latest / ') and row.get('id'):
         with tempfile.TemporaryDirectory(prefix='nightly-dedup-') as temp:
             artifact = f'nightly-discovery-{row["id"]}'
-            result = subprocess.run(['gh', 'run', 'download', str(row['id']), '--repo', REPO,
+            result = subprocess.run(['gh', 'run', 'download', str(row['id']), '--repo', repository(),
                                      '--name', artifact, '--dir', temp],
                                     text=True, capture_output=True)
             if result.returncode == 0:
@@ -151,38 +159,44 @@ def annotate_history(rows):
 
 
 def route(data):
-    if (os.environ.get('GITHUB_REPOSITORY') != REPO or os.environ.get('GITHUB_REF') != 'refs/heads/main'
+    repo = repository()
+    if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')):
         raise ValueError('Nightly router requires trusted main context')
     rows = []
     for page in range(1, 11):
-        batch = api(f'repos/{REPO}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
+        batch = api(f'repos/{repo}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
         rows += batch
         if len(batch) < 100:
             break
     else:
         raise ValueError('Route history exhausted; refusing unsafe deduplication')
     annotate_history(rows)
-    state = route_state(rows, data['upstream_sha'], os.environ['GITHUB_SHA'])
+    signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
+    if signing not in ('true', 'false'):
+        raise ValueError('Invalid Android signing toggle')
+    state = route_state(rows, data['upstream_sha'], os.environ['GITHUB_SHA'], signing=signing)
     print('Nightly route: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed; inspect logs or dispatch manually')
     if state == 'RETRY':
-        subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', REPO, '--ref', 'main',
+        subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'official_run_id=' + data['official_run_id'],
-                        '-f', 'expected_sha=' + data['upstream_sha'], '-f', 'release_mode=draft'], check=True)
+                        '-f', 'expected_sha=' + data['upstream_sha'], '-f', 'release_mode=draft',
+                        '-f', 'include_wayland=true'], check=True)
 
 
 def dedup():
     """Skip duplicate manual dispatches before preparation/build/signing begins."""
-    if (os.environ.get('GITHUB_REPOSITORY') != REPO
-            or os.environ.get('GITHUB_REF') not in ('refs/heads/main', 'refs/heads/development')
+    repository()
+    if (os.environ.get('GITHUB_REF') not in ('refs/heads/main', 'refs/heads/development')
             or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'):
         raise ValueError('Nightly dedup requires a trusted branch workflow_dispatch context')
     current = os.environ.get('GITHUB_RUN_ID', '')
     mode = os.environ.get('RELEASE_MODE', 'draft')
     wayland = os.environ.get('INCLUDE_WAYLAND', 'true').lower()
-    if mode not in ('dry-run', 'draft', 'release') or wayland not in ('true', 'false'):
+    signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
+    if mode not in ('dry-run', 'draft', 'release') or wayland not in ('true', 'false') or signing not in ('true', 'false'):
         raise ValueError('Invalid Nightly dedup configuration')
     if os.environ['GITHUB_REF'] == 'refs/heads/development':
         if mode != 'dry-run':
@@ -194,7 +208,7 @@ def dedup():
         return
     rows = []
     for page in range(1, 11):
-        batch = api(f'repos/{REPO}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
+        batch = api(f'repos/{repository()}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
         rows += batch
         if len(batch) < 100:
             break
@@ -203,7 +217,7 @@ def dedup():
     rows = prior_history(rows, current)
     annotate_history(rows)
     state = route_state(rows, os.environ['UPSTREAM_EXPECTED_SHA'], os.environ['GITHUB_SHA'],
-                        mode, wayland, current)
+                        mode, wayland, current, signing)
     print('Nightly dedup: ' + state)
     if state == 'EXHAUSTED':
         raise ValueError('Three attempts failed for this exact source/build identity; inspect logs before retrying')
@@ -261,7 +275,8 @@ def aggregate(root, discovery):
     mode = os.environ.get('RELEASE_MODE', 'dry-run')
     if mode not in ('dry-run', 'draft', 'release'):
         raise ValueError('Unsupported Nightly release mode')
-    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING'] = 'true' if mode in ('draft', 'release') else 'false'
+    signing_required = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower() == 'true'
+    os.environ['REQUIRE_ANDROID_PRODUCTION_SIGNING'] = 'true' if signing_required and mode in ('draft', 'release') else 'false'
     infos = []
     for p in root.rglob('build-info.json'):
         info = json.loads(p.read_text())
@@ -278,7 +293,7 @@ def aggregate(root, discovery):
             raise ValueError('Nightly must not claim a Stable tag')
     android = [i for i in infos if i.get('platform') == 'android']
     signed = len(android) == 3 and all(i.get('signed_status') == 'PRODUCTION SIGNED / IDENTITY VERIFIED' and i.get('signing_identity_verified') is True and {2, 3}.issubset(set(i.get('signing_schemes', []))) for i in android)
-    if mode in ('draft', 'release') and not signed:
+    if mode in ('draft', 'release') and signing_required and not signed:
         raise ValueError('Nightly draft/release requires all three production-signed Android targets with v2 and v3')
     report = qualify(root, 'nightly', False)
     if report['result'] != 'PASS':
@@ -290,8 +305,10 @@ def aggregate(root, discovery):
 
 
 def require_draft_context():
-    expected = {'GITHUB_REPOSITORY': REPO, 'GITHUB_REF': 'refs/heads/main',
-                'GITHUB_EVENT_NAME': 'workflow_dispatch', 'GITHUB_WORKFLOW_REF': REPO + '/.github/workflows/nightly.yml@refs/heads/main'}
+    repo = repository()
+    expected = {'GITHUB_REPOSITORY': repo, 'GITHUB_REF': 'refs/heads/main',
+                'GITHUB_EVENT_NAME': 'workflow_dispatch',
+                'GITHUB_WORKFLOW_REF': repo + '/.github/workflows/nightly.yml@refs/heads/main'}
     if any(os.environ.get(k) != v for k, v in expected.items()) or os.environ.get('RELEASE_MODE') not in ('draft', 'release'):
         raise ValueError('Nightly release writes require the protected main workflow and qualified mode')
 
@@ -311,10 +328,12 @@ def draft(root, discovery):
     from scripts.release.production import scan_job_log
     require_draft_context()
     release_mode = os.environ['RELEASE_MODE']
+    signing_required = os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING', 'false').lower() == 'true'
     report = aggregate(root, discovery)  # Revalidate downloaded binaries and signatures in write job.
-    if report['result'] != 'PASS' or not report['android_production_signing']:
+    if report['result'] != 'PASS' or (signing_required and not report['android_production_signing']):
         raise ValueError('Incomplete signed Nightly aggregate')
     data = json.loads(discovery.read_text())
+    repo = repository()
     release_name, upstream_notes = upstream_nightly_release()
     run_id = str(data['official_run_id'])
     if not re.fullmatch(r'[1-9][0-9]*', run_id):
@@ -324,11 +343,11 @@ def draft(root, discovery):
                          common_patch_hash=patch_hash('common', data['patchset']),
                          sos_patch_hash=patch_hash('sos', data['patchset']),
                          wayland_included=os.environ.get('INCLUDE_WAYLAND', 'true').lower() == 'true',
-                         build_profile='production-signed',
+                         build_profile='production-signed' if signing_required else 'unsigned',
                          wayland_policy=report.get('wayland', {}).get('policy_sha256'))
     identity = hashlib.sha256(json.dumps(identity_data, sort_keys=True).encode()).hexdigest()
     tag = 'nightly'
-    jobs_path = f'repos/{REPO}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100'
+    jobs_path = f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100'
     for attempt in range(5):
         try:
             jobs = api(jobs_path)['jobs']
@@ -341,7 +360,7 @@ def draft(root, discovery):
             time.sleep(delay)
     for job in jobs:
         if job['status'] == 'completed' and job['conclusion'] == 'success':
-            scan_job_log(job['id'])
+            scan_job_log(job['id'], repo)
     files = sorted(p for p in ASSETS.iterdir() if p.is_file())
     if any(p.suffix.lower() == '.json' or p.name.startswith(('source-', 'build-info-')) for p in files):
         raise ValueError('Non-public metadata in Nightly release assets')
@@ -368,7 +387,8 @@ def draft(root, discovery):
                 'sos_patch_hash=' + identity_data['sos_patch_hash'],
                 'wayland_included=' + str(identity_data['wayland_included']).lower(),
                 'asset_inventory=' + json.dumps(sorted(expected)),
-                'android_signing=PRODUCTION SIGNED / IDENTITY VERIFIED; APK v2 AND v3',
+                'android_signing=' + ('PRODUCTION SIGNED / IDENTITY VERIFIED; APK v2 AND v3'
+                                      if report['android_production_signing'] else 'NOT ENABLED'),
                 'desktop_code_signing=NOT ENABLED', 'runtime_ui_validation=NOT TESTED',
                 'real_remote_session=NOT TESTED', 'release_policy=' + ('PUBLIC NIGHTLY PRERELEASE; NOT STABLE' if release_mode == 'release' else 'DRAFT ONLY; NOT PUBLIC'),
                 'automation_state=uploading']
@@ -379,14 +399,14 @@ def draft(root, discovery):
 
     # A single moving release is intentional. Hide an existing published
     # prerelease during replacement so consumers never see a mixed asset set.
-    existing = api(f'repos/{REPO}/releases/tags/{tag}', missing=True)
+    existing = api(f'repos/{repository()}/releases/tags/{tag}', missing=True)
     if existing and existing.get('immutable') is True:
         raise ValueError('The nightly release is immutable and cannot be refreshed')
     if existing and 'channel=nightly' not in (existing.get('body') or '').splitlines():
         raise ValueError('Refusing to replace a nightly-tag release not owned by this workflow')
     if existing:
         body = existing.get('body') or ''
-        existing_ref = api(f'repos/{REPO}/git/ref/tags/{tag}', missing=True)
+        existing_ref = api(f'repos/{repository()}/git/ref/tags/{tag}', missing=True)
         tag_matches_source = (existing_ref or {}).get('object', {}).get('sha') == os.environ['GITHUB_SHA']
         expected_metadata = [
             'nightly_identity=' + identity,
@@ -399,7 +419,7 @@ def draft(root, discovery):
             'wayland_included=' + str(identity_data['wayland_included']).lower(),
             'automation_state=complete',
         ]
-        remote_rows = api(f'repos/{REPO}/releases/{existing["id"]}/assets?per_page=100') or []
+        remote_rows = api(f'repos/{repository()}/releases/{existing["id"]}/assets?per_page=100') or []
         remote = {a['name']: {'size': a['size'], 'digest': a.get('digest')}
                   for a in remote_rows if a.get('state') == 'uploaded'}
         inventory_line = next((line for line in body.splitlines() if line.startswith('asset_inventory=')), '')
@@ -427,7 +447,7 @@ def draft(root, discovery):
             if existing.get('draft') is True:
                 promoted_body = body.replace('release_policy=DRAFT ONLY; NOT PUBLIC',
                                              'release_policy=PUBLIC NIGHTLY PRERELEASE; NOT STABLE')
-                promoted = request('PATCH', f'repos/{REPO}/releases/{existing["id"]}',
+                promoted = request('PATCH', f'repos/{repository()}/releases/{existing["id"]}',
                                    dict(draft=False, prerelease=True, body=promoted_body))
                 if promoted.get('draft') is not False or promoted.get('prerelease') is not True:
                     raise ValueError('Reused Nightly Draft promotion state mismatch')
@@ -438,25 +458,25 @@ def draft(root, discovery):
             return result
     if existing:
         release_id = existing['id']
-        staged = request('PATCH', f'repos/{REPO}/releases/{release_id}',
+        staged = request('PATCH', f'repos/{repository()}/releases/{release_id}',
                          dict(tag_name=tag, target_commitish=os.environ['GITHUB_SHA'],
                               name=release_name, body=notes, draft=True, prerelease=True))
         if staged.get('draft') is not True or staged.get('prerelease') is not True:
             raise ValueError('Could not hide existing Nightly release before replacing assets')
         old_assets = []
         for page in range(1, 11):
-            page_assets = api(f'repos/{REPO}/releases/{release_id}/assets?per_page=100&page={page}') or []
+            page_assets = api(f'repos/{repository()}/releases/{release_id}/assets?per_page=100&page={page}') or []
             old_assets.extend(page_assets)
             if len(page_assets) < 100:
                 break
         else:
             raise ValueError('Nightly release has too many asset pages; refusing incomplete replacement')
         for asset in old_assets:
-            gh('api', '--method', 'DELETE', f'repos/{REPO}/releases/assets/{asset["id"]}')
-        if api(f'repos/{REPO}/releases/{release_id}/assets?per_page=100'):
+            gh('api', '--method', 'DELETE', f'repos/{repository()}/releases/assets/{asset["id"]}')
+        if api(f'repos/{repository()}/releases/{release_id}/assets?per_page=100'):
             raise ValueError('Could not clear prior Nightly assets before replacement')
-    ref_path = f'repos/{REPO}/git/ref/tags/{tag}'
-    ref_update_path = f'repos/{REPO}/git/refs/tags/{tag}'
+    ref_path = f'repos/{repository()}/git/ref/tags/{tag}'
+    ref_update_path = f'repos/{repository()}/git/refs/tags/{tag}'
     current_ref = api(ref_path, missing=True)
     if current_ref:
         if current_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
@@ -464,12 +484,12 @@ def draft(root, discovery):
             if updated_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
                 raise ValueError('Nightly tag did not move to the validated custom source commit')
     elif existing:
-        created_ref = request('POST', f'repos/{REPO}/git/refs',
+        created_ref = request('POST', f'repos/{repository()}/git/refs',
                               dict(ref='refs/tags/' + tag, sha=os.environ['GITHUB_SHA']))
         if created_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
             raise ValueError('Nightly tag could not be recreated at the validated custom source commit')
     if not existing:
-        created = request('POST', f'repos/{REPO}/releases',
+        created = request('POST', f'repos/{repository()}/releases',
                           dict(tag_name=tag, name=release_name,
                                target_commitish=os.environ['GITHUB_SHA'], body=notes,
                                draft=True, prerelease=True))
@@ -478,13 +498,13 @@ def draft(root, discovery):
         release_id = created['id']
     else:
         release_id = existing['id']
-    current_release = api(f'repos/{REPO}/releases/{release_id}')
+    current_release = api(f'repos/{repository()}/releases/{release_id}')
     if current_release.get('tag_name') != tag or current_release.get('draft') is not True:
         raise ValueError('Nightly replacement release is not safely staged as a draft')
-    gh('release', 'upload', tag, *map(str, files), '--repo', REPO)
+    gh('release', 'upload', tag, *map(str, files), '--repo', repository())
     for attempt in range(12):
         uploaded = {a['name']: {'size': a['size'], 'digest': a.get('digest')} for a in
-                    (api(f'repos/{REPO}/releases/{release_id}/assets?per_page=100') or []) if a.get('state') == 'uploaded'}
+                    (api(f'repos/{repository()}/releases/{release_id}/assets?per_page=100') or []) if a.get('state') == 'uploaded'}
         if uploaded == expected:
             break
         if attempt < 11:
@@ -492,7 +512,7 @@ def draft(root, discovery):
     if uploaded != expected:
         raise ValueError('Incomplete Nightly upload/checksum verification; draft remains incomplete')
     # Publication is the final irreversible step, only after every signed asset digest matches.
-    final = request('PATCH', f'repos/{REPO}/releases/{release_id}',
+    final = request('PATCH', f'repos/{repository()}/releases/{release_id}',
                     dict(tag_name=tag, target_commitish=os.environ['GITHUB_SHA'],
                          name=release_name, draft=release_mode != 'release', prerelease=True,
                          body=notes.replace('automation_state=uploading', 'automation_state=complete')))
