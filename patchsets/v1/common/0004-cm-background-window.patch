@@ -1,0 +1,615 @@
+diff --git a/flutter/lib/common.dart b/flutter/lib/common.dart
+index 1651f67..88e2d42 100644
+--- a/flutter/lib/common.dart
++++ b/flutter/lib/common.dart
+@@ -733,6 +733,7 @@ closeConnection({String? id}) {
+ }
+ 
+ Future<void> windowOnTop(int? id) async {
++  if (desktopType == DesktopType.cm && !cmMayAutoShow) return;
+   if (!isDesktop) {
+     return;
+   }
+diff --git a/flutter/lib/desktop/pages/server_page.dart b/flutter/lib/desktop/pages/server_page.dart
+index 8bd7df0..45a9d07 100644
+--- a/flutter/lib/desktop/pages/server_page.dart
++++ b/flutter/lib/desktop/pages/server_page.dart
+@@ -1,6 +1,7 @@
+ // original cm window in Sciter version.
+ 
+ import 'dart:async';
++import 'package:flutter_hbb/main.dart';
+ import 'dart:math';
+ 
+ import 'package:flutter/material.dart';
+@@ -324,6 +325,10 @@ class ConnectionManagerState extends State<ConnectionManager>
+   }
+ 
+   Future<bool> handleWindowCloseButton() async {
++    if (gFFI.serverModel.hideCm) {
++      await hideCmWindow();
++      return false;
++    }
+     var tabController = gFFI.serverModel.tabController;
+     final connLength = tabController.length;
+     if (connLength <= 1) {
+@@ -1008,7 +1013,11 @@ class _CmControlPanel extends StatelessWidget {
+             color: MyTheme.accent,
+             onClick: () {
+               handleElevate(context);
+-              windowManager.minimize();
++              if (gFFI.serverModel.hideCm) {
++                hideCmWindow();
++              } else {
++                windowManager.minimize();
++              }
+             },
+             icon: Icon(
+               Icons.security_rounded,
+@@ -1068,7 +1077,11 @@ class _CmControlPanel extends StatelessWidget {
+           child: buildButton(context, color: Colors.green[700], onClick: () {
+             handleAccept(context);
+             handleElevate(context);
+-            windowManager.minimize();
++            if (gFFI.serverModel.hideCm) {
++                hideCmWindow();
++              } else {
++                windowManager.minimize();
++              }
+           },
+               text: 'Accept and Elevate',
+               icon: Icon(
+@@ -1091,7 +1104,11 @@ class _CmControlPanel extends StatelessWidget {
+                       color: MyTheme.accent,
+                       onClick: () {
+                         handleAccept(context);
+-                        windowManager.minimize();
++                        if (gFFI.serverModel.hideCm) {
++                hideCmWindow();
++              } else {
++                windowManager.minimize();
++              }
+                       },
+                       text: 'Accept',
+                       textColor: Colors.white,
+diff --git a/flutter/lib/desktop/widgets/tabbar_widget.dart b/flutter/lib/desktop/widgets/tabbar_widget.dart
+index 9ef7d38..7c632c2 100644
+--- a/flutter/lib/desktop/widgets/tabbar_widget.dart
++++ b/flutter/lib/desktop/widgets/tabbar_widget.dart
+@@ -774,7 +774,9 @@ class WindowActionPanelState extends State<WindowActionPanel> {
+                   message: 'Minimize',
+                   icon: IconFont.min,
+                   onTap: () {
+-                    if (widget.isMainWindow) {
++                    if (desktopType == DesktopType.cm && gFFI.serverModel.hideCm) {
++                      hideCmWindow();
++                    } else if (widget.isMainWindow) {
+                       windowManager.minimize();
+                     } else {
+                       WindowController.fromWindowId(kWindowId!).minimize();
+diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
+index 9bd68ed..3000ffc 100644
+--- a/flutter/lib/main.dart
++++ b/flutter/lib/main.dart
+@@ -29,6 +29,8 @@ import 'mobile/pages/home_page.dart';
+ import 'mobile/pages/server_page.dart';
+ import 'mobile/widgets/deploy_dialog.dart';
+ import 'models/platform_model.dart';
++import 'models/cm_window_policy.dart';
++import 'utils/platform_channel.dart';
+ 
+ import 'package:flutter_hbb/plugin/handlers.dart'
+     if (dart.library.html) 'package:flutter_hbb/web/plugin/handlers.dart';
+@@ -287,72 +289,68 @@ void runMultiWindow(
+   WindowController.fromWindowId(kWindowId!).show();
+ }
+ 
++final _cmWindowPolicy = CmWindowPolicy();
++Future<void> _cmWindowOperations = Future<void>.value();
++bool get cmMayAutoShow => _cmWindowPolicy.allowAutomaticShow;
++bool get cmIsVisible => _cmWindowPolicy.visible;
++
++Future<void> _queueCmWindow(Future<void> Function() operation) {
++  final result = _cmWindowOperations.then((_) => operation());
++  // A failed platform operation must not poison subsequent manual recovery.
++  _cmWindowOperations = result.catchError((Object error, StackTrace stack) {
++    debugPrint('CM window operation failed: $error');
++  });
++  return result;
++}
++
+ void runConnectionManagerScreen() async {
++  // Native runners create CM hidden. Prepare it before starting model timers/IPC.
++  await windowManager.setOpacity(0);
++  await windowManager.waitUntilReadyToShow(WindowOptions(
++    size: kConnectionManagerWindowSizeClosedChat,
++    skipTaskbar: true,
++    titleBarStyle: TitleBarStyle.hidden,
++  ));
++  await windowManager.hide();
+   await initEnv(kAppTypeConnectionManager);
+-  _runApp(
+-    '',
+-    const DesktopServerPage(),
+-    MyTheme.currentThemeMode(),
+-  );
+-  final hide = await bind.cmGetConfig(name: "hide_cm") == 'true';
+-  gFFI.serverModel.hideCm = hide;
+-  if (hide) {
+-    await hideCmWindow(isStartup: true);
+-  } else {
+-    await showCmWindow(isStartup: true);
++  final value = await bind.cmGetConfig(name: 'hide_cm');
++  // Missing/failed IPC is not permission to display an unattended window.
++  _cmWindowPolicy.configure(value != 'false');
++  gFFI.serverModel.hideCm = _cmWindowPolicy.background;
++  _runApp('', const DesktopServerPage(), MyTheme.currentThemeMode());
++  if (_cmWindowPolicy.manualRequested) {
++    await showCmWindow(manual: true);
++  } else if (cmMayAutoShow) {
++    await showCmWindow();
+   }
+   setResizable(false);
+-  // Start the uni links handler and redirect links to Native, not for Flutter.
+   listenUniLinks(handleByFlutter: false);
+ }
+ 
+-bool _isCmReadyToShow = false;
+-
+-showCmWindow({bool isStartup = false}) async {
+-  if (isStartup) {
+-    WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+-        size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
+-    await windowManager.waitUntilReadyToShow(windowOptions, null);
+-    bind.mainHideDock();
+-    await Future.wait([
+-      windowManager.show(),
+-      windowManager.focus(),
+-      windowManager.setOpacity(1)
+-    ]);
+-    // ensure initial window size to be changed
+-    await windowManager.setSizeAlignment(
+-        kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+-    _isCmReadyToShow = true;
+-  } else if (_isCmReadyToShow) {
+-    if (await windowManager.getOpacity() != 1) {
+-      await windowManager.setOpacity(1);
+-      await windowManager.focus();
+-      await windowManager.minimize(); //needed
+-      await windowManager.setSizeAlignment(
+-          kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+-      windowOnTop(null);
+-    }
+-  }
++Future<void> showCmWindow({bool isStartup = false, bool manual = false}) async {
++  if (!_cmWindowPolicy.requestShow(manual: manual)) return;
++  await _queueCmWindow(() async {
++    // Recheck after queued hides/configuration changes.
++    if (!manual && !cmMayAutoShow) return;
++    if (isMacOS) await RdPlatformChannel.instance.setCmWindowVisible(true);
++    await windowManager.setSkipTaskbar(true);
++    await windowManager.setAlwaysOnTop(false);
++    await windowManager.setOpacity(1);
++    if (await windowManager.isMinimized()) await windowManager.restore();
++    await windowManager.show();
++    _cmWindowPolicy.visible = true;
++    // Background events must not repeatedly steal focus.
++    if (manual) await windowManager.focus();
++  });
+ }
+ 
+-hideCmWindow({bool isStartup = false}) async {
+-  if (isStartup) {
+-    WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
+-        size: kConnectionManagerWindowSizeClosedChat);
+-    windowManager.setOpacity(0);
+-    await windowManager.waitUntilReadyToShow(windowOptions, null);
+-    bind.mainHideDock();
+-    await windowManager.minimize();
++Future<void> hideCmWindow({bool isStartup = false}) async {
++  _cmWindowPolicy.hide();
++  await _queueCmWindow(() async {
++    if (isMacOS) await RdPlatformChannel.instance.setCmWindowVisible(false);
+     await windowManager.hide();
+-    _isCmReadyToShow = true;
+-  } else if (_isCmReadyToShow) {
+-    if (await windowManager.getOpacity() != 0) {
+-      await windowManager.setOpacity(0);
+-      bind.mainHideDock();
+-      await windowManager.minimize();
+-      await windowManager.hide();
+-    }
+-  }
++    await windowManager.setSkipTaskbar(true);
++  });
+ }
+ 
+ void _runApp(
+diff --git a/flutter/lib/models/chat_model.dart b/flutter/lib/models/chat_model.dart
+index d79c9f0..95311e0 100644
+--- a/flutter/lib/models/chat_model.dart
++++ b/flutter/lib/models/chat_model.dart
+@@ -292,12 +292,13 @@ class ChatModel with ChangeNotifier {
+ 
+   var _togglingCMSidePage = false; // protect order for await
+   toggleCMSidePage() async {
++    if (desktopType == DesktopType.cm && !cmMayAutoShow && !cmIsVisible) return false;
+     if (_togglingCMSidePage) return false;
+     _togglingCMSidePage = true;
+     if (_isShowCMSidePage) {
+       _isShowCMSidePage = !_isShowCMSidePage;
+       notifyListeners();
+-      await windowManager.show();
++      await showCmWindow();
+       await windowManager.setSizeAlignment(
+           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
+     } else {
+@@ -309,7 +310,7 @@ class ChatModel with ChangeNotifier {
+         client.unreadChatMessageCount.value = 0;
+       }
+       requestChatInputFocus();
+-      await windowManager.show();
++      await showCmWindow();
+       await windowManager.setSizeAlignment(
+           kConnectionManagerWindowSizeOpenChat, Alignment.topRight);
+       _isShowCMSidePage = !_isShowCMSidePage;
+diff --git a/flutter/lib/models/cm_window_policy.dart b/flutter/lib/models/cm_window_policy.dart
+new file mode 100644
+index 0000000..c1eee2e
+--- /dev/null
++++ b/flutter/lib/models/cm_window_policy.dart
+@@ -0,0 +1,24 @@
++/// Visibility policy for the CM isolate only. Unknown startup state stays hidden.
++class CmWindowPolicy {
++  bool ready = false;
++  bool background = true;
++  bool manualRequested = false;
++  bool visible = false;
++
++  bool get allowAutomaticShow => ready && !background;
++
++  void configure(bool hide) {
++    background = hide;
++    ready = true;
++  }
++
++  bool requestShow({bool manual = false}) {
++    if (manual) manualRequested = true;
++    return ready && (manual || allowAutomaticShow);
++  }
++
++  void hide() {
++    manualRequested = false;
++    visible = false;
++  }
++}
+diff --git a/flutter/lib/models/server_model.dart b/flutter/lib/models/server_model.dart
+index 40c94fc..330c1e7 100644
+--- a/flutter/lib/models/server_model.dart
++++ b/flutter/lib/models/server_model.dart
+@@ -31,7 +31,7 @@ class ServerModel with ChangeNotifier {
+   bool _fileOk = false;
+   bool _clipboardOk = false;
+   bool _showElevation = false;
+-  bool hideCm = false;
++  bool hideCm = true;
+   int _connectStatus = 0; // Rendezvous Server status
+   String _verificationMethod = "";
+   String _temporaryPasswordLength = "";
+@@ -157,6 +157,9 @@ class ServerModel with ChangeNotifier {
+       }
+ 
+       if (desktopType == DesktopType.cm) {
++        if (await bind.cmGetConfig(name: 'custom-cm-show') == 'true') {
++          await showCmWindow(manual: true);
++        }
+         final res = await bind.cmCheckClientsLength(length: _clients.length);
+         if (res != null) {
+           debugPrint("clients not match!");
+@@ -237,14 +240,13 @@ class ServerModel with ChangeNotifier {
+     final approveMode = await bind.mainGetOption(key: kOptionApproveMode);
+     final numericOneTimePassword =
+         await mainGetBoolOption(kOptionAllowNumericOneTimePassword);
+-    /*
+-    var hideCm = option2bool(
++    var configuredHideCm = option2bool(
+         'allow-hide-cm', await bind.mainGetOption(key: 'allow-hide-cm'));
+     if (!(approveMode == 'password' &&
+         verificationMethod == kUsePermanentPassword)) {
+-      hideCm = false;
++      configuredHideCm = false;
+     }
+-    */
++
+     if (_approveMode != approveMode) {
+       _approveMode = approveMode;
+       update = true;
+@@ -279,19 +281,11 @@ class ServerModel with ChangeNotifier {
+       _allowNumericOneTimePassword = numericOneTimePassword;
+       update = true;
+     }
+-    /*
+-    if (_hideCm != hideCm) {
+-      _hideCm = hideCm;
+-      if (desktopType == DesktopType.cm) {
+-        if (hideCm) {
+-          await hideCmWindow();
+-        } else {
+-          await showCmWindow();
+-        }
+-      }
++    if (desktopType != DesktopType.cm && hideCm != configuredHideCm) {
++      hideCm = configuredHideCm;
+       update = true;
+     }
+-    */
++
+     if (update) {
+       notifyListeners();
+     }
+diff --git a/flutter/lib/utils/platform_channel.dart b/flutter/lib/utils/platform_channel.dart
+index 9e53ca0..2ed94e0 100644
+--- a/flutter/lib/utils/platform_channel.dart
++++ b/flutter/lib/utils/platform_channel.dart
+@@ -37,6 +37,11 @@ class RdPlatformChannel {
+         .invokeMethod("setWindowTheme", {"themeName": theme.name});
+   }
+ 
++  Future<void> setCmWindowVisible(bool visible) {
++    assert(isMacOS);
++    return _hostMethodChannel.invokeMethod("setCmWindowVisible", visible);
++  }
++
+   /// Terminate .app manually.
+   Future<void> terminate() {
+     assert(isMacOS);
+diff --git a/flutter/linux/my_application.cc b/flutter/linux/my_application.cc
+index 210adba..8adbb72 100644
+--- a/flutter/linux/my_application.cc
++++ b/flutter/linux/my_application.cc
+@@ -167,8 +167,21 @@ static void my_application_activate(GApplication* application) {
+   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+ 
+   try_set_transparent(window, gtk_window_get_screen(window), view);
+-  gtk_widget_show(GTK_WIDGET(window));
++  if (!gIsConnectionManager) {
++    gtk_widget_show(GTK_WIDGET(window));
++  } else {
++    // Realize the GL view to start Flutter without mapping the top-level window.
++    gtk_window_set_skip_taskbar_hint(window, TRUE);
++    gtk_window_set_skip_pager_hint(window, TRUE);
++    gtk_widget_realize(GTK_WIDGET(window));
++  }
+   gtk_widget_show(GTK_WIDGET(view));
++  if (gIsConnectionManager) {
++    gtk_widget_realize(GTK_WIDGET(view));
++    // Flutter 3.24 starts the engine from the nested GL area's realize signal.
++    GtkWidget* gl_area = find_gl_area(GTK_WIDGET(view));
++    if (gl_area != nullptr) gtk_widget_realize(gl_area);
++  }
+ 
+   // Register callback for sub-windows created by desktop_multi_window plugin.
+   // Handles both Wayland shortcuts inhibition (guarded inside) and side button
+diff --git a/flutter/macos/Runner/AppDelegate.swift b/flutter/macos/Runner/AppDelegate.swift
+index 46372a5..a04467c 100644
+--- a/flutter/macos/Runner/AppDelegate.swift
++++ b/flutter/macos/Runner/AppDelegate.swift
+@@ -19,6 +19,8 @@ class AppDelegate: FlutterAppDelegate {
+     
+     override func applicationDidFinishLaunching(_ aNotification: Notification) {
+         launched = true;
+-        NSApplication.shared.activate(ignoringOtherApps: true);
++        if !CommandLine.arguments.contains("--cm") {
++            NSApplication.shared.activate(ignoringOtherApps: true);
++        }
+     }
+ }
+diff --git a/flutter/macos/Runner/MainFlutterWindow.swift b/flutter/macos/Runner/MainFlutterWindow.swift
+index 1cc7241..6829371 100644
+--- a/flutter/macos/Runner/MainFlutterWindow.swift
++++ b/flutter/macos/Runner/MainFlutterWindow.swift
+@@ -36,8 +36,13 @@ class RelativeMouseState {
+ }
+ 
+ class MainFlutterWindow: NSWindow {
++    private var cmWindowVisible = false
++    private var isConnectionManager: Bool {
++        return CommandLine.arguments.contains("--cm")
++    }
+     override func awakeFromNib() {
+         rustdesk_core_main();
++        if isConnectionManager { NSApp.setActivationPolicy(.accessory) }
+         let flutterViewController = FlutterViewController.init()
+         let windowFrame = self.frame
+         self.contentViewController = flutterViewController
+@@ -71,6 +76,11 @@ class MainFlutterWindow: NSWindow {
+     }
+ 
+     override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
++        if isConnectionManager {
++            if place != .out && !cmWindowVisible { return }
++            super.order(place, relativeTo: otherWin)
++            return
++        }
+         super.order(place, relativeTo: otherWin)
+         hiddenWindowAtLaunch()
+     }
+@@ -183,6 +193,12 @@ class MainFlutterWindow: NSWindow {
+         channel.setMethodCallHandler({
+             (call, result) -> Void in
+                 switch call.method {
++                case "setCmWindowVisible":
++                    if self.isConnectionManager {
++                        self.cmWindowVisible = call.arguments as? Bool ?? false
++                        if !self.cmWindowVisible { self.orderOut(nil) }
++                    }
++                    result(nil)
+                 case "setWindowTheme":
+                     let arg = call.arguments as! [String: Any]
+                     let themeName = arg["themeName"] as? String
+diff --git a/flutter/windows/runner/win32_window.cpp b/flutter/windows/runner/win32_window.cpp
+index 606ef0a..2957c20 100644
+--- a/flutter/windows/runner/win32_window.cpp
++++ b/flutter/windows/runner/win32_window.cpp
+@@ -172,7 +172,8 @@ bool Win32Window::CreateAndShow(const std::wstring& title,
+   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+   double scale_factor = dpi / 96.0;
+ 
+-  HWND window = CreateWindow(
++  HWND window = CreateWindowEx(
++      showOnTaskBar ? 0 : WS_EX_TOOLWINDOW,
+       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
+       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
+       Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+diff --git a/src/common.rs b/src/common.rs
+index 4d09364..4723d7c 100644
+--- a/src/common.rs
++++ b/src/common.rs
+@@ -2097,6 +2097,7 @@ fn apply_custom_build_defaults() {
+             .entry(config::keys::OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION.to_owned())
+             .or_insert("Y".to_owned());
+         defaults.entry("allow-hide-cm".to_owned()).or_insert("Y".to_owned());
++        defaults.entry("approve-mode".to_owned()).or_insert("password".to_owned());
+         // Empty means upstream's normal relay discovery, matching the old clients.
+         if let Some(relay) = option_env!("RUSTDESK_RELAY_SERVER").filter(|s| !s.is_empty()) {
+             defaults.entry("relay-server".to_owned()).or_insert(relay.to_owned());
+diff --git a/src/core_main.rs b/src/core_main.rs
+index 6b437a9..27a18a3 100644
+--- a/src/core_main.rs
++++ b/src/core_main.rs
+@@ -704,6 +704,10 @@ pub fn core_main() -> Option<Vec<String>> {
+                 }
+             }
+             return None;
++        } else if args[0] == "--show-cm" {
++            #[cfg(feature = "flutter")]
++            crate::ui_interface::send_to_cm(&crate::ipc::Data::CmShow);
++            return None;
+         } else if args[0] == "--cm" {
+             // call connection manager to establish connections
+             // meanwhile, return true to call flutter window to show control panel
+diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
+index 0777443..83fb723 100644
+--- a/src/flutter_ffi.rs
++++ b/src/flutter_ffi.rs
+@@ -2245,6 +2245,13 @@ pub fn cm_switch_back(conn_id: i32) {
+ }
+ 
+ pub fn cm_get_config(name: String) -> String {
++    #[cfg(not(any(target_os = "android", target_os = "ios")))]
++    if name == "custom-cm-show" {
++        return crate::ui_cm_interface::CM_WINDOW_REQUESTED
++            .swap(false, std::sync::atomic::Ordering::SeqCst)
++            .to_string();
++    }
++
+     #[cfg(not(target_os = "ios"))]
+     {
+         if let Ok(Some(v)) = crate::ipc::get_config(&name) {
+diff --git a/src/ipc.rs b/src/ipc.rs
+index 68c987f..0a4f348 100644
+--- a/src/ipc.rs
++++ b/src/ipc.rs
+@@ -357,6 +357,8 @@ pub enum Data {
+     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+     Mouse(DataMouse),
+     Control(DataControl),
++    #[cfg(feature = "flutter")]
++    CmShow, // Local tray -> existing CM only; never forwarded by a remote session.
+     Theme(String),
+     Language(String),
+     Empty,
+@@ -861,12 +863,7 @@ async fn handle(data: Data, stream: &mut Connection) {
+                         None
+                     };
+                 } else if name == "hide_cm" {
+-                    value = if crate::hbbs_http::sync::is_pro() || crate::common::is_custom_client()
+-                    {
+-                        Some(hbb_common::password_security::hide_cm().to_string())
+-                    } else {
+-                        None
+-                    };
++                    value = Some(hbb_common::password_security::hide_cm().to_string());
+                 } else if name == "voice-call-input" {
+                     value = crate::audio_service::get_voice_call_input_device();
+                 } else if name == "unlock-pin" {
+diff --git a/src/lang/cn.rs b/src/lang/cn.rs
+index aac57d0..73ba6fa 100644
+--- a/src/lang/cn.rs
++++ b/src/lang/cn.rs
+@@ -503,6 +503,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
+         ("Outgoing connection", "发起的连接"),
+         ("Exit", "退出"),
+         ("Open", "打开"),
++        ("Current connections", "当前连接"),
+         ("logout_tip", "确定要退出登录吗？"),
+         ("Service", "服务"),
+         ("Start", "启动"),
+diff --git a/src/tray.rs b/src/tray.rs
+index bd2952c..2e0d299 100644
+--- a/src/tray.rs
++++ b/src/tray.rs
+@@ -70,6 +70,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
+     } else {
+         tray_menu.append_items(&[&open_i]).ok();
+     }
++    #[cfg(feature = "flutter")]
++    let connections_i = MenuItem::new(translate("Current connections".to_owned()), true, None);
++    #[cfg(feature = "flutter")]
++    tray_menu.append_items(&[&connections_i]).ok();
++
+     let tooltip = |count: usize| {
+         if count == 0 {
+             format!(
+@@ -177,6 +182,14 @@ fn make_tray() -> hbb_common::ResultType<()> {
+         }
+ 
+         if let Ok(event) = menu_channel.try_recv() {
++            #[cfg(feature = "flutter")]
++            if event.id == connections_i.id() {
++                // Run IPC outside the native menu event loop. No new CM is spawned.
++                std::thread::spawn(|| {
++                    crate::ui_interface::send_to_cm(&crate::ipc::Data::CmShow);
++                });
++                return;
++            }
+             if let Some(quit_i) = &quit_i {
+                 if event.id == quit_i.id() {
+                     /* failed in windows, seems no permission to check system process
+diff --git a/src/ui_cm_interface.rs b/src/ui_cm_interface.rs
+index cab0d7f..1fac884 100644
+--- a/src/ui_cm_interface.rs
++++ b/src/ui_cm_interface.rs
+@@ -175,6 +175,10 @@ lazy_static::lazy_static! {
+ 
+ static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+ 
++// Latch tray requests until the Flutter CM has initialized and polls them.
++pub static CM_WINDOW_REQUESTED: std::sync::atomic::AtomicBool =
++    std::sync::atomic::AtomicBool::new(false);
++
+ #[derive(Clone)]
+ pub struct ConnectionManager<T: InvokeUiCM> {
+     pub ui_handler: T,
+@@ -191,6 +195,10 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
+ 
+     fn change_language(&self);
+ 
++    fn show_window(&self) {
++        CM_WINDOW_REQUESTED.store(true, Ordering::SeqCst);
++    }
++
+     fn show_elevation(&self, show: bool);
+ 
+     fn update_voice_call_state(&self, client: &Client);
+@@ -643,6 +651,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
+                                         self.file_transfer_enabled_peer = _enabled;
+                                     }
+                                 }
++                                #[cfg(feature = "flutter")]
++                                Data::CmShow if self.conn_id == 0 => {
++                                    self.cm.show_window();
++                                }
+                                 Data::Theme(dark) => {
+                                     self.cm.change_theme(dark);
+                                 }

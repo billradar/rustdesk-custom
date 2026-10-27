@@ -10,7 +10,11 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FILES = ['src/common.rs', 'src/flutter.rs', 'src/flutter_ffi.rs', 'libs/hbb_common/src/config.rs'] + [
+FILES = ['flutter/lib/main.dart', 'flutter/lib/common.dart',
+         'flutter/lib/models/cm_window_policy.dart', 'flutter/lib/models/server_model.dart',
+         'flutter/lib/models/chat_model.dart', 'flutter/lib/utils/platform_channel.dart',
+         'flutter/lib/desktop/pages/server_page.dart',
+         'flutter/lib/desktop/widgets/tabbar_widget.dart', 'src/common.rs', 'src/flutter.rs', 'src/flutter_ffi.rs', 'libs/hbb_common/src/config.rs'] + [
     'flutter/lib/desktop/pages/' + f + '.dart' for f in
     ('connection_page', 'desktop_home_page', 'desktop_setting_page', 'desktop_tab_page')]
 
@@ -85,6 +89,8 @@ def contracts(tree, variant, patchset=None):
             raise RuntimeError('SOS settings guard coverage changed')
     elif 'final isSosMode' in home or '"sos-mode"' in common:
         raise RuntimeError('SOS customization leaked into Standard')
+    from scripts.validation.cm_window_contract import source_contract
+    source_contract(tree)
     return {'Config API': 'PASS', 'Rust API structure': 'PASS', 'Flutter API structure': 'PASS',
             'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
 
@@ -179,6 +185,8 @@ def main():
                     result = subprocess.run(['flutter', 'pub', 'get'], cwd=tree / 'flutter', stdout=stream, stderr=subprocess.STDOUT)
                 if result.returncode:
                     raise RuntimeError(f'Flutter pub get failed: {log}')
+                run([sys.executable, str(ROOT / 'scripts/validation/cm_window_contract.py'),
+                     '--source', str(tree), '--dart', 'dart'], log)
                 # Only error severity fails. Upstream lint warnings remain in logs.
                 with log.open('a') as stream:
                     result = subprocess.run(['flutter', 'analyze', '--no-fatal-infos', '--no-fatal-warnings',

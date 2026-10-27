@@ -16,11 +16,11 @@
     }
   },
   "hashes": {
-    "common": "4e8073b0e470f30b0ef1825b97b43fdbcd0044e911f12fb8723605d7b5992201",
+    "common": "3e47115ae59c74f0d2c5c1ce2cc3cc6b46b05e58a95362a99d16d9ede261fe1f",
     "sos": "d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34"
   },
   "runtime_ui": {
-    "status": "skipped_by_user"
+    "status": "not_tested"
   },
   "real_remote_session": {
     "status": "not_tested"
@@ -37,5 +37,21 @@
     "workflow_run": "https://github.com/billradar/rustdesk-custom-test/actions/runs/36819181305",
     "common_patch_hash": "87b7fb949b3bbc55c6d1e166909e167ebb8e0b6586630c0269f6440ba0542531",
     "scope": "Historical validation before forced-software-render policy; not evidence for current patch hash"
+  },
+  "cm_background_window": {
+    "status": "native_runtime_validation_pending",
+    "common_patch_hash": "3e47115ae59c74f0d2c5c1ce2cc3cc6b46b05e58a95362a99d16d9ede261fe1f",
+    "local_validation": {
+      "patch_apply_standard_and_sos": "pass",
+      "prepared_source_contracts": "pass",
+      "compiled_configuration_helper": "pass",
+      "dart_policy_sequences": "pass"
+    },
+    "tested_upstream_shas": [
+      "6c578292e8ebbbec708b76986ba8c4bc7c509747"
+    ],
+    "runtime_ui": "not_tested",
+    "real_remote_session": "not_tested",
+    "native_package_build": "not_run"
   }
 }

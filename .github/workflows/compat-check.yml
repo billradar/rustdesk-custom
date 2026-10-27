@@ -137,6 +137,7 @@ jobs:
         python3 scripts/release/channel_contract.py
         python3 scripts/build/config_mir_contract.py
         python3 scripts/validation/native_config_contract.py
+        python3 scripts/validation/cm_window_contract.py
         python3 scripts/signing/android_signing_contract.py
   preflight:
     name: Validate patch and API compatibility
