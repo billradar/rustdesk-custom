@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   route:
-    if: github.repository == 'billradar/rustdesk-custom' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     permissions:

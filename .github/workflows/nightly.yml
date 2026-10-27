@@ -283,9 +283,8 @@ jobs:
       group: rustdesk-nightly-release-write
       cancel-in-progress: false
     if: >-
-      github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
-      github.workflow_ref == 'billradar/rustdesk-custom/.github/workflows/nightly.yml@refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' && (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
       needs.resolve.outputs.dedup_skip != 'true' &&
       needs.aggregate.result == 'success'

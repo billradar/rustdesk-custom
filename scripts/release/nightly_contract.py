@@ -84,7 +84,7 @@ class NightlyTests(unittest.TestCase):
             self.assertEqual(nightly.source_sha_from_run(row),'')
 
     def test_manual_dedup_skips_active_or_successful_batch(self):
-        env=dict(GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
+        env=dict(GITHUB_REPOSITORY='example/rustdesk-custom',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
                  GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
                  RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
@@ -105,12 +105,14 @@ class NightlyTests(unittest.TestCase):
             api.assert_not_called()
 
     def test_route_dispatches_only_pinned_official_run(self):
-        env=dict(GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
+        clone='example/rustdesk-custom'
+        env=dict(GITHUB_REPOSITORY=clone,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
         with patch.dict(os.environ,env),patch.object(nightly,'api',return_value={'workflow_runs':[]}),patch.object(nightly.subprocess,'run') as dispatch:
             nightly.route({'official_run_id':'17','upstream_sha':'b'*40})
             args=dispatch.call_args.args[0]
             self.assertIn('official_run_id=17',args)
             self.assertIn('expected_sha='+'b'*40,args)
+            self.assertEqual(args[args.index('--repo')+1],clone)
             self.assertEqual(args[args.index('--ref')+1],'main')
 
     def test_nightly_cannot_enter_stable_publication(self):
@@ -180,7 +182,7 @@ class NightlyTests(unittest.TestCase):
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
         for name in ['android-sign','draft']:
             guard=w['jobs'][name]['if']
-            for token in ["github.ref == 'refs/heads/main'","github.event_name == 'workflow_dispatch'","inputs.release_mode == 'draft'", "inputs.release_mode == 'release'",'.github/workflows/nightly.yml@refs/heads/main']:
+            for token in ["github.ref == 'refs/heads/main'","github.event_name == 'workflow_dispatch'","inputs.release_mode == 'draft'", "inputs.release_mode == 'release'","format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository)"]:
                 self.assertIn(token,guard)
         action=next(x for x in signer['steps'] if x.get('uses')=='./.github/actions/android-yubikey-sign')
         self.assertEqual(action['with']['channel'],'nightly')
@@ -225,8 +227,9 @@ class NightlyTests(unittest.TestCase):
 
 class NightlyDraftTests(unittest.TestCase):
     def setUp(self):
-        self.env={'GITHUB_REPOSITORY':nightly.REPO,'GITHUB_REF':'refs/heads/main',
-                  'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':nightly.REPO+'/.github/workflows/nightly.yml@refs/heads/main',
+        self.repo='example/rustdesk-custom'
+        self.env={'GITHUB_REPOSITORY':self.repo,'GITHUB_REF':'refs/heads/main',
+                  'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':self.repo+'/.github/workflows/nightly.yml@refs/heads/main',
                   'RELEASE_MODE':'draft','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'9',
                   'REQUIRE_ANDROID_PRODUCTION_SIGNING':'true'}
         self.data=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
