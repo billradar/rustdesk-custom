@@ -219,7 +219,7 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(discovery_upload['if'],'always()')
         self.assertEqual(discovery_upload['with']['if-no-files-found'],'warn')
         self.assertIn('needs.resolve.outputs.dedup_skip',w['jobs']['prepare']['if'])
-        self.assertTrue(w['concurrency']['group'].startswith('nightly-latest-'))
+        self.assertEqual(w['concurrency']['group'], 'nightly-latest')
         self.assertNotIn('github.sha',w['concurrency']['group'])
         for family in ['windows','platforms','android']:
             j=w['jobs'][family+'-build']
@@ -302,7 +302,7 @@ class NightlyDraftTests(unittest.TestCase):
             uploaded=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
             if mode=='bad-upload':uploaded[0]['digest']='sha256:'+'0'*64
             def api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
+                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
                 if '/releases/tags/' in path:return {'id':7} if mode=='existing' else None
                 if '/git/ref/tags/' in path:return None
                 if '/releases?' in path:return []
@@ -345,10 +345,12 @@ class NightlyDraftTests(unittest.TestCase):
             def first_request(method,path,payload):
                 if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
                 if method=='PATCH':create_payload['body']=payload['body']
-                return {'id':7,'draft':True,'prerelease':True}
+                return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly'}
             def first_api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
+                if '/releases?' in path:return []
+                if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
                 if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
@@ -356,9 +358,10 @@ class NightlyDraftTests(unittest.TestCase):
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 first=nightly.draft(root,discovery)
             def reused_api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path:return {'id':7,'name':'nightly','draft':True,'prerelease':True,'body':create_payload['body']}
+                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
+                if '/releases/tags/' in path:return {'id':7,'name':'nightly','tag_name':'nightly','draft':True,'prerelease':True,'body':create_payload['body']}
                 if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
+                if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
                 return None
@@ -382,9 +385,10 @@ class NightlyDraftTests(unittest.TestCase):
             def first_request(method,path,payload):
                 if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
                 if method=='PATCH':create_payload['body']=payload['body']
-                return {'id':7,'draft':True,'prerelease':True}
+                return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly'}
             def first_api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
+                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
+                if '/releases?' in path:return []
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
@@ -393,13 +397,14 @@ class NightlyDraftTests(unittest.TestCase):
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 nightly.draft(root,discovery)
             def reused_api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path:return {'id':7,'name':'nightly','draft':True,'prerelease':True,'body':create_payload['body']}
+                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
+                if '/releases/tags/' in path:return {'id':7,'name':'nightly','tag_name':'nightly','draft':True,'prerelease':True,'body':create_payload['body']}
                 if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
+                if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
                 return None
-            with patch.dict(os.environ,RELEASE_MODE='release'),patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request',return_value={'draft':False,'prerelease':True}) as write:
+            with patch.dict(os.environ,RELEASE_MODE='release'),patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request',return_value={'draft':False,'prerelease':True,'tag_name':'nightly'}) as write:
                 result=nightly.draft(root,discovery)
                 self.assertTrue(result['reused'])
                 self.assertFalse(result['draft'])
