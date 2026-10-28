@@ -18,7 +18,9 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: nightly-latest-${{ inputs.release_mode }}-${{ inputs.include_wayland && 'wayland' || 'no-wayland' }}-${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+  # Every Nightly configuration mutates the same moving ``nightly`` tag and
+  # Release, so they must share one concurrency group.
+  group: nightly-latest
   cancel-in-progress: false
 jobs:
   resolve:
