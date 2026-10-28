@@ -374,6 +374,29 @@ def upstream_nightly_release():
     return name, body.rstrip()
 
 
+def cleanup_superseded_nightly_releases(current_release_id, release_name):
+    """Keep only the completed, canonical Nightly release for this channel."""
+    repo = repository()
+    stale = []
+    for page in range(1, 11):
+        rows = api(f'repos/{repo}/releases?per_page=100&page={page}') or []
+        stale.extend(r for r in rows
+                     if str(r.get('id')) != str(current_release_id)
+                     and r.get('prerelease') is True
+                     and 'channel=nightly' in (r.get('body') or '').splitlines())
+        if len(rows) < 100:
+            break
+    else:
+        raise ValueError('Too many release pages to safely clean superseded Nightly releases')
+    for release in stale:
+        if release.get('immutable') is True:
+            raise ValueError('A superseded Nightly release is immutable and cannot be removed')
+        gh('api', '--method', 'DELETE', f'repos/{repo}/releases/{release["id"]}')
+        if api(f'repos/{repo}/releases/{release["id"]}', missing=True) is not None:
+            raise ValueError('Could not remove superseded Nightly release: ' + str(release.get('tag_name')))
+        print('Removed superseded Nightly release: ' + str(release.get('tag_name')))
+
+
 def draft(root, discovery):
     from scripts.release.github import request, gh
     from scripts.release.production import scan_job_log
@@ -459,6 +482,22 @@ def draft(root, discovery):
     # A single moving release is intentional. Hide an existing published
     # prerelease during replacement so consumers never see a mixed asset set.
     existing = api(f'repos/{repository()}/releases/tags/{tag}', missing=True)
+    # GitHub renames a release to ``untagged-*`` if its Git tag was removed.
+    # Reuse that workflow-owned Nightly release instead of creating a second one.
+    if not existing:
+        matches = []
+        for page in range(1, 11):
+            rows = api(f'repos/{repository()}/releases?per_page=100&page={page}') or []
+            matches.extend(r for r in rows
+                           if r.get('prerelease') is True
+                           and 'channel=nightly' in (r.get('body') or '').splitlines())
+            if len(rows) < 100:
+                break
+        else:
+            raise ValueError('Too many release pages to safely locate an existing Nightly release')
+        if len(matches) > 1:
+            raise ValueError('Multiple workflow-owned Nightly releases exist; refusing ambiguous replacement')
+        existing = matches[0] if matches else None
     if existing and existing.get('immutable') is True:
         raise ValueError('The nightly release is immutable and cannot be refreshed')
     if existing and 'channel=nightly' not in (existing.get('body') or '').splitlines():
@@ -496,13 +535,14 @@ def draft(root, discovery):
             and prior_inventory == sorted(expected)
             and remote == expected
         )
-        if complete_match and release_mode == 'draft' and existing.get('draft') is True:
+        if complete_match and existing.get('tag_name') == tag and release_mode == 'draft' and existing.get('draft') is True:
+            cleanup_superseded_nightly_releases(existing['id'], release_name)
             result = dict(tag=tag, release_id=existing['id'], draft=True, prerelease=True,
                           reused=True, workflow_run=os.environ['GITHUB_RUN_ID'], assets=expected)
             (ROOT / '.work/nightly-draft.json').write_text(json.dumps(result, indent=2) + '\n')
             print('Exact complete Nightly Draft already exists: ' + tag)
             return result
-        if complete_match and release_mode == 'release':
+        if complete_match and existing.get('tag_name') == tag and release_mode == 'release':
             if existing.get('draft') is True:
                 promoted_body = body.replace('release_policy=DRAFT ONLY; NOT PUBLIC',
                                              'release_policy=PUBLIC NIGHTLY PRERELEASE; NOT STABLE')
@@ -510,6 +550,7 @@ def draft(root, discovery):
                                    dict(draft=False, prerelease=True, body=promoted_body))
                 if promoted.get('draft') is not False or promoted.get('prerelease') is not True:
                     raise ValueError('Reused Nightly Draft promotion state mismatch')
+            cleanup_superseded_nightly_releases(existing['id'], release_name)
             result = dict(tag=tag, release_id=existing['id'], draft=False, prerelease=True,
                           reused=True, workflow_run=os.environ['GITHUB_RUN_ID'], assets=expected)
             (ROOT / '.work/nightly-draft.json').write_text(json.dumps(result, indent=2) + '\n')
@@ -517,6 +558,21 @@ def draft(root, discovery):
             return result
     if existing:
         release_id = existing['id']
+        if existing.get('tag_name') != tag:
+            # Restore the canonical moving tag before reattaching the existing
+            # release, so a missing ref cannot cause GitHub to mint another
+            # untagged release during replacement.
+            current_ref = api(f'repos/{repository()}/git/ref/tags/{tag}', missing=True)
+            if current_ref:
+                updated_ref = request('PATCH', f'repos/{repository()}/git/refs/tags/{tag}',
+                                      dict(sha=os.environ['GITHUB_SHA'], force=True))
+                if updated_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
+                    raise ValueError('Nightly tag did not move to the validated custom source commit')
+            else:
+                created_ref = request('POST', f'repos/{repository()}/git/refs',
+                                      dict(ref='refs/tags/' + tag, sha=os.environ['GITHUB_SHA']))
+                if created_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
+                    raise ValueError('Nightly tag could not be restored at the validated custom source commit')
         staged = request('PATCH', f'repos/{repository()}/releases/{release_id}',
                          dict(tag_name=tag, target_commitish=os.environ['GITHUB_SHA'],
                               name=release_name, body=notes, draft=True, prerelease=True))
@@ -577,6 +633,9 @@ def draft(root, discovery):
                          body=notes.replace('automation_state=uploading', 'automation_state=complete')))
     if final.get('draft') is not (release_mode != 'release') or final.get('prerelease') is not True:
         raise ValueError('Nightly release state mismatch')
+    if final.get('tag_name') != tag:
+        raise ValueError('Completed Nightly release does not use the canonical tag')
+    cleanup_superseded_nightly_releases(release_id, release_name)
     result = dict(tag=tag, release_id=release_id, draft=release_mode != 'release', prerelease=True,
                   workflow_run=os.environ['GITHUB_RUN_ID'], assets=expected)
     (ROOT / '.work/nightly-draft.json').write_text(json.dumps(result, indent=2) + '\n')
