@@ -431,7 +431,16 @@ def _release(root, publish, channel='stable', experimental=False):
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
     uploaded={}
     for attempt in range(12):
-        assets=api(f'repos/{repo}/releases/{result["id"]}/assets') or []
+        assets=[]
+        page=1
+        while True:
+            batch=api(f'repos/{repo}/releases/{result["id"]}/assets?per_page=100&page={page}') or []
+            if not isinstance(batch,list):
+                raise ValueError('Invalid release asset listing')
+            assets.extend(batch)
+            if len(batch)<100:
+                break
+            page+=1
         uploaded={a['name']:a['size'] for a in assets if a.get('state')=='uploaded'}
         if uploaded==expected_assets: break
         if attempt<11:time.sleep(5)
