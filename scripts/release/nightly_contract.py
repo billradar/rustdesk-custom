@@ -339,6 +339,15 @@ class NightlyDraftTests(unittest.TestCase):
     def test_create_verified_draft_only(self):self.perform()
 
     def test_complete_matching_draft_is_deleted_and_created_with_new_id(self):
+        self.refresh_matching_draft()
+
+    def test_missing_tag_is_restored_before_deleting_legacy_draft(self):
+        self.refresh_matching_draft(tag_missing=True)
+
+    def test_failed_tag_restoration_preserves_old_draft(self):
+        self.refresh_matching_draft(tag_missing=True, invalid_tag=True)
+
+    def refresh_matching_draft(self, tag_missing=False, invalid_tag=False):
         import hashlib
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
@@ -366,11 +375,12 @@ class NightlyDraftTests(unittest.TestCase):
             old=dict(id=7,name='nightly',tag_name='nightly',draft=True,prerelease=True,
                      body=create_payload['body'],target_commitish='a'*40,updated_at='2026-10-28T07:34:13Z')
             deleted=False
+            tag_exists=not tag_missing
             events=[]
             def recreated_api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
                 if '/releases/tags/' in path:return old
-                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}} if tag_exists else None
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
@@ -378,6 +388,16 @@ class NightlyDraftTests(unittest.TestCase):
                 if path.endswith('/releases/8'):return dict(old,id=8)
                 raise AssertionError(path)
             def recreate(method,path,payload):
+                nonlocal tag_exists
+                if path==f'repos/{self.repo}/git/refs':
+                    self.assertFalse(deleted)
+                    self.assertEqual(method,'POST')
+                    self.assertEqual(payload,dict(ref='refs/tags/nightly',sha='a'*40))
+                    if invalid_tag:
+                        return {'object':{'sha':'c'*40}}
+                    tag_exists=True
+                    events.append('restore-tag')
+                    return {'object':{'sha':'a'*40}}
                 if method=='POST':
                     self.assertTrue(deleted)
                     events.append('create')
@@ -389,6 +409,7 @@ class NightlyDraftTests(unittest.TestCase):
                 nonlocal deleted
                 if args[:3]==('api','--method','DELETE'):
                     self.assertEqual(args[3],f'repos/{self.repo}/releases/7')
+                    self.assertTrue(tag_exists)
                     deleted=True
                     events.append('delete')
                 elif args[:2]==('release','upload'):
@@ -396,11 +417,17 @@ class NightlyDraftTests(unittest.TestCase):
                     events.append('upload')
                 else:raise AssertionError(args)
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=recreated_api),patch('scripts.release.github.gh',side_effect=gh),patch('scripts.release.github.request',side_effect=recreate):
+                if invalid_tag:
+                    with self.assertRaisesRegex(ValueError,'tag could not be recreated'):
+                        nightly.draft(root,discovery)
+                    self.assertFalse(deleted)
+                    self.assertEqual(events,[])
+                    return
                 second=nightly.draft(root,discovery)
             self.assertFalse(second.get('reused',False))
             self.assertEqual(second['tag'],first['tag'])
             self.assertNotEqual(second['release_id'],first['release_id'])
-            self.assertEqual(events,['delete','create','upload','complete'])
+            self.assertEqual(events,(['restore-tag'] if tag_missing else [])+['delete','create','upload','complete'])
 
     def test_draft_delete_rejects_public_foreign_immutable_and_changed_records(self):
         old=dict(id=7,name='nightly',tag_name='nightly',draft=True,prerelease=True,

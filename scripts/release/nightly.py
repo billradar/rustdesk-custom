@@ -572,6 +572,13 @@ def draft(root, discovery):
             print('Verified complete Nightly release: ' + tag)
             return result
     if existing and existing.get('draft') is True:
+        # Restore a missing canonical ref before discarding the old Release identity.
+        # Creating its replacement as a private Draft does not create a Git tag.
+        if not api(f'repos/{repository()}/git/ref/tags/{tag}', missing=True):
+            restored_ref = request('POST', f'repos/{repository()}/git/refs',
+                                   dict(ref='refs/tags/' + tag, sha=os.environ['GITHUB_SHA']))
+            if restored_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
+                raise ValueError('Nightly tag could not be recreated at the validated custom source commit')
         # All local package/signature/checksum/log gates above have passed.
         # Keep the Git ref; deleting the Release removes its old attachments.
         delete_refresh_draft(existing)
