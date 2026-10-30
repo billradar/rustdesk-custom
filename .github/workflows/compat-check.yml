@@ -137,6 +137,7 @@ jobs:
         python3 scripts/release/channel_contract.py
         python3 -m scripts.release.stable_lock_contract
         python3 -m scripts.release.stable_router_contract
+        python3 -m scripts.release.stable_tag_contract
         python3 -m scripts.validation.build_reliability_contract
         python3 -m scripts.validation.summary_contract
         python3 scripts/build/config_mir_contract.py

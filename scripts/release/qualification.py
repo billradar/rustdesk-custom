@@ -446,6 +446,8 @@ def _release(root, publish, channel='stable', experimental=False):
         if attempt<11:time.sleep(5)
     if uploaded!=expected_assets:
         raise ValueError('Incomplete release upload; remains unpublished: expected='+json.dumps(expected_assets,sort_keys=True)+' actual='+json.dumps(uploaded,sort_keys=True))
+    from scripts.release.stable_tag import ensure
+    ensure(repo,tag,standard['custom_repository_sha'])
     final_body=notes
     if publish:
         if 'automation_state=complete' not in final_body:
@@ -519,6 +521,8 @@ def publish_existing_draft(channel='stable'):
             or any(not re.fullmatch(r'sha256:[0-9a-f]{64}',asset.get('digest','')) or asset.get('size',0)<=0 for asset in assets)):
         raise ValueError('Existing Stable draft asset inventory/digests are incomplete')
     verify_release_asset_checksums(tag,assets)
+    from scripts.release.stable_tag import ensure
+    ensure(repo,tag,custom_sha)
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',
