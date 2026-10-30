@@ -70,7 +70,7 @@ Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方�
 
 ### Nightly
 
-1. 自动同步由 **Upstream Nightly Router**（`.github/workflows/upstream-nightly.yml`）每日 UTC 12:00（香港时间 20:00）启动，比上游每日 UTC 00:00 的计划晚 12 小时。路由检查最新成功的官方 Nightly 并派发构建，不等待当天尚未成功的运行；GitHub schedule 可能延迟。
+1. 自动同步由 **Upstream Nightly Router**（`.github/workflows/upstream-nightly.yml`）每日 UTC 02:23（香港时间 10:23）启动，避开整点；不保证这是低峰时段或能准点执行。路由检查最新成功的官方 Nightly 并派发构建，不等待当天尚未成功的运行；GitHub schedule 可能延迟。
 2. 手动构建时运行 **Nightly Build Pipeline**（`.github/workflows/nightly.yml`），选择 `main` 分支。手动和自动均选择启动时最新成功的官方 `flutter-nightly.yml` 运行，不再提供 `official_run_id`、`expected_sha` 输入。解析阶段记录运行 ID 并锁定完整源码 SHA，后续各阶段共用该 SHA。
 3. `release_mode` 选 `dry-run` 做无发布验证，`draft` 创建私有 prerelease Draft，`release` 仅用于明确公开已验证的 Nightly prerelease。生产模式要求所有平台与 Android 生产签名门禁通过。`include_wayland` 默认开启。
 4. development 分支只允许 `dry-run`，用于开发验证；不得把 development 的构建结果当作 main 的发布资格。
@@ -102,3 +102,12 @@ Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方�
 ## 7. 生产操作限制
 
 生产发布和 Android 签名必须使用受保护的 GitHub Actions 路径。不要把 PIN、令牌、密钥材料、签名输入或完整敏感环境转储写入日志、Issue、PR 或文档。遇到身份不匹配、来源不明或 Runner 不可信时，应停止操作并调查。
+
+
+### 构建稳定性与单目标恢复
+
+- Android 在原生编译前安装应用/Flutter 的 compile SDK 和 `desktop_drop` 所需 API 33。平台目录必须有匹配的 API 元数据和可校验的 `android.jar`；显式声明的 build-tools 也会准备。每次安装超时为 5 分钟，最多 3 次，间隔 10/20 秒。每次下载使用独立临时目录，校验成功后才放入 SDK；只清理精确定位的无效组件，不删除整个 SDK 或缓存；失败仍阻止构建。
+- `Build reliability and targeted recovery` 在 main 的 Stable/Nightly 运行结束后生成 `build-reliability-*` Actions artifact，保留 30 天。记录各 Job 的创建、启动、完成时间、runner 标签、执行/排队时间和失败分类。未获得 runner 的任务不伪造 0 秒排队，单独记录未分配时长。成功 Job 的 API 时间用于估算排队，不是云平台资源监控。
+- 仅有明确 SDK 安装下载异常、runner 关闭或容量不足证据的失败构建目标可自动恢复；普通编译错误、未知故障、来源准备/校验任务、签名和发布任务不直接重试。public `release` 模式及整个运行被取消时不自动恢复。已上传有效产物的失败目标也交由人工处理，避免重传冲突。
+- 每次结束最多请求重跑一个受影响的叶子 Job，以及 GitHub 定义的依赖任务；整个运行最多 3 个 attempt（初次 + 2 次恢复）。成功的其他目标、固定源码和来源锁沿用原运行；依赖的签名、聚合和 Draft 仍执行原有保护和校验。多个目标同时故障或次数耗尽时，查看报告并人工决定后续操作。
+- 仓库变量 `BUILD_INFRA_AUTO_RETRY_ENABLED=false` 可关闭自动恢复，继续保留报告。新增 workflow 需合并到 main 后才生效，不会主动重跑历史运行。本次改动不自动派发生产构建、签名或发布。
