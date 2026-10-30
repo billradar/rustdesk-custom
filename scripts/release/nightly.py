@@ -2,6 +2,7 @@
 """Follow successful official Nightly runs; never infer source from its moving tag."""
 import argparse
 import base64
+from datetime import datetime, timezone
 import json
 import hashlib
 import time
@@ -376,6 +377,7 @@ def upstream_nightly_release():
 
 def cleanup_superseded_nightly_releases(current_release_id, release_name):
     """Keep only the completed, canonical Nightly release for this channel."""
+    from scripts.release.github import gh
     repo = repository()
     stale = []
     for page in range(1, 11):
@@ -395,6 +397,26 @@ def cleanup_superseded_nightly_releases(current_release_id, release_name):
         if api(f'repos/{repo}/releases/{release["id"]}', missing=True) is not None:
             raise ValueError('Could not remove superseded Nightly release: ' + str(release.get('tag_name')))
         print('Removed superseded Nightly release: ' + str(release.get('tag_name')))
+
+
+def delete_refresh_draft(existing):
+    """Delete only the unchanged workflow-owned private Draft selected for refresh."""
+    from scripts.release.github import gh
+    require_draft_context()
+    if (existing.get('draft') is not True or existing.get('prerelease') is not True
+            or existing.get('immutable') is True
+            or 'channel=nightly' not in (existing.get('body') or '').splitlines()
+            or not re.fullmatch(r'[1-9][0-9]*',str(existing.get('id','')))):
+        raise ValueError('Refusing to delete a non-owned, published or immutable Nightly release')
+    path=f'repos/{repository()}/releases/{existing["id"]}'
+    fresh=api(path,missing=True)
+    fields=('id','draft','prerelease','immutable','tag_name','target_commitish','body','updated_at')
+    if not fresh or any(fresh.get(key)!=existing.get(key) for key in fields):
+        raise ValueError('Nightly Draft changed before deletion; refusing to delete')
+    gh('api','--method','DELETE',path)
+    if api(path,missing=True) is not None:
+        raise ValueError('Old Nightly Draft still exists; refusing duplicate creation')
+    print('Deleted prior private Nightly Draft: '+str(existing['id']))
 
 
 def draft(root, discovery):
@@ -479,11 +501,11 @@ def draft(root, discovery):
     notes = (upstream_notes + '\n\n'
              '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n')
 
-    # A single moving release is intentional. Hide an existing published
-    # prerelease during replacement so consumers never see a mixed asset set.
+    # The tag remains moving. Refresh private Drafts with a new Release identity;
+    # published prereleases retain the explicitly authorized release-mode path.
     existing = api(f'repos/{repository()}/releases/tags/{tag}', missing=True)
-    # GitHub renames a release to ``untagged-*`` if its Git tag was removed.
-    # Reuse that workflow-owned Nightly release instead of creating a second one.
+    # Tag lookup may miss Draft/legacy records. Locate the workflow-owned
+    # Nightly record by metadata before a guarded refresh.
     if not existing:
         matches = []
         for page in range(1, 11):
@@ -535,13 +557,6 @@ def draft(root, discovery):
             and prior_inventory == sorted(expected)
             and remote == expected
         )
-        if complete_match and existing.get('tag_name') == tag and release_mode == 'draft' and existing.get('draft') is True:
-            cleanup_superseded_nightly_releases(existing['id'], release_name)
-            result = dict(tag=tag, release_id=existing['id'], draft=True, prerelease=True,
-                          reused=True, workflow_run=os.environ['GITHUB_RUN_ID'], assets=expected)
-            (ROOT / '.work/nightly-draft.json').write_text(json.dumps(result, indent=2) + '\n')
-            print('Exact complete Nightly Draft already exists: ' + tag)
-            return result
         if complete_match and existing.get('tag_name') == tag and release_mode == 'release':
             if existing.get('draft') is True:
                 promoted_body = body.replace('release_policy=DRAFT ONLY; NOT PUBLIC',
@@ -556,6 +571,20 @@ def draft(root, discovery):
             (ROOT / '.work/nightly-draft.json').write_text(json.dumps(result, indent=2) + '\n')
             print('Verified complete Nightly release: ' + tag)
             return result
+    if existing and existing.get('draft') is True:
+        # Restore a missing canonical ref before discarding the old Release identity.
+        # Creating its replacement as a private Draft does not create a Git tag.
+        if not api(f'repos/{repository()}/git/ref/tags/{tag}', missing=True):
+            restored_ref = request('POST', f'repos/{repository()}/git/refs',
+                                   dict(ref='refs/tags/' + tag, sha=os.environ['GITHUB_SHA']))
+            if restored_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
+                raise ValueError('Nightly tag could not be recreated at the validated custom source commit')
+        # All local package/signature/checksum/log gates above have passed.
+        # Keep the Git ref; deleting the Release removes its old attachments.
+        delete_refresh_draft(existing)
+        existing = None
+    elif existing and release_mode == 'draft':
+        raise ValueError('Nightly is publicly released; Draft refresh must not hide or delete it')
     if existing:
         release_id = existing['id']
         if existing.get('tag_name') != tag:
@@ -626,11 +655,18 @@ def draft(root, discovery):
             time.sleep(5)
     if uploaded != expected:
         raise ValueError('Incomplete Nightly upload/checksum verification; draft remains incomplete')
+    # GitHub's Release date can follow the tag commit date even for a fresh object.
+    # Record actual package verification time separately, without changing source identity.
+    verified_at = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    completed_notes = (notes.replace('automation_state=uploading', 'automation_state=complete')
+                       + f'\nLatest packages verified (UTC): `{verified_at}` · '
+                       + f'[Actions run {os.environ["GITHUB_RUN_ID"]}]'
+                       + f'(https://github.com/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]})\n')
     # Publication is the final irreversible step, only after every signed asset digest matches.
     final = request('PATCH', f'repos/{repository()}/releases/{release_id}',
                     dict(tag_name=tag, target_commitish=os.environ['GITHUB_SHA'],
                          name=release_name, draft=release_mode != 'release', prerelease=True,
-                         body=notes.replace('automation_state=uploading', 'automation_state=complete')))
+                         body=completed_notes))
     if final.get('draft') is not (release_mode != 'release') or final.get('prerelease') is not True:
         raise ValueError('Nightly release state mismatch')
     if final.get('tag_name') != tag:

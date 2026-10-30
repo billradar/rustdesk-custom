@@ -135,6 +135,7 @@ jobs:
         python3 scripts/release/production_contract.py
         python3 scripts/release/qualification_contract.py
         python3 scripts/release/channel_contract.py
+        python3 scripts/release/nightly_contract.py
         python3 -m scripts.release.stable_lock_contract
         python3 -m scripts.release.stable_router_contract
         python3 -m scripts.release.stable_tag_contract
