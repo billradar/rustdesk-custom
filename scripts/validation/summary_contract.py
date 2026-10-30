@@ -5,6 +5,8 @@ import io
 import json
 import os
 import re
+import shlex
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -226,6 +228,49 @@ class SummaryContract(unittest.TestCase):
         self.assertEqual(workflow['jobs']['ci-dashboard']['steps'][0]['with']['ref'],'main')
         self.assertEqual(workflow['jobs']['observe']['permissions'],{'contents':'read','actions':'write','checks':'read'})
         self.assertIn("workflow_run.name != 'CI - Patch and Build compatibility'",workflow['jobs']['observe']['if'])
+
+    def test_observer_entrypoint_imports_summaries_without_pythonpath(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/build-reliability.yml').read_text())
+        command=shlex.split(next(s['run'] for s in workflow['jobs']['observe']['steps'] if s.get('name')=='Record scheduling and recover one infrastructure target'))
+        self.assertEqual(command,['python3','-m','scripts.validation.build_reliability'])
+        workspace=Path(self.temp.name)/'workspace with spaces'
+        scripts=workspace/'scripts/validation'
+        scripts.mkdir(parents=True)
+        for name in ('build_reliability.py','summary.py','summary_dashboard.py'):
+            shutil.copy2(ROOT/'scripts/validation'/name,scripts/name)
+        event=workspace/'event.json'
+        run=dict(id=42,repository={'full_name':'example/repo'},head_repository={'full_name':'example/repo'},
+                 event='workflow_dispatch',head_branch='main',path='.github/workflows/nightly.yml',
+                 status='completed',conclusion='success',head_sha='a'*40,run_attempt=1,
+                 created_at='2026-10-30T10:00:00Z',display_title='Nightly latest / '+'a'*40+' / draft / wayland=true / android-signing=true')
+        event.write_text(json.dumps({'workflow_run':run}))
+        bootstrap="""
+import json,os,runpy,sys
+from types import SimpleNamespace
+from unittest.mock import patch
+run=json.load(open(os.environ['GITHUB_EVENT_PATH']))['workflow_run']
+def fake_gh(command,**kwargs):
+    assert command[:2]==['gh','api'],command
+    assert '--method' not in command, 'entrypoint must not mutate this successful fixture'
+    endpoint=command[2].split('?')[0]
+    if endpoint.endswith('/jobs'): data={'jobs':[]}
+    elif endpoint.endswith('/artifacts'): data={'artifacts':[]}
+    elif endpoint.endswith('/runs/42'): data=run
+    else: raise AssertionError(endpoint)
+    return SimpleNamespace(stdout=json.dumps(data),returncode=0)
+with patch('subprocess.run',side_effect=fake_gh):
+    runpy.run_module(sys.argv[1],run_name='__main__')
+"""
+        env=dict(os.environ,GITHUB_EVENT_PATH=str(event),GITHUB_REPOSITORY='example/repo',GITHUB_STEP_SUMMARY=str(self.path))
+        env.pop('PYTHONPATH',None)
+        result=subprocess.run([sys.executable,'-c',bootstrap,command[2]],cwd=workspace,env=env,text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(json.loads((workspace/'.work/build-reliability/report.json').read_text())['recovery'],'NOT_NEEDED')
+        self.assertTrue((workspace/'.work/build-reliability/dashboard-evidence.json').is_file())
+        output=self.path.read_text()
+        self.assertIn('Run overview',output)
+        self.assertIn('Automatic recovery',output)
+        self.assertEqual(output.count('rustdesk-summary:dashboard:begin'),1)
 
     def test_only_new_presentation_job_is_advisory(self):
         workflow=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())

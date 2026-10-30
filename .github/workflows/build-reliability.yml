@@ -31,7 +31,7 @@ jobs:
         ref: main
         persist-credentials: false
     - name: Record scheduling and recover one infrastructure target
-      run: python3 scripts/validation/build_reliability.py
+      run: python3 -m scripts.validation.build_reliability
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
