@@ -1,8 +1,8 @@
 name: Upstream Nightly Router
 'on':
   schedule:
-    # Official Nightly starts at 00:00 UTC; check daily at 12:00 UTC.
-    - cron: '0 12 * * *'
+    # Official Nightly starts at 00:00 UTC; check off the hour at 02:23 UTC.
+    - cron: '23 2 * * *'
   workflow_dispatch: {}
 permissions:
   contents: read

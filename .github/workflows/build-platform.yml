@@ -74,6 +74,19 @@ jobs:
         p=json.load(open('.work/platform-profile.json'))
         if p['runner']!=os.environ['EXPECTED_RUNNER']:raise ValueError('BUILD_COMPAT: official runner mismatch')
         PY
+    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+      id: android-flutter
+      if: inputs.platform == 'android'
+      with:
+        flutter-version: ${{ steps.profile.outputs.flutter }}
+        channel: stable
+    - name: Prepare and verify Android SDK before native compilation
+      id: android-sdk
+      if: inputs.platform == 'android'
+      run: |
+        export JAVA_HOME="${JAVA_HOME_17_X64:?Hosted Java 17 is required}"
+        export PATH="$JAVA_HOME/bin:$PATH"
+        python3 -m scripts.platform.android_sdk --tree "$PREPARED_SOURCE_DIR" --flutter "$FLUTTER_ROOT" --sdk "$ANDROID_HOME"
     - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       id: rust
       with:
@@ -82,7 +95,7 @@ jobs:
         components: rustfmt
     - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
       id: flutter
-      if: inputs.platform != 'linux'
+      if: inputs.platform == 'macos'
       with:
         flutter-version: ${{ steps.profile.outputs.flutter }}
         channel: stable
@@ -130,6 +143,8 @@ jobs:
       env:
         SOURCE_OUTCOME: ${{ steps.source.outcome }}
         PROFILE_OUTCOME: ${{ steps.profile.outcome }}
+        ANDROID_FLUTTER_OUTCOME: ${{ steps.android-flutter.outcome }}
+        SDK_OUTCOME: ${{ steps.android-sdk.outcome }}
         RUST_OUTCOME: ${{ steps.rust.outcome }}
         FLUTTER_OUTCOME: ${{ steps.flutter.outcome }}
         DEPS_OUTCOME: ${{ steps.dependencies.outcome }}
@@ -143,7 +158,7 @@ jobs:
         folder=Path('.work/target-diagnostic');folder.mkdir(parents=True,exist_ok=True)
         path=folder/'diagnostic.json'
         if not path.exists():
-            keys=[('SOURCE_OUTCOME','PROVENANCE'),('PROFILE_OUTCOME','BUILD_COMPAT'),('RUST_OUTCOME','TOOLCHAIN'),('FLUTTER_OUTCOME','TOOLCHAIN'),('DEPS_OUTCOME','DEPENDENCY'),('VCPKG_OUTCOME','DEPENDENCY'),('NDK_OUTCOME','TOOLCHAIN')]
+            keys=[('SOURCE_OUTCOME','PROVENANCE'),('PROFILE_OUTCOME','BUILD_COMPAT'),('ANDROID_FLUTTER_OUTCOME','TOOLCHAIN'),('SDK_OUTCOME','INFRASTRUCTURE'),('RUST_OUTCOME','TOOLCHAIN'),('FLUTTER_OUTCOME','TOOLCHAIN'),('DEPS_OUTCOME','DEPENDENCY'),('VCPKG_OUTCOME','DEPENDENCY'),('NDK_OUTCOME','TOOLCHAIN')]
             failed=next(((k,c) for k,c in keys if os.environ.get(k)=='failure'),('UNKNOWN','INFRASTRUCTURE'))
             path.write_text(json.dumps({'target':os.environ['PLATFORM']+'-'+os.environ['PLATFORM_ARCH']+'-'+os.environ['VARIANT'],'result':'FAIL','failure_category':failed[1],'failed_step':failed[0],'upstream_sha':os.environ['UPSTREAM_EXPECTED_SHA'],'build_run':os.environ['GITHUB_RUN_ID']},indent=2)+'\n')
         elif os.environ.get('UPLOAD_OUTCOME')=='failure':
@@ -153,7 +168,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: diagnostic-${{ inputs.platform }}-${{ inputs.arch }}-${{ inputs.variant }}-${{ github.run_id }}
+        name: diagnostic-${{ inputs.platform }}-${{ inputs.arch }}-${{ inputs.variant }}-${{ github.run_id }}-${{ github.run_attempt }}
         path: .work/target-diagnostic/
         if-no-files-found: warn
         retention-days: 14
