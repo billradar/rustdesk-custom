@@ -146,11 +146,15 @@ def main():
         'patchset': os.environ.get('PATCHSET', 'v1'), 'upstream_repository': 'rustdesk/rustdesk', 'upstream_sha': args.sha,
         'upstream_branch': os.environ.get('UPSTREAM_BRANCH'), 'variants': {},
         'Runtime/UI Validation': 'SKIPPED BY USER', 'Real Remote Session Validation': 'NOT TESTED'}
+    if args.simulate_failure:
+        report['simulated'] = True
     variants = ['standard', 'sos'] if args.variant == 'both' else [args.variant]
+    active_check = None
     try:
         for variant in variants:
             tree = destination / variant
             status = report['variants'].setdefault(variant, {})
+            active_check = None
             log = destination / (variant + '.log')
             if args.mode == 'prepare':
                 if not re.fullmatch('[0-9a-f]{40}', args.sha):
@@ -165,22 +169,28 @@ def main():
                         raise RuntimeError('Failure simulation unexpectedly applied')
                     status['Patch Apply'] = 'FAIL (SIMULATED)'
                     raise RuntimeError('Simulated patch conflict: nonexistent-simulation; expensive builds blocked')
+                active_check = 'Patch Apply'
                 run(['bash', str(ROOT / 'scripts/source/apply_patches.sh'), str(tree), variant], log)
                 status['Patch Apply'] = 'PASS'
+                active_check = None
                 status['hbb_common Patch'] = 'PASS'
                 run([sys.executable, str(ROOT / 'scripts/source/verify_source.py'), str(tree), variant, '--automation'], log)
                 status['Native helper mock compilation/assertions'] = 'PASS'
                 status.update(contracts(tree, variant))
+                active_check = 'Build System'
                 changed = build_system(tree)
                 status['Build System'] = 'WARNING' if changed else 'PASS'
                 status['Changed build files'] = changed
+                active_check = None
                 status['Rust real-config compile'] = 'NOT RUN'
                 status['Flutter Analyze'] = 'NOT RUN'
                 rust_probe(tree)
             elif args.mode == 'rust':
+                active_check = 'Rust real-config compile'
                 run(['cargo', 'check', '--locked', '--manifest-path', str(tree / 'Cargo.toml'), '-p', ('hbb_common' if os.environ.get('PATCHSET', 'v1') == 'v1' else 'base'), '--bin', 'custom_patch_config'], log)
                 status['Rust real-config compile'] = 'PASS'
             elif args.mode == 'analyze':
+                active_check = 'Flutter Analyze'
                 with log.open('a') as stream:
                     result = subprocess.run(['flutter', 'pub', 'get'], cwd=tree / 'flutter', stdout=stream, stderr=subprocess.STDOUT)
                 if result.returncode:
@@ -189,18 +199,29 @@ def main():
                      '--source', str(tree), '--dart', 'dart'], log)
                 # Only error severity fails. Upstream lint warnings remain in logs.
                 with log.open('a') as stream:
+                    analysis_start = stream.tell()
                     result = subprocess.run(['flutter', 'analyze', '--no-fatal-infos', '--no-fatal-warnings',
                         *[file.removeprefix('flutter/') for file in FILES if file.endswith('.dart')]],
                         cwd=tree / 'flutter', stdout=stream, stderr=subprocess.STDOUT)
                 if result.returncode:
                     raise RuntimeError(f'Flutter analyze errors: {log}')
                 status['Flutter Analyze'] = 'PASS'
+                try:
+                    from scripts.validation.summary import analysis_status
+                    with log.open() as analysis_log:
+                        analysis_log.seek(analysis_start)
+                        status['Flutter Analyze'] = analysis_status(analysis_log.read(), result.returncode)
+                except Exception:
+                    print('Analysis warning presentation unavailable; compiler exit status is unchanged.',file=sys.stderr)
+
             else:
                 status.update(contracts(tree, variant))
         report['Overall'] = 'PASS'
         if args.mode == 'prepare':
             report['Coverage'] = 'Patch, structural API, native mock compile; real-config Rust and Flutter analyze pending'
     except Exception as error:
+        if active_check is not None:
+            status[active_check] = 'FAIL'
         report['Overall'] = 'FAIL'
         report['Reason'] = str(error)
         report['Failed stage'] = args.mode
@@ -214,11 +235,13 @@ def main():
         print(str(error), file=sys.stderr)
     finally:
         report_path.write_text(json.dumps(report, indent=2) + '\n')
-        lines = ['# RustDesk Upstream Compatibility', '', '```json', json.dumps(report, indent=2), '```', '']
-        (destination / 'report.md').write_text('\n'.join(lines))
-        if os.environ.get('GITHUB_STEP_SUMMARY'):
-            with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as file:
-                file.write('\n'.join(lines))
+        from scripts.validation.summary import compatibility_report_card, publish
+        try:
+            (destination / 'report.md').write_text(compatibility_report_card(report))
+        except Exception:
+            print('Markdown report unavailable; JSON diagnostics remain authoritative.', file=sys.stderr)
+        if args.mode != 'prepare' or report['Overall'] == 'FAIL':
+            publish('compatibility', compatibility_report_card, report)
     return 0 if report['Overall'] == 'PASS' else 1
 
 if __name__ == '__main__':

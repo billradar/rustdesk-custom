@@ -138,6 +138,7 @@ jobs:
         python3 -m scripts.release.stable_lock_contract
         python3 -m scripts.release.stable_router_contract
         python3 -m scripts.validation.build_reliability_contract
+        python3 -m scripts.validation.summary_contract
         python3 scripts/build/config_mir_contract.py
         python3 scripts/validation/native_config_contract.py
         python3 scripts/validation/cm_window_contract.py
@@ -406,6 +407,9 @@ jobs:
     if: always()
     runs-on: ubuntu-22.04
     steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         pattern: '*report-${{ github.run_id }}'
@@ -417,6 +421,8 @@ jobs:
     - name: Report generation and actual compile coverage
       env:
         SELECTED: ${{ needs.resolve.outputs.patchset }}
+        UPSTREAM_EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+        UPSTREAM_VERSION: ${{ needs.resolve.outputs.upstream_version }}
         PREFLIGHT_RESULT: ${{ needs.preflight.result }}
         BRIDGE_RESULT: ${{ needs.bridge.result }}
         FLUTTER_RESULT: ${{ needs.flutter-analyze.result }}
@@ -424,12 +430,45 @@ jobs:
         CONTRACT_RESULT: ${{ needs.contracts.result }}
         CHANNEL: ${{ inputs.channel }}
         ANDROID_SIGNING_SMOKE: ${{ inputs.android_signing_smoke }}
-      run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\nroots=list(Path('diagnostics').rglob('patchset-selection.json'))\n\
-        report=json.loads(roots[0].read_text()) if roots else {'selected':None}\npassed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success' and os.environ['BRIDGE_RESULT']=='success' and os.environ['FLUTTER_RESULT']=='success' and (os.environ['CHANNEL']=='ci' or os.environ['ANDROID_SIGNING_SMOKE']=='true' or os.environ['HELPER_RESULT']=='success'))\nreport['overall']='PASS' if passed else 'FAIL'\nreport['Rust fast check']='PASS'\
-        \ if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'\nreport['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success'\
-        \ else 'NOT PASSED'\nreport['Bridge']='PASS' if os.environ['BRIDGE_RESULT']=='success' else 'NOT PASSED'\nreport['Windows helper']='N/A (CI)' if os.environ['CHANNEL']=='ci' else ('N/A (Android signing smoke)' if os.environ['ANDROID_SIGNING_SMOKE']=='true' else ('PASS' if os.environ['HELPER_RESULT']=='success' else 'NOT PASSED'))\nif isinstance(report.get('patchsets'), list):\n    for item in report['patchsets']:\n        if item.get('patchset')==os.environ['SELECTED']:\n            item['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'\nelse:\n    report['selected']=os.environ['SELECTED']\n    report['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'\nPath('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\\n')\n\
-        with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:\n    f.write('## Patch Generation Compatibility\\n```json\\\
-        n'+json.dumps(report,indent=2)+'\\n```\\n')\nPYCODE\n"
+      run: |
+        python3 - <<'PYCODE'
+        import json,os
+        from pathlib import Path
+        roots=list(Path('diagnostics').rglob('patchset-selection.json'))
+        report=json.loads(roots[0].read_text()) if roots else {'selected':None}
+        passed=(os.environ['CONTRACT_RESULT']=='success' and os.environ['PREFLIGHT_RESULT']=='success' and os.environ['BRIDGE_RESULT']=='success' and os.environ['FLUTTER_RESULT']=='success' and (os.environ['CHANNEL']=='ci' or os.environ['ANDROID_SIGNING_SMOKE']=='true' or os.environ['HELPER_RESULT']=='success'))
+        report['overall']='PASS' if passed else 'FAIL'
+        report['Rust fast check']='PASS' if os.environ['PREFLIGHT_RESULT']=='success' else 'NOT PASSED'
+        report['Flutter Analyze']='PASS' if os.environ['FLUTTER_RESULT']=='success' else 'NOT PASSED'
+        report['Bridge']='PASS' if os.environ['BRIDGE_RESULT']=='success' else 'NOT PASSED'
+        report['Windows helper']='N/A (CI)' if os.environ['CHANNEL']=='ci' else ('N/A (Android signing smoke)' if os.environ['ANDROID_SIGNING_SMOKE']=='true' else ('PASS' if os.environ['HELPER_RESULT']=='success' else 'NOT PASSED'))
+        if isinstance(report.get('patchsets'), list):
+            for item in report['patchsets']:
+                if item.get('patchset')==os.environ['SELECTED']:
+                    item['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'
+        else:
+            report['selected']=os.environ['SELECTED']
+            report['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'
+        from scripts.validation.summary import merge_compatibility, compatibility_cards, details, publish
+        reports=[]
+        for path in Path('diagnostics').rglob('report.json'):
+            try:
+                candidate=json.loads(path.read_text())
+                if isinstance(candidate,dict): reports.append(candidate)
+            except (OSError,ValueError):
+                pass
+        report['upstream_sha']=os.environ.get('UPSTREAM_EXPECTED_SHA','')
+        report['upstream_version']=os.environ.get('UPSTREAM_VERSION','')
+        report['patchset']=os.environ['SELECTED']
+        try:
+            report['variants']=merge_compatibility(reports,report['upstream_sha'],report['patchset'])
+        except Exception:
+            report['summary_status']='NOT RUN — renderer unavailable'
+        Path('compatibility-report.json').write_text(json.dumps(report,indent=2)+'\n')
+        def render():
+            return compatibility_cards(report.get('variants',{}), report['overall']) + details('Generation and diagnostic evidence', report)
+        publish('compatibility',render)
+        PYCODE
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: generation-compatibility-${{ github.run_id }}

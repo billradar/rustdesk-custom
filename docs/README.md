@@ -10,7 +10,8 @@
 4. [工作流与发布流程](workflows-and-release.md)：CI、上游兼容性检查和 Stable 发布各自负责什么，如何安全执行发布。
 5. [日常操作手册](operations.md)：环境准备、修改、验证、提交流程，以及 Stable/Nightly 的 GitHub Actions 实际操作和安全重试步骤。
 6. [Android 生产签名](android-production-signing.md)：生产签名的安全边界、授权条件和执行步骤。
-7. [故障排查](troubleshooting.md)：按症状定位常见失败原因。
+7. [Actions Summary Dashboard](actions-summary.md)：真实运行数据、状态含义、折叠证据与模拟测试隔离。
+8. [故障排查](troubleshooting.md)：按症状定位常见失败原因。
 
 ## 阅读和修改规则
 

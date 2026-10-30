@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 import zlib
+from scripts.validation.summary import isolated_summary, run_contract_tests
 import yaml
 from scripts.platform import android_sdk as sdk
 from scripts.validation import build_reliability as recovery
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class SdkTests(unittest.TestCase):
     def setUp(self):
+        isolation=isolated_summary()
+        isolation.__enter__()
+        self.addCleanup(isolation.__exit__,None,None,None)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -143,6 +147,9 @@ class SdkTests(unittest.TestCase):
 
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
+        isolation=isolated_summary()
+        isolation.__enter__()
+        self.addCleanup(isolation.__exit__,None,None,None)
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.output=Path(self.temp.name)/'report.json'
@@ -287,4 +294,4 @@ class RecoveryTests(unittest.TestCase):
         self.assertLess(ids.index('android-sdk'),ids.index('build'))
 
 
-if __name__=='__main__':unittest.main()
+if __name__=='__main__':run_contract_tests('Build reliability contracts')

@@ -61,14 +61,8 @@ def create(data, patchset, output):
     result = dict(lock, lock_sha256=digest,
                   lock_artifact=f'stable-build-lock-{lock["workflow_run"]}-{attempt}',
                   signing_enabled=str(lock['android_signing_enabled']).lower())
-    if os.environ.get('GITHUB_STEP_SUMMARY'):
-        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-            stream.write('## Automatically locked Stable build\n\n'
-                         f'- Build identity: `{lock["build_identity"]}`\n'
-                         f'- Upstream: `{lock["upstream_tag"]}` / `{lock["upstream_sha"]}`\n'
-                         f'- Custom commit: `{lock["custom_repository_sha"]}`\n'
-                         f'- Patchset: `{lock["patchset"]}`\n'
-                         f'- Wayland: `{lock["wayland_included"]}`; signing policy: `{lock["android_signing_enabled"]}`\n')
+    from scripts.validation.summary import publish, stable_lock_card
+    publish('stable-lock', stable_lock_card, lock)
     return result
 
 
