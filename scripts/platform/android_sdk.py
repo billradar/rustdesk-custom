@@ -9,6 +9,7 @@ import subprocess
 import time
 import tempfile
 import zipfile
+import zlib
 
 
 def packages(tree, flutter):
@@ -46,7 +47,7 @@ def valid(sdk, package):
         try:
             with zipfile.ZipFile(folder / 'android.jar') as archive:
                 return bool(archive.namelist()) and archive.testzip() is None
-        except (OSError, zipfile.BadZipFile):
+        except (OSError, zipfile.BadZipFile, zlib.error):
             return False
     return all((folder / name).is_file() for name in ('aapt2', 'apksigner'))
 

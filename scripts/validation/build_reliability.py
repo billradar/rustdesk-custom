@@ -52,7 +52,7 @@ def target_job(job):
     # Only leaf compilation jobs; never source preparation, aggregate, signing or publication.
     return bool(re.search(r' / (?:android|linux|macos)-(?:x86_64|aarch64|armv7)-(?:standard|sos)$', job['name'])
                 or re.search(r' / unattended-wayland-(?:standard|sos)-(?:x86_64|aarch64)$', job['name'])
-                or re.search(r'^windows-build / build/windows-(?:standard|sos|aarch64-standard|aarch64-sos)$', job['name']))
+                or re.search(r'^(?:windows-build|04A · Build Stable Windows targets) / build/windows-(?:standard|sos|aarch64-standard|aarch64-sos)$', job['name']))
 
 
 def classify(job, annotations, log):

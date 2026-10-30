@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+import zlib
 import yaml
 from scripts.platform import android_sdk as sdk
 from scripts.validation import build_reliability as recovery
@@ -35,6 +36,56 @@ class SdkTests(unittest.TestCase):
         (folder/'source.properties').write_text('AndroidVersion.ApiLevel=' + package.split('android-')[-1])
         with zipfile.ZipFile(folder/'android.jar', 'w') as archive:
             archive.writestr('android/app/Activity.class', 'fixture')
+
+    def corrupt_compressed_jar(self, root, package):
+        jar=root.joinpath(*package.split(';'))/'android.jar'
+        with zipfile.ZipFile(jar,'w',compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr('android/app/Activity.class',b'fixture'*100)
+        with zipfile.ZipFile(jar) as archive:
+            info=archive.infolist()[0]
+            header_offset=info.header_offset
+        raw=bytearray(jar.read_bytes())
+        name_length=int.from_bytes(raw[header_offset+26:header_offset+28],'little')
+        extra_length=int.from_bytes(raw[header_offset+28:header_offset+30],'little')
+        compressed_start=header_offset+30+name_length+extra_length
+        # Reserved DEFLATE block type: directory remains valid but decompression fails.
+        raw[compressed_start] |= 0b110
+        jar.write_bytes(raw)
+        with zipfile.ZipFile(jar) as archive:
+            self.assertEqual(archive.namelist(),['android/app/Activity.class'])
+            with self.assertRaises(zlib.error):archive.testzip()
+
+    def test_corrupt_compressed_cached_and_staged_jar_can_be_repaired(self):
+        self.install('platforms;android-33')
+        self.corrupt_compressed_jar(self.sdk,'platforms;android-33')
+        self.assertFalse(sdk.valid(self.sdk,'platforms;android-33'))
+        attempts=[]
+        def install(args,**kwargs):
+            staging=Path(next(x.split('=',1)[1] for x in args if x.startswith('--sdk_root=')))
+            selected=[x for x in args if x.startswith('platforms;')]
+            attempts.append(selected)
+            for package in selected:self.install(package,staging)
+            if len(attempts)==1:self.corrupt_compressed_jar(staging,'platforms;android-33')
+            return SimpleNamespace(returncode=0)
+        with patch.object(sdk.subprocess,'run',side_effect=install),patch.object(sdk.time,'sleep') as sleep:
+            report=sdk.prepare(self.tree,self.flutter,self.sdk,self.output)
+        self.assertEqual(report['result'],'PASS')
+        self.assertEqual(attempts,[['platforms;android-33','platforms;android-36'],['platforms;android-33']])
+        self.assertEqual(report['attempts'][0]['invalid'],['platforms;android-33'])
+        sleep.assert_called_once_with(10)
+
+    def test_repeated_compressed_jar_corruption_keeps_exhaustion_marker(self):
+        self.install('platforms;android-36')
+        def install(args,**kwargs):
+            staging=Path(next(x.split('=',1)[1] for x in args if x.startswith('--sdk_root=')))
+            self.install('platforms;android-33',staging)
+            self.corrupt_compressed_jar(staging,'platforms;android-33')
+            return SimpleNamespace(returncode=0)
+        with patch.object(sdk.subprocess,'run',side_effect=install) as run,patch.object(sdk.time,'sleep'):
+            with self.assertRaisesRegex(ValueError,'INFRASTRUCTURE: SDK_INSTALL_RETRY_EXHAUSTED'):
+                sdk.prepare(self.tree,self.flutter,self.sdk,self.output)
+        self.assertEqual(run.call_count,3)
+        self.assertEqual(json.loads(self.output.read_text())['result'],'FAIL')
 
     def test_exact_application_and_plugin_platforms(self):
         self.assertEqual(sdk.packages(self.tree, self.flutter), ['platforms;android-33','platforms;android-36'])
@@ -124,6 +175,29 @@ class RecoveryTests(unittest.TestCase):
         success=dict(self.job,id=458,name='other / linux-aarch64-standard',run_attempt=1,conclusion='success')
         selected=recovery.latest_jobs([previous,other,success,retry])
         self.assertEqual(selected,[retry,other,success])
+
+    def test_both_windows_callers_have_recoverable_leaf_jobs(self):
+        stable=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
+        nightly=yaml.safe_load((ROOT/'.github/workflows/nightly.yml').read_text())
+        for workflow, caller in ((stable,stable['jobs']['windows-build']['name']),
+                                 (nightly,nightly['jobs']['windows-build'].get('name','windows-build'))):
+            self.run['path']='.github/workflows/tag.yml' if workflow is stable else '.github/workflows/nightly.yml'
+            self.run['display_title']='Stable 1.5.1 / draft / wayland=true / android-signing=true' if workflow is stable else 'Nightly latest / '+'a'*40+' / draft / wayland=true / android-signing=true'
+            for variant in ('standard','sos','aarch64-standard','aarch64-sos'):
+                with self.subTest(caller=caller,variant=variant):
+                    self.job['name']=caller+' / build/windows-'+variant
+                    report,calls=self.invoke()
+                    self.assertEqual(report['recovery'],'REQUESTED')
+                    self.assertIn(('api','repos/example/repo/actions/jobs/456/logs'),[c.args for c in calls.call_args_list])
+                    self.job.update(steps=[],conclusion='cancelled')
+                    report,_=self.invoke(annotations=[{'message':'Due to capacity constraints'}])
+                    self.assertTrue(report['jobs'][0]['retry_eligible'])
+                    self.job.update(steps=[{'name':'Download source','conclusion':'cancelled'}],conclusion='failure')
+            for suffix in ('Build shared Windows helper','Validate Windows build provenance',
+                           'Validate native Windows ARM64 provenance','arm64-bridge','build/windows-web'):
+                with self.subTest(caller=caller,suffix=suffix):
+                    self.assertFalse(recovery.target_job({'name':caller+' / '+suffix}))
+        self.assertFalse(recovery.target_job({'name':'unrelated / build/windows-standard'}))
 
     def test_only_failed_leaf_and_dependents_are_retried(self):
         report,calls=self.invoke()
