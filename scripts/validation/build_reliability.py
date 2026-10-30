@@ -30,6 +30,17 @@ def pages(path, key=None):
     raise ValueError('Reliability evidence pagination limit reached')
 
 
+def latest_jobs(rows):
+    """Keep each logical job's newest execution, including prior successful targets."""
+    found = {}
+    for row in rows:
+        key = row['name']
+        order = lambda job: (job.get('run_attempt', 0), job.get('created_at') or '', job['id'])
+        if key not in found or order(row) > order(found[key]):
+            found[key] = row
+    return list(found.values())
+
+
 def seconds(start, end):
     if not start or not end:
         return None
@@ -106,7 +117,7 @@ def process(event, repo, output):
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, indent=2) + '\n')
         return report
-    jobs = pages(f'repos/{repo}/actions/runs/{run_id}/jobs?filter=latest', 'jobs')
+    jobs = latest_jobs(pages(f'repos/{repo}/actions/runs/{run_id}/jobs?filter=all', 'jobs'))
     report = dict(schema='build-reliability-v1', run_id=run_id, attempt=run['run_attempt'],
                   custom_sha=run['head_sha'], workflow=run['path'], created_at=run['created_at'],
                   observed_at=datetime.now(timezone.utc).isoformat(), jobs=[], recovery='NOT_NEEDED')

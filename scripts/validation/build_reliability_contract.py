@@ -117,6 +117,14 @@ class RecoveryTests(unittest.TestCase):
             report=recovery.process({'workflow_run':copy.deepcopy(self.run)},'example/repo',self.output)
             return report,calls
 
+    def test_partial_retry_keeps_prior_success_and_other_failed_targets(self):
+        previous=dict(self.job,run_attempt=1)
+        retry=dict(self.job,id=999,run_attempt=2,conclusion='success')
+        other=dict(self.job,id=457,name='other / macos-aarch64-standard',run_attempt=1)
+        success=dict(self.job,id=458,name='other / linux-aarch64-standard',run_attempt=1,conclusion='success')
+        selected=recovery.latest_jobs([previous,other,success,retry])
+        self.assertEqual(selected,[retry,other,success])
+
     def test_only_failed_leaf_and_dependents_are_retried(self):
         report,calls=self.invoke()
         self.assertEqual(report['recovery'],'REQUESTED')
