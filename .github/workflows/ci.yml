@@ -60,20 +60,16 @@ jobs:
     if: needs.classify.outputs.docs_only == 'true'
     runs-on: ubuntu-22.04
     steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
     - name: Report functional CI skip
       run: |
-        cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-        ## Change classification: DOCS_ONLY
-
-        Functional CI: **SKIPPED**
-        Reason: documentation-only change
-
-        - Repository architecture contract: SKIPPED
-        - Build: SKIPPED
-        - Compatibility: SKIPPED
-        - Release qualification: SKIPPED
-        - Signing: SKIPPED
-        EOF
+        python3 - <<'PY'
+        from scripts.validation.summary import publish, card, badge
+        publish('documentation',card,'📄 Documentation-only change',[
+            (label,badge('SKIPPED')) for label in ('Repository contracts','Build','Compatibility','Release qualification','Signing')])
+        PY
 
   resolve:
     needs: classify
@@ -178,3 +174,32 @@ jobs:
         path: .work/ci-bridge
         if-no-files-found: error
         retention-days: 90
+
+  dashboard:
+    name: Render current CI dashboard snapshot
+    # Presentation only: failure must not change the existing build/qualification gates.
+    continue-on-error: true
+    needs: [classify, resolve, compatibility, qualification]
+    if: always()
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Render actual run snapshot (final result follows in the read-only observer)
+      run: |
+        python3 - <<'PY'
+        import os
+        from pathlib import Path
+        from scripts.validation.summary_dashboard import publish_run
+        publish_run(os.environ['GITHUB_REPOSITORY'],os.environ['GITHUB_RUN_ID'],output=Path('.work/dashboard/evidence.json'))
+        PY
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: ci-dashboard-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
+        path: .work/dashboard/
+        if-no-files-found: warn
+        retention-days: 30

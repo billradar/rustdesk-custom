@@ -157,19 +157,18 @@ def process(event, repo, output):
         return report
     finally:
         output.write_text(json.dumps(report, indent=2) + '\n')
-        if os.environ.get('GITHUB_STEP_SUMMARY'):
-            with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
-                stream.write(f'## Build reliability: run {run_id}, attempt {run["run_attempt"]}\n\n'
-                             f'Recovery: {report["recovery"]}. One infrastructure job per completion; '
-                             f'maximum {MAX_ATTEMPTS} run attempts.\n\n'
-                             '| Job ID | Result | Evidence | Queue seconds |\n|---|---|---|---|\n')
-                for job in report['jobs']:
-                    stream.write(f'| {job["id"]} | {job["conclusion"]} | {job["reason"]} | {job["queue_seconds"]} |\n')
+        from scripts.validation.summary import publish, dashboard
+        publish('dashboard', dashboard, run=run, jobs=jobs, recovery=report,
+                maximum=MAX_ATTEMPTS, evidence=report)
 
 
 def main():
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
-    process(event, os.environ['GITHUB_REPOSITORY'], Path('.work/build-reliability/report.json'))
+    result = process(event, os.environ['GITHUB_REPOSITORY'], Path('.work/build-reliability/report.json'))
+    if result.get('recovery') != 'SKIPPED_STALE_EVENT':
+        from scripts.validation.summary_dashboard import publish_run
+        publish_run(os.environ['GITHUB_REPOSITORY'], event['workflow_run']['id'], result, MAX_ATTEMPTS,
+                    Path('.work/build-reliability/dashboard-evidence.json'))
 
 
 if __name__ == '__main__':
