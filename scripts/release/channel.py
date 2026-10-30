@@ -378,6 +378,8 @@ def draft(root):
     expected={p.name:p.stat().st_size for p in release_files}
     if {a['name']:a['size'] for a in uploaded if a['state']=='uploaded'}!=expected:
         raise ValueError('Incomplete draft upload; remains unpublished')
+    from scripts.release.stable_tag import ensure
+    ensure(REPOSITORY,tag,info['custom_repository_sha'])
     final=request('PATCH',f'repos/{REPOSITORY}/releases/{result["id"]}',{'draft':True,'body':notes})
     print('Draft created; automatic publication disabled.')
 

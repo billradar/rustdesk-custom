@@ -222,8 +222,9 @@ class ReleaseBodyContractTests(unittest.TestCase):
         env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','RELEASE_TAG':'v1.4.9-custom.v1.1',
              'BUILD_IDENTITY':identity,'UPSTREAM_SHA':upstream,'CUSTOM_REPOSITORY_SHA':custom,
              'PATCHSET':patchset,'WAYLAND_INCLUDED':'false','WAYLAND_POLICY_SHA256':''}
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request',return_value={'draft':False}) as write:
+        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request',return_value={'draft':False}) as write,patch('scripts.release.stable_tag.ensure') as tag_write:
             qualification.publish_existing_draft()
+            tag_write.assert_called_once_with('billradar/rustdesk-custom','v1.4.9-custom.v1.1',custom)
             write.assert_called_once()
         mismatch=dict(release,body=body.replace('custom_repository_sha='+custom,'custom_repository_sha='+'d'*40))
         with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[mismatch]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request') as write:

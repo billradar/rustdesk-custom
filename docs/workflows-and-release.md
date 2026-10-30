@@ -203,3 +203,12 @@ reviewed Android signing identity. Never claim the original repository's
 certificate identity for a different key.
 
 Stable 手动和自动构建均自动计算并锁定构建身份，不提供身份输入框。自动路由读取同一运行生成的身份锁进行去重和重试计数；活动运行尚未生成锁时保守跳过，已结束运行缺少锁时停止并要求检查。锁文件绑定本次运行、仓库提交、上游版本/SHA、补丁哈希、Wayland 和签名策略，以下游必需的摘要校验防止漂移。强制重建/覆盖旧发布开关暂不恢复，旧发布保持不可覆盖。
+
+
+## Stable 草稿与 Git tag
+
+Stable Release 的 `tag_name` 与 Git 引用 `refs/tags/...` 是两件事。草稿页面的 `untagged-*` 是 GitHub 的内部地址，不表示仓库把版本名称设置成了 untagged。单独创建真实 Git tag 也不保证草稿页面 URL 立即变化；不要为改变地址而自动发布 Release。
+
+Stable 自动化在完成产物、架构、来源和上传清单校验后，显式创建 `v{上游版本}-custom.{补丁修订}` 的不可变 Git tag，指向本批产物记录的 `custom_repository_sha`，而非上游仓库 SHA 或稍后变化的 main HEAD。草稿仍保持 `draft=true`。
+
+已有轻量/附注 tag 只有在最终指向同一提交时才可复用；同名异提交立即失败，绝不强制更新或删除。引用创建失败时保留草稿并停止，不提升令牌权限。旧草稿在用户明确选择发布、且原有身份与远程校验全部通过后，也会检查/补建 tag，再进行原有发布动作。此修改不批量修复历史草稿，也不主动发布任何草稿。
