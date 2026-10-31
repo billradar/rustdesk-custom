@@ -1,0 +1,332 @@
+{
+  "schema": "upstream-interface-review-v1",
+  "approval": "REQUIRED / NOT APPROVED",
+  "upstream_repository": "rustdesk/rustdesk",
+  "upstream_sha": "3b7e2cebd9303a43eecb9bc96921548df846f45d",
+  "custom_repository_sha": "391e8b1ba382aa9c1998c29a3a2a5c444aae4f0d",
+  "workflow_run": "41200898286",
+  "observed_profile": {
+    "signature": "ce995eb6df567c3c25d41a2322e1ce82f4adae3fbf9d0d05d80a3d1fb60e733c",
+    "upstream_version": "1.5.1",
+    "runner": "windows-2022",
+    "rust": "1.75",
+    "flutter": "3.24.5",
+    "llvm": "15.0.6",
+    "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+    "bridge_rust": "1.75",
+    "cargo_expand": "1.0.95",
+    "frb": "1.80.1",
+    "bridge_flutter": "3.22.3",
+    "helper_commit": "ecd8d6a139eee76845ea66423fb739af450fda90",
+    "source_sbom_requested": true
+  },
+  "inspection_error": null,
+  "critical": {
+    "windows_job": {
+      "name": "${{ matrix.job.target }}",
+      "needs": [
+        "build-RustDeskTempTopMostWindow",
+        "generate-bridge"
+      ],
+      "runs-on": "${{ matrix.job.os }}",
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "job": [
+            {
+              "target": "x86_64-pc-windows-msvc",
+              "os": "windows-2022",
+              "arch": "x86_64",
+              "flutter-arch": "x64",
+              "vcpkg-triplet": "x64-windows-static",
+              "build-args": "--vram"
+            },
+            {
+              "target": "aarch64-pc-windows-msvc",
+              "os": "windows-11-arm",
+              "arch": "aarch64",
+              "flutter-arch": "arm64",
+              "vcpkg-triplet": "arm64-windows-static",
+              "build-args": ""
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "name": "Export GitHub Actions cache environment variables",
+          "uses": "actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410",
+          "with": {
+            "script": "core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');\ncore.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');\n"
+          }
+        },
+        {
+          "name": "Checkout source code",
+          "uses": "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "with": {
+            "submodules": "recursive"
+          }
+        },
+        {
+          "name": "Restore bridge files",
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}",
+            "path": "./"
+          }
+        },
+        {
+          "name": "Install LLVM and Clang",
+          "uses": "KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0",
+          "with": {
+            "version": "${{ env.LLVM_VERSION }}"
+          }
+        },
+        {
+          "name": "Install flutter",
+          "id": "flutter",
+          "uses": "subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225",
+          "with": {
+            "channel": "stable",
+            "flutter-version": "${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}",
+            "architecture": "x64"
+          }
+        },
+        {
+          "name": "Force arm64 Dart SDK + engine",
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "run": "$flutterRoot = \"${{ steps.flutter.outputs['CACHE-PATH'] }}\"\nWrite-Host \"PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE\"\nWrite-Host \"Flutter root: $flutterRoot\"\nRemove-Item -Force \"$flutterRoot\\bin\\cache\\engine-dart-sdk.stamp\" -ErrorAction SilentlyContinue\n& \"$flutterRoot\\bin\\internal\\update_dart_sdk.ps1\"\n# Confirm the Dart we ended up with is arm64 (\"on windows_arm64\"); fail loudly if not.\n$dartVer = & \"$flutterRoot\\bin\\dart.bat\" --version 2>&1 | Out-String\nWrite-Host $dartVer\nif ($dartVer -notmatch \"windows_arm64\") {\n  Write-Error \"Expected an arm64 Dart SDK but got: $dartVer\"\n  exit 1\n}\n& \"$flutterRoot\\bin\\flutter.bat\" precache --windows\n# Fail fast if precache pulled the wrong-arch Windows engine: an arm64 Dart should\n# fetch windows-arm64 engine artifacts. Bailing here saves the ~25min Rust build.\n$engineDir = \"$flutterRoot\\bin\\cache\\artifacts\\engine\"\nWrite-Host \"Engine artifacts present:\"\nGet-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host\nif (-not (Test-Path \"$engineDir\\windows-arm64-release\")) {\n  Write-Error \"Expected windows-arm64-release engine artifacts but they are missing (wrong-arch SDK).\"\n  exit 1\n}\n"
+        },
+        {
+          "name": "Replace engine with rustdesk custom flutter engine",
+          "if": "${{ matrix.job.arch == 'x86_64' }}",
+          "run": "flutter doctor -v\nflutter precache --windows\nInvoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip\nExpand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release\nmv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/\n"
+        },
+        {
+          "name": "Patch flutter",
+          "if": "${{ matrix.job.arch == 'x86_64' }}",
+          "shell": "bash",
+          "run": "cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))\ncd $(dirname $(dirname $(which flutter)))\nif [[ \"3.24.5\" == ${{env.FLUTTER_VERSION}} ]]; then\n  git apply flutter_3.24.4_dropdown_menu_enableFilter.diff\nfi\n"
+        },
+        {
+          "name": "Patch RustDesk sources for Flutter 3.44 (arm64)",
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "shell": "bash",
+          "run": "bash .github/patches/apply_flutter_3.44_source_patches.sh"
+        },
+        {
+          "name": "Install Rust toolchain",
+          "uses": "dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9",
+          "with": {
+            "toolchain": "${{ env.SCITER_RUST_VERSION }}",
+            "targets": "${{ matrix.job.target }}",
+            "components": "rustfmt"
+          }
+        },
+        {
+          "uses": "Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32",
+          "with": {
+            "prefix-key": "${{ matrix.job.os }}"
+          }
+        },
+        {
+          "name": "Setup vcpkg with Github Actions binary cache",
+          "uses": "lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2",
+          "with": {
+            "vcpkgDirectory": "C:\\vcpkg",
+            "vcpkgGitCommitId": "${{ env.VCPKG_COMMIT_ID }}",
+            "doNotCache": false
+          }
+        },
+        {
+          "name": "Install vcpkg dependencies",
+          "env": {
+            "VCPKG_DEFAULT_HOST_TRIPLET": "${{ matrix.job.vcpkg-triplet }}"
+          },
+          "run": "if ! $VCPKG_ROOT/vcpkg \\\n  install \\\n  --triplet ${{ matrix.job.vcpkg-triplet }} \\\n  --x-install-root=\"$VCPKG_ROOT/installed\"; then\n  find \"${VCPKG_ROOT}/\" -name \"*.log\" | while read -r _1; do\n    echo \"$_1:\"\n    echo \"======\"\n    cat \"$_1\"\n    echo \"======\"\n    echo \"\"\n  done\n  exit 1\nfi\nhead -n 100 \"${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log\" || true\n",
+          "shell": "bash"
+        },
+        {
+          "name": "Set SODIUM_LIB_DIR (arm64)",
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "shell": "bash",
+          "run": "echo \"SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib\" >> \"$GITHUB_ENV\""
+        },
+        {
+          "name": "Build rustdesk",
+          "run": "# Windows: build RustDesk\n# --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix\npython3 .\\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}\nmv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk\n\n# Download usbmmidd_v2.zip and extract it to ./rustdesk\nInvoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip\nExpand-Archive usbmmidd_v2.zip -DestinationPath .\nRemove-Item -Path usbmmidd_v2\\Win32 -Recurse\nRemove-Item -Path \"usbmmidd_v2\\deviceinstaller64.exe\", \"usbmmidd_v2\\deviceinstaller.exe\", \"usbmmidd_v2\\usbmmidd.bat\"\nmv -Force .\\usbmmidd_v2 ./rustdesk\n\n# Download printer driver files and extract them to ./rustdesk\ntry {\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums\n\n  # Check and move the files\n  $checksum_driver = (Select-String -Path .\\sha256sums -Pattern '^([a-fA-F0-9]{64}) \\*rustdesk_printer_driver_v4-1.4\\.zip$').Matches.Groups[1].Value\n  $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256\n  $checksum_adapter = (Select-String -Path .\\sha256sums -Pattern '^([a-fA-F0-9]{64}) \\*printer_driver_adapter\\.zip$').Matches.Groups[1].Value\n  $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256\n  if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {\n      Write-Output \"rustdesk_printer_driver_v4-1.4, checksums match, extract the file.\"\n      Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .\n      mkdir ./rustdesk/drivers\n      mv -Force .\\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver\n      Expand-Archive printer_driver_adapter.zip -DestinationPath .\n      mv -Force .\\printer_driver_adapter.dll ./rustdesk\n  } elseif ($checksum_driver -ne $downloadsum_driver.Hash) {\n      Write-Output \"rustdesk_printer_driver_v4-1.4, checksums do not match, ignore the file.\"\n  } else {\n      Write-Output \"printer_driver_adapter.dll, checksums do not match, ignore the file.\"\n  }\n} catch {\n    Write-Host \"Ingore the printer driver error.\"\n}\n"
+        },
+        {
+          "name": "Run the Rust tests",
+          "if": "${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}",
+          "shell": "bash",
+          "run": "# The build's own features, so the tests see the code that ships.\nFEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)\ncargo test --locked --release --lib --features \"$FEATURES\"\n# Its Windows tests run nowhere else.\ncargo test --locked --release -p clipboard\n"
+        },
+        {
+          "name": "find Runner.res",
+          "continue-on-error": true,
+          "shell": "bash",
+          "run": "runner_res=$(find . -name \"Runner.res\");\nif [ \"$runner_res\" == \"\" ]; then\n  echo \"Runner.res: not found\";\nelse\n  echo \"Runner.res: $runner_res\";\n  cp $runner_res ./libs/portable/Runner.res;\n  echo \"list ./libs/portable/Runner.res\";\n  ls -l ./libs/portable/Runner.res;\nfi\n"
+        },
+        {
+          "name": "Download RustDeskTempTopMostWindow artifacts",
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "if": "${{ inputs.upload-artifact }}",
+          "with": {
+            "name": "${{ matrix.job.arch == 'aarch64' && 'topmostwindow-artifacts-ARM64' || 'topmostwindow-artifacts-x64' }}",
+            "path": "./rustdesk"
+          }
+        },
+        {
+          "name": "Upload unsigned",
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-windows-${{ matrix.job.arch }}",
+            "path": "rustdesk"
+          }
+        },
+        {
+          "name": "Sign rustdesk files",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "shell": "bash",
+          "run": "pip3 install requests argparse\nBASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./rustdesk/\n"
+        },
+        {
+          "name": "Verify Windows Flutter version",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true'",
+          "shell": "powershell",
+          "run": "$reportedVersion = (& \".\\rustdesk\\rustdesk.exe\" --version | Out-String).Trim()\nif ($LASTEXITCODE -ne 0) {\n  throw \"rustdesk --version exited with $LASTEXITCODE\"\n}\nif ($reportedVersion -cne $env:VERSION) {\n  throw \"RustDesk reports version '$reportedVersion', expected '$env:VERSION'\"\n}\n"
+        },
+        {
+          "name": "Verify template payload signatures",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "shell": "powershell",
+          "run": "Get-ChildItem ./rustdesk -Recurse -File -ErrorAction Stop |\n  Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |\n  ForEach-Object {\n    $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop\n    if ($signature.Status -ne 'Valid') { throw \"Invalid template payload signature: $($_.FullName) ($($signature.Status))\" }\n  }\n"
+        },
+        {
+          "name": "Build template packer",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "shell": "bash",
+          "run": "sed -i '/dpiAware/d' res/manifest.xml\npushd ./libs/portable\npip3 install -r requirements.txt\npython3 ./generate.py -f ../../rustdesk/ -e rustdesk.exe -l 11 -t \"${{ matrix.job.target }}\" --exclude-exe\npopd\nmkdir -p ./packer-template\ncp ./target/${{ matrix.job.target }}/release/rustdesk-portable-packer.exe ./packer-template/rustdesk-template-${{ matrix.job.arch }}.exe\n"
+        },
+        {
+          "name": "Upload unsigned template packer",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-packer-template-${{ matrix.job.arch }}",
+            "path": "./packer-template",
+            "if-no-files-found": "error"
+          }
+        },
+        {
+          "name": "Build self-extracted executable",
+          "shell": "bash",
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "run": "sed -i '/dpiAware/d' res/manifest.xml\npushd ./libs/portable\npip3 install -r requirements.txt\npython3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe\npopd\nmkdir -p ./SignOutput\nmv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe\n"
+        },
+        {
+          "name": "Add MSBuild to PATH",
+          "uses": "microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce",
+          "with": {
+            "msbuild-architecture": "${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86' }}"
+          }
+        },
+        {
+          "name": "Build msi",
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "run": "pushd ./res/msi\npython preprocess.py --arp -d ../../rustdesk\nnuget restore msi.sln\n$msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }\nmsbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10\n$msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1\nmv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi\nsha256sum ../../SignOutput/rustdesk-*.msi\n"
+        },
+        {
+          "name": "Build pre-built MSI template",
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "run": "git checkout -- res/msi\ncp -r ./rustdesk ./rustdesk-msi-template\nmv ./rustdesk-msi-template/rustdesk.exe ./rustdesk-msi-template/RDAPPNAM.exe\nSet-Content -Path ./rustdesk-msi-template/custom.txt -Value 'placeholder' -NoNewline\n$assets = './rustdesk-msi-template/data/flutter_assets/assets'\nNew-Item -ItemType Directory -Force -Path $assets | Out-Null\nforeach ($a in 'icon.ico','icon.png','logo.png','logo_light.png','logo_dark.png') {\n  Set-Content -Path \"$assets/$a\" -Value 'placeholder' -NoNewline\n}\npushd ./res/msi\npython preprocess.py --arp --template --revision-version 0 -d ../../rustdesk-msi-template --app-name RDAPPNAM\n$msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }\nmsbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform\nmsbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10\n$msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1\npopd\nmkdir ./msi-template\nmv $msi.FullName ./msi-template/rustdesk-template-${{ matrix.job.arch }}.msi\ngit checkout -- res/msi\nrm -r -fo ./rustdesk-msi-template\n"
+        },
+        {
+          "name": "Upload unsigned msi template",
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-msi-template-${{ matrix.job.arch }}",
+            "path": "./msi-template"
+          }
+        },
+        {
+          "name": "Sign rustdesk self-extracted file",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "shell": "bash",
+          "run": "BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput\n"
+        },
+        {
+          "name": "Upload signed Windows Flutter EXE",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "windows-flutter-${{ matrix.job.arch }}-exe",
+            "path": "./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe",
+            "if-no-files-found": "error"
+          }
+        },
+        {
+          "name": "Upload signed Windows Flutter MSI",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "windows-flutter-${{ matrix.job.arch }}-msi",
+            "path": "./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi",
+            "if-no-files-found": "error"
+          }
+        },
+        {
+          "name": "Publish Release",
+          "uses": "softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844",
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true'",
+          "with": {
+            "prerelease": true,
+            "tag_name": "${{ env.TAG_NAME }}",
+            "files": "./SignOutput/rustdesk-*.msi\n./SignOutput/rustdesk-*.exe\n"
+          }
+        }
+      ]
+    },
+    "tools": {
+      "RUST_VERSION": "1.75",
+      "FLUTTER_VERSION": "3.24.5",
+      "LLVM_VERSION": "15.0.6",
+      "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+    },
+    "files": {
+      "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+      "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46",
+      ".github/workflows/bridge.yml": "b519191d9d9bd7f4350cc978c8fd6db366cf3152206835620a73f09a165b4d05",
+      ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+      ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
+    }
+  },
+  "compared_profile": "reviewed-151-1297da",
+  "checks": {
+    "interface": "UNKNOWN / BLOCKED",
+    "patches": {
+      "standard": {
+        "patch_apply": "PASS",
+        "api_structure": "PASS"
+      },
+      "sos": {
+        "patch_apply": "PASS",
+        "api_structure": "PASS"
+      }
+    },
+    "rust_compile": "NOT RUN",
+    "bridge": "NOT RUN",
+    "flutter_analyze": "NOT RUN",
+    "runtime": "NOT TESTED"
+  },
+  "upstream_compare_url": "https://github.com/rustdesk/rustdesk/compare/1297da6d186e58d9096be24072ae3998cdbbf8fe...3b7e2cebd9303a43eecb9bc96921548df846f45d",
+  "critical_diff": "",
+  "patchset": "v2",
+  "patch_hashes": {
+    "common": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+    "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+  }
+}
