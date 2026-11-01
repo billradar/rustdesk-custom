@@ -50,6 +50,7 @@ jobs:
       UPSTREAM_REF: ${{ inputs.upstream_ref }}
       BUILD_CHANNEL: ${{ inputs.channel }}
       CLIENT_PATCH_REVISION: ${{ inputs.patch_revision }}
+      BRANDING_INPUT_PATH: .work/branding-input.json
       CLIENT_RELEASE_IDENTITY: ${{ inputs.client_release_identity && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -57,6 +58,58 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements.txt
+    - name: Freeze public branding variables with defaults
+      env:
+        CUSTOM_DISPLAY_NAME: ${{ vars.CUSTOM_DISPLAY_NAME || '' }}
+        CUSTOM_ABOUT_TITLE: ${{ vars.CUSTOM_ABOUT_TITLE || '' }}
+        CUSTOM_ANDROID_APP_LABEL: ${{ vars.CUSTOM_ANDROID_APP_LABEL || '' }}
+        CUSTOM_ANDROID_SERVICE_LABEL: ${{ vars.CUSTOM_ANDROID_SERVICE_LABEL || '' }}
+        CUSTOM_LINUX_APP_LABEL: ${{ vars.CUSTOM_LINUX_APP_LABEL || '' }}
+        CUSTOM_DESCRIPTION: ${{ vars.CUSTOM_DESCRIPTION || '' }}
+        CUSTOM_SLOGAN: ${{ vars.CUSTOM_SLOGAN || '' }}
+        CUSTOM_INSTALLER_TITLE: ${{ vars.CUSTOM_INSTALLER_TITLE || '' }}
+        CUSTOM_INSTALLER_DESCRIPTION: ${{ vars.CUSTOM_INSTALLER_DESCRIPTION || '' }}
+        CUSTOM_PUBLISHER: ${{ vars.CUSTOM_PUBLISHER || '' }}
+        CUSTOM_MAINTAINER: ${{ vars.CUSTOM_MAINTAINER || '' }}
+        CUSTOM_CONTACT_EMAIL: ${{ vars.CUSTOM_CONTACT_EMAIL || '' }}
+        CUSTOM_CUSTOMIZATION_NOTICE: ${{ vars.CUSTOM_CUSTOMIZATION_NOTICE || '' }}
+        CUSTOM_WINDOWS_COMPANY_NAME: ${{ vars.CUSTOM_WINDOWS_COMPANY_NAME || '' }}
+        CUSTOM_LINUX_GENERIC_NAME: ${{ vars.CUSTOM_LINUX_GENERIC_NAME || '' }}
+        CUSTOM_LINUX_COMMENT: ${{ vars.CUSTOM_LINUX_COMMENT || '' }}
+        CUSTOM_WEBSITE_URL: ${{ vars.CUSTOM_WEBSITE_URL || '' }}
+        CUSTOM_HELP_URL: ${{ vars.CUSTOM_HELP_URL || '' }}
+        CUSTOM_SUPPORT_URL: ${{ vars.CUSTOM_SUPPORT_URL || '' }}
+        CUSTOM_PRIVACY_URL: ${{ vars.CUSTOM_PRIVACY_URL || '' }}
+        CUSTOM_DISPLAY_NAME_EN: ${{ vars.CUSTOM_DISPLAY_NAME_EN || '' }}
+        CUSTOM_DISPLAY_NAME_ZH_CN: ${{ vars.CUSTOM_DISPLAY_NAME_ZH_CN || '' }}
+        CUSTOM_ABOUT_TITLE_EN: ${{ vars.CUSTOM_ABOUT_TITLE_EN || '' }}
+        CUSTOM_ABOUT_TITLE_ZH_CN: ${{ vars.CUSTOM_ABOUT_TITLE_ZH_CN || '' }}
+        CUSTOM_ANDROID_APP_LABEL_EN: ${{ vars.CUSTOM_ANDROID_APP_LABEL_EN || '' }}
+        CUSTOM_ANDROID_APP_LABEL_ZH_CN: ${{ vars.CUSTOM_ANDROID_APP_LABEL_ZH_CN || '' }}
+        CUSTOM_ANDROID_SERVICE_LABEL_EN: ${{ vars.CUSTOM_ANDROID_SERVICE_LABEL_EN || '' }}
+        CUSTOM_ANDROID_SERVICE_LABEL_ZH_CN: ${{ vars.CUSTOM_ANDROID_SERVICE_LABEL_ZH_CN || '' }}
+        CUSTOM_LINUX_APP_LABEL_EN: ${{ vars.CUSTOM_LINUX_APP_LABEL_EN || '' }}
+        CUSTOM_LINUX_APP_LABEL_ZH_CN: ${{ vars.CUSTOM_LINUX_APP_LABEL_ZH_CN || '' }}
+        CUSTOM_DESCRIPTION_EN: ${{ vars.CUSTOM_DESCRIPTION_EN || '' }}
+        CUSTOM_DESCRIPTION_ZH_CN: ${{ vars.CUSTOM_DESCRIPTION_ZH_CN || '' }}
+        CUSTOM_SLOGAN_EN: ${{ vars.CUSTOM_SLOGAN_EN || '' }}
+        CUSTOM_SLOGAN_ZH_CN: ${{ vars.CUSTOM_SLOGAN_ZH_CN || '' }}
+        CUSTOM_INSTALLER_TITLE_EN: ${{ vars.CUSTOM_INSTALLER_TITLE_EN || '' }}
+        CUSTOM_INSTALLER_TITLE_ZH_CN: ${{ vars.CUSTOM_INSTALLER_TITLE_ZH_CN || '' }}
+        CUSTOM_INSTALLER_DESCRIPTION_EN: ${{ vars.CUSTOM_INSTALLER_DESCRIPTION_EN || '' }}
+        CUSTOM_INSTALLER_DESCRIPTION_ZH_CN: ${{ vars.CUSTOM_INSTALLER_DESCRIPTION_ZH_CN || '' }}
+        CUSTOM_CUSTOMIZATION_NOTICE_EN: ${{ vars.CUSTOM_CUSTOMIZATION_NOTICE_EN || '' }}
+        CUSTOM_CUSTOMIZATION_NOTICE_ZH_CN: ${{ vars.CUSTOM_CUSTOMIZATION_NOTICE_ZH_CN || '' }}
+        CUSTOM_LINUX_GENERIC_NAME_EN: ${{ vars.CUSTOM_LINUX_GENERIC_NAME_EN || '' }}
+        CUSTOM_LINUX_GENERIC_NAME_ZH_CN: ${{ vars.CUSTOM_LINUX_GENERIC_NAME_ZH_CN || '' }}
+        CUSTOM_LINUX_COMMENT_EN: ${{ vars.CUSTOM_LINUX_COMMENT_EN || '' }}
+        CUSTOM_LINUX_COMMENT_ZH_CN: ${{ vars.CUSTOM_LINUX_COMMENT_ZH_CN || '' }}
+        CUSTOM_LOGO_PATH: ${{ vars.CUSTOM_LOGO_PATH || '' }}
+        CUSTOM_LOGO_LIGHT_PATH: ${{ vars.CUSTOM_LOGO_LIGHT_PATH || '' }}
+        CUSTOM_LOGO_DARK_PATH: ${{ vars.CUSTOM_LOGO_DARK_PATH || '' }}
+        CUSTOM_APP_ICON_PATH: ${{ vars.CUSTOM_APP_ICON_PATH || '' }}
+        CUSTOM_TRAY_ICON_PATH: ${{ vars.CUSTOM_TRAY_ICON_PATH || '' }}
+      run: python3 -m scripts.source.branding --output .work/branding-input.json --repository "$GITHUB_REPOSITORY"
     - name: Fetch exact official source
       run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
     - id: profile

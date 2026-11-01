@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run-bound source artifacts, no credentials/configuration injection during prepare."""
+"""Run-bound source artifacts with public branding; no production credentials injected."""
 import argparse, datetime, hashlib, json, os, re, shutil, subprocess, tarfile
 from pathlib import Path, PurePosixPath
 from scripts.upstream.patchsets import patch_hash, verify
@@ -38,6 +38,11 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
            [('repository','custom_repository'),('version','upstream_version'),('upstream_sha','upstream_sha'),
             ('variant','variant'),('build_run','prepare_workflow_run')]):
         raise ValueError('Client update identity differs from build provenance')
+    from scripts.source.branding import load as load_branding
+    branding_path=tree/'branding.json'
+    if not branding_path.is_file() or hashlib.sha256(branding_path.read_bytes()).hexdigest()!=manifest.get('branding_sha256'):
+        raise ValueError('Branding snapshot differs from prepared-source identity')
+    load_branding(branding_path,manifest['custom_repository'])
     contracts(tree,variant,patchset);check(tree)
     return manifest
 
@@ -97,6 +102,9 @@ def prepare(base,output,ref,sha,name,bridge):
                        variant=variant, run=os.environ['GITHUB_RUN_ID'],
                        channel=identity_channel,
                        revision=os.environ.get('CLIENT_PATCH_REVISION', ''))
+        from scripts.source.branding import load as load_branding, apply as apply_branding
+        branding=load_branding(os.environ.get('BRANDING_INPUT_PATH'),os.environ['GITHUB_REPOSITORY'])
+        branding_sha256=apply_branding(tree,branding)
         scan_prepared_source(tree)
         if profile['source_sbom_requested']:
             run('syft','dir:'+str(tree),'-o','cyclonedx-json='+str(tree/'custom-source.sbom.json'))
@@ -107,6 +115,7 @@ def prepare(base,output,ref,sha,name,bridge):
                   'custom_repository':os.environ['GITHUB_REPOSITORY'],'custom_repository_sha':os.environ['GITHUB_SHA'],
                   'variant':variant,'prepare_workflow_run':os.environ['GITHUB_RUN_ID'],
                   'client_update_identity':update_identity,
+                  'branding_sha256':branding_sha256,
                   'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   'build_adapter_signature':profile['signature'],'files':inventory(tree)}
         (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n')

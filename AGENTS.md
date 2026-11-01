@@ -32,7 +32,7 @@ A green compile is only one stage. It does not by itself prove a valid artifact,
 - Do not assume SOS exists for every platform. The platform matrix, not the variant name or README table alone, determines enabled/required targets.
 
 Current patchset layout:
-- `patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`, `0004-cm-background-window.patch`.
+- `patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`, `0004-cm-background-window.patch`, `0005-custom-release-updates.patch`, `0006-public-branding.patch`.
 - `patchsets/v1/sos/`: `0001-sos-mode.patch`, `0002-sos-home.patch`, `0003-sos-settings.patch`.
 - `patchsets/v2/` contains the corresponding common and SOS customization generation for the newer upstream API boundary.
 
@@ -41,6 +41,8 @@ Common `0004` gives the Flutter CM a hidden native startup, serialized manual-on
 These filenames are useful orientation, not a complete semantic specification. Read the patch before changing or describing its behavior.
 
 Common `0005-custom-release-updates.patch` in both generations implements latest-only client updates from the build repository embedded via `GITHUB_REPOSITORY`; forks use their own latest Release without editing URLs. Missing/invalid identity fails closed. No client Nightly channel or beta opt-in exists. Stable prepared-source identity must receive the patch revision from Tag preflight; the source inventory binds its embedded identity, including repository ownership. Exact package/flavor matching and GitHub API size/SHA256 verification precede a user-confirmed system-installer handoff. Independent update signatures are deferred; Android production signing stays unchanged. Keep the upstream verifier separate and disable unattended official/root installers for custom builds. Read `docs/client-updates.md` and run `scripts.validation.client_update_contract` with affected contracts; policy tests do not prove device installation.
+
+Common `0006-public-branding.patch` adds display-only branding with 20 base repository Variables, 24 optional language overrides and five reserved image inputs. Missing/empty values use upstream or documented derived defaults; empty image inputs preserve assets, nonempty reserved inputs fail explicitly. Freeze public variables once, apply before source inventory, and verify `branding_sha256`; never route Secrets into branding. Keep internal APP_NAME/package/service/URI/configuration/signing identity and original attribution intact. Existing completed-release deduplication is unchanged; Variable edits apply to a fresh eligible build, not an overwrite. Read `docs/branding.md` and run `scripts.validation.branding_contract` and affected source/package contracts.
 
 ### Wayland unattended build flavor
 

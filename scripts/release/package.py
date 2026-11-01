@@ -70,8 +70,9 @@ def build_windows_installers(tree, release, packages, version):
     # Upstream builds the MSI from res/msi using the reviewed WiX project.
     # setup-msbuild is installed by the calling workflow before this script runs.
     msi_root = tree / 'res/msi'
+    from scripts.source.branding import msi_arguments
     subprocess.run(
-        [sys.executable, 'preprocess.py', '--arp', '-d', str(release)],
+        [sys.executable, 'preprocess.py', '--arp', '-d', str(release), *msi_arguments(tree)],
         cwd=msi_root, check=True, env=env,
     )
     subprocess.run(
