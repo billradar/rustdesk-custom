@@ -3,7 +3,7 @@ index f4788af..1b6ada1 100644
 --- a/flutter/android/app/src/main/AndroidManifest.xml
 +++ b/flutter/android/app/src/main/AndroidManifest.xml
 @@ -24,2 +24,4 @@
- 
+
 +    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 +
      <application
@@ -274,7 +274,7 @@ index cb40aff..0a41a54 100644
 +import '../../common/widgets/custom_update.dart';
  import 'dart:async';
 @@ -611,2 +612,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
- 
+
 +    enhancementsTiles.add(SettingsTile.navigation(
 +      title: Text(translate('Check for updates')),
 +      onPressed: (_) => showCustomUpdateDialog(),
