@@ -25,6 +25,9 @@ def validate(folder):
     arch=info.get('architecture', 'x86_64')
     if arch not in ('x86_64','aarch64'): raise ValueError('Unsupported Windows architecture')
     machine={'x86_64':0x8664,'aarch64':0xaa64}[arch]
+    if arch == 'x86_64':
+        from scripts.build.windows_printer import validate as validate_printer
+        validate_printer(folder / 'rustdesk')
     if info['variant'] not in ('standard', 'sos') or info['platform'] != 'windows-'+arch:
         raise ValueError('Unexpected variant/platform')
     if info.get('signed') is not False or info.get('configuration') != os.environ.get('BUILD_CONFIGURATION', 'TEST ONLY'):
