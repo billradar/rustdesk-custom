@@ -80,6 +80,19 @@ toolchain drift and unreviewed runners still fail closed. The separate unattende
 workflow remains pinned to its own reviewed 1.5.0 DRM policy; this profile does not
 authorize a new libdrmtap pin or new unattended packages.
 
+The later reviewed snapshot `94c321d05ce02ee73304e6cf99187e2d4d96e409`
+has exact build signature `ce995eb6df567c3c25d41a2322e1ce82f4adae3fbf9d0d05d80a3d1fb60e733c`.
+Compared with `1297da6d`, its Windows Flutter job adds only three template steps
+(signature validation, packing, artifact upload), each gated by upstream upload
+and signing settings. All other critical inputs and toolchains are unchanged.
+The separate Windows ARM64 recipe keeps the same bridge, Flutter version and
+source-patch digest; its exact new parent signature is registered separately.
+Linux/macOS/Android jobs and recipes are unchanged; their signatures change only
+because Flutter package metadata increments `1.5.1+68` to `1.5.1+69`.
+The custom workflow does not execute upstream template/signing jobs. These are
+exact static interface reviews, not a relaxation of future-change checks or
+evidence of native build/runtime success.
+
 Windows ARM64 is a separate experimental lane on the native `windows-11-arm`
 runner. It uses Flutter 3.44 and a same-source ARM64 bridge, validates the Dart,
 Flutter engine, Rust output, helper DLL, EXE and MSI architecture, then emits

@@ -18,7 +18,7 @@
     }
   },
   "hashes": {
-    "common": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+    "common": "84a3622d716a17c30838d57eae8903ae4fd46463e85db467a71b341bd48dbfb8",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "runtime_ui": {
@@ -86,6 +86,14 @@
       "compiled_configuration_helper": "pass",
       "dart_policy_sequences": "pass",
       "flutter_analyze_snapshot_standard": "pass_with_existing_same_upstream_generated_bridge"
-    }
+    },
+    "scope": "Historical pre-client-update patch hash; native runtime validation remains pending"
+  },
+  "client_updates": {
+    "channel": "latest-only",
+    "integrity": "GitHub HTTPS/API SHA256 and size",
+    "independent_update_signatures": "DEFERRED",
+    "runtime_validation": "NOT TESTED",
+    "repository": "embedded GITHUB_REPOSITORY; fork-aware"
   }
 }

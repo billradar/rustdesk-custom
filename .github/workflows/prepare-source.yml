@@ -4,6 +4,12 @@ env:
 'on':
   workflow_call:
     inputs:
+      client_release_identity:
+        type: boolean
+        default: false
+      patch_revision:
+        type: string
+        default: ''
       build_wayland:
         type: boolean
         default: false
@@ -43,6 +49,8 @@ jobs:
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
       UPSTREAM_REF: ${{ inputs.upstream_ref }}
       BUILD_CHANNEL: ${{ inputs.channel }}
+      CLIENT_PATCH_REVISION: ${{ inputs.patch_revision }}
+      CLIENT_RELEASE_IDENTITY: ${{ inputs.client_release_identity && 'true' || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:

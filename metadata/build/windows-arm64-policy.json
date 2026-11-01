@@ -17,6 +17,15 @@
       "flutter": "3.44.9",
       "bridge_flutter": "3.44.8",
       "patch_sha256": "5d1400a5361dd14b366adb4ae28d82933528e727eaf6fe9dc6a43b3b744ff210"
+    },
+    {
+      "signature": "ce995eb6df567c3c25d41a2322e1ce82f4adae3fbf9d0d05d80a3d1fb60e733c",
+      "runner": "windows-11-arm",
+      "target": "aarch64-pc-windows-msvc",
+      "triplet": "arm64-windows-static",
+      "flutter": "3.44.9",
+      "bridge_flutter": "3.44.8",
+      "patch_sha256": "5d1400a5361dd14b366adb4ae28d82933528e727eaf6fe9dc6a43b3b744ff210"
     }
   ]
 }

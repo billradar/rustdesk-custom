@@ -135,6 +135,7 @@ jobs:
         python3 scripts/release/production_contract.py
         python3 scripts/release/qualification_contract.py
         python3 scripts/release/channel_contract.py
+        python3 scripts/release/nightly_contract.py
         python3 -m scripts.release.stable_lock_contract
         python3 -m scripts.release.stable_router_contract
         python3 -m scripts.release.stable_tag_contract
@@ -176,6 +177,7 @@ jobs:
 
         '
     - name: Real hbb_common configuration API compilation
+      # Run real client version ordering on the reviewed Rust toolchain as well.
       run: 'sudo apt-get update
 
         sudo apt-get install -y libssl-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev pkg-config protobuf-compiler
@@ -183,6 +185,8 @@ jobs:
         source scripts/validation/test_config.sh
 
         python3 scripts/validation/compatibility.py rust --variant "$SELECTED_VARIANT"
+
+        python3 -m scripts.validation.client_update_contract
 
         '
     - name: Preserve diagnostics even on conflict

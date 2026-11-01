@@ -11,7 +11,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ['flutter/lib/main.dart', 'flutter/lib/common.dart',
-         'flutter/lib/models/cm_window_policy.dart', 'flutter/lib/models/server_model.dart',
+         'flutter/lib/models/cm_window_policy.dart', 'flutter/lib/common/widgets/custom_update.dart',
+         'flutter/lib/mobile/pages/settings_page.dart', 'flutter/lib/models/server_model.dart',
          'flutter/lib/models/chat_model.dart', 'flutter/lib/utils/platform_channel.dart',
          'flutter/lib/desktop/pages/server_page.dart',
          'flutter/lib/desktop/widgets/tabbar_widget.dart', 'src/common.rs', 'src/flutter.rs', 'src/flutter_ffi.rs', 'libs/hbb_common/src/config.rs'] + [
@@ -91,6 +92,8 @@ def contracts(tree, variant, patchset=None):
         raise RuntimeError('SOS customization leaked into Standard')
     from scripts.validation.cm_window_contract import source_contract
     source_contract(tree)
+    from scripts.validation.client_update_contract import source_contract as update_source_contract
+    update_source_contract(tree)
     return {'Config API': 'PASS', 'Rust API structure': 'PASS', 'Flutter API structure': 'PASS',
             'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
 

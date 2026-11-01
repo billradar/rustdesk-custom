@@ -12,6 +12,7 @@
 6. [Android 生产签名](android-production-signing.md)：生产签名的安全边界、授权条件和执行步骤。
 7. [Actions Summary Dashboard](actions-summary.md)：真实运行数据、状态含义、折叠证据与模拟测试隔离。
 8. [故障排查](troubleshooting.md)：按症状定位常见失败原因。
+9. [客户端更新](client-updates.md)：latest 更新来源、版本比较、附件校验及系统安装流程。
 
 ## 阅读和修改规则
 

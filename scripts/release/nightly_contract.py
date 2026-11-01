@@ -303,7 +303,9 @@ class NightlyDraftTests(unittest.TestCase):
             if mode=='bad-upload':uploaded[0]['digest']='sha256:'+'0'*64
             def api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path:return {'id':7} if mode=='existing' else None
+                if '/releases/tags/' in path:
+                    if mode=='published':return {'id':7,'tag_name':'nightly','name':'nightly','draft':False,'prerelease':True,'body':'channel=nightly'}
+                    return {'id':7} if mode=='existing' else None
                 if '/git/ref/tags/' in path:return None
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
@@ -314,7 +316,9 @@ class NightlyDraftTests(unittest.TestCase):
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',return_value={'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}) as write:
                 if mode!='ok':
                     with self.assertRaises(ValueError):nightly.draft(root,discovery)
-                    if mode in ['unsigned','existing','bad-checksum','forbidden-json']:write.assert_not_called()
+                    if mode in ['unsigned','existing','published','bad-checksum','forbidden-json']:
+                        write.assert_not_called()
+                        upload.assert_not_called()
                     if mode=='bad-upload':self.assertEqual(write.call_count,1)
                 else:
                     result=nightly.draft(root,discovery)
@@ -327,12 +331,23 @@ class NightlyDraftTests(unittest.TestCase):
                     self.assertTrue(write.call_args.args[2]['body'].startswith(self.upstream_notes+'\n\n<!-- rustdesk-custom-release-metadata'))
                     self.assertEqual(write.call_args.args[2]['name'],'nightly')
                     self.assertIn('asset_inventory=',write.call_args.args[2]['body'])
+                    self.assertRegex(write.call_args.args[2]['body'],r'Latest packages verified \(UTC\): `[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z`')
+                    self.assertIn(f'https://github.com/{self.repo}/actions/runs/9',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)
                     self.assertEqual(result['tag'], 'nightly')
 
     def test_create_verified_draft_only(self):self.perform()
 
-    def test_complete_matching_draft_is_reused_unchanged(self):
+    def test_complete_matching_draft_is_deleted_and_created_with_new_id(self):
+        self.refresh_matching_draft()
+
+    def test_missing_tag_is_restored_before_deleting_legacy_draft(self):
+        self.refresh_matching_draft(tag_missing=True)
+
+    def test_failed_tag_restoration_preserves_old_draft(self):
+        self.refresh_matching_draft(tag_missing=True, invalid_tag=True)
+
+    def refresh_matching_draft(self, tag_missing=False, invalid_tag=False):
         import hashlib
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
@@ -357,19 +372,90 @@ class NightlyDraftTests(unittest.TestCase):
                 raise AssertionError(path)
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
                 first=nightly.draft(root,discovery)
-            def reused_api(path,missing=False):
+            old=dict(id=7,name='nightly',tag_name='nightly',draft=True,prerelease=True,
+                     body=create_payload['body'],target_commitish='a'*40,updated_at='2026-10-28T07:34:13Z')
+            deleted=False
+            tag_exists=not tag_missing
+            events=[]
+            def recreated_api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path:return {'id':7,'name':'nightly','tag_name':'nightly','draft':True,'prerelease':True,'body':create_payload['body']}
-                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
+                if '/releases/tags/' in path:return old
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}} if tag_exists else None
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
-                return None
-            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request') as write:
+                if path.endswith('/releases/7'):return None if deleted else old
+                if path.endswith('/releases/8'):return dict(old,id=8)
+                raise AssertionError(path)
+            def recreate(method,path,payload):
+                nonlocal tag_exists
+                if path==f'repos/{self.repo}/git/refs':
+                    self.assertFalse(deleted)
+                    self.assertEqual(method,'POST')
+                    self.assertEqual(payload,dict(ref='refs/tags/nightly',sha='a'*40))
+                    if invalid_tag:
+                        return {'object':{'sha':'c'*40}}
+                    tag_exists=True
+                    events.append('restore-tag')
+                    return {'object':{'sha':'a'*40}}
+                if method=='POST':
+                    self.assertTrue(deleted)
+                    events.append('create')
+                    return {'id':8,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
+                self.assertTrue(path.endswith('/releases/8'))
+                events.append('complete')
+                return {'id':8,**payload}
+            def gh(*args):
+                nonlocal deleted
+                if args[:3]==('api','--method','DELETE'):
+                    self.assertEqual(args[3],f'repos/{self.repo}/releases/7')
+                    self.assertTrue(tag_exists)
+                    deleted=True
+                    events.append('delete')
+                elif args[:2]==('release','upload'):
+                    self.assertTrue(deleted)
+                    events.append('upload')
+                else:raise AssertionError(args)
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=recreated_api),patch('scripts.release.github.gh',side_effect=gh),patch('scripts.release.github.request',side_effect=recreate):
+                if invalid_tag:
+                    with self.assertRaisesRegex(ValueError,'tag could not be recreated'):
+                        nightly.draft(root,discovery)
+                    self.assertFalse(deleted)
+                    self.assertEqual(events,[])
+                    return
                 second=nightly.draft(root,discovery)
-                self.assertTrue(second['reused'])
-                self.assertEqual(second['tag'],first['tag'])
-                write.assert_not_called()
+            self.assertFalse(second.get('reused',False))
+            self.assertEqual(second['tag'],first['tag'])
+            self.assertNotEqual(second['release_id'],first['release_id'])
+            self.assertEqual(events,(['restore-tag'] if tag_missing else [])+['delete','create','upload','complete'])
+
+    def test_draft_delete_rejects_public_foreign_immutable_and_changed_records(self):
+        old=dict(id=7,name='nightly',tag_name='nightly',draft=True,prerelease=True,
+                 body='channel=nightly',target_commitish='a'*40,updated_at='original')
+        for change in ({'draft':False},{'prerelease':False},{'immutable':True},{'body':'channel=stable'}):
+            with self.subTest(change=change),patch.dict(os.environ,self.env),patch.object(nightly,'api') as api,patch('scripts.release.github.gh') as gh:
+                with self.assertRaises(ValueError):nightly.delete_refresh_draft(dict(old,**change))
+                api.assert_not_called();gh.assert_not_called()
+        for fresh in (None,dict(old,updated_at='changed'),dict(old,draft=False)):
+            with self.subTest(fresh=fresh),patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=fresh),patch('scripts.release.github.gh') as gh:
+                with self.assertRaises(ValueError):nightly.delete_refresh_draft(old)
+                gh.assert_not_called()
+
+    def test_failed_delete_blocks_creation_and_never_deletes_tag(self):
+        old=dict(id=7,tag_name='nightly',draft=True,prerelease=True,body='channel=nightly')
+        with patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=old),patch('scripts.release.github.gh') as gh:
+            with self.assertRaisesRegex(ValueError,'still exists'):nightly.delete_refresh_draft(old)
+            gh.assert_called_once_with('api','--method','DELETE',f'repos/{self.repo}/releases/7')
+
+
+    def test_superseded_cleanup_uses_gh_without_touching_other_channels(self):
+        stale=dict(id=6,prerelease=True,body='channel=nightly',tag_name='nightly-old')
+        stable=dict(id=5,prerelease=False,body='channel=stable')
+        foreign=dict(id=4,prerelease=True,body='channel=other')
+        current=dict(stale,id=8,tag_name='nightly')
+        with patch.dict(os.environ,self.env),patch.object(nightly,'api',side_effect=[[stale,stable,foreign,current],None]),patch('scripts.release.github.gh') as gh:
+            nightly.cleanup_superseded_nightly_releases(8,'nightly')
+        gh.assert_called_once_with('api','--method','DELETE',f'repos/{self.repo}/releases/6')
 
     def test_release_mode_promotes_only_a_complete_matching_draft(self):
         import hashlib
@@ -442,6 +528,7 @@ class NightlyDraftTests(unittest.TestCase):
             self.assertIn('automation_state=complete',calls[1][1]['body'])
     def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
     def test_existing_release_never_overwritten(self):self.perform('existing')
+    def test_draft_refresh_does_not_hide_a_published_release(self):self.perform('published')
     def test_bad_upload_digest_cannot_mark_draft_complete(self):self.perform('bad-upload')
     def test_bad_checksums_block_publication(self):self.perform('bad-checksum')
     def test_nonpublic_json_blocks_publication(self):self.perform('forbidden-json')

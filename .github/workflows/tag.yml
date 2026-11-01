@@ -135,6 +135,8 @@ jobs:
     uses: ./.github/workflows/prepare-source.yml
     with:
       build_wayland: ${{ inputs.include_wayland }}
+      patch_revision: ${{ needs.draft-preflight.outputs.patch_revision }}
+      client_release_identity: true
       upstream_ref: ${{ needs.resolve.outputs.upstream_ref }}
       upstream_sha: ${{ needs.resolve.outputs.upstream_sha }}
       channel: stable

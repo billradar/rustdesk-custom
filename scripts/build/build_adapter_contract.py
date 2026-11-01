@@ -51,5 +51,17 @@ class AdapterContract(unittest.TestCase):
         with patch.object(adapter,'ROOT',self.root),self.assertRaisesRegex(ValueError,'unknown critical'):
             adapter.check(self.source)
 
+    def test_reviewed_template_profile_preserves_toolchain_and_critical_inputs(self):
+        profiles=json.loads((adapter.ROOT/'metadata/build/adapter-profiles.json').read_text())['profiles']
+        current=next(p for p in profiles if p['id']=='reviewed-151-94c321')
+        self.assertEqual(current['reviewed_upstream_sha'],'94c321d05ce02ee73304e6cf99187e2d4d96e409')
+        self.assertEqual(current['critical'],self.review['critical'])
+        self.assertNotEqual(current['signature'],self.review['signature'])
+        policy=json.loads((adapter.ROOT/'metadata/build/windows-arm64-policy.json').read_text())['profiles']
+        old=next(p for p in policy if p['signature']==self.review['signature'])
+        new=next(p for p in policy if p['signature']==current['signature'])
+        self.assertEqual({k:v for k,v in old.items() if k!='signature'},
+                         {k:v for k,v in new.items() if k!='signature'})
+
 
 if __name__=='__main__':unittest.main()

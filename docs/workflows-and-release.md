@@ -173,9 +173,13 @@ in Draft and release modes when signing is enabled. If it is disabled, the aggre
 uses validated unsigned Android build artifacts instead. A separate contents-write job downloads the exact
 same-run Android packages and optional Wayland pair and revalidates them before any
 write. It scans completed build logs, then refreshes the fixed `nightly` tag and
-Release only after validation succeeds. The existing Release is temporarily made a
-Draft, prior assets are removed, the tag is moved to the custom build commit, and
-the new packages and SHA256SUMS are uploaded and verified by name, size and digest.
+Release only after validation succeeds. Refreshing a private Draft first rechecks its
+workflow ownership, unchanged metadata and Draft state, then deletes it and creates a
+new Release ID; even an exact matching Draft is not reused in draft mode. The moving
+Git tag is retained and moved to the validated custom build commit when needed.
+New packages and SHA256SUMS are uploaded and verified by name, size and digest.
+Draft mode refuses to hide/delete an already public canonical Nightly release;
+explicit release mode retains its existing publication/promotion checks.
 Only then is automation_state marked complete and the Release left as a Draft or
 published prerelease according to the selected mode. A release-write concurrency
 lock prevents overlapping builds from replacing each other's assets. Windows/macOS
@@ -212,3 +216,8 @@ Stable Release 的 `tag_name` 与 Git 引用 `refs/tags/...` 是两件事。草�
 Stable 自动化在完成产物、架构、来源和上传清单校验后，显式创建 `v{上游版本}-custom.{补丁修订}` 的不可变 Git tag，指向本批产物记录的 `custom_repository_sha`，而非上游仓库 SHA 或稍后变化的 main HEAD。草稿仍保持 `draft=true`。
 
 已有轻量/附注 tag 只有在最终指向同一提交时才可复用；同名异提交立即失败，绝不强制更新或删除。引用创建失败时保留草稿并停止，不提升令牌权限。旧草稿在用户明确选择发布、且原有身份与远程校验全部通过后，也会检查/补建 tag，再进行原有发布动作。此修改不批量修复历史草稿，也不主动发布任何草稿。
+
+
+Nightly 私有草稿刷新采用删除重建，当前草稿在本地产物、签名、清单和日志校验完成前不会删除。删除前再次检查草稿归属和完整状态快照；删除后确认旧 Release 不存在，才创建新 Release。保留同源成功构建去重，不为刷新日期强制重编译。删除重建存在窗口：若删除后创建或上传失败，该次可能暂时没有完整草稿；Actions 产物仍保留，可按原流程恢复。新草稿只有上传摘要全部匹配才标记 complete。
+
+[GitHub 对 `created_at` 的说明](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)指出它可能表示关联 tag/commit 的日期，不能保证删除重建后页面 “drafted … ago” 一定刷新；不要伪造提交时间或创建空提交。说明末尾单独记录真实 UTC 产物校验完成时间和 Actions 运行链接。这个字段不参与源码/构建身份，也不代表 Runtime 测试或公开发布。
