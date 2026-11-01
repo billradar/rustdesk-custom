@@ -1,0 +1,1156 @@
+diff --git a/flutter/android/app/src/main/AndroidManifest.xml b/flutter/android/app/src/main/AndroidManifest.xml
+index e078818..5e2c797 100644
+--- a/flutter/android/app/src/main/AndroidManifest.xml
++++ b/flutter/android/app/src/main/AndroidManifest.xml
+@@ -28,2 +28,4 @@
+ 
++    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
++
+     <application
+@@ -111,2 +113,8 @@
+             android:value="2" />
++        <provider android:name="androidx.core.content.FileProvider"
++            android:authorities="${applicationId}.custom_update_files"
++            android:exported="false" android:grantUriPermissions="true">
++            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
++                android:resource="@xml/custom_update_paths" />
++        </provider>
+     </application>
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+index 7225e52..ed94d98 100644
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+@@ -268,2 +268,25 @@ class MainActivity : FlutterActivity() {
+             when (call.method) {
++                "custom_update_install" -> {
++                    try {
++                        val file = java.io.File(call.arguments as String).canonicalFile
++                        val root = java.io.File(cacheDir, "custom-updates").canonicalFile
++                        require(file.isFile && file.extension == "apk" &&
++                            file.path.startsWith(root.path + java.io.File.separator))
++                        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
++                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
++                                Uri.parse("package:$packageName")))
++                            result.success(false)
++                        } else {
++                            val uri = androidx.core.content.FileProvider.getUriForFile(
++                                this, "$packageName.custom_update_files", file)
++                            startActivity(Intent(Intent.ACTION_VIEW).apply {
++                                setDataAndType(uri, "application/vnd.android.package-archive")
++                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
++                            })
++                            result.success(true)
++                        }
++                    } catch (e: Exception) {
++                        result.error("CUSTOM_UPDATE_INSTALL", "Unable to open verified APK", null)
++                    }
++                }
+                 "init_service" -> {
+diff --git a/flutter/android/app/src/main/res/xml/custom_update_paths.xml b/flutter/android/app/src/main/res/xml/custom_update_paths.xml
+new file mode 100644
+index 0000000..dd8e7d3
+--- /dev/null
++++ b/flutter/android/app/src/main/res/xml/custom_update_paths.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<paths xmlns:android="http://schemas.android.com/apk/res/android">
++    <cache-path name="verified_updates" path="custom-updates/" />
++</paths>
+diff --git a/flutter/lib/common/widgets/custom_update.dart b/flutter/lib/common/widgets/custom_update.dart
+new file mode 100644
+index 0000000..8dfd52e
+--- /dev/null
++++ b/flutter/lib/common/widgets/custom_update.dart
+@@ -0,0 +1,154 @@
++import 'dart:convert';
++import 'package:flutter/material.dart';
++import 'package:path_provider/path_provider.dart';
++import 'package:url_launcher/url_launcher.dart';
++import '../../common.dart';
++import '../../models/platform_model.dart';
++
++const useCustomReleaseUpdates = true;
++
++Future<Map<String, dynamic>> _request(String key) async {
++  final value = jsonDecode(await bind.mainGetCommon(key: key));
++  if (value is! Map<String, dynamic>) {
++    throw StateError('Invalid update response');
++  }
++  return value;
++}
++
++class CustomUpdateSettings extends StatelessWidget {
++  const CustomUpdateSettings({super.key});
++  @override
++  Widget build(BuildContext context) => ListTile(
++        title: Text(translate('Check for updates')),
++        subtitle: FutureBuilder<String>(
++            future: bind.mainGetVersion(),
++            builder: (context, snapshot) => Text(snapshot.data ?? '')),
++        trailing: const Icon(Icons.system_update),
++        onTap: () => showCustomUpdateDialog(),
++      );
++}
++
++Future<void> showCustomUpdateDialog() async {
++  final context = globalKey.currentContext;
++  if (context == null) return;
++  await showDialog<void>(
++      context: context, builder: (_) => const _CustomUpdateDialog());
++}
++
++class _CustomUpdateDialog extends StatefulWidget {
++  const _CustomUpdateDialog();
++  @override
++  State<_CustomUpdateDialog> createState() => _CustomUpdateDialogState();
++}
++
++class _CustomUpdateDialogState extends State<_CustomUpdateDialog> {
++  bool _busy = false;
++  Map<String, dynamic> _info = {};
++  String _message = '';
++  bool _downloaded = false;
++  @override
++  void initState() {
++    super.initState();
++    _check();
++  }
++
++  Future<void> _check() async {
++    setState(() {
++      _busy = true;
++      _downloaded = false;
++      _message = '';
++      _info = {};
++    });
++    try {
++      final result = await _request('custom-update-check');
++      if (!mounted) return;
++      _info = result['status'] == 'available'
++          ? await _request('custom-update-info')
++          : result;
++      _message = _info['status'] == 'available'
++          ? '${_info['version']}'
++          : translate(_info['status'] == 'current'
++              ? 'No newer compatible release'
++              : 'Update temporarily unavailable');
++    } catch (_) {
++      _message = translate('Update temporarily unavailable');
++    }
++    if (mounted) setState(() => _busy = false);
++  }
++
++  Future<void> _download() async {
++    setState(() {
++      _busy = true;
++      _message = translate('Downloading and verifying update');
++    });
++    try {
++      final directory = await getTemporaryDirectory();
++      final result = await _request('custom-update-download:${jsonEncode({
++            'directory': directory.path,
++            'release': _info['release'],
++            'asset': _info['asset']
++          })}');
++      if (!mounted) return;
++      _downloaded = result['status'] == 'downloaded';
++      _message = translate(_downloaded
++          ? 'Update download verified'
++          : 'Update temporarily unavailable');
++    } catch (_) {
++      _message = translate('Update temporarily unavailable');
++    }
++    if (mounted) setState(() => _busy = false);
++  }
++
++  Future<void> _install() async {
++    setState(() => _busy = true);
++    try {
++      final result = await _request('custom-update-open');
++      if (result['status'] != 'opened') {
++        throw StateError('Update verification failed');
++      }
++      if (isAndroid) {
++        final opened =
++            await gFFI.invokeMethod('custom_update_install', result['path']);
++        if (opened != true) throw StateError('Installer permission required');
++      }
++      _message = translate('Complete installation in the system installer');
++    } catch (_) {
++      _message =
++          translate('Unable to open installer; check installation permissions');
++    }
++    if (mounted) setState(() => _busy = false);
++  }
++
++  @override
++  Widget build(BuildContext context) => AlertDialog(
++        title: Text(translate('Check for updates')),
++        content: Column(
++            mainAxisSize: MainAxisSize.min,
++            crossAxisAlignment: CrossAxisAlignment.start,
++            children: [
++              if (_busy) const LinearProgressIndicator(),
++              const SizedBox(height: 12),
++              Text(_message),
++            ]),
++        actions: [
++          TextButton(
++              onPressed: _busy ? null : _check,
++              child: Text(translate('Retry'))),
++          if (_info['status'] == 'available' && !_downloaded)
++            TextButton(
++                onPressed: _busy ? null : _download,
++                child: Text(translate('Download'))),
++          if (_downloaded)
++            TextButton(
++                onPressed: _busy ? null : _install,
++                child: Text(translate('Install'))),
++          if (_info['url'] is String)
++            TextButton(
++                onPressed: () => launchUrl(Uri.parse(_info['url'] as String)),
++                child: Text(translate('Changelog'))),
++          TextButton(
++              onPressed: () => Navigator.of(context).pop(),
++              child: Text(translate('Close'))),
++        ],
++      );
++}
+diff --git a/flutter/lib/desktop/pages/desktop_home_page.dart b/flutter/lib/desktop/pages/desktop_home_page.dart
+index 6d370cb..7cd43f9 100644
+--- a/flutter/lib/desktop/pages/desktop_home_page.dart
++++ b/flutter/lib/desktop/pages/desktop_home_page.dart
+@@ -1 +1,2 @@
++import '../../common/widgets/custom_update.dart';
+ import 'dart:async';
+@@ -14,3 +15,2 @@ import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
+ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+-import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
+ import 'package:flutter_hbb/models/platform_model.dart';
+@@ -437,4 +437,3 @@ class _DesktopHomePageState extends State<DesktopHomePage>
+       GestureTapCallback onPressed = () async {
+-        final Uri url = Uri.parse('https://rustdesk.com/download');
+-        await launchUrl(url);
++        await showCustomUpdateDialog();
+       };
+@@ -442,3 +441,3 @@ class _DesktopHomePageState extends State<DesktopHomePage>
+         onPressed = () {
+-          handleUpdate(updateUrl);
++          showCustomUpdateDialog();
+         };
+@@ -453,3 +452,3 @@ class _DesktopHomePageState extends State<DesktopHomePage>
+           link: isToUpdate
+-              ? 'https://github.com/rustdesk/rustdesk/releases/tag/${bind.mainGetNewVersion()}'
++              ? updateUrl
+               : null);
+diff --git a/flutter/lib/desktop/pages/desktop_setting_page.dart b/flutter/lib/desktop/pages/desktop_setting_page.dart
+index db58122..80c0787 100644
+--- a/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -1 +1,2 @@
++import '../../common/widgets/custom_update.dart';
+ import 'dart:async';
+@@ -553,3 +554,3 @@ class _GeneralState extends State<_General> {
+       ],
+-      if (!isWeb && !bind.isCustomClient())
++      if (!isWeb)
+         _OptionCheckBox(
+@@ -560,9 +561,3 @@ class _GeneralState extends State<_General> {
+         ),
+-      if (showAutoUpdate)
+-        _OptionCheckBox(
+-          context,
+-          'Auto update',
+-          kOptionAllowAutoUpdate,
+-          isServer: true,
+-        ),
++      if (showAutoUpdate || !isWeb) const CustomUpdateSettings(),
+       if (isWindows && !outgoingOnly)
+diff --git a/flutter/lib/mobile/pages/settings_page.dart b/flutter/lib/mobile/pages/settings_page.dart
+index 198613a..83cb15a 100644
+--- a/flutter/lib/mobile/pages/settings_page.dart
++++ b/flutter/lib/mobile/pages/settings_page.dart
+@@ -1 +1,2 @@
++import '../../common/widgets/custom_update.dart';
+ import 'dart:async';
+@@ -647,2 +648,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+ 
++    enhancementsTiles.add(SettingsTile.navigation(
++      title: Text(translate('Check for updates')),
++      onPressed: (_) => showCustomUpdateDialog(),
++    ));
++
+     enhancementsTiles.add(
+diff --git a/src/common.rs b/src/common.rs
+index d0c77f9..8050380 100644
+--- a/src/common.rs
++++ b/src/common.rs
+@@ -1 +1,4 @@
++#[path = "custom_update/mod.rs"]
++pub mod custom_update;
++
+ use std::{
+@@ -1020,8 +1023,9 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
+ pub fn check_software_update() {
+-    if is_custom_client() {
+-        return;
+-    }
+     let opt = LocalConfig::get_option(keys::OPTION_ENABLE_CHECK_UPDATE);
+     if config::option2bool(keys::OPTION_ENABLE_CHECK_UPDATE, &opt) {
+-        std::thread::spawn(move || allow_err!(do_check_software_update()));
++        std::thread::spawn(|| {
++            if let Err(err) = custom_update::check() {
++                log::debug!("Custom Stable update unavailable: {}", err);
++            }
++        });
+     }
+@@ -1032,3 +1036,3 @@ pub fn check_software_update() {
+ #[tokio::main(flavor = "current_thread")]
+-pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
++pub async fn do_check_official_software_update() -> hbb_common::ResultType<()> {
+     let (request, url) =
+@@ -3840 +3844,8 @@ mod tests {
+ }
++
++// Custom clients use only the repository's latest published Stable Release.
++#[tokio::main(flavor = "current_thread")]
++pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
++    tokio::task::spawn_blocking(custom_update::check).await??;
++    Ok(())
++}
+diff --git a/src/custom_update/build.json b/src/custom_update/build.json
+new file mode 100644
+index 0000000..6846bf8
+--- /dev/null
++++ b/src/custom_update/build.json
+@@ -0,0 +1 @@
++{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0"}
+diff --git a/src/custom_update/mod.rs b/src/custom_update/mod.rs
+new file mode 100644
+index 0000000..1d1322f
+--- /dev/null
++++ b/src/custom_update/mod.rs
+@@ -0,0 +1,590 @@
++//! Custom Release updates: GitHub HTTPS/API integrity only.
++//! Independent update signatures are explicitly deferred; APK signatures remain unchanged.
++use hbb_common::{anyhow::anyhow, bail, ResultType};
++use serde_derive::Deserialize;
++use serde_json::{json, Value};
++use sha2::{Digest, Sha256};
++use std::{
++    fs,
++    io::{Read, Write},
++    path::{Path, PathBuf},
++    sync::Mutex,
++    time::Duration,
++};
++mod policy;
++const REPOSITORY: &str = "billradar/rustdesk-custom";
++const API: &str = "https://api.github.com/repos/billradar/rustdesk-custom/releases/latest";
++pub const MANUAL_INSTALL_ONLY: bool = true;
++const MAX_ASSET: u64 = 1024 * 1024 * 1024;
++
++#[derive(Deserialize)]
++struct Build {
++    version: String,
++    revision: Option<String>,
++    upstream_sha: String,
++    variant: String,
++    build_run: String,
++}
++#[derive(Clone, Debug, Deserialize, PartialEq)]
++struct Asset {
++    id: u64,
++    name: String,
++    size: u64,
++    digest: Option<String>,
++    browser_download_url: String,
++    state: String,
++}
++#[derive(Clone, Debug, Deserialize)]
++struct Release {
++    id: u64,
++    tag_name: String,
++    draft: bool,
++    prerelease: bool,
++    html_url: String,
++    body: Option<String>,
++    assets: Vec<Asset>,
++}
++#[derive(Clone)]
++struct Candidate {
++    release: Release,
++    asset: Asset,
++}
++#[derive(Clone)]
++struct Downloaded {
++    candidate: Candidate,
++    path: PathBuf,
++}
++lazy_static::lazy_static! {
++    static ref CANDIDATE: Mutex<Option<Candidate>> = Mutex::new(None);
++    static ref DOWNLOADED: Mutex<Option<Downloaded>> = Mutex::new(None);
++    static ref OPERATION: Mutex<()> = Mutex::new(());
++}
++fn build() -> ResultType<Build> {
++    let b: Build = serde_json::from_str(include_str!("build.json"))?;
++    if policy::numeric::<3>(&b.version).is_none()
++        || !policy::hex(&b.upstream_sha, 40)
++        || !matches!(b.variant.as_str(), "standard" | "sos")
++        || b.build_run.parse::<u64>().is_err()
++        || b.revision
++            .as_ref()
++            .is_some_and(|r| policy::numeric::<2>(r.trim_start_matches('v')).is_none())
++    {
++        bail!("Custom update build identity unavailable; install a qualified build first");
++    }
++    Ok(b)
++}
++pub fn display_version() -> String {
++    match build() {
++        Ok(b) => match b.revision {
++            Some(r) => format!("{}-custom.{}", b.version, r),
++            None => format!("{}-custom.build{}", b.version, b.build_run),
++        },
++        Err(_) => crate::VERSION.to_owned(),
++    }
++}
++fn allowed_host(host: &str) -> bool {
++    host == "github.com" || host == "api.github.com" || host.ends_with(".githubusercontent.com")
++}
++fn client() -> ResultType<reqwest::blocking::Client> {
++    // No embedded token, insecure TLS exception, or official-server fallback.
++    Ok(reqwest::blocking::Client::builder()
++        .https_only(true)
++        .user_agent("rustdesk-custom-updater/1")
++        .connect_timeout(Duration::from_secs(15))
++        .timeout(Duration::from_secs(900))
++        .redirect(reqwest::redirect::Policy::custom(|attempt| {
++            if attempt.previous().len() >= 5
++                || attempt.url().scheme() != "https"
++                || !attempt.url().host_str().is_some_and(allowed_host)
++            {
++                attempt.error("Untrusted update redirect")
++            } else {
++                attempt.follow()
++            }
++        }))
++        .build()?)
++}
++fn get_release() -> ResultType<Release> {
++    let mut response = client()?
++        .get(API)
++        .timeout(Duration::from_secs(30))
++        .header("Accept", "application/vnd.github+json")
++        .send()?
++        .error_for_status()?;
++    let mut bytes = Vec::new();
++    response
++        .by_ref()
++        .take(4 * 1024 * 1024 + 1)
++        .read_to_end(&mut bytes)?;
++    if bytes.len() > 4 * 1024 * 1024 {
++        bail!("Release response too large");
++    }
++    let r: Release = serde_json::from_slice(&bytes)?;
++    validate_release(&r)?;
++    Ok(r)
++}
++fn validate_release(r: &Release) -> ResultType<()> {
++    if r.draft
++        || r.prerelease
++        || policy::stable_tag(&r.tag_name).is_none()
++        || r.html_url
++            != format!(
++                "https://github.com/{REPOSITORY}/releases/tag/{}",
++                r.tag_name
++            )
++    {
++        bail!("Latest is not a published custom Stable release");
++    }
++    Ok(())
++}
++fn source(r: &Release) -> ResultType<String> {
++    // Only read the repository-owned metadata block, not upstream release prose.
++    let body = r.body.as_deref().unwrap_or("");
++    let marker = "<!-- rustdesk-custom-release-metadata\n";
++    if body.matches(marker).count() != 1 {
++        bail!("Release identity missing or duplicated");
++    }
++    let block = body
++        .split_once(marker)
++        .unwrap()
++        .1
++        .split_once("-->")
++        .ok_or_else(|| anyhow!("Release identity incomplete"))?
++        .0;
++    let states: Vec<_> = block
++        .lines()
++        .filter(|l| l.starts_with("automation_state="))
++        .collect();
++    if states.len() != 1
++        || !matches!(
++            states[0],
++            "automation_state=complete" | "automation_state=published"
++        )
++    {
++        bail!("Release assets are not qualified complete");
++    }
++    let values: Vec<_> = block
++        .lines()
++        .filter_map(|l| l.strip_prefix("Upstream SHA: "))
++        .collect();
++    if values.len() != 1 || !policy::hex(values[0], 40) {
++        bail!("Release source identity invalid");
++    }
++    Ok(values[0].to_owned())
++}
++fn package_format() -> ResultType<&'static str> {
++    #[cfg(target_os = "windows")]
++    {
++        return Ok(if crate::platform::is_msi_installed()? {
++            "msi"
++        } else {
++            "exe"
++        });
++    }
++    #[cfg(target_os = "macos")]
++    {
++        return Ok("dmg");
++    }
++    #[cfg(target_os = "android")]
++    {
++        return Ok("apk");
++    }
++    #[cfg(target_os = "linux")]
++    {
++        if cfg!(feature = "drm") {
++            return Ok("deb");
++        }
++        let installed = std::process::Command::new("dpkg-query")
++            .args(["-W", "-f=${Status}", "rustdesk"])
++            .output()
++            .is_ok_and(|o| o.status.success() && o.stdout == b"install ok installed");
++        if installed {
++            return Ok("deb");
++        }
++        if std::process::Command::new("rpm")
++            .args(["-q", "rustdesk"])
++            .output()
++            .is_ok_and(|o| o.status.success())
++        {
++            let os = fs::read_to_string("/etc/os-release")
++                .unwrap_or_default()
++                .to_lowercase();
++            return Ok(if os.contains("suse") {
++                "suse.rpm"
++            } else {
++                "rpm"
++            });
++        }
++        bail!("Package type unavailable; use the matching package on the Release page");
++    }
++    #[cfg(not(any(
++        target_os = "windows",
++        target_os = "macos",
++        target_os = "android",
++        target_os = "linux"
++    )))]
++    bail!("Updates are not supported on this platform");
++}
++fn selected_asset(r: &Release, b: &Build) -> ResultType<Asset> {
++    let arch = if cfg!(all(target_os = "android", target_arch = "arm")) {
++        "armv7"
++    } else {
++        std::env::consts::ARCH
++    };
++    asset_for(
++        r,
++        b,
++        std::env::consts::OS,
++        arch,
++        cfg!(all(target_os = "linux", feature = "drm")),
++        package_format()?,
++    )
++}
++fn asset_for(
++    r: &Release,
++    b: &Build,
++    platform: &str,
++    arch: &str,
++    wayland: bool,
++    format: &str,
++) -> ResultType<Asset> {
++    let (v, _) = policy::stable_tag(&r.tag_name).ok_or_else(|| anyhow!("Invalid Stable tag"))?;
++    let version = format!("{}.{}.{}", v[0], v[1], v[2]);
++    let name = policy::package_name(&version, &b.variant, platform, arch, wayland, format)
++        .ok_or_else(|| anyhow!("Unsupported package type"))?;
++    let assets: Vec<_> = r.assets.iter().filter(|a| a.name == name).collect();
++    if assets.len() != 1 {
++        bail!("Matching update package missing or duplicated");
++    }
++    let a = assets[0];
++    let digest = a.digest.as_deref().and_then(|d| d.strip_prefix("sha256:"));
++    if a.id == 0
++        || a.size == 0
++        || a.size > MAX_ASSET
++        || a.state != "uploaded"
++        || !digest.is_some_and(|d| policy::hex(d, 64))
++        || a.browser_download_url
++            != format!(
++                "https://github.com/{REPOSITORY}/releases/download/{}/{}",
++                r.tag_name, name
++            )
++    {
++        bail!("Update package digest, size or URL invalid");
++    }
++    Ok(a.clone())
++}
++fn clear() {
++    *CANDIDATE.lock().unwrap() = None;
++    *super::SOFTWARE_UPDATE_URL.lock().unwrap() = String::new();
++}
++pub fn check() -> ResultType<Value> {
++    let _guard = OPERATION.lock().unwrap();
++    clear();
++    let b = build()?;
++    let r = get_release()?;
++    let (version, revision) = policy::stable_tag(&r.tag_name).unwrap();
++    let installed_revision = b
++        .revision
++        .as_deref()
++        .and_then(|v| policy::numeric::<2>(v.trim_start_matches('v')));
++    if !policy::newer(
++        policy::numeric(&b.version).unwrap(),
++        installed_revision,
++        &b.upstream_sha,
++        version,
++        revision,
++        &source(&r)?,
++    ) {
++        return Ok(json!({"status":"current","current":display_version()}));
++    }
++    let asset = selected_asset(&r, &b)?;
++    *CANDIDATE.lock().unwrap() = Some(Candidate {
++        release: r.clone(),
++        asset,
++    });
++    *super::SOFTWARE_UPDATE_URL.lock().unwrap() = r.html_url.clone();
++    #[cfg(feature = "flutter")]
++    {
++        let event = json!({"name":"check_software_update_finish","url":r.html_url}).to_string();
++        let _ = crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, event);
++    }
++    Ok(
++        json!({"status":"available","version":r.tag_name,"url":r.html_url,"current":display_version()}),
++    )
++}
++fn verify_file(path: &Path, a: &Asset) -> ResultType<()> {
++    let meta = fs::symlink_metadata(path)?;
++    if !meta.is_file() || meta.len() != a.size {
++        bail!("Update size mismatch");
++    }
++    let mut file = fs::File::open(path)?;
++    let mut digest = Sha256::new();
++    let mut buf = [0u8; 65536];
++    loop {
++        let n = file.read(&mut buf)?;
++        if n == 0 {
++            break;
++        }
++        digest.update(&buf[..n]);
++    }
++    if a.digest.as_deref() != Some(format!("sha256:{:x}", digest.finalize()).as_str()) {
++        bail!("Update SHA256 mismatch");
++    }
++    Ok(())
++}
++fn download(request: &str) -> ResultType<Value> {
++    let _guard = OPERATION.lock().unwrap();
++    let req: Value = serde_json::from_str(request)?;
++    let c = CANDIDATE
++        .lock()
++        .unwrap()
++        .clone()
++        .ok_or_else(|| anyhow!("Check for updates first"))?;
++    if req["release"].as_u64() != Some(c.release.id) || req["asset"].as_u64() != Some(c.asset.id) {
++        bail!("Update selection expired; check again");
++    }
++    // Revalidate latest immediately before download. Closed/replaced Releases fail closed.
++    let r = get_release()?;
++    if r.id != c.release.id
++        || r.tag_name != c.release.tag_name
++        || source(&r)? != source(&c.release)?
++        || selected_asset(&r, &build()?)? != c.asset
++    {
++        clear();
++        bail!("Release changed; check again");
++    }
++    let directory = PathBuf::from(
++        req["directory"]
++            .as_str()
++            .ok_or_else(|| anyhow!("Download directory missing"))?,
++    );
++    if !directory.is_absolute() || !directory.is_dir() {
++        bail!("Invalid download directory");
++    }
++    let parent = directory.join("custom-updates");
++    let mut builder = fs::DirBuilder::new();
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::DirBuilderExt;
++        builder.mode(0o700);
++    }
++    match builder.create(&parent) {
++        Ok(()) => (),
++        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => (),
++        Err(e) => return Err(e.into()),
++    }
++    let metadata = fs::symlink_metadata(&parent)?;
++    if !metadata.is_dir() {
++        bail!("Unsafe update directory");
++    }
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::MetadataExt;
++        if metadata.uid() != unsafe { hbb_common::libc::geteuid() } || metadata.mode() & 0o077 != 0
++        {
++            bail!("Update directory must be private and owned by the current user");
++        }
++    }
++    let nonce = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)?
++        .as_nanos();
++    let folder = parent.join(format!("{}-{nonce}", std::process::id()));
++    builder.create(&folder)?;
++    let path = folder.join(&c.asset.name);
++    let result = (|| -> ResultType<()> {
++        let mut response = client()?
++            .get(&c.asset.browser_download_url)
++            .send()?
++            .error_for_status()?;
++        if response.content_length().is_some_and(|n| n != c.asset.size) {
++            bail!("Update content length mismatch");
++        }
++        let mut file = fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(&path)?;
++        let copied = std::io::copy(&mut response.by_ref().take(c.asset.size + 1), &mut file)?;
++        file.flush()?;
++        file.sync_all()?;
++        drop(file);
++        if copied != c.asset.size {
++            bail!("Update download truncated or oversized");
++        }
++        verify_file(&path, &c.asset)
++    })();
++    if let Err(e) = result {
++        let _ = fs::remove_file(&path);
++        let _ = fs::remove_dir(&folder);
++        return Err(e);
++    }
++    *DOWNLOADED.lock().unwrap() = Some(Downloaded {
++        candidate: c,
++        path: path.clone(),
++    });
++    Ok(json!({"path":path,"status":"downloaded"}))
++}
++fn open_download() -> ResultType<Value> {
++    let _guard = OPERATION.lock().unwrap();
++    let d = DOWNLOADED
++        .lock()
++        .unwrap()
++        .clone()
++        .ok_or_else(|| anyhow!("No verified update downloaded"))?;
++    verify_file(&d.path, &d.candidate.asset)?;
++    #[cfg(target_os = "windows")]
++    {
++        if d.path.extension().and_then(|s| s.to_str()) == Some("msi") {
++            std::process::Command::new("msiexec.exe")
++                .arg("/i")
++                .arg(&d.path)
++                .spawn()?;
++        } else {
++            std::process::Command::new(&d.path).spawn()?;
++        }
++    }
++    #[cfg(target_os = "macos")]
++    {
++        std::process::Command::new("open").arg(&d.path).spawn()?;
++    }
++    #[cfg(target_os = "linux")]
++    {
++        std::process::Command::new("xdg-open")
++            .arg(&d.path)
++            .spawn()?;
++    }
++    // Android hands the verified private-cache APK to its system installer via FileProvider.
++    Ok(json!({"status":"opened","path":d.path}))
++}
++pub fn response(key: &str) -> Option<String> {
++    if !key.starts_with("custom-update-") {
++        return None;
++    }
++    let result = if key == "custom-update-check" {
++        check()
++    } else if key == "custom-update-info" {
++        Ok(match CANDIDATE.lock().unwrap().as_ref() {
++            Some(c) => {
++                json!({"status":"available","version":c.release.tag_name,"url":c.release.html_url,
++                "release":c.release.id,"asset":c.asset.id,"size":c.asset.size,"current":display_version()})
++            }
++            None => json!({"status":"current","current":display_version()}),
++        })
++    } else if let Some(request) = key.strip_prefix("custom-update-download:") {
++        download(request)
++    } else if key == "custom-update-open" {
++        open_download()
++    } else {
++        Err(anyhow!("Unsupported custom update request"))
++    };
++    Some(match result {
++        Ok(v) => v.to_string(),
++        Err(e) => json!({"status":"unavailable","error":e.to_string()}).to_string(),
++    })
++}
++pub fn new_version() -> String {
++    CANDIDATE
++        .lock()
++        .unwrap()
++        .as_ref()
++        .map(|c| c.release.tag_name.clone())
++        .unwrap_or_default()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn release() -> Release {
++        let tag = "v1.5.1-custom.v2.6";
++        Release { id:1,tag_name:tag.into(),draft:false,prerelease:false,
++            html_url:format!("https://github.com/{REPOSITORY}/releases/tag/{tag}"),
++            body:Some(format!("<!-- rustdesk-custom-release-metadata\nUpstream SHA: {}\nautomation_state=complete\n-->\n","a".repeat(40))),
++            assets:vec![Asset { id:2,name:"rustdesk-1.5.1-linux-x86_64.deb".into(),size:4,
++                digest:Some(format!("sha256:{:x}",Sha256::digest(b"test"))),state:"uploaded".into(),
++                browser_download_url:format!("https://github.com/{REPOSITORY}/releases/download/{tag}/rustdesk-1.5.1-linux-x86_64.deb") }] }
++    }
++    fn identity() -> Build {
++        Build {
++            version: "1.5.1".into(),
++            revision: Some("v2.5".into()),
++            upstream_sha: "a".repeat(40),
++            variant: "standard".into(),
++            build_run: "1".into(),
++        }
++    }
++    #[test]
++    fn reject_nonstable_and_foreign_releases() {
++        let mut r = release();
++        assert!(validate_release(&r).is_ok());
++        r.draft = true;
++        assert!(validate_release(&r).is_err());
++        r.draft = false;
++        r.prerelease = true;
++        assert!(validate_release(&r).is_err());
++        r.prerelease = false;
++        r.tag_name = "nightly".into();
++        assert!(validate_release(&r).is_err());
++        r = release();
++        r.html_url = r.html_url.replace(REPOSITORY, "other/repo");
++        assert!(validate_release(&r).is_err());
++    }
++    #[test]
++    fn fail_closed_on_metadata_drift() {
++        let mut r = release();
++        assert_eq!(source(&r).unwrap(), "a".repeat(40));
++        r.body = Some(r.body.clone().unwrap().replace("complete", "uploading"));
++        assert!(source(&r).is_err());
++        r = release();
++        r.body = Some(r.body.clone().unwrap().replace(
++            "automation_state=complete",
++            "automation_state=complete\nautomation_state=uploading",
++        ));
++        assert!(source(&r).is_err());
++        r = release();
++        r.body = Some(r.body.clone().unwrap().repeat(2));
++        assert!(source(&r).is_err());
++    }
++    #[test]
++    fn exact_asset_requires_api_digest_size_and_owner() {
++        let b = identity();
++        let good = release();
++        assert!(asset_for(&good, &b, "linux", "x86_64", false, "deb").is_ok());
++        assert!(asset_for(&good, &b, "linux", "x86_64", true, "deb").is_err());
++        assert!(asset_for(&good, &b, "linux", "aarch64", false, "deb").is_err());
++        let mut r = good.clone();
++        r.assets[0].digest = None;
++        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
++        r = good.clone();
++        r.assets[0].size = 0;
++        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
++        r = good.clone();
++        r.assets[0].browser_download_url = r.assets[0]
++            .browser_download_url
++            .replace(REPOSITORY, "other/repo");
++        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
++        r = good;
++        r.assets.push(r.assets[0].clone());
++        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
++    }
++    #[test]
++    fn verify_content_not_just_size() {
++        let folder =
++            std::env::temp_dir().join(format!("custom-update-test-{}", std::process::id()));
++        fs::create_dir(&folder).unwrap();
++        let path = folder.join("asset");
++        let a = release().assets.remove(0);
++        fs::write(&path, b"test").unwrap();
++        assert!(verify_file(&path, &a).is_ok());
++        fs::write(&path, b"evil").unwrap();
++        assert!(verify_file(&path, &a).is_err());
++        fs::write(&path, b"shorter").unwrap();
++        assert!(verify_file(&path, &a).is_err());
++        fs::remove_file(path).unwrap();
++        fs::remove_dir(folder).unwrap();
++    }
++    #[test]
++    fn only_known_https_redirect_hosts() {
++        assert!(allowed_host("release-assets.githubusercontent.com"));
++        assert!(!allowed_host("github.com.evil.test"));
++        assert!(!allowed_host("githubusercontent.com.evil.test"));
++    }
++}
+diff --git a/src/custom_update/policy.rs b/src/custom_update/policy.rs
+new file mode 100644
+index 0000000..33af1fe
+--- /dev/null
++++ b/src/custom_update/policy.rs
+@@ -0,0 +1,156 @@
++//! Release policy shared by both supported patch generations.
++pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
++    let parts: Vec<_> = value.split('.').collect();
++    if parts.len() != N {
++        return None;
++    }
++    let mut result = [0; N];
++    for (i, part) in parts.iter().enumerate() {
++        if part.is_empty() || !part.bytes().all(|c| c.is_ascii_digit()) {
++            return None;
++        }
++        result[i] = part.parse().ok()?;
++    }
++    Some(result)
++}
++pub fn stable_tag(tag: &str) -> Option<([u64; 3], [u64; 2])> {
++    let (version, revision) = tag.strip_prefix('v')?.split_once("-custom.v")?;
++    let revision: [u64; 2] = numeric(revision)?;
++    if revision.contains(&0) {
++        return None;
++    }
++    Some((numeric(version)?, revision))
++}
++pub fn newer(
++    current: [u64; 3],
++    revision: Option<[u64; 2]>,
++    source: &str,
++    remote: [u64; 3],
++    remote_revision: [u64; 2],
++    remote_source: &str,
++) -> bool {
++    if current != remote {
++        return remote > current;
++    }
++    match revision {
++        Some(local) => remote_revision > local,
++        // Non-release builds may move to Stable at the same version only when
++        // the exact upstream source agrees. Never guess Nightly chronology.
++        None => source == remote_source,
++    }
++}
++pub fn hex(value: &str, length: usize) -> bool {
++    value.len() == length
++        && value
++            .bytes()
++            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
++}
++pub fn package_name(
++    version: &str,
++    variant: &str,
++    platform: &str,
++    arch: &str,
++    wayland: bool,
++    format: &str,
++) -> Option<String> {
++    numeric::<3>(version)?;
++    if !matches!(variant, "standard" | "sos") || !matches!(arch, "x86_64" | "aarch64" | "armv7") {
++        return None;
++    }
++    let suffix = if variant == "sos" { "-sos" } else { "" };
++    if wayland {
++        if platform != "linux" || format != "deb" || arch == "armv7" {
++            return None;
++        }
++        return Some(format!(
++            "rustdesk-unattended-wayland-{variant}-{version}-{arch}.deb"
++        ));
++    }
++    let name = match (platform, format) {
++        ("windows", "exe" | "msi") if arch != "armv7" => {
++            format!("rustdesk-{version}{suffix}-windows-{arch}.{format}")
++        }
++        ("macos", "dmg") if arch != "armv7" => {
++            format!("rustdesk-{version}{suffix}-macos-{arch}-unsigned.dmg")
++        }
++        ("linux", "deb") if arch != "armv7" => {
++            format!("rustdesk-{version}{suffix}-linux-{arch}.deb")
++        }
++        ("linux", "rpm" | "suse.rpm") if arch != "armv7" => {
++            let rpm_arch = if arch == "aarch64" {
++                "aarch64"
++            } else {
++                "x86_64"
++            };
++            let tail = if format == "suse.rpm" {
++                "-suse.rpm"
++            } else {
++                ".rpm"
++            };
++            format!("rustdesk-{version}{suffix}-linux-{arch}-0.{rpm_arch}{tail}")
++        }
++        ("android", "apk") if variant == "standard" => {
++            format!("rustdesk-{version}-android-{arch}-signed.apk")
++        }
++        _ => return None,
++    };
++    Some(name)
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn numeric_revisions() {
++        assert!(
++            stable_tag("v1.5.1-custom.v2.10").unwrap().1
++                > stable_tag("v1.5.1-custom.v2.9").unwrap().1
++        );
++        for s in [
++            "nightly",
++            "v1.5-custom.v2.5",
++            "v1.5.1-custom.v2.0",
++            "v1.5.1-custom.v2.5/evil",
++            "v1.5.1-custom.v2.18446744073709551616",
++        ] {
++            assert!(stable_tag(s).is_none());
++        }
++    }
++    #[test]
++    fn revision_upgrade_without_downgrade() {
++        assert!(newer([1, 5, 1], Some([2, 5]), "a", [1, 5, 1], [2, 6], "b"));
++        assert!(!newer([1, 5, 1], Some([2, 6]), "a", [1, 5, 1], [2, 5], "b"));
++        assert!(!newer(
++            [1, 5, 1],
++            Some([2, 5]),
++            "a",
++            [1, 5, 0],
++            [99, 99],
++            "b"
++        ));
++        assert!(newer([1, 5, 1], Some([2, 5]), "a", [1, 5, 2], [2, 1], "b"));
++        assert!(!newer([1, 5, 1], Some([2, 5]), "a", [1, 5, 1], [2, 5], "b"));
++    }
++    #[test]
++    fn non_release_waits_for_stable_to_catch_up() {
++        assert!(!newer([1, 5, 1], None, "a", [1, 5, 1], [2, 6], "b"));
++        assert!(newer([1, 5, 1], None, "a", [1, 5, 1], [2, 6], "a"));
++        assert!(newer([1, 5, 1], None, "a", [1, 5, 2], [2, 6], "b"));
++    }
++    #[test]
++    fn exact_package_types() {
++        assert_eq!(
++            package_name("1.5.1", "standard", "linux", "x86_64", true, "deb").unwrap(),
++            "rustdesk-unattended-wayland-standard-1.5.1-x86_64.deb"
++        );
++        assert_eq!(
++            package_name("1.5.1", "sos", "windows", "aarch64", false, "msi").unwrap(),
++            "rustdesk-1.5.1-sos-windows-aarch64.msi"
++        );
++        assert_eq!(
++            package_name("1.5.1", "standard", "android", "armv7", false, "apk").unwrap(),
++            "rustdesk-1.5.1-android-armv7-signed.apk"
++        );
++        assert!(package_name("1.5.1", "sos", "android", "aarch64", false, "apk").is_none());
++        assert!(package_name("1.5.1", "standard", "windows", "x86_64", true, "exe").is_none());
++    }
++}
+diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
+index 9b47926..452bbd5 100644
+--- a/src/flutter_ffi.rs
++++ b/src/flutter_ffi.rs
+@@ -1136,3 +1136,3 @@ pub fn main_get_license() -> String {
+ pub fn main_get_version() -> String {
+-    get_version()
++    crate::common::custom_update::display_version()
+ }
+@@ -2686,2 +2686,5 @@ pub fn main_get_printer_names() -> SyncReturn<String> {
+ pub fn main_get_common(key: String) -> String {
++    if let Some(response) = crate::common::custom_update::response(&key) {
++        return response;
++    }
+     if key == "is-printer-installed" {
+@@ -2783,2 +2786,5 @@ pub fn main_get_common_sync(key: String) -> SyncReturn<String> {
+ pub fn main_set_common(_key: String, _value: String) {
++    // Custom downloads have a separate API-digest verification and explicit
++    // installer handoff. Never enter the legacy official installer path.
++    if matches!(_key.as_str(), "download-new-version" | "update-me") { return; }
+     #[cfg(target_os = "windows")]
+diff --git a/src/lang/cn.rs b/src/lang/cn.rs
+index cd5978a..da60222 100644
+--- a/src/lang/cn.rs
++++ b/src/lang/cn.rs
+@@ -3,2 +3,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
+     [
++        ("Check for updates", "检查更新"),
++        ("No newer compatible release", "暂无更新的兼容正式版"),
++        ("Update temporarily unavailable", "更新暂不可用，请稍后重试"),
++        ("Downloading and verifying update", "正在下载并验证更新"),
++        ("Update download verified", "更新下载完成，校验通过"),
++        ("Complete installation in the system installer", "请在系统安装程序中完成安装"),
++        ("Unable to open installer; check installation permissions", "无法打开安装程序，请检查安装权限"),
++
+         ("Status", "状态"),
+diff --git a/src/lang/tw.rs b/src/lang/tw.rs
+index 498caf7..f637cd4 100644
+--- a/src/lang/tw.rs
++++ b/src/lang/tw.rs
+@@ -3,2 +3,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
+     [
++        ("Check for updates", "检查更新"),
++        ("No newer compatible release", "暂无更新的兼容正式版"),
++        ("Update temporarily unavailable", "更新暂不可用，请稍后重试"),
++        ("Downloading and verifying update", "正在下载并验证更新"),
++        ("Update download verified", "更新下载完成，校验通过"),
++        ("Complete installation in the system installer", "请在系统安装程序中完成安装"),
++        ("Unable to open installer; check installation permissions", "无法打开安装程序，请检查安装权限"),
++
+         ("Status", "狀態"),
+diff --git a/src/updater.rs b/src/updater.rs
+index 0c17840..71014ab 100644
+--- a/src/updater.rs
++++ b/src/updater.rs
+@@ -88,2 +88,3 @@ pub fn update_controlling_session_count(count: usize) {
+ pub fn start_auto_update() {
++    if crate::common::custom_update::MANUAL_INSTALL_ONLY { return; }
+     let _sender = TX_MSG.lock().unwrap();
+@@ -176,2 +177,3 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
+ fn check_update(manually: bool) -> ResultType<()> {
++    if crate::common::custom_update::MANUAL_INSTALL_ONLY { let _ = crate::common::custom_update::check()?; return Ok(()); }
+     // On macOS, auto-update is handled by check_update_as_root() in the service process.
+@@ -495,2 +497,3 @@ fn wait_for_failed_update_retry() {
+ pub fn start_auto_update_macos() {
++    if crate::common::custom_update::MANUAL_INSTALL_ONLY { return; }
+     let spawn_result = std::thread::Builder::new()
+@@ -536,2 +539,3 @@ pub fn start_auto_update_macos() {
+ pub fn check_update_as_root() -> ResultType<bool> {
++    if crate::common::custom_update::MANUAL_INSTALL_ONLY { return Ok(false); }
+     let _update_lock = acquire_mac_update_lock()?;

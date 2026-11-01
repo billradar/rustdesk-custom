@@ -29,6 +29,15 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if git(tree,'rev-parse','HEAD')!=sha:raise ValueError('Prepared git source SHA mismatch')
     actual=inventory(tree);actual.pop('source-manifest.json',None)
     if actual!=manifest['files']:raise ValueError('Prepared source file inventory mismatch')
+    identity_path=tree/'src/custom_update/build.json'
+    if not identity_path.is_file():raise ValueError('Client update identity missing')
+    update_identity=json.loads(identity_path.read_text())
+    if update_identity!=manifest.get('client_update_identity'):
+        raise ValueError('Client update identity differs from prepared-source manifest')
+    if any(update_identity[k]!=manifest[v] for k,v in
+           [('version','upstream_version'),('upstream_sha','upstream_sha'),
+            ('variant','variant'),('build_run','prepare_workflow_run')]):
+        raise ValueError('Client update identity differs from build provenance')
     contracts(tree,variant,patchset);check(tree)
     return manifest
 
@@ -77,6 +86,16 @@ def prepare(base,output,ref,sha,name,bridge):
                 run('git','-C',tree,'apply','--check',p);run('git','-C',tree,'apply',p)
         contracts(tree,variant,name)
         run('python3',ROOT/'scripts/release/package.py','restore-bridge',tree,bridge)
+        from scripts.source.update_identity import write_identity
+        # Signing smoke tests also use the Stable build channel, but are not
+        # release builds and must not invent a preflight revision.
+        identity_channel=os.environ['BUILD_CHANNEL']
+        if identity_channel=='stable' and os.environ.get('CLIENT_RELEASE_IDENTITY')!='true':
+            identity_channel='ci'
+        update_identity=write_identity(tree, version=profile['upstream_version'], sha=sha,
+                       variant=variant, run=os.environ['GITHUB_RUN_ID'],
+                       channel=identity_channel,
+                       revision=os.environ.get('CLIENT_PATCH_REVISION', ''))
         scan_prepared_source(tree)
         if profile['source_sbom_requested']:
             run('syft','dir:'+str(tree),'-o','cyclonedx-json='+str(tree/'custom-source.sbom.json'))
@@ -86,6 +105,7 @@ def prepare(base,output,ref,sha,name,bridge):
                   'sos_patch_hash':patch_hash('sos',name) if variant=='sos' else None,
                   'custom_repository':os.environ['GITHUB_REPOSITORY'],'custom_repository_sha':os.environ['GITHUB_SHA'],
                   'variant':variant,'prepare_workflow_run':os.environ['GITHUB_RUN_ID'],
+                  'client_update_identity':update_identity,
                   'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   'build_adapter_signature':profile['signature'],'files':inventory(tree)}
         (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n')

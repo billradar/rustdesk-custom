@@ -40,6 +40,8 @@ Common `0004` gives the Flutter CM a hidden native startup, serialized manual-on
 
 These filenames are useful orientation, not a complete semantic specification. Read the patch before changing or describing its behavior.
 
+Common `0005-custom-release-updates.patch` in both generations implements latest-only client updates from this repository. No client Nightly channel or beta opt-in exists. Stable prepared-source identity must receive the patch revision from Tag preflight; the source inventory binds its embedded identity. Exact package/flavor matching and GitHub API size/SHA256 verification precede a user-confirmed system-installer handoff. Independent update signatures are deferred; Android production signing stays unchanged. Keep the upstream verifier separate and disable unattended official/root installers for custom builds. Read `docs/client-updates.md` and run `scripts.validation.client_update_contract` with affected contracts; policy tests do not prove device installation.
+
 ### Wayland unattended build flavor
 
 - `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard and SOS sources. No separate manual trigger remains. Tag draft/release revalidates and attaches all four DEBs; Nightly aggregates them as Actions artifacts and includes them in its signed prerelease Draft.
