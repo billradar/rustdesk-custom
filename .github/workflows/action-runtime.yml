@@ -1,0 +1,43 @@
+name: Action runtime compatibility
+'on':
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'scripts/validation/action_runtime_contract.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/**'
+      - 'scripts/validation/action_runtime_contract.py'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  windows-tools:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3, Node.js 24
+      - uses: ./.github/actions/install-llvm
+        with:
+          version: '15.0.6'
+          directory: '${{ runner.temp }}/llvm-runtime-smoke'
+      - name: Verify installed Windows build tools
+        shell: pwsh
+        run: |
+          msbuild -version -nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          clang --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path "$env:LLVM_PATH/bin/libclang.dll")) { throw 'libclang.dll missing' }
+  local-contract:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install -r requirements.txt
+      - run: python3 -m scripts.validation.action_runtime_contract

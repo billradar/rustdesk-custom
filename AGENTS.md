@@ -228,6 +228,8 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 
 ## 7. CI classification and contracts
 
+Action runtime maintenance: current JavaScript Actions use Node.js 24. The local LLVM installer preserves upstream v2.0.9 code with a runtime-only metadata change and hash/Apache-license provenance; read `.github/actions/install-llvm/README.md`. Run `scripts.validation.action_runtime_contract` and the credential-free `action-runtime.yml` Windows smoke workflow when changing these dependencies. Preserve source toolchain versions and signing isolation.
+
 `scripts/validation/change_classification.py` classifies a change as:
 - `DOCS_ONLY` only when every changed path is recognized as documentation/non-functional;
 - `FUNCTIONAL` for functional or ambiguous changes, manual CI dispatch, or a push without a usable previous revision.

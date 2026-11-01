@@ -74,7 +74,7 @@ jobs:
         p=json.load(open('.work/platform-profile.json'))
         if p['runner']!=os.environ['EXPECTED_RUNNER']:raise ValueError('BUILD_COMPAT: official runner mismatch')
         PY
-    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
       id: android-flutter
       if: inputs.platform == 'android'
       with:
@@ -93,7 +93,7 @@ jobs:
         toolchain: ${{ steps.profile.outputs.rust }}
         targets: ${{ steps.profile.outputs.target }}
         components: rustfmt
-    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
       id: flutter
       if: inputs.platform == 'macos'
       with:

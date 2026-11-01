@@ -1,0 +1,14 @@
+{
+  "repository": "KyleMayes/install-llvm-action",
+  "revision": "ebc0426251bc40c7cd31162802432c68818ab8f0",
+  "version": "v2.0.9",
+  "files_sha256": {
+    "action.yml": "e249cf33ede57d14a18bb904d256d34caf19d1bbd56401a4208fa57c59bcffb1",
+    "assets.json": "a399bf33455aca7992de9e4eb186a7ff3ffc95e5bbf0e29c30ab012813f0963a",
+    "LICENSE.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "dist/main.js": "6da04a37b3858aaa2b3a059b66c6e41261de7b6910f96871d563c1324502bca4"
+  },
+  "local_changes": [
+    "action.yml: runs.using node20 -> node24"
+  ]
+}

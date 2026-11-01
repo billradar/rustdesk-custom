@@ -128,3 +128,23 @@ the named setup/build scripts are inherited; custom macOS packages remain unsign
 The separate Wayland DRM policy is not expanded by this review. Signature approval
 is not package/runtime validation; unknown future files/tools/recipes and disabled
 jobs remain blocked, with regression tests for those cases.
+
+### GitHub Action JavaScript runtimes
+
+All current directly used JavaScript Actions declare Node.js 24. MSBuild uses
+Microsoft's v3 commit `30375c66a4eea26614e0d39710365f22f8b0af57`. Flutter setup
+uses `1a449444c387b1966244ae4d4f8c696479add0b2`, whose nested cache Action is v5
+(Node.js 24), replacing the old composite's cache v3 (Node.js 16).
+
+The LLVM installer is the narrowly maintained local copy documented in
+[its provenance guide](../.github/actions/install-llvm/README.md), because upstream
+v2.0.9 still declares Node.js 20. Its runtime declaration changes to Node.js 24;
+its JavaScript, asset catalog and license stay unchanged and hash-verified.
+No deprecation-warning suppression or insecure runtime opt-out is used.
+
+The `Action runtime compatibility` workflow exercises actual Windows MSBuild and
+LLVM installation without build credentials or production signing. The local
+`python3 -m scripts.validation.action_runtime_contract` checks bundle integrity,
+retired references and the Node.js 24 entry point. Recheck transitive composite
+Action dependencies when upgrading their pinned revisions. Historical workflow
+runs retain their original Action versions and annotations.

@@ -135,7 +135,7 @@ jobs:
     - id: profile
       name: Resolve reviewed helper commit
       run: python3 scripts/build/build_adapter.py .work/prepared-input/source --output .work/build-profile.json
-    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+    - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
     - name: Build pinned WindowInjection helper
       run: |
         git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
@@ -231,10 +231,10 @@ jobs:
       env:
         RUSTDESK_PASSWORD: ${{ secrets.RUSTDESK_PASSWORD }}
       run: python3 scripts/signing/production_config.py inputs
-    - uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+    - uses: ./.github/actions/install-llvm
       with:
         version: ${{ steps.profile.outputs.llvm }}
-    - uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
       with:
         flutter-version: ${{ steps.profile.outputs.flutter }}
         channel: stable
@@ -244,7 +244,7 @@ jobs:
         toolchain: ${{ steps.profile.outputs.rust }}
         targets: x86_64-pc-windows-msvc
         components: rustfmt
-    - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+    - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
     - name: Prepare upstream dependency recipes
       run: echo "Dependency recipes are from verified Prepared Source"
     - name: Install the official custom Flutter engine
