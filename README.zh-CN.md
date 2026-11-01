@@ -187,4 +187,8 @@ python3 scripts/validation/repository_contract.py
 
 ## 许可证
 
-RustDesk Custom 包含 RustDesk 的维护和自动化代码。具体许可证条款请以上游 RustDesk 项目及本仓库相关文件为准。
+除另有声明外，RustDesk Custom 的原创贡献采用 **GNU Affero 通用公共许可证第 3 版（仅此版本）**（`AGPL-3.0-only`）。完整条款见 [LICENSE](LICENSE)，归属与适用范围见 [NOTICE.md](NOTICE.md)。
+
+基于 RustDesk 的补丁和定制客户端继续遵循适用的上游 AGPL 条款。上游及第三方代码、依赖和素材保留各自的许可证与版权声明，本仓库不主张拥有这些贡献的版权。
+
+分发定制二进制时，应按许可证要求提供完整对应源码的获取方式，包括准确的上游版本、自定义修改和必要构建脚本；仅链接未经修改的上游源码并不足够。
