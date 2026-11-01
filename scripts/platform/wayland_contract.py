@@ -292,13 +292,17 @@ class DebianLabelContract(unittest.TestCase):
             root=Path(td);stage=root/'stage';(stage/'DEBIAN').mkdir(parents=True)
             (stage/'usr/bin').mkdir(parents=True)
             (stage/'usr/bin/rustdesk').write_bytes(b'fictional unchanged client payload')
-            control='Package: rustdesk-unattended-wayland\nVersion: 1.5.0\nArchitecture: amd64\nMaintainer: Fixture <fixture@example.invalid>\nConflicts: rustdesk\nProvides: rustdesk\nReplaces: rustdesk\nDescription: RustDesk\n Original long description.\n'
+            control='Package: rustdesk-unattended-wayland\nVersion: 1.5.0\nArchitecture: amd64\nMaintainer: Fixture <fixture@example.invalid>\nHomepage: https://github.com/fixture/client\nConflicts: rustdesk\nProvides: rustdesk\nReplaces: rustdesk\nDescription: RustDesk\n Original long description.\n'
             (stage/'DEBIAN/control').write_text(control)
             postinst=stage/'DEBIAN/postinst';postinst.write_text('#!/bin/sh\nexit 0\n');postinst.chmod(0o755)
             package=root/'client.deb'
             subprocess.run(['dpkg-deb','-Zxz','--build','--root-owner-group',str(stage),str(package)],check=True,stdout=subprocess.DEVNULL)
             for attempt,variant in enumerate(('standard','sos','standard')):
-                wayland.label_package(package,variant)
+                from scripts.source import branding
+                from scripts.platform.platform_package import prepare_deb
+                snapshot=branding.resolve({'CUSTOM_DESCRIPTION':'雷达远程支持'},'fixture/client')
+                (root/'branding.json').write_text(json.dumps(snapshot),encoding='utf-8')
+                prepare_deb(package,root,variant)
                 values=subprocess.check_output(['dpkg-deb','-f',str(package)],text=True)
                 for line in control.splitlines():
                     if not line.startswith(('Description:',' ')):self.assertIn(line,values)

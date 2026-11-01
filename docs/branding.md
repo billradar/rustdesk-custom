@@ -103,3 +103,8 @@ Validate defaults, representative overrides and escaping with
 `python3 -m scripts.validation.branding_contract`, prepared-source contracts,
 Flutter analysis and affected packaging/signing contracts. Native installers and
 real-device display/upgrade behavior still require exact-package testing.
+
+Wayland unattended DEBs apply public branding before their mandatory Standard/SOS
+summary label. Their Description first line remains `RustDesk Wayland unattended
+(STANDARD)` or `RustDesk Wayland unattended (SOS)` for independent variant validation;
+other public metadata and payload remain subject to the existing branding rules.

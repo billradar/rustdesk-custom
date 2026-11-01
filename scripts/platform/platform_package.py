@@ -153,6 +153,14 @@ def validate_wayland_deb(deb, root, info):
  for marker in [b'/usr/lib/rustdesk/libdrmtap.so.0',b'enable-drm-display-wake']:
   if marker not in binary:raise ValueError('PACKAGE: stock/no-wake binary under unattended name')
 
+def prepare_deb(package, tree, unattended_variant=None):
+ from scripts.source.branding import rebrand_deb
+ rebrand_deb(package,tree)
+ if unattended_variant is not None:
+  from scripts.platform.wayland import label_package
+  label_package(package,unattended_variant)
+
+
 def create(tree,platform,arch,variant):
  tree=Path(tree);values=configured();m=json.loads((tree/'source-manifest.json').read_text());profile=json.loads(Path('.work/platform-profile.json').read_text())
  if platform in ('linux','macos'):
@@ -185,14 +193,11 @@ def create(tree,platform,arch,variant):
  else:packages=list((tree/'signed-apk').glob('*.apk'));kind='debug-signed-apk'
  if not packages:raise ValueError('PACKAGE: official package absent')
  for p in packages:
+  if p.suffix=='.deb':prepare_deb(p,tree,variant if flavor else None)
   if flavor:
-   from scripts.platform.wayland import label_package,package_name
-   label_package(p,variant)
+   from scripts.platform.wayland import package_name
    name=package_name(version,variant,arch)
   else:name=f'{artifact_variant}-{p.name}'
-  if p.suffix=='.deb':
-   from scripts.source.branding import rebrand_deb
-   rebrand_deb(p,tree)
   shutil.copy2(p,dest/'packages'/name)
  if platform=='macos':
   # Validate the actual DMG bundle against the built Rust library on the macOS runner.
