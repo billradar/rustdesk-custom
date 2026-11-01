@@ -131,6 +131,33 @@ class BrandingTests(unittest.TestCase):
             right=new_file((ROOT/'patchsets/v2'/PATCH).read_text(encoding='utf-8'),file)
             self.assertEqual(left,right)
 
+    def test_about_variant_helper_patch_applies_and_localizes(self):
+        for generation in ('v1', 'v2'):
+            text=(ROOT/'patchsets'/generation/PATCH).read_text(encoding='utf-8')
+            helper=text.split('diff --git ',2)[1]
+            with tempfile.TemporaryDirectory() as td:
+                subprocess.run(['git','apply','-'],cwd=td,input='diff --git '+helper,
+                               text=True,encoding='utf-8',check=True,capture_output=True)
+                source=(Path(td)/'flutter/lib/common/branding.dart').read_text(encoding='utf-8')
+                self.assertIn("final suffix = brandingUsesChinese() ? '_ZH_CN' : '_EN';",source)
+                self.assertIn("language = bind.mainGetLocalOption(key: 'lang');",source)
+                self.assertIn('PlatformDispatcher.instance.locale.toString()',source)
+                self.assertIn('brandingVariantLabel(customAboutVariant, customAboutWayland,',source)
+                for label in ['标准版','SOS 远程协助版','变体','Variant',' + Wayland unattended']:
+                    self.assertIn(label,source)
+                dart=shutil.which('dart')
+                if dart:
+                    fn=source.split('String brandingVariantLabel(',1)[1].split('List<Widget>',1)[0]
+                    program="String brandingVariantLabel("+fn+"\nvoid main() {\n"
+                    for variant,wayland,chinese,expected in [
+                        ('Standard',False,True,'变体: 标准版'),('SOS',False,True,'变体: SOS 远程协助版'),
+                        ('Standard',False,False,'Variant: Standard'),('SOS',True,False,'Variant: SOS + Wayland unattended'),
+                        ('Standard',True,True,'变体: 标准版 + Wayland 无人值守')]:
+                        program += 'if (brandingVariantLabel('+json.dumps(variant)+', '+str(wayland).lower()+', '+str(chinese).lower()+') != '+json.dumps(expected)+') throw StateError("Wrong variant label");\n'
+                    program+='}\n'
+                    target=Path(td)/'labels.dart';target.write_text(program,encoding='utf-8')
+                    subprocess.run([dart,str(target)],check=True,capture_output=True)
+
     def test_native_escaping_and_internal_identity_isolation(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)

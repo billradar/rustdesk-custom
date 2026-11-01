@@ -46,6 +46,9 @@ Common `0006-public-branding.patch` adds display-only branding with 20 base repo
 
 About pages derive display-only `version-custom.patch-revision` and Standard/SOS labels from the validated prepared-source update identity. CI/Nightly never claim a Stable revision. The Wayland lane alone sets its generated display flavor before compilation; package and prepared-source checks bind the display to actual source identity. Keep native/package/protocol versions and update comparison logic unchanged.
 
+Windows x64 packaging stages checksum-pinned official printer driver and adapter archives through `scripts/build/windows_printer.py` before EXE/MSI generation; `scripts.validation.windows_printer_contract` covers integrity and missing payload failures. The official INF supports NTamd64 only; ARM64 records printer support as unsupported and must not ship the x64 driver as native ARM64. About variant labels follow the existing branding language resolver.
+
+
 ### Wayland unattended build flavor
 
 - `.github/workflows/wayland.yml` is a reusable internal build called by Tag/Nightly with `include_wayland` (default true), using the same-run prepared Standard and SOS sources. No separate manual trigger remains. Tag draft/release revalidates and attaches all four DEBs; Nightly aggregates them as Actions artifacts and includes them in its signed prerelease Draft.

@@ -91,6 +91,12 @@ class ReleaseGateTests(unittest.TestCase):
         (folder/'rustdesk').mkdir(parents=True)
         pe=bytearray(128); pe[:2]=b'MZ'; struct.pack_into('<I',pe,0x3c,64); pe[64:68]=b'PE\0\0'; struct.pack_into('<H',pe,68,0x8664)
         (folder/'rustdesk/rustdesk.exe').write_bytes(pe)
+        from scripts.build.windows_printer import DRIVER_FILES
+        for name in DRIVER_FILES:
+            path=folder/'rustdesk/drivers/RustDeskPrinterDriver'/name
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_bytes(b'printer test fixture')
+        (folder/'rustdesk/printer_driver_adapter.dll').write_bytes(pe)
         packages = folder / 'packages'
         packages.mkdir(parents=True)
         (packages / f'rustdesk-1.4.9{("-sos" if variant == "sos" else "")}-windows-x86_64.exe').write_bytes(pe)
