@@ -230,7 +230,7 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 
 ## 7. CI classification and contracts
 
-Action runtime maintenance: current JavaScript Actions use Node.js 24. The local LLVM installer preserves upstream v2.0.9 code with a runtime-only metadata change and hash/Apache-license provenance; read `.github/actions/install-llvm/README.md`. Run `scripts.validation.action_runtime_contract` and the credential-free `action-runtime.yml` Windows smoke workflow when changing these dependencies. Preserve source toolchain versions and signing isolation.
+Action runtime maintenance: current JavaScript Actions use Node.js 24. The local LLVM installer preserves upstream v2.0.9 code with a runtime-only metadata change and hash/Apache-license provenance; read `.github/actions/install-llvm/README.md`. Run `scripts.validation.action_runtime_contract` and the credential-free `action-runtime.yml` Windows smoke workflow when changing these dependencies. Preserve source toolchain versions and signing isolation. Windows ARM64 SDK preparation uses the shared `prepare_windows_arm64_flutter.ps1` and `FLUTTER_ROOT`, never a cache-container output; the Action runtime workflow exercises it on a native ARM64 runner.
 
 `scripts/validation/change_classification.py` classifies a change as:
 - `DOCS_ONLY` only when every changed path is recognized as documentation/non-functional;

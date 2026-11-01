@@ -4,11 +4,13 @@ name: Action runtime compatibility
     paths:
       - '.github/**'
       - 'scripts/validation/action_runtime_contract.py'
+      - 'scripts/build/prepare_windows_arm64_flutter.ps1'
   push:
     branches: [main]
     paths:
       - '.github/**'
       - 'scripts/validation/action_runtime_contract.py'
+      - 'scripts/build/prepare_windows_arm64_flutter.ps1'
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -33,6 +35,48 @@ jobs:
           clang --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "$env:LLVM_PATH/bin/libclang.dll")) { throw 'libclang.dll missing' }
+  windows-arm64-flutter:
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+          architecture: arm64
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.44.9'
+          channel: stable
+          architecture: x64
+      - name: Reject cache parent before changing the SDK
+        shell: pwsh
+        run: |
+          $actual = $env:FLUTTER_ROOT
+          try {
+            $env:FLUTTER_ROOT = Split-Path -Parent $actual
+            try {
+              & ./scripts/build/prepare_windows_arm64_flutter.ps1
+              throw 'Invalid SDK parent was accepted'
+            } catch {
+              if ($_ -notmatch 'Flutter SDK entry point missing') { throw }
+            }
+          } finally {
+            $env:FLUTTER_ROOT = $actual
+          }
+      - name: Verify real SDK root and install native ARM64 Dart and engine
+        shell: pwsh
+        env:
+          PYTHONPATH: .
+        run: |
+          & ./scripts/build/prepare_windows_arm64_flutter.ps1
+          python -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Workflow parser installation failed' }
+          $engine = "$env:FLUTTER_ROOT/bin/cache/artifacts/engine/windows-arm64-release/flutter_windows.dll"
+          python -c "from scripts.build.windows_arm64 import pe; import sys; pe(sys.executable); pe(r'$engine')"
+          if ($LASTEXITCODE -ne 0) { throw 'Python/engine ARM64 machine check failed' }
   local-contract:
     runs-on: ubuntu-22.04
     steps:
