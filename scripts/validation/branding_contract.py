@@ -1,5 +1,6 @@
 """Public branding defaults, escaping, identity isolation and real DEB regressions."""
 import hashlib
+import io
 import json
 import plistlib
 from pathlib import Path
@@ -7,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 import yaml
@@ -18,8 +20,8 @@ PATCH='common/0006-public-branding.patch'
 
 
 def source_contract(tree):
-    expected=new_file((ROOT/'patchsets/v2'/PATCH).read_text(),'flutter/lib/common/branding.dart')
-    if (tree/'flutter/lib/common/branding.dart').read_text()!=expected:
+    expected=new_file((ROOT/'patchsets/v2'/PATCH).read_text(encoding='utf-8'),'flutter/lib/common/branding.dart')
+    if (tree/'flutter/lib/common/branding.dart').read_text(encoding='utf-8')!=expected:
         raise ValueError('Branding helper differs from reviewed patch')
 
 
@@ -28,7 +30,7 @@ class BrandingTests(unittest.TestCase):
         self.assertEqual(len(b.TEXT)+len(b.URLS),20)
         self.assertEqual(len(b.VISUAL),5)
         self.assertEqual(len(b.NAMES),49)
-        workflow=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())
+        workflow=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text(encoding='utf-8'))
         step=next(s for s in workflow['jobs']['prepare']['steps'] if s.get('name')=='Freeze public branding variables with defaults')
         self.assertEqual(set(step['env']),set(b.NAMES))
         for key,value in step['env'].items():
@@ -61,11 +63,11 @@ class BrandingTests(unittest.TestCase):
     def test_frozen_snapshot_cannot_change_repository_or_values(self):
         with tempfile.TemporaryDirectory() as td:
             p=Path(td)/'branding.json';snapshot=b.resolve({'CUSTOM_DISPLAY_NAME':'Radar'},'owner/repo')
-            p.write_text(json.dumps(snapshot))
+            p.write_text(json.dumps(snapshot), encoding='utf-8')
             self.assertEqual(b.load(p,'owner/repo'),snapshot)
             with self.assertRaises(ValueError):b.load(p,'another/repo')
             snapshot['values']['CUSTOM_WEBSITE_URL']='http://unsafe.example'
-            p.write_text(json.dumps(snapshot))
+            p.write_text(json.dumps(snapshot), encoding='utf-8')
             with self.assertRaises(ValueError):b.load(p,'owner/repo')
 
     def test_dart_literals_escape_interpolation_and_native_metadata_arguments(self):
@@ -76,7 +78,7 @@ class BrandingTests(unittest.TestCase):
             root=Path(td);snapshot=b.resolve({'CUSTOM_PUBLISHER':'Bill Radar (houxnan)',
                 'CUSTOM_CONTACT_EMAIL':'support@example.com','CUSTOM_MAINTAINER':'Bill Radar',
                 'CUSTOM_DESCRIPTION':'Remote support'},'fork/client')
-            (root/'branding.json').write_text(json.dumps(snapshot))
+            (root/'branding.json').write_text(json.dumps(snapshot), encoding='utf-8')
             args=b.msi_arguments(root);self.assertEqual(args[0],'--custom-arp')
             arp=json.loads(args[1]);self.assertEqual(arp['HelpLink']['v'],'https://github.com/fork/client/issues')
             self.assertNotIn('ARPSYSTEMCOMPONENT',json.dumps(arp))
@@ -86,24 +88,24 @@ class BrandingTests(unittest.TestCase):
         if not shutil.which('dpkg-deb'):self.skipTest('dpkg-deb unavailable')
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);stage=root/'stage';(stage/'DEBIAN').mkdir(parents=True)
-            (stage/'DEBIAN/control').write_text('Package: rustdesk\nVersion: 1.5.1\nArchitecture: amd64\nMaintainer: rustdesk <info@rustdesk.com>\nHomepage: https://rustdesk.com\nDescription: Remote desktop\nDepends: libc6\n')
-            (stage/'DEBIAN/postinst').write_text('#!/bin/sh\nexit 0\n');(stage/'DEBIAN/postinst').chmod(0o755)
+            (stage/'DEBIAN/control').write_text('Package: rustdesk\nVersion: 1.5.1\nArchitecture: amd64\nMaintainer: rustdesk <info@rustdesk.com>\nHomepage: https://rustdesk.com\nDescription: Remote desktop\nDepends: libc6\n', encoding='utf-8')
+            (stage/'DEBIAN/postinst').write_text('#!/bin/sh\nexit 0\n', encoding='utf-8');(stage/'DEBIAN/postinst').chmod(0o755)
             (stage/'usr/share/icons').mkdir(parents=True);(stage/'usr/share/icons/original.png').write_bytes(b'unchanged-icon')
             package=root/'client.deb'
             subprocess.run(['dpkg-deb','--build','--root-owner-group',str(stage),str(package)],check=True,stdout=subprocess.DEVNULL)
             snapshot=b.resolve({'CUSTOM_DESCRIPTION':'Radar support'},'fork/client')
-            (root/'branding.json').write_text(json.dumps(snapshot));b.rebrand_deb(package,root)
+            (root/'branding.json').write_text(json.dumps(snapshot), encoding='utf-8');b.rebrand_deb(package,root)
             extracted=root/'out';subprocess.run(['dpkg-deb','--raw-extract',str(package),str(extracted)],check=True)
             self.assertEqual((extracted/'DEBIAN/postinst').read_bytes(),(stage/'DEBIAN/postinst').read_bytes())
             self.assertEqual((extracted/'usr/share/icons/original.png').read_bytes(),b'unchanged-icon')
-            control=(extracted/'DEBIAN/control').read_text()
+            control=(extracted/'DEBIAN/control').read_text(encoding='utf-8')
             for value in ['Package: rustdesk','Version: 1.5.1','Depends: libc6','Description: Radar support']:
                 self.assertIn(value,control)
 
     def test_both_generations_share_branding_implementation(self):
         for file in ['flutter/lib/common/branding.dart','flutter/lib/common/branding_values.dart']:
-            left=new_file((ROOT/'patchsets/v1'/PATCH).read_text(),file)
-            right=new_file((ROOT/'patchsets/v2'/PATCH).read_text(),file)
+            left=new_file((ROOT/'patchsets/v1'/PATCH).read_text(encoding='utf-8'),file)
+            right=new_file((ROOT/'patchsets/v2'/PATCH).read_text(encoding='utf-8'),file)
             self.assertEqual(left,right)
 
     def test_native_escaping_and_internal_identity_isolation(self):
@@ -123,21 +125,32 @@ class BrandingTests(unittest.TestCase):
                 'res/icon.png':'original-image',
             }
             for file,text in files.items():
-                p=root/file;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text)
+                p=root/file;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text, encoding='utf-8')
             plist=root/'flutter/macos/Runner/Info.plist'
             plist.write_bytes(plistlib.dumps({'CFBundleIdentifier':'com.carriez.flutterHbb','CFBundleName':'$(PRODUCT_NAME)'}))
             name='Radar "$name" & Co.'
             snapshot=b.resolve({'CUSTOM_DISPLAY_NAME':name,'CUSTOM_PUBLISHER':'Bill Radar (houxnan)',
                                 'CUSTOM_DESCRIPTION':'Remote support'},'fork/client')
-            digest=b.apply(root,snapshot)
+            # Reproduce Windows' legacy locale without requiring a Windows host.
+            # Source generation and snapshot consumers must remain UTF-8 even
+            # when an implicit text open would select cp1252.
+            original_open=io.open
+            def windows_open(file,mode='r',buffering=-1,encoding=None,errors=None,newline=None,closefd=True,opener=None):
+                if 'b' not in mode and encoding is None:encoding='cp1252'
+                return original_open(file,mode,buffering,encoding,errors,newline,closefd,opener)
+            with patch('io.open',side_effect=windows_open):
+                digest=b.apply(root,snapshot)
+                self.assertEqual(b.load(root/'branding.json','fork/client'),snapshot)
+                self.assertEqual(b.msi_arguments(root)[0],'--custom-arp')
+                self.assertIn('基于 RustDesk', (root/'flutter/lib/common/branding_values.dart').read_text(encoding='utf-8'))
             self.assertEqual(digest,hashlib.sha256((root/'branding.json').read_bytes()).hexdigest())
-            self.assertEqual(ET.fromstring((root/'res/msi/Package/Package.wxs').read_text()).get('Name'),name)
+            self.assertEqual(ET.fromstring((root/'res/msi/Package/Package.wxs').read_text(encoding='utf-8')).get('Name'),name)
             self.assertEqual(plistlib.loads(plist.read_bytes())['CFBundleIdentifier'],'com.carriez.flutterHbb')
             for file in ['flutter/android/app/build.gradle','flutter/macos/Runner/Configs/AppInfo.xcconfig',
                          'res/rustdesk.service','res/icon.png']:
-                self.assertEqual((root/file).read_text(),files[file])
-            self.assertIn(r'\$name',(root/'flutter/lib/common/branding_values.dart').read_text())
-            self.assertIn('Exec=rustdesk %u',(root/'res/rustdesk.desktop').read_text())
+                self.assertEqual((root/file).read_text(encoding='utf-8'),files[file])
+            self.assertIn(r'\$name',(root/'flutter/lib/common/branding_values.dart').read_text(encoding='utf-8'))
+            self.assertIn('Exec=rustdesk %u',(root/'res/rustdesk.desktop').read_text(encoding='utf-8'))
 
 
 if __name__=='__main__':unittest.main()

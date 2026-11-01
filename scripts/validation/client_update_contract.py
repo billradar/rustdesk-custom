@@ -17,16 +17,16 @@ PATCH = "common/0005-custom-release-updates.patch"
 
 
 def patch_file(generation, name):
-    return new_file((ROOT / "patchsets" / generation / PATCH).read_text(), name)
+    return new_file((ROOT / "patchsets" / generation / PATCH).read_text(encoding='utf-8'), name)
 
 
 def source_contract(tree):
-    module = (tree / "src/custom_update/mod.rs").read_text()
+    module = (tree / "src/custom_update/mod.rs").read_text(encoding='utf-8')
     expected = patch_file("v2", "src/custom_update/mod.rs")
     if module != expected:
         raise ValueError("Client update implementation differs from reviewed patch")
-    ffi = (tree / "src/flutter_ffi.rs").read_text()
-    home = (tree / "flutter/lib/desktop/pages/desktop_home_page.dart").read_text()
+    ffi = (tree / "src/flutter_ffi.rs").read_text(encoding='utf-8')
+    home = (tree / "flutter/lib/desktop/pages/desktop_home_page.dart").read_text(encoding='utf-8')
     if "custom_update::response(&key)" not in ffi or "showCustomUpdateDialog();" not in home:
         raise ValueError("Client update UI/FFI route missing")
 
@@ -59,11 +59,11 @@ class ClientUpdateTests(unittest.TestCase):
         self.assertIn("verify_file(&d.path", module)
 
     def test_stable_revision_is_passed_from_preflight_to_prepared_source(self):
-        tag = yaml.safe_load((ROOT / ".github/workflows/tag.yml").read_text())
+        tag = yaml.safe_load((ROOT / ".github/workflows/tag.yml").read_text(encoding='utf-8'))
         self.assertEqual(tag["jobs"]["prepare"]["with"]["patch_revision"],
                          "${{ needs.draft-preflight.outputs.patch_revision }}")
         self.assertIs(tag["jobs"]["prepare"]["with"]["client_release_identity"], True)
-        prepare = yaml.safe_load((ROOT / ".github/workflows/prepare-source.yml").read_text())
+        prepare = yaml.safe_load((ROOT / ".github/workflows/prepare-source.yml").read_text(encoding='utf-8'))
         self.assertEqual(prepare["jobs"]["prepare"]["env"]["CLIENT_PATCH_REVISION"],
                          "${{ inputs.patch_revision }}")
 
@@ -72,12 +72,12 @@ class ClientUpdateTests(unittest.TestCase):
             tree = Path(directory)
             destination = tree / "src/custom_update/build.json"
             destination.parent.mkdir(parents=True)
-            destination.write_text("{}")
+            destination.write_text("{}", encoding='utf-8')
             args = dict(repository="fork-owner/custom-client", version="1.5.1", sha="a" * 40, variant="standard", run="123",
                         channel="stable", revision="v2.6")
             self.assertEqual(write_identity(tree, **args)["revision"], "v2.6")
-            self.assertEqual(json.loads(destination.read_text())["variant"], "standard")
-            self.assertEqual(json.loads(destination.read_text())["repository"], "fork-owner/custom-client")
+            self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["variant"], "standard")
+            self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["repository"], "fork-owner/custom-client")
             for invalid in ("", "https://github.com/owner/repo", "owner/repo/extra", "owner/repo?x", "owner/.."):
                 with self.subTest(repository=invalid), self.assertRaises(ValueError):
                     write_identity(tree, **(args | {"repository": invalid}))
@@ -98,9 +98,9 @@ class ClientUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             tree = Path(directory)
             policy = tree / "policy.rs"
-            policy.write_text(patch_file("v2", "src/custom_update/policy.rs"))
+            policy.write_text(patch_file("v2", "src/custom_update/policy.rs"), encoding='utf-8')
             (tree / "stable_release_fixture.txt").write_text(
-                patch_file("v2", "src/custom_update/stable_release_fixture.txt"))
+                patch_file("v2", "src/custom_update/stable_release_fixture.txt"), encoding='utf-8')
             executable = tree / "policy-tests"
             subprocess.run([compiler, "--edition=2021", "--test", str(policy),
                             "-o", str(executable)], check=True)

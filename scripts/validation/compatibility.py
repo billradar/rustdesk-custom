@@ -22,13 +22,13 @@ FILES = ['flutter/lib/main.dart', 'flutter/lib/common.dart',
     ('connection_page', 'desktop_home_page', 'desktop_setting_page', 'desktop_tab_page')]
 
 def run(command, log):
-    with log.open('a') as stream:
+    with log.open('a', encoding='utf-8') as stream:
         stream.write('\n$ ' + ' '.join(map(str, command)) + '\n')
         stream.flush()
         completed = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
     if completed.returncode:
         # Diagnostic source/patch/compiler logs contain only fictional test configuration.
-        print(log.read_text()[-18000:])
+        print(log.read_text(encoding='utf-8')[-18000:])
         raise RuntimeError(f'Command failed ({completed.returncode}); see {log}')
 
 def contracts(tree, variant, patchset=None):
@@ -38,14 +38,14 @@ def contracts(tree, variant, patchset=None):
         path = tree / file
         if not path.is_file():
             raise RuntimeError('Missing dependency file: ' + file)
-        texts[file] = path.read_text()
+        texts[file] = path.read_text(encoding='utf-8')
     hbb = texts['libs/hbb_common/src/config.rs']
     for token in ('HARD_SETTINGS', 'DEFAULT_SETTINGS', 'BUILTIN_SETTINGS', 'OVERWRITE_SETTINGS',
                   'pub fn get_option(',
                   'pub fn get_rendezvous_server(', 'pub fn is_incoming_only(', 'pub fn is_disable_settings('):
         if token not in hbb:
             raise RuntimeError('Missing hbb configuration API: ' + token)
-    key_source = hbb if patchset == 'v1' else (tree / 'libs/base/src/config/keys.rs').read_text()
+    key_source = hbb if patchset == 'v1' else (tree / 'libs/base/src/config/keys.rs').read_text(encoding='utf-8')
     if 'OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION' not in key_source:
         raise RuntimeError('Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION')
     common = texts['src/common.rs']
@@ -102,7 +102,7 @@ def contracts(tree, variant, patchset=None):
             'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
 
 def build_system(tree):
-    baseline = json.loads((ROOT / 'metadata/baselines/build.json').read_text())
+    baseline = json.loads((ROOT / 'metadata/baselines/build.json').read_text(encoding='utf-8'))
     changed = []
     for file, digest in baseline.items():
         path = tree / file
@@ -115,28 +115,28 @@ def build_system(tree):
                  '.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff'):
         if not (tree / file).is_file():
             raise RuntimeError('Windows build adapter dependency missing: ' + file)
-    build = (tree / 'build.py').read_text()
+    build = (tree / 'build.py').read_text(encoding='utf-8')
     for flag in ('--portable', '--flutter', '--skip-portable-pack', '--hwcodec', '--vram'):
         if flag not in build:
             raise RuntimeError('Windows build interface removed: ' + flag)
     # Explicitly reject a toolchain migration that the historical Windows adapter cannot support.
-    cargo = (tree / 'Cargo.toml').read_text()
+    cargo = (tree / 'Cargo.toml').read_text(encoding='utf-8')
     if not re.search(r'rust-version\s*=\s*"1\.75(?:\.0)?"', cargo):
         raise RuntimeError('Rust minimum version changed: review pinned Windows adapter')
     return changed
 
 def rust_probe(tree):
-    common = (tree / 'src/common.rs').read_text()
+    common = (tree / 'src/common.rs').read_text(encoding='utf-8')
     helper = common[common.index('fn apply_custom_build_defaults()'):common.index('\npub fn load_custom_client()')]
     crate = 'hbb_common' if os.environ.get('PATCHSET', 'v1') == 'v1' else 'base'
     manifest = tree / ('libs/' + crate + '/Cargo.toml')
-    manifest.write_text(manifest.read_text() + '\n[[bin]]\nname = \"custom_patch_config\"\npath = \"custom_patch_config.rs\"\n')
+    manifest.write_text(manifest.read_text(encoding='utf-8') + '\n[[bin]]\nname = \"custom_patch_config\"\npath = \"custom_patch_config.rs\"\n', encoding='utf-8')
     path = tree / ('libs/' + crate + '/custom_patch_config.rs')
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('use hbb_common::config;\n' + helper + '\nfn main() {\n'
                     'apply_custom_build_defaults();\n'
                     'let _: fn(&str) -> String = config::Config::get_option;\n'
-                    'let _: fn() -> String = config::Config::get_rendezvous_server;\n}\n')
+                    'let _: fn() -> String = config::Config::get_rendezvous_server;\n}\n', encoding='utf-8')
 
 def main():
     parser = argparse.ArgumentParser()
@@ -149,7 +149,7 @@ def main():
     destination = ROOT / args.root
     destination.mkdir(parents=True, exist_ok=True)
     report_path = destination / 'report.json'
-    report = json.loads(report_path.read_text()) if report_path.exists() else {
+    report = json.loads(report_path.read_text(encoding='utf-8')) if report_path.exists() else {
         'patchset': os.environ.get('PATCHSET', 'v1'), 'upstream_repository': 'rustdesk/rustdesk', 'upstream_sha': args.sha,
         'upstream_branch': os.environ.get('UPSTREAM_BRANCH'), 'variants': {},
         'Runtime/UI Validation': 'SKIPPED BY USER', 'Real Remote Session Validation': 'NOT TESTED'}
@@ -171,7 +171,7 @@ def main():
                     # A synthetic nonexistent target, piped to git; tracked patches stay unchanged.
                     bad = 'diff --git a/nonexistent-simulation b/nonexistent-simulation\n--- a/nonexistent-simulation\n+++ b/nonexistent-simulation\n@@ -1 +1 @@\n-old\n+new\n'
                     result = subprocess.run(['git', '-C', str(tree), 'apply', '--check', '-'], input=bad, text=True, capture_output=True)
-                    log.write_text(log.read_text() + result.stderr)
+                    log.write_text(log.read_text(encoding='utf-8') + result.stderr, encoding='utf-8')
                     if result.returncode == 0:
                         raise RuntimeError('Failure simulation unexpectedly applied')
                     status['Patch Apply'] = 'FAIL (SIMULATED)'
@@ -198,14 +198,14 @@ def main():
                 status['Rust real-config compile'] = 'PASS'
             elif args.mode == 'analyze':
                 active_check = 'Flutter Analyze'
-                with log.open('a') as stream:
+                with log.open('a', encoding='utf-8') as stream:
                     result = subprocess.run(['flutter', 'pub', 'get'], cwd=tree / 'flutter', stdout=stream, stderr=subprocess.STDOUT)
                 if result.returncode:
                     raise RuntimeError(f'Flutter pub get failed: {log}')
                 run([sys.executable, str(ROOT / 'scripts/validation/cm_window_contract.py'),
                      '--source', str(tree), '--dart', 'dart'], log)
                 # Only error severity fails. Upstream lint warnings remain in logs.
-                with log.open('a') as stream:
+                with log.open('a', encoding='utf-8') as stream:
                     analysis_start = stream.tell()
                     result = subprocess.run(['flutter', 'analyze', '--no-fatal-infos', '--no-fatal-warnings',
                         *[file.removeprefix('flutter/') for file in FILES if file.endswith('.dart')]],
@@ -234,17 +234,17 @@ def main():
         report['Failed stage'] = args.mode
         report['Failed variant'] = variant if 'variant' in locals() else 'unknown'
         if 'log' in locals() and log.exists():
-            diagnostic = log.read_text()
+            diagnostic = log.read_text(encoding='utf-8')
             failed_patch = re.search(r'STOP: failed patch ([^;]+)', diagnostic)
             if failed_patch:
                 report['Failed patch'] = failed_patch.group(1)
             report['Failed files'] = sorted(set(re.findall(r'error: patch failed: (.+?):[0-9]+', diagnostic)))
         print(str(error), file=sys.stderr)
     finally:
-        report_path.write_text(json.dumps(report, indent=2) + '\n')
+        report_path.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         from scripts.validation.summary import compatibility_report_card, publish
         try:
-            (destination / 'report.md').write_text(compatibility_report_card(report))
+            (destination / 'report.md').write_text(compatibility_report_card(report), encoding='utf-8')
         except Exception:
             print('Markdown report unavailable; JSON diagnostics remain authoritative.', file=sys.stderr)
         if args.mode != 'prepare' or report['Overall'] == 'FAIL':

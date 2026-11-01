@@ -84,7 +84,7 @@ def resolve(environ, repository):
 
 
 def load(path, repository):
-    snapshot = json.loads(Path(path).read_text()) if path else resolve({}, repository)
+    snapshot = json.loads(Path(path).read_text(encoding='utf-8')) if path else resolve({}, repository)
     if snapshot.get('schema') != SCHEMA or snapshot.get('repository') != repository:
         raise ValueError('Branding snapshot belongs to a different build repository')
     if resolve(snapshot['values'], repository) != snapshot:
@@ -123,17 +123,17 @@ def deb_fields(values):
 def rebrand_deb(package, tree):
     path=Path(tree)/'branding.json'
     if not path.is_file():return  # Historical/test sources have no branding snapshot.
-    snapshot=json.loads(path.read_text())
+    snapshot=json.loads(path.read_text(encoding='utf-8'))
     fields=deb_fields(load(path,snapshot['repository'])['values'])
     if not fields:return
     with tempfile.TemporaryDirectory(prefix='rustdesk-public-branding-') as temp:
         root=Path(temp);stage=root/'package'
         subprocess.run(['dpkg-deb','--raw-extract',str(package),str(stage)],check=True)
-        control=stage/'DEBIAN/control';text=control.read_text()
+        control=stage/'DEBIAN/control';text=control.read_text(encoding='utf-8')
         for field,value in fields.items():
             text,count=re.subn(r'^'+field+r':[^\n]*',lambda _:field+': '+value,text,flags=re.M)
             if count!=1:raise ValueError('Missing/duplicate package branding field: '+field)
-        control.write_text(text)
+        control.write_text(text, encoding='utf-8')
         output=root/'branded.deb'
         subprocess.run(['dpkg-deb','-Zxz','--build','--root-owner-group',str(stage),str(output)],
                        check=True,stdout=subprocess.DEVNULL)
@@ -143,7 +143,7 @@ def rebrand_deb(package, tree):
 def msi_arguments(tree):
     path=Path(tree)/'branding.json'
     if not path.is_file():return []
-    snapshot=json.loads(path.read_text())
+    snapshot=json.loads(path.read_text(encoding='utf-8'))
     values=load(path,snapshot['repository'])['values']
     arp={}
     for name,field,value in (
@@ -164,7 +164,7 @@ def apply(tree, snapshot):
     generated.write_text('// Generated public build branding; no secrets.\n'
                          'const Map<String, String> customBranding = {\n' +
                          ''.join('  ' + dart_literal(k) + ': ' + dart_literal(v) + ',\n'
-                                 for k, v in sorted(values.items())) + '};\n')
+                                 for k, v in sorted(values.items())) + '};\n', encoding='utf-8')
     # Do not change APP_NAME, applicationId, bundle ID, service/URI, or payload paths.
     manifest = tree / 'flutter/android/app/src/main/AndroidManifest.xml'
     for key, original, resource in (
@@ -186,9 +186,9 @@ def apply(tree, snapshot):
         if entries:
             path = tree / 'flutter/android/app/src/main/res' / folder / 'custom_branding.xml'
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text('<resources>\n' + '\n'.join(entries) + '\n</resources>\n')
+            path.write_text('<resources>\n' + '\n'.join(entries) + '\n</resources>\n', encoding='utf-8')
     desktop = tree / 'res/rustdesk.desktop'
-    text = desktop.read_text()
+    text = desktop.read_text(encoding='utf-8')
     for key, field in (('CUSTOM_LINUX_APP_LABEL', 'Name'), ('CUSTOM_LINUX_GENERIC_NAME', 'GenericName'), ('CUSTOM_LINUX_COMMENT', 'Comment')):
         value = native(values, key)
         localized = values.get(key + '_ZH_CN')
@@ -203,19 +203,19 @@ def apply(tree, snapshot):
             if localized:
                 new += '\n' + field + '[zh_CN]=' + localized.replace('\\', '\\\\')
             text = text[:match.start()] + new + text[match.end():]
-    desktop.write_text(text)
+    desktop.write_text(text, encoding='utf-8')
     rc = tree / 'flutter/windows/runner/Runner.rc'
     for key, field in (('CUSTOM_DISPLAY_NAME', 'ProductName'), ('CUSTOM_DESCRIPTION', 'FileDescription'),
                        ('CUSTOM_WINDOWS_COMPANY_NAME', 'CompanyName')):
         value = native(values, key)
         if value:
-            text = rc.read_text()
+            text = rc.read_text(encoding='utf-8')
             escaped = value.replace('\\', '\\\\').replace('"', '\\"')
             pattern = r'(VALUE "' + field + r'", )"[^\n]*?(" "\\0")'
             text, count = re.subn(pattern, lambda m: m[1] + '"' + escaped + m[2], text)
             if count != 1:
                 raise ValueError('Missing Windows display field: ' + field)
-            rc.write_text(text)
+            rc.write_text(text, encoding='utf-8')
     name = native(values, 'CUSTOM_DISPLAY_NAME')
     if name:
         path = tree / 'flutter/macos/Runner/Info.plist'
@@ -236,14 +236,14 @@ def apply(tree, snapshot):
         replace_once(tree / 'res/msi/Package/UI/MyInstallDirDlg.wxs',
                      'Title="!(loc.InstallDirDlg_Title)"', 'Title=' + quoteattr(title))
     for path in (tree / 'res').glob('rpm*.spec'):
-        text = path.read_text()
+        text = path.read_text(encoding='utf-8')
         for field, value in (('Summary', native(values, 'CUSTOM_DESCRIPTION')),
                              ('Vendor', native(values, 'CUSTOM_MAINTAINER') or native(values, 'CUSTOM_PUBLISHER')),
                              ('URL', values.get('CUSTOM_WEBSITE_URL'))):
             if value:
                 text = re.sub(r'^' + field + r':[^\n]*', lambda _: field + ': ' + value.replace('%', '%%'), text, flags=re.M)
-        path.write_text(text)
-    (tree / 'branding.json').write_text(json.dumps(snapshot, sort_keys=True, indent=2) + '\n')
+        path.write_text(text, encoding='utf-8')
+    (tree / 'branding.json').write_text(json.dumps(snapshot, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     return hashlib.sha256((tree / 'branding.json').read_bytes()).hexdigest()
 
 
@@ -254,5 +254,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     snapshot = resolve(os.environ, args.repository)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(snapshot, sort_keys=True, indent=2) + '\n')
+    args.output.write_text(json.dumps(snapshot, sort_keys=True, indent=2) + '\n', encoding='utf-8')
     print('Public branding variables validated and frozen (values omitted)')

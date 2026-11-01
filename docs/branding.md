@@ -7,6 +7,8 @@ as unset. It freezes one validated public snapshot per build, then uses that
 snapshot for Standard/SOS, Dart text, platform display resources and package
 metadata. `branding.json`, generated Dart values and native resource changes are
 covered by the prepared-source inventory and `branding_sha256`.
+Branding files and prepared-source text checks explicitly use UTF-8 on every
+platform, including Windows hosts whose default text encoding is cp1252.
 
 ## Twenty base variables
 
