@@ -102,6 +102,24 @@ class BrandingTests(unittest.TestCase):
             for value in ['Package: rustdesk','Version: 1.5.1','Depends: libc6','Description: Radar support']:
                 self.assertIn(value,control)
 
+    def test_installer_patch_handles_row_and_table_layouts(self):
+        file='flutter/lib/desktop/pages/install_page.dart'
+        for generation in ('v1','v2'):
+            patch_text=(ROOT/'patchsets'/generation/PATCH).read_text(encoding='utf-8')
+            header='diff --git a/'+file+' b/'+file+'\n'
+            installer=header+patch_text.split(header,1)[1].split('diff --git ',1)[0]
+            for layout in ('Row','Table'):
+                with self.subTest(generation=generation,layout=layout),tempfile.TemporaryDirectory() as td:
+                    root=Path(td);target=root/file;target.parent.mkdir(parents=True)
+                    target.write_text("import 'dart:convert';\n"+'\n'*136+
+                        "            children: [\n              Text(translate('Installation'),\n"+
+                        "                  style: Theme.of(context).textTheme.headlineMedium),\n"+
+                        '              '+layout+'(\n',encoding='utf-8')
+                    subprocess.run(['git','apply','-'],cwd=root,input=installer,text=True,check=True,capture_output=True)
+                    result=target.read_text(encoding='utf-8')
+                    self.assertIn('...brandingInstallerHeading(',result)
+                    self.assertIn('              '+layout+'(',result)
+
     def test_both_generations_share_branding_implementation(self):
         for file in ['flutter/lib/common/branding.dart','flutter/lib/common/branding_values.dart']:
             left=new_file((ROOT/'patchsets/v1'/PATCH).read_text(encoding='utf-8'),file)
