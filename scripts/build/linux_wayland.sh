@@ -7,6 +7,11 @@ python3 scripts/signing/production_config.py inputs
 export BUILD_FLAVOR=unattended-wayland
 [[ "$VARIANT" == standard || "$VARIANT" == sos ]] || { echo 'PROVENANCE: unreviewed source variant'; exit 1; }
 python3 scripts/platform/wayland.py recipe --tree "$source" --arch "$PLATFORM_ARCH" --variant "$VARIANT" --out .work/linux-recipe
+python3 - "$source" "$VARIANT" <<'PYABOUT'
+import sys
+from scripts.source.update_identity import enable_wayland_about
+enable_wayland_about(sys.argv[1], sys.argv[2])
+PYABOUT
 python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --output .work/platform-profile.json
 triplet=$(python3 -c 'import json;print(json.load(open(".work/platform-profile.json"))["triplet"])')
 # Same small crate-type adjustment as the official Linux job, after input verification.

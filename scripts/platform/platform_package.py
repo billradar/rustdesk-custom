@@ -162,6 +162,8 @@ def prepare_deb(package, tree, unattended_variant=None):
 
 
 def create(tree,platform,arch,variant):
+ from scripts.source.update_identity import verify_about_identity
+ verify_about_identity(tree,unattended=os.environ.get('BUILD_FLAVOR')=='unattended-wayland')
  tree=Path(tree);values=configured();m=json.loads((tree/'source-manifest.json').read_text());profile=json.loads(Path('.work/platform-profile.json').read_text())
  if platform in ('linux','macos'):
   library=tree/('target/release/liblibrustdesk.so' if platform=='linux' else 'target/release/liblibrustdesk.dylib')

@@ -43,6 +43,8 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if not branding_path.is_file() or hashlib.sha256(branding_path.read_bytes()).hexdigest()!=manifest.get('branding_sha256'):
         raise ValueError('Branding snapshot differs from prepared-source identity')
     load_branding(branding_path,manifest['custom_repository'])
+    from scripts.source.update_identity import verify_about_identity
+    verify_about_identity(tree)
     contracts(tree,variant,patchset);check(tree)
     return manifest
 

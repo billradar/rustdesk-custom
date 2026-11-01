@@ -108,3 +108,19 @@ Wayland unattended DEBs apply public branding before their mandatory Standard/SO
 summary label. Their Description first line remains `RustDesk Wayland unattended
 (STANDARD)` or `RustDesk Wayland unattended (SOS)` for independent variant validation;
 other public metadata and payload remain subject to the existing branding rules.
+
+### About version and build variant
+
+Desktop and mobile About pages display the validated prepared-source identity.
+A Stable build shows `<upstream>-custom.<patch-revision>` (for example,
+`1.5.0-custom.v2.1`); CI/Nightly builds show `<upstream>-custom` without claiming
+a Stable revision. The variant is `Standard` or `SOS`. The dedicated Wayland
+unattended build adds ` + Wayland 无人值守` to that variant, after verifying the
+same-run prepared source and before compilation. An ordinary Linux build on a
+Wayland desktop does not receive this build-flavor label.
+
+The generated Dart constants are bound to the native update identity and source
+inventory. Packaging checks the expected ordinary/unattended display identity.
+Package/protocol versions, native `mainGetVersion` and update ordering are
+unchanged. Public branding Variables cannot override these identity fields.
+Previously built clients retain their existing About text until updated.

@@ -23,5 +23,40 @@ def write_identity(tree, *, repository, version, sha, variant, run, channel, rev
     destination = Path(tree) / "src/custom_update/build.json"
     if not destination.is_file() or destination.is_symlink():
         raise ValueError("Client update patch must be applied before identity injection")
-    destination.write_text(json.dumps(data, sort_keys=True, indent=2) + "\n")
+    about = Path(tree) / ABOUT_PATH
+    if not about.is_file() or about.is_symlink():
+        raise ValueError("About identity patch must be applied before identity injection")
+    destination.write_text(json.dumps(data, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+    about.write_text(about_source(data), encoding='utf-8')
     return data
+
+
+ABOUT_PATH = 'flutter/lib/common/custom_about_identity.dart'
+
+
+def about_source(identity, *, unattended=False):
+    version = identity['version'] + '-custom'
+    if identity.get('revision'):
+        version += '.' + identity['revision']
+    variant = {'standard': 'Standard', 'sos': 'SOS'}[identity['variant']]
+    return ('// Generated display identity; internal versions are unchanged.\n'
+            'const customAboutVersion = ' + json.dumps(version) + ';\n'
+            'const customAboutVariant = ' + json.dumps(variant) + ';\n'
+            'const customAboutWayland = ' + ('true' if unattended else 'false') + ';\n')
+
+
+def verify_about_identity(tree, *, unattended=False):
+    tree = Path(tree)
+    identity = json.loads((tree / 'src/custom_update/build.json').read_text(encoding='utf-8'))
+    about = tree / ABOUT_PATH
+    if about.is_symlink() or about.read_text(encoding='utf-8') != about_source(identity, unattended=unattended):
+        raise ValueError('PROVENANCE: About display differs from actual build identity')
+
+
+def enable_wayland_about(tree, variant):
+    tree = Path(tree)
+    verify_about_identity(tree)
+    identity = json.loads((tree / 'src/custom_update/build.json').read_text(encoding='utf-8'))
+    if variant not in ('standard', 'sos') or identity['variant'] != variant:
+        raise ValueError('PROVENANCE: About Wayland source variant mismatch')
+    (tree / ABOUT_PATH).write_text(about_source(identity, unattended=True), encoding='utf-8')

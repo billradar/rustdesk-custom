@@ -73,6 +73,9 @@ class ClientUpdateTests(unittest.TestCase):
             destination = tree / "src/custom_update/build.json"
             destination.parent.mkdir(parents=True)
             destination.write_text("{}", encoding='utf-8')
+            about = tree / 'flutter/lib/common/custom_about_identity.dart'
+            about.parent.mkdir(parents=True)
+            about.write_text("", encoding='utf-8')
             args = dict(repository="fork-owner/custom-client", version="1.5.1", sha="a" * 40, variant="standard", run="123",
                         channel="stable", revision="v2.6")
             self.assertEqual(write_identity(tree, **args)["revision"], "v2.6")
@@ -90,6 +93,34 @@ class ClientUpdateTests(unittest.TestCase):
             self.assertIsNone(write_identity(tree, **args)["revision"])
             with self.assertRaises(ValueError):
                 write_identity(tree, **(args | {"revision": "v2.6"}))
+
+    def test_about_identity_versions_variants_and_wayland_isolation(self):
+        from scripts.source.update_identity import ABOUT_PATH, about_source, enable_wayland_about, verify_about_identity
+        with tempfile.TemporaryDirectory() as directory:
+            tree=Path(directory)
+            native=tree/'src/custom_update/build.json';native.parent.mkdir(parents=True)
+            about=tree/ABOUT_PATH;about.parent.mkdir(parents=True)
+            native.write_text('{}');about.write_text('')
+            for variant,label in [('standard','Standard'),('sos','SOS')]:
+                for channel,revision,version in [('stable','v2.1','1.5.0-custom.v2.1'),
+                                                  ('nightly','','1.5.0-custom'),('ci','','1.5.0-custom')]:
+                    with self.subTest(variant=variant,channel=channel):
+                        data=write_identity(tree,repository='owner/repo',version='1.5.0',sha='a'*40,
+                                            variant=variant,run='123',channel=channel,revision=revision)
+                        before=native.read_bytes()
+                        self.assertIn('"'+version+'"',about.read_text())
+                        self.assertIn('"'+label+'"',about.read_text())
+                        self.assertIn('customAboutWayland = false',about.read_text())
+                        verify_about_identity(tree)
+                        with self.assertRaises(ValueError):enable_wayland_about(tree,'sos' if variant=='standard' else 'standard')
+                        enable_wayland_about(tree,variant)
+                        verify_about_identity(tree,unattended=True)
+                        self.assertIn('customAboutWayland = true',about.read_text())
+                        self.assertEqual(native.read_bytes(),before)
+                        self.assertEqual(data['version'],'1.5.0')
+                        with self.assertRaises(ValueError):verify_about_identity(tree)
+                        about.write_text(about_source(data).replace(version,'9.9.9-custom'))
+                        with self.assertRaises(ValueError):verify_about_identity(tree)
 
     def test_policy_with_real_rust_compiler(self):
         compiler = RUSTC or shutil.which("rustc")
