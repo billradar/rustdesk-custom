@@ -292,6 +292,8 @@ If you find a security issue, avoid publishing credentials, signing material, or
 
 ## License
 
-RustDesk Custom contains maintenance and automation code for RustDesk. RustDesk itself is licensed under its upstream project's license.
+Unless otherwise stated, original contributions to RustDesk Custom are licensed under the **GNU Affero General Public License, version 3 only** (`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full terms and [NOTICE.md](NOTICE.md) for attribution and scope.
 
-Please refer to the upstream RustDesk repository and the applicable files in this repository for the exact licensing terms of each component.
+RustDesk-derived patches and customized clients remain subject to the applicable upstream AGPL terms. Upstream and third-party code, dependencies and assets retain their respective licenses and copyright notices. This repository does not claim ownership of those contributions.
+
+When distributing customized binaries, provide access to their complete Corresponding Source as required by the license, including the exact upstream revision, custom modifications and necessary build scripts; a link to unmodified upstream source alone is insufficient.
