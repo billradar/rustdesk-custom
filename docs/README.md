@@ -13,6 +13,7 @@
 7. [Actions Summary Dashboard](actions-summary.md)：真实运行数据、状态含义、折叠证据与模拟测试隔离。
 8. [故障排查](troubleshooting.md)：按症状定位常见失败原因。
 9. [客户端更新](client-updates.md)：latest 更新来源、版本比较、附件校验及系统安装流程。
+10. [品牌文字定制](branding.md)：仓库变量、默认值、中英文覆盖及预留图片接口。
 
 ## 阅读和修改规则
 

@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "3efd3ff68de35f78177035785fc3ab5351d6c722cb3ea8a28f0d012cd1b16ad1",
+    "common": "95e61b0006e1f9ca4f9c63d761d73bb6445fbc646253b7477e7ac37d8ec4ee96",
     "sos": "d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34"
   },
   "runtime_ui": {
@@ -59,5 +59,10 @@
     "independent_update_signatures": "DEFERRED",
     "runtime_validation": "NOT TESTED",
     "repository": "embedded GITHUB_REPOSITORY; fork-aware"
+  },
+  "public_branding": {
+    "variables": "20 base, 24 optional language overrides, 5 reserved image interfaces",
+    "images": "UNCHANGED when unset; nonempty reserved inputs rejected",
+    "runtime_validation": "NOT TESTED"
   }
 }

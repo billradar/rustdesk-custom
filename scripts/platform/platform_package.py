@@ -190,6 +190,9 @@ def create(tree,platform,arch,variant):
    label_package(p,variant)
    name=package_name(version,variant,arch)
   else:name=f'{artifact_variant}-{p.name}'
+  if p.suffix=='.deb':
+   from scripts.source.branding import rebrand_deb
+   rebrand_deb(p,tree)
   shutil.copy2(p,dest/'packages'/name)
  if platform=='macos':
   # Validate the actual DMG bundle against the built Rust library on the macOS runner.

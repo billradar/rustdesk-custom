@@ -1,0 +1,174 @@
+diff --git a/flutter/lib/common/branding.dart b/flutter/lib/common/branding.dart
+new file mode 100644
+index 0000000..350ebcf
+--- /dev/null
++++ b/flutter/lib/common/branding.dart
+@@ -0,0 +1,53 @@
++import 'dart:ui' show PlatformDispatcher;
++import 'package:flutter/material.dart';
++import 'package:url_launcher/url_launcher_string.dart';
++import '../common.dart';
++import '../models/platform_model.dart';
++import 'branding_values.dart';
++
++String brandingText(String key, String fallback) {
++  var language = bind.mainGetLocalOption(key: 'lang');
++  if (language.isEmpty || language == 'default') {
++    language = PlatformDispatcher.instance.locale.toString();
++  }
++  language = language.toLowerCase().replaceAll('_', '-');
++  final suffix =
++      language.startsWith('zh') && !language.contains('tw') ? '_ZH_CN' : '_EN';
++  return customBranding['$key$suffix'] ?? customBranding[key] ?? fallback;
++}
++
++String brandingLink(String key, String fallback) =>
++    customBranding[key] ?? fallback;
++
++String brandingWindowTitle(String original) {
++  final name = brandingText('CUSTOM_DISPLAY_NAME', '');
++  return name.isEmpty ? original : original.replaceFirst('RustDesk', name);
++}
++
++List<Widget> brandingAboutDetails() {
++  final widgets = <Widget>[];
++  for (final key in [
++    'CUSTOM_DESCRIPTION',
++    'CUSTOM_CUSTOMIZATION_NOTICE',
++    'CUSTOM_MAINTAINER',
++    'CUSTOM_CONTACT_EMAIL'
++  ]) {
++    final text = brandingText(key, '');
++    if (text.isNotEmpty) {
++      widgets.add(ConstrainedBox(
++          constraints: const BoxConstraints(maxWidth: 360), child: Text(text)));
++    }
++  }
++  for (final entry in {
++    'CUSTOM_HELP_URL': 'Help',
++    'CUSTOM_SUPPORT_URL': 'Feedback'
++  }.entries) {
++    final url = brandingLink(entry.key, '');
++    if (url.isNotEmpty) {
++      widgets.add(TextButton(
++          onPressed: () => launchUrlString(url),
++          child: Text(translate(entry.value))));
++    }
++  }
++  return widgets;
++}
+diff --git a/flutter/lib/common/branding_values.dart b/flutter/lib/common/branding_values.dart
+new file mode 100644
+index 0000000..ba6493e
+--- /dev/null
++++ b/flutter/lib/common/branding_values.dart
+@@ -0,0 +1,2 @@
++// Defaults until public repository variables are frozen for a build.
++const Map<String, String> customBranding = {};
+diff --git a/flutter/lib/desktop/pages/desktop_setting_page.dart b/flutter/lib/desktop/pages/desktop_setting_page.dart
+index 8922e4a..9f65c51 100644
+--- a/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -1 +1,2 @@
++import '../../common/branding.dart';
+ import '../../common/widgets/custom_update.dart';
+@@ -2393,3 +2394,3 @@ class _AboutState extends State<_About> {
+         controller: scrollController,
+-        child: _Card(title: translate('About RustDesk'), children: [
++        child: _Card(title: brandingText('CUSTOM_ABOUT_TITLE', translate('About RustDesk')), children: [
+           Column(
+@@ -2400,2 +2401,3 @@ class _AboutState extends State<_About> {
+               ),
++              ...brandingAboutDetails(),
+               SelectionArea(
+@@ -2412,3 +2414,3 @@ class _AboutState extends State<_About> {
+                   onTap: () {
+-                    launchUrlString('https://rustdesk.com/privacy.html');
++                    launchUrlString(brandingLink('CUSTOM_PRIVACY_URL', 'https://rustdesk.com/privacy.html'));
+                   },
+@@ -2420,3 +2422,3 @@ class _AboutState extends State<_About> {
+                   onTap: () {
+-                    launchUrlString('https://rustdesk.com');
++                    launchUrlString(brandingLink('CUSTOM_WEBSITE_URL', 'https://rustdesk.com'));
+                   },
+@@ -2442,3 +2444,3 @@ class _AboutState extends State<_About> {
+                           Text(
+-                            translate('Slogan_tip'),
++                            brandingText('CUSTOM_SLOGAN', translate('Slogan_tip')),
+                             style: TextStyle(
+diff --git a/flutter/lib/desktop/pages/install_page.dart b/flutter/lib/desktop/pages/install_page.dart
+index fe94b38..3933991 100644
+--- a/flutter/lib/desktop/pages/install_page.dart
++++ b/flutter/lib/desktop/pages/install_page.dart
+@@ -1 +1,2 @@
++import '../../common/branding.dart';
+ import 'dart:convert';
+@@ -138,4 +139,6 @@ class _InstallPageBodyState extends State<_InstallPageBody>
+             children: [
+-              Text(translate('Installation'),
++              Text(brandingText('CUSTOM_INSTALLER_TITLE', translate('Installation')),
+                   style: Theme.of(context).textTheme.headlineMedium),
++              if (brandingText('CUSTOM_INSTALLER_DESCRIPTION', '').isNotEmpty)
++                Text(brandingText('CUSTOM_INSTALLER_DESCRIPTION', '')),
+               Row(
+diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
+index 8ea6042..92a3210 100644
+--- a/flutter/lib/main.dart
++++ b/flutter/lib/main.dart
+@@ -1 +1,2 @@
++import 'common/branding.dart';
+ import 'dart:async';
+@@ -176,3 +177,3 @@ void runMainApp(bool startService) async {
+     windowManager.setOpacity(1);
+-    windowManager.setTitle(getWindowName());
++    windowManager.setTitle(brandingWindowTitle(getWindowName()));
+     // Do not use `windowManager.setResizable()` here.
+@@ -199,3 +200,3 @@ void runMultiWindow(
+   await initEnv(appType);
+-  final title = getWindowName();
++  final title = brandingWindowTitle(getWindowName());
+   // set prevent close to true, we handle close event manually
+@@ -497,3 +498,3 @@ class _AppState extends State<App> with WidgetsBindingObserver {
+               ? '${bind.mainGetAppNameSync()} Web Client V2 (Preview)'
+-              : bind.mainGetAppNameSync(),
++              : brandingText('CUSTOM_DISPLAY_NAME', bind.mainGetAppNameSync()),
+           theme: MyTheme.lightTheme,
+diff --git a/flutter/lib/mobile/pages/settings_page.dart b/flutter/lib/mobile/pages/settings_page.dart
+index 0a41a54..45341d5 100644
+--- a/flutter/lib/mobile/pages/settings_page.dart
++++ b/flutter/lib/mobile/pages/settings_page.dart
+@@ -1 +1,2 @@
++import '../../common/branding.dart';
+ import '../../common/widgets/custom_update.dart';
+@@ -39,3 +40,3 @@ class SettingsPage extends StatefulWidget implements PageShape {
+
+-const url = 'https://rustdesk.com/';
++final url = brandingLink('CUSTOM_WEBSITE_URL', 'https://rustdesk.com/');
+
+@@ -968,3 +969,3 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+                   padding: EdgeInsets.symmetric(vertical: 8),
+-                  child: Text('rustdesk.com',
++                  child: Text(brandingLink('CUSTOM_WEBSITE_URL', 'https://rustdesk.com/'),
+                       style: TextStyle(
+@@ -993,3 +994,3 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+               onPressed: (context) =>
+-                  launchUrlString('https://rustdesk.com/privacy.html'),
++                  launchUrlString(brandingLink('CUSTOM_PRIVACY_URL', 'https://rustdesk.com/privacy.html')),
+               leading: Icon(Icons.privacy_tip),
+@@ -1101,8 +1102,9 @@ void showAbout(OverlayDialogManager dialogManager) {
+     return CustomAlertDialog(
+-      title: Text(translate('About RustDesk')),
++      title: Text(brandingText('CUSTOM_ABOUT_TITLE', translate('About RustDesk'))),
+       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
+         Text('Version: $version'),
++        ...brandingAboutDetails(),
+         InkWell(
+             onTap: () async {
+-              const url = 'https://rustdesk.com/';
++              final url = brandingLink('CUSTOM_WEBSITE_URL', 'https://rustdesk.com/');
+               await launchUrl(Uri.parse(url));
+@@ -1111,3 +1113,3 @@ void showAbout(OverlayDialogManager dialogManager) {
+               padding: EdgeInsets.symmetric(vertical: 8),
+-              child: Text('rustdesk.com',
++              child: Text(brandingLink('CUSTOM_WEBSITE_URL', 'https://rustdesk.com/'),
+                   style: TextStyle(
