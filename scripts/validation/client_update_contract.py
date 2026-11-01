@@ -9,6 +9,7 @@ import unittest
 
 import yaml
 from scripts.source.update_identity import write_identity
+from scripts.release.qualification import build_release_body
 from scripts.validation.cm_window_contract import new_file
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,8 +34,17 @@ def source_contract(tree):
 class ClientUpdateTests(unittest.TestCase):
     def test_both_patch_generations_share_the_same_update_policy(self):
         for name in ("src/custom_update/mod.rs", "src/custom_update/policy.rs",
+                     "src/custom_update/stable_release_fixture.txt",
                      "flutter/lib/common/widgets/custom_update.dart"):
             self.assertEqual(patch_file("v1", name), patch_file("v2", name))
+
+    def test_parser_fixture_is_generated_by_the_real_stable_publisher(self):
+        actual = build_release_body(
+            "Official release notes used by the producer/consumer regression.", [
+                "upstream_repository=rustdesk/rustdesk", "upstream_tag=1.5.1",
+                "upstream_sha=" + "a" * 40, "patchset=v2",
+                "custom_release_revision=v2.6", "automation_state=complete"])
+        self.assertEqual(actual, patch_file("v2", "src/custom_update/stable_release_fixture.txt"))
 
     def test_latest_only_and_no_beta_ui(self):
         module = patch_file("v2", "src/custom_update/mod.rs")
@@ -83,6 +93,8 @@ class ClientUpdateTests(unittest.TestCase):
             tree = Path(directory)
             policy = tree / "policy.rs"
             policy.write_text(patch_file("v2", "src/custom_update/policy.rs"))
+            (tree / "stable_release_fixture.txt").write_text(
+                patch_file("v2", "src/custom_update/stable_release_fixture.txt"))
             executable = tree / "policy-tests"
             subprocess.run([compiler, "--edition=2021", "--test", str(policy),
                             "-o", str(executable)], check=True)

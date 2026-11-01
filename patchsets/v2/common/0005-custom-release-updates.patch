@@ -327,10 +327,10 @@ index 0000000..6846bf8
 +{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0"}
 diff --git a/src/custom_update/mod.rs b/src/custom_update/mod.rs
 new file mode 100644
-index 0000000..1d1322f
+index 0000000..3af803c
 --- /dev/null
 +++ b/src/custom_update/mod.rs
-@@ -0,0 +1,590 @@
+@@ -0,0 +1,560 @@
 +//! Custom Release updates: GitHub HTTPS/API integrity only.
 +//! Independent update signatures are explicitly deferred; APK signatures remain unchanged.
 +use hbb_common::{anyhow::anyhow, bail, ResultType};
@@ -471,39 +471,9 @@ index 0000000..1d1322f
 +    Ok(())
 +}
 +fn source(r: &Release) -> ResultType<String> {
-+    // Only read the repository-owned metadata block, not upstream release prose.
-+    let body = r.body.as_deref().unwrap_or("");
-+    let marker = "<!-- rustdesk-custom-release-metadata\n";
-+    if body.matches(marker).count() != 1 {
-+        bail!("Release identity missing or duplicated");
-+    }
-+    let block = body
-+        .split_once(marker)
-+        .unwrap()
-+        .1
-+        .split_once("-->")
-+        .ok_or_else(|| anyhow!("Release identity incomplete"))?
-+        .0;
-+    let states: Vec<_> = block
-+        .lines()
-+        .filter(|l| l.starts_with("automation_state="))
-+        .collect();
-+    if states.len() != 1
-+        || !matches!(
-+            states[0],
-+            "automation_state=complete" | "automation_state=published"
-+        )
-+    {
-+        bail!("Release assets are not qualified complete");
-+    }
-+    let values: Vec<_> = block
-+        .lines()
-+        .filter_map(|l| l.strip_prefix("Upstream SHA: "))
-+        .collect();
-+    if values.len() != 1 || !policy::hex(values[0], 40) {
-+        bail!("Release source identity invalid");
-+    }
-+    Ok(values[0].to_owned())
++    policy::metadata_source(r.body.as_deref().unwrap_or(""))
++        .map(str::to_owned)
++        .ok_or_else(|| anyhow!("Release source identity missing, ambiguous or incomplete"))
 +}
 +fn package_format() -> ResultType<&'static str> {
 +    #[cfg(target_os = "windows")]
@@ -923,10 +893,10 @@ index 0000000..1d1322f
 +}
 diff --git a/src/custom_update/policy.rs b/src/custom_update/policy.rs
 new file mode 100644
-index 0000000..33af1fe
+index 0000000..2e31ce2
 --- /dev/null
 +++ b/src/custom_update/policy.rs
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,230 @@
 +//! Release policy shared by both supported patch generations.
 +pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
 +    let parts: Vec<_> = value.split('.').collect();
@@ -974,6 +944,40 @@ index 0000000..33af1fe
 +            .bytes()
 +            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 +}
++/// Accept both the current Stable publisher and historical private drafts.
++/// Metadata-looking strings in upstream notes must never supply source identity.
++pub fn metadata_source(body: &str) -> Option<&str> {
++    const STABLE: &str = "\n\n## Custom release metadata\n\n";
++    const LEGACY: &str = "<!-- rustdesk-custom-release-metadata\n";
++    let (block, source_prefix) = match (body.matches(STABLE).count(), body.matches(LEGACY).count())
++    {
++        (1, 0) => (body.split_once(STABLE)?.1, "upstream_sha="),
++        (0, 1) => (
++            body.split_once(LEGACY)?.1.split_once("-->")?.0,
++            "Upstream SHA: ",
++        ),
++        _ => return None,
++    };
++    let mut states = block
++        .lines()
++        .filter(|line| line.starts_with("automation_state="));
++    if !matches!(
++        states.next(),
++        Some("automation_state=complete" | "automation_state=published")
++    ) || states.next().is_some()
++    {
++        return None;
++    }
++    let mut sources = block
++        .lines()
++        .filter_map(|line| line.strip_prefix(source_prefix));
++    let source = sources.next()?;
++    if sources.next().is_some() || !hex(source, 40) {
++        return None;
++    }
++    Some(source)
++}
++
 +pub fn package_name(
 +    version: &str,
 +    variant: &str,
@@ -1029,6 +1033,46 @@ index 0000000..33af1fe
 +mod tests {
 +    use super::*;
 +    #[test]
++    fn actual_stable_publisher_metadata() {
++        let body = include_str!("stable_release_fixture.txt");
++        assert_eq!(
++            metadata_source(body),
++            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
++        );
++        assert!(metadata_source(
++            &body.replace("automation_state=complete", "automation_state=published")
++        )
++        .is_some());
++        assert!(metadata_source(
++            &body.replace("automation_state=complete", "automation_state=uploading")
++        )
++        .is_none());
++        assert!(metadata_source(&body.repeat(2)).is_none());
++        assert!(
++            metadata_source(&body.replace("upstream_sha=", "upstream_sha=bad\nupstream_sha="))
++                .is_none()
++        );
++        assert!(metadata_source(&format!("{body}automation_state=uploading\n")).is_none());
++        assert!(metadata_source(
++            "upstream_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nautomation_state=complete"
++        )
++        .is_none());
++    }
++    #[test]
++    fn historical_draft_metadata_is_still_supported() {
++        let body = "<!-- rustdesk-custom-release-metadata\nUpstream SHA: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nautomation_state=complete\n-->\n";
++        assert_eq!(
++            metadata_source(body),
++            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
++        );
++        assert!(metadata_source(&body.repeat(2)).is_none());
++        assert!(metadata_source(&format!(
++            "{}{body}",
++            include_str!("stable_release_fixture.txt")
++        ))
++        .is_none());
++    }
++    #[test]
 +    fn numeric_revisions() {
 +        assert!(
 +            stable_tag("v1.5.1-custom.v2.10").unwrap().1
@@ -1083,6 +1127,22 @@ index 0000000..33af1fe
 +        assert!(package_name("1.5.1", "standard", "windows", "x86_64", true, "exe").is_none());
 +    }
 +}
+diff --git a/src/custom_update/stable_release_fixture.txt b/src/custom_update/stable_release_fixture.txt
+new file mode 100644
+index 0000000..f0c5bbd
+--- /dev/null
++++ b/src/custom_update/stable_release_fixture.txt
+@@ -0,0 +1,10 @@
++Official release notes used by the producer/consumer regression.
++
++## Custom release metadata
++
++upstream_repository=rustdesk/rustdesk
++upstream_tag=1.5.1
++upstream_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++patchset=v2
++custom_release_revision=v2.6
++automation_state=complete
 diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
 index 9b47926..452bbd5 100644
 --- a/src/flutter_ffi.rs
