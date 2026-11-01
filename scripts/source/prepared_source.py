@@ -19,7 +19,7 @@ def inventory(tree):
     return result
 
 def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
-    manifest=json.loads((tree/'source-manifest.json').read_text())
+    manifest=json.loads((tree/'source-manifest.json').read_text(encoding='utf-8'))
     expected={'variant':variant,'upstream_sha':sha,'patchset':patchset,'custom_repository_sha':custom_sha,
               'prepare_workflow_run':str(run_id),'upstream_repository':'rustdesk/rustdesk'}
     for k,v in expected.items():
@@ -31,7 +31,7 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if actual!=manifest['files']:raise ValueError('Prepared source file inventory mismatch')
     identity_path=tree/'src/custom_update/build.json'
     if not identity_path.is_file():raise ValueError('Client update identity missing')
-    update_identity=json.loads(identity_path.read_text())
+    update_identity=json.loads(identity_path.read_text(encoding='utf-8'))
     if update_identity!=manifest.get('client_update_identity'):
         raise ValueError('Client update identity differs from prepared-source manifest')
     if any(update_identity[k]!=manifest[v] for k,v in
@@ -118,18 +118,18 @@ def prepare(base,output,ref,sha,name,bridge):
                   'branding_sha256':branding_sha256,
                   'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   'build_adapter_signature':profile['signature'],'files':inventory(tree)}
-        (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n')
+        (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n', encoding='utf-8')
         verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'])
         bundle=output/('prepared-'+variant);bundle.mkdir()
         archive=bundle/'source.tar.gz'
         with tarfile.open(archive,'w:gz') as tar:tar.add(tree,arcname='source')
         shutil.copy2(tree/'source-manifest.json',bundle/'source-manifest.json')
-        (bundle/'SHA256SUMS').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  source.tar.gz\n')
+        (bundle/'SHA256SUMS').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  source.tar.gz\n', encoding='utf-8')
     shutil.rmtree(common)
 
 def unpack(bundle,destination,variant,sha,name):
     archive=bundle/'source.tar.gz';digest=hashlib.sha256(archive.read_bytes()).hexdigest()
-    if (bundle/'SHA256SUMS').read_text()!=digest+'  source.tar.gz\n':raise ValueError('Prepared archive checksum mismatch')
+    if (bundle/'SHA256SUMS').read_text(encoding='utf-8')!=digest+'  source.tar.gz\n':raise ValueError('Prepared archive checksum mismatch')
     destination.mkdir(parents=True,exist_ok=False)
     with tarfile.open(archive) as tar:
         members=tar.getmembers()

@@ -26,7 +26,7 @@ def new_file(patch, path):
 
 
 def source_contract(tree):
-    read = lambda p: (tree / p).read_text()
+    read = lambda p: (tree / p).read_text(encoding='utf-8')
     main = read('flutter/lib/main.dart')
     cm = main[main.index('final _cmWindowPolicy'):main.index('void _runApp(')]
     require('minimize()' not in cm, 'CM must hide directly without a minimize transition')
@@ -119,8 +119,8 @@ void main() {
 def dart_contract(policy, dart):
     with tempfile.TemporaryDirectory(prefix='rustdesk-cm-policy-') as folder:
         root = Path(folder)
-        (root / 'policy.dart').write_text(policy)
-        (root / 'check.dart').write_text("import 'policy.dart';\n" + DART_CASES)
+        (root / 'policy.dart').write_text(policy, encoding='utf-8')
+        (root / 'check.dart').write_text("import 'policy.dart';\n" + DART_CASES, encoding='utf-8')
         subprocess.run([dart, 'run', str(root / 'check.dart')], check=True, cwd=root)
 
 
@@ -131,7 +131,7 @@ def main():
     args = parser.parse_args()
     policies = []
     for gen in ('v1', 'v2'):
-        patch = (ROOT / 'patchsets' / gen / 'common/0004-cm-background-window.patch').read_text()
+        patch = (ROOT / 'patchsets' / gen / 'common/0004-cm-background-window.patch').read_text(encoding='utf-8')
         policies.append(new_file(patch, POLICY))
     require(policies[0] == policies[1], 'policy must be identical across patch generations')
     if args.source:
