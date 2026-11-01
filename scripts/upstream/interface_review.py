@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Record unknown interfaces and propose report-only PRs; never approve profiles."""
 import argparse
+import base64
 import difflib
 import json
 import os
@@ -95,19 +96,67 @@ def request(path, method='GET', data=None, missing=False):
         raise
 
 
-def validate_packet(p):
+def validate_report(p):
+    """Validate report contents without claiming they belong to the current run."""
+    if not isinstance(p,dict):raise ValueError('Invalid review report')
     if p.get('schema')!=SCHEMA or p.get('approval')!='REQUIRED / NOT APPROVED' or p.get('upstream_repository')!='rustdesk/rustdesk':
         raise ValueError('Invalid/unapproved review packet')
     for key in ['upstream_sha','custom_repository_sha']:
         if not re.fullmatch('[0-9a-f]{40}',str(p.get(key,''))):raise ValueError('Invalid packet identity')
+    if not re.fullmatch('[1-9][0-9]*',str(p.get('workflow_run',''))):raise ValueError('Invalid report run')
+    if not isinstance(p.get('checks'),dict):raise ValueError('Missing report checks')
+    if p['checks'].get('interface')!='UNKNOWN / BLOCKED':raise ValueError('Review must not claim approval')
+    if p['checks'].get('rust_compile')!='NOT RUN' or p['checks'].get('bridge')!='NOT RUN' or p['checks'].get('flutter_analyze')!='NOT RUN' or p['checks'].get('runtime')!='NOT TESTED':
+        raise ValueError('Review must not invent compilation/runtime validation')
+    if p.get('observed_profile') is not None:
+        if (not isinstance(p['observed_profile'],dict) or not isinstance(p.get('critical'),dict)
+                or not re.fullmatch('[0-9a-f]{64}',str(p['observed_profile'].get('signature','')))
+                or build_adapter.digest(p['critical'])!=p['observed_profile']['signature']):
+            raise ValueError('Observed interface signature mismatch')
+
+
+def validate_packet(p):
+    validate_report(p)
     if p['custom_repository_sha']!=os.environ['GITHUB_SHA'] or str(p['workflow_run'])!=os.environ['GITHUB_RUN_ID']:
         raise ValueError('Review packet is not from this exact run/commit')
-    if p['checks']['interface']!='UNKNOWN / BLOCKED':raise ValueError('Review must not claim approval')
-    if p['checks']['rust_compile']!='NOT RUN' or p['checks']['bridge']!='NOT RUN' or p['checks']['flutter_analyze']!='NOT RUN' or p['checks']['runtime']!='NOT TESTED':
-        raise ValueError('Review must not invent compilation/runtime validation')
-    if p.get('observed_profile'):
-        if build_adapter.digest(p['critical'])!=p['observed_profile']['signature']:
-            raise ValueError('Observed interface signature mismatch')
+
+
+def report_identity(packet):
+    return packet['observed_profile']['signature'] if packet.get('observed_profile') else packet['upstream_sha']
+
+
+def recover_report(current, head, signature):
+    """Read an immutable, report-only branch; never rewrite its historical data."""
+    if not re.fullmatch('[0-9a-f]{40}',head):raise ValueError('Invalid review branch head')
+    compare=request('compare/'+current+'...'+head)
+    files=compare.get('files',[])
+    if (len(files)!=1 or files[0].get('status')!='added'
+            or not re.fullmatch(r'docs/upstream-interface-reviews/[0-9a-f]{40}\.json',files[0].get('filename',''))):
+        raise ValueError('Existing review branch has unexpected changes; refusing reuse')
+    path=files[0]['filename']
+    tree_sha=request('git/commits/'+head)['tree']['sha']
+    tree=request('git/trees/'+tree_sha+'?recursive=1')
+    entries=[entry for entry in tree.get('tree',[]) if entry.get('path')==path]
+    if (tree.get('truncated',True) or len(entries)!=1 or entries[0].get('mode')!='100644'
+            or entries[0].get('type')!='blob' or entries[0].get('sha')!=files[0].get('sha')):
+        raise ValueError('Existing review report is not a verified regular JSON file')
+    blob=request('git/blobs/'+entries[0]['sha'])
+    if (blob.get('encoding')!='base64' or not isinstance(blob.get('size'),int)
+            or not 0<blob['size']<=1024*1024 or len(blob.get('content',''))>2*1024*1024):
+        raise ValueError('Existing review report is oversized or invalid')
+    raw=base64.b64decode(''.join(blob['content'].split()),validate=True)
+    if len(raw)!=blob['size']:raise ValueError('Existing review report size mismatch')
+    report=json.loads(raw)
+    validate_report(report)
+    if path!='docs/upstream-interface-reviews/'+report['upstream_sha']+'.json' or report_identity(report)!=signature:
+        raise ValueError('Existing review report has a different source or interface identity')
+    run=request('actions/runs/'+str(report['workflow_run']))
+    if (run.get('head_sha')!=report['custom_repository_sha'] or run.get('head_branch')!='main'
+            or run.get('event') not in ('schedule','workflow_dispatch')
+            or run.get('path')!='.github/workflows/upstream-main-compatibility.yml'
+            or run.get('repository',{}).get('full_name')!=REPOSITORY):
+        raise ValueError('Existing review report is not from the trusted discovery workflow')
+    return report
 
 
 def publish(packet):
@@ -115,7 +164,7 @@ def publish(packet):
     if os.environ.get('GITHUB_REPOSITORY')!=REPOSITORY or os.environ.get('GITHUB_REF')!='refs/heads/main' or os.environ.get('GITHUB_EVENT_NAME') not in ['schedule','workflow_dispatch']:
         raise ValueError('Review PR writes require protected main scheduled/manual context')
     validate_packet(packet)
-    signature=packet.get('observed_profile',{}).get('signature') if packet.get('observed_profile') else packet['upstream_sha']
+    signature=report_identity(packet)
     if not re.fullmatch('[0-9a-f]{40}|[0-9a-f]{64}',signature):raise ValueError('Invalid review identity')
     branch='automation/upstream-interface-'+signature
     owner=REPOSITORY.split('/')[0]
@@ -126,23 +175,32 @@ def publish(packet):
     path='docs/upstream-interface-reviews/'+packet['upstream_sha']+'.json'
     current=request('git/ref/heads/main')['object']['sha']
     if current!=os.environ['GITHUB_SHA']:raise ValueError('Main advanced; retry on its current trusted revision')
-    if request('git/ref/heads/'+branch,missing=True):
+    ref=request('git/ref/heads/'+branch,missing=True)
+    report=packet
+    if ref:
         # Recover a PR-creation failure without resetting/replacing the branch.
-        compare=request('compare/main...'+branch)
-        files=compare.get('files',[])
-        if len(files)!=1 or files[0].get('filename')!=path or files[0].get('status')!='added':
-            raise ValueError('Existing review branch has unexpected changes; refusing reuse')
+        head=ref['object']['sha']
+        report=recover_report(current,head,signature)
     else:
         parent=request('git/commits/'+current)
         tree=request('git/trees','POST',{'base_tree':parent['tree']['sha'],'tree':[{'path':path,'mode':'100644','type':'blob','content':json.dumps(packet,indent=2)+'\n'}]})
         commit=request('git/commits','POST',{'message':'docs: record unknown upstream interface '+packet['upstream_sha'][:12],
             'tree':tree['sha'],'parents':[current]})
         request('git/refs','POST',{'ref':'refs/heads/'+branch,'sha':commit['sha']})
-    body=('Unknown upstream interface detected at `'+packet['upstream_sha']+'`.\n\n'
+        head=commit['sha']
+    if (request('git/ref/heads/main')['object']['sha']!=current
+            or request('git/ref/heads/'+branch)['object']['sha']!=head):
+        raise ValueError('Review refs changed during validation; retry without overwriting them')
+    body=('Unknown upstream interface detected at `'+report['upstream_sha']+'`.\n\n'
         'This report records the observed signature, reviewed-baseline diff and independent Standard/SOS patch/application structure checks. '
         'It does not modify the approved profile list, select a new patch generation, authorize publication, or claim successful compilation/runtime testing. '
         'A maintainer must inspect the changes and explicitly approve the interface before the normal gate can pass.\n\n'
-        'Read-only discovery run: https://github.com/'+REPOSITORY+'/actions/runs/'+os.environ['GITHUB_RUN_ID'])
+        'Stored report discovery run: https://github.com/'+REPOSITORY+'/actions/runs/'+str(report['workflow_run']))
+    if report is not packet:
+        body+=('\n\nRecovered the existing report without changing its branch or contents. '
+            'Current discovery at `'+packet['upstream_sha']+'` has the same review identity; '
+            'the stored checks apply only to the historical report source, not the current discovery.\n\n'
+            'Current discovery run: https://github.com/'+REPOSITORY+'/actions/runs/'+os.environ['GITHUB_RUN_ID'])
     pr=request('pulls','POST',{'title':'Review unknown upstream build interface '+signature[:12],
         'head':branch,'base':'main','body':body,'draft':True})
     print('Created review draft: '+pr['html_url']);return pr['html_url']
