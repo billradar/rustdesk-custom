@@ -189,6 +189,7 @@ jobs:
         python3 -m scripts.validation.client_update_contract
 
         python3 -m scripts.validation.branding_contract
+
         python3 -m scripts.validation.windows_printer_contract
 
         '
