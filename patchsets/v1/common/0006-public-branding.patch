@@ -3,13 +3,14 @@ new file mode 100644
 index 0000000..350ebcf
 --- /dev/null
 +++ b/flutter/lib/common/branding.dart
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,69 @@
 +import 'dart:ui' show PlatformDispatcher;
 +import 'package:flutter/material.dart';
 +import 'package:url_launcher/url_launcher_string.dart';
 +import '../common.dart';
 +import '../models/platform_model.dart';
 +import 'branding_values.dart';
++import 'custom_about_identity.dart';
 +
 +String brandingText(String key, String fallback) {
 +  var language = bind.mainGetLocalOption(key: 'lang');
@@ -22,6 +23,9 @@ index 0000000..350ebcf
 +  return customBranding['$key$suffix'] ?? customBranding[key] ?? fallback;
 +}
 +
++String brandingVersion(String upstream) =>
++    customAboutVersion.isEmpty ? upstream : customAboutVersion;
++
 +String brandingLink(String key, String fallback) =>
 +    customBranding[key] ?? fallback;
 +
@@ -31,7 +35,10 @@ index 0000000..350ebcf
 +}
 +
 +List<Widget> brandingAboutDetails() {
-+  final widgets = <Widget>[];
++  final widgets = <Widget>[
++    if (customAboutVariant.isNotEmpty)
++      Text('Variant: $customAboutVariant${customAboutWayland ? " + Wayland 无人值守" : ""}'),
++  ];
 +  for (final key in [
 +    'CUSTOM_DESCRIPTION',
 +    'CUSTOM_CUSTOMIZATION_NOTICE',
@@ -66,6 +73,15 @@ index 0000000..350ebcf
 +    if (description.isNotEmpty) Text(description),
 +  ];
 +}
+diff --git a/flutter/lib/common/custom_about_identity.dart b/flutter/lib/common/custom_about_identity.dart
+new file mode 100644
+--- /dev/null
++++ b/flutter/lib/common/custom_about_identity.dart
+@@ -0,0 +1,4 @@
++// Replaced by the validated prepared-source build identity.
++const customAboutVersion = '';
++const customAboutVariant = '';
++const customAboutWayland = false;
 diff --git a/flutter/lib/common/branding_values.dart b/flutter/lib/common/branding_values.dart
 new file mode 100644
 index 0000000..ba6493e
@@ -86,10 +102,13 @@ index 8922e4a..9f65c51 100644
 -        child: _Card(title: translate('About RustDesk'), children: [
 +        child: _Card(title: brandingText('CUSTOM_ABOUT_TITLE', translate('About RustDesk')), children: [
            Column(
-@@ -2400,2 +2401,3 @@ class _AboutState extends State<_About> {
+@@ -2400,4 +2401,5 @@ class _AboutState extends State<_About> {
                ),
 +              ...brandingAboutDetails(),
                SelectionArea(
+-                  child: Text('${translate('Version')}: $version')
++                  child: Text('${translate('Version')}: ${brandingVersion(version)}')
+                       .marginSymmetric(vertical: 4.0)),
 @@ -2412,3 +2414,3 @@ class _AboutState extends State<_About> {
                    onTap: () {
 -                    launchUrlString('https://rustdesk.com/privacy.html');
@@ -166,7 +185,8 @@ index 0a41a54..45341d5 100644
 -      title: Text(translate('About RustDesk')),
 +      title: Text(brandingText('CUSTOM_ABOUT_TITLE', translate('About RustDesk'))),
        content: Wrap(direction: Axis.vertical, spacing: 12, children: [
-         Text('Version: $version'),
+-        Text('Version: $version'),
++        Text('Version: ${brandingVersion(version)}'),
 +        ...brandingAboutDetails(),
          InkWell(
              onTap: () async {

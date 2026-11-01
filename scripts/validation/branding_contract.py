@@ -24,6 +24,11 @@ def source_contract(tree):
     if (tree/'flutter/lib/common/branding.dart').read_text(encoding='utf-8')!=expected:
         raise ValueError('Branding helper differs from reviewed patch')
 
+    for file in ('flutter/lib/desktop/pages/desktop_setting_page.dart',
+                 'flutter/lib/mobile/pages/settings_page.dart'):
+        if 'brandingVersion(version)' not in (tree/file).read_text(encoding='utf-8'):
+            raise ValueError('About page is missing custom display version: '+file)
+
 
 class BrandingTests(unittest.TestCase):
     def test_variable_count_and_workflow_empty_fallbacks(self):
