@@ -224,7 +224,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(jobs['release']['needs'],'aggregate')
         self.assertEqual(jobs['draft']['needs'],'aggregate')
         self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
-        self.assertIn('--discovery-only',jobs['resolve']['steps'][1]['run'])
+        self.assertIn('--discovery-only',next(s for s in jobs['resolve']['steps'] if s.get('id')=='resolve')['run'])
         for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
             self.assertNotIn('qualification',str(jobs[name].get('needs',[])))
 

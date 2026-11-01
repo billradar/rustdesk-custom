@@ -342,6 +342,60 @@ class JobLogScanTests(unittest.TestCase):
         with patch.object(production,'gh',side_effect=subprocess.CalledProcessError(1,['gh','api'])), self.assertRaises(subprocess.CalledProcessError):
             production.scan_job_log(12)
 
+class ReleaseAppContractTests(unittest.TestCase):
+    def test_configuration_rejects_missing_values_without_exposing_them(self):
+        from scripts.release.app_credentials import require_configuration
+        require_configuration('Iv1.example', 'true')
+        for client,key in [('', 'true'),('  ','true'),('Iv1.example','false'),('Iv1.example','')]:
+            with self.subTest(client=client,key=key),self.assertRaisesRegex(ValueError,'Release App configuration missing'):
+                require_configuration(client,key)
+
+    def test_token_is_short_lived_repo_scoped_and_node24_pinned(self):
+        import yaml
+        root=Path(__file__).resolve().parents[2]
+        action=yaml.safe_load((root/'.github/actions/release-app-token/action.yml').read_text())
+        steps=action['runs']['steps']
+        self.assertEqual(len(steps),1)
+        self.assertEqual(steps[0]['uses'],'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1')
+        inputs=steps[0]['with']
+        self.assertEqual(inputs['owner'],'${{ github.repository_owner }}')
+        self.assertEqual(inputs['repositories'],'${{ github.event.repository.name }}')
+        self.assertEqual({k:v for k,v in inputs.items() if k.startswith('permission-')},
+                         {'permission-contents':'write','permission-workflows':'write','permission-actions':'read'})
+        self.assertNotIn('skip-token-revoke',inputs)
+
+    def test_app_credentials_only_reach_gated_release_steps(self):
+        import yaml
+        root=Path(__file__).resolve().parents[2]
+        allowed={('tag.yml','draft'),('tag.yml','release'),('tag.yml','publish-existing'),('nightly.yml','draft')}
+        found=set()
+        for path in (root/'.github/workflows').glob('*.yml'):
+            workflow=yaml.safe_load(path.read_text())
+            for name,job in workflow['jobs'].items():
+                steps=job.get('steps',[])
+                token_steps=[(i,x) for i,x in enumerate(steps) if x.get('uses')=='./.github/actions/release-app-token']
+                if token_steps:
+                    found.add((path.name,name))
+                    self.assertIn((path.name,name),allowed)
+                    self.assertIn('workflow_dispatch',job['if'])
+                    self.assertIn('refs/heads/main',job['if'])
+                    self.assertEqual(len(token_steps),1)
+                    index,step=token_steps[0]
+                    self.assertEqual(step['with']['private-key'],'${{ secrets.RELEASE_APP_PRIVATE_KEY }}')
+                    self.assertEqual(index,len(steps)-2)
+                    self.assertEqual(steps[-1]['env']['GH_TOKEN'],'${{ steps.release-app.outputs.token }}')
+                    self.assertNotIn('release-app.outputs.token',str(job.get('env',{})))
+                for step in steps:
+                    if '${{ secrets.RELEASE_APP_PRIVATE_KEY }}' in str(step):
+                        self.assertEqual(step.get('uses'),'./.github/actions/release-app-token')
+            if path.name in ('tag.yml','nightly.yml'):
+                steps=workflow['jobs']['resolve']['steps']
+                check=next(x for x in steps if 'app_credentials.py' in x.get('run',''))
+                self.assertEqual(check['if'],"inputs.release_mode != 'dry-run'")
+                self.assertEqual(check['env']['RELEASE_APP_KEY_PRESENT'],"${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}")
+        self.assertEqual(found,allowed)
+
+
 if __name__ == "__main__": unittest.main()
 
 class StaticPatchsetSelectionTests(unittest.TestCase):

@@ -26,3 +26,5 @@
 - [Wayland unattended build flow and gates](wayland-unattended.md)
 
 - Nightly 同步、触发时间和构建门禁见 [工作流与发布流程](workflows-and-release.md#nightly-同步与构建)。
+
+- [Release GitHub App authentication](release-app.md): exact-commit release permissions, one-time setup and credential boundaries.
