@@ -100,13 +100,21 @@ application and API-structure results. Rust compilation, bridge generation,
 Flutter analysis and runtime are explicitly **not run** in this unapproved path.
 The normal compatibility gate continues to fail until the interface is reviewed.
 
-A separate trusted-main job, with only repository contents/PR write permissions,
+A separate trusted-main job, with repository contents/PR write and Actions read permissions,
 can propose a **draft, report-only PR**. It cannot change the approved profile
 list, patch policy, signing or release settings. Reports live under
 `docs/upstream-interface-reviews/`; automation branches use the full interface
 signature and are deduplicated across repeated runs. Partial PR-creation retries
-can reuse only a branch containing the single expected report; they never reset
-or force-update a branch. Existing closed reviews are not silently reopened.
+can reuse only a branch adding one regular, non-executable JSON report. Recovery
+compares immutable commit IDs, verifies the stored report's filename/source and
+interface digest, and checks its recorded discovery run against this repository's
+trusted main workflow. Different upstream source commits may share an interface
+branch: recovery retains the original file and creates only the missing draft PR,
+with the historical source/run and current discovery clearly distinguished. It
+does not copy old check results onto the new source. Extra files, malformed or
+untrusted reports, truncated trees, executable/symlink reports and refs changing
+during validation stop recovery. Branches are never reset or force-updated.
+Existing closed reviews are not silently reopened.
 
 No PAT or production configuration is used. GitHub Actions must be permitted by
 the repository/organization to create pull requests; otherwise the report artifact

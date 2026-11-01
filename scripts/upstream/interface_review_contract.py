@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Report-only automation must never approve an interface or mutate protected code."""
 import copy
+import base64
 import json
 import os
 from pathlib import Path
@@ -35,14 +36,16 @@ class ReviewContract(unittest.TestCase):
 
     def test_proposal_changes_only_one_document_and_is_draft(self):
         calls=[]
+        created=False
         def api(path,method='GET',data=None,missing=False):
+            nonlocal created
             calls.append((path,method,data))
             if path.startswith('pulls?'):return []
             if path=='git/ref/heads/main':return {'object':{'sha':'a'*40}}
-            if path.startswith('git/ref/heads/'):return None
+            if path.startswith('git/ref/heads/'):return {'object':{'sha':'e'*40}} if created else None
             if path.startswith('git/commits/') and method=='GET':return {'tree':{'sha':'d'*40}}
             if path in ['git/trees','git/commits']:return {'sha':'e'*40}
-            if path=='git/refs':return {}
+            if path=='git/refs':created=True;return {}
             if path=='pulls':return {'html_url':'https://github.com/billradar/rustdesk-custom/pull/1'}
             raise AssertionError(path)
         with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api):
@@ -68,6 +71,95 @@ class ReviewContract(unittest.TestCase):
             raise AssertionError(path)
         with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api),self.assertRaisesRegex(ValueError,'unexpected changes'):
             review.publish(self.packet)
+
+    def recovery(self, change=None):
+        """An old source report and a new discovery with the same interface."""
+        current=copy.deepcopy(self.packet)
+        current['critical']={'files':{},'tools':{}}
+        current['observed_profile']={'signature':review.build_adapter.digest(current['critical'])}
+        stored=copy.deepcopy(current)
+        stored.update(upstream_sha='c'*40,custom_repository_sha='d'*40,workflow_run='11')
+        path='docs/upstream-interface-reviews/'+'c'*40+'.json'
+        state={'files':[{'filename':path,'status':'added','sha':'e'*40}],
+            'mode':'100644','truncated':False,'stored':stored,
+            'run':{'head_sha':'d'*40,'head_branch':'main','event':'schedule',
+                'path':'.github/workflows/upstream-main-compatibility.yml',
+                'repository':{'full_name':review.REPOSITORY}}}
+        if change:change(state)
+        calls=[];refs={'main':0,'branch':0}
+        def api(endpoint,method='GET',data=None,missing=False):
+            calls.append((endpoint,method,data))
+            if endpoint.startswith('pulls?'):return []
+            if endpoint=='git/ref/heads/main':
+                refs['main']+=1
+                sha='0'*40 if state.get('main_changed') and refs['main']>1 else 'a'*40
+                return {'object':{'sha':sha}}
+            if endpoint.startswith('git/ref/heads/'):
+                refs['branch']+=1
+                sha='0'*40 if state.get('branch_changed') and refs['branch']>1 else 'f'*40
+                return {'object':{'sha':sha}}
+            if endpoint=='compare/'+'a'*40+'...'+'f'*40:return {'files':state['files']}
+            if endpoint=='git/commits/'+'f'*40:return {'tree':{'sha':'d'*40}}
+            if endpoint=='git/trees/'+'d'*40+'?recursive=1':
+                return {'truncated':state['truncated'],'tree':[
+                    {'path':path,'mode':state['mode'],'type':'blob','sha':'e'*40}]}
+            if endpoint=='git/blobs/'+'e'*40:
+                raw=state.get('raw',json.dumps(state['stored']).encode())
+                return {'encoding':'base64','size':state.get('size',len(raw)),
+                        'content':base64.b64encode(raw).decode()}
+            if endpoint=='actions/runs/11':return state['run']
+            if endpoint=='pulls' and method=='POST':return {'html_url':'recovered-draft'}
+            raise AssertionError(endpoint)
+        return current,calls,api
+
+    def test_same_interface_different_source_recovers_only_the_missing_pr(self):
+        current,calls,api=self.recovery()
+        with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api):
+            self.assertEqual(review.publish(current),'recovered-draft')
+        writes=[(path,method) for path,method,_ in calls if method!='GET']
+        self.assertEqual(writes,[('pulls','POST')])
+        pr=next(data for path,_,data in calls if path=='pulls')
+        self.assertTrue(pr['draft'])
+        self.assertEqual(pr['head'],'automation/upstream-interface-'+current['observed_profile']['signature'])
+        self.assertIn('`'+'c'*40+'`',pr['body'])
+        self.assertIn('`'+'b'*40+'`',pr['body'])
+        self.assertIn('/actions/runs/11',pr['body'])
+        self.assertIn('/actions/runs/17',pr['body'])
+        self.assertIn('historical report source',pr['body'])
+
+    def test_recovery_rejects_untrusted_reports_and_changed_refs_without_writes(self):
+        changes={
+            'extra code':lambda s:s['files'].append({'filename':'src/main.rs','status':'modified'}),
+            'symlink':lambda s:s.update(mode='120000'),
+            'executable':lambda s:s.update(mode='100755'),
+            'truncated tree':lambda s:s.update(truncated=True),
+            'oversized':lambda s:s.update(size=2*1024*1024),
+            'invalid JSON':lambda s:s.update(raw=b'not JSON'),
+            'wrong filename identity':lambda s:s['stored'].update(upstream_sha='0'*40),
+            'fabricated build':lambda s:s['stored']['checks'].update(rust_compile='PASS'),
+            'approved report':lambda s:s['stored'].update(approval='APPROVED'),
+            'digest mismatch':lambda s:s['stored']['critical'].update(unexpected=True),
+            'untrusted workflow':lambda s:s['run'].update(path='.github/workflows/other.yml'),
+            'foreign run':lambda s:s['run'].update(repository={'full_name':'other/repo'}),
+            'wrong historical commit':lambda s:s['run'].update(head_sha='0'*40),
+            'main advanced':lambda s:s.update(main_changed=True),
+            'branch changed':lambda s:s.update(branch_changed=True),
+        }
+        for name,change in changes.items():
+            with self.subTest(name=name):
+                current,calls,api=self.recovery(change)
+                with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api):
+                    with self.assertRaises(ValueError):review.publish(current)
+                self.assertFalse(any(method!='GET' for _,method,_ in calls))
+
+    def test_different_valid_interface_cannot_reuse_the_branch(self):
+        def change(state):
+            state['stored']['critical']={'files':{'different':'input'}}
+            state['stored']['observed_profile']['signature']=review.build_adapter.digest(state['stored']['critical'])
+        current,calls,api=self.recovery(change)
+        with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api):
+            with self.assertRaisesRegex(ValueError,'different source or interface'):review.publish(current)
+        self.assertFalse(any(method!='GET' for _,method,_ in calls))
 
     def test_known_interface_creates_no_report(self):
         profile={'signature':'known'}
