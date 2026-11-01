@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000..350ebcf
 --- /dev/null
 +++ b/flutter/lib/common/branding.dart
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,83 @@
 +import 'dart:ui' show PlatformDispatcher;
 +import 'package:flutter/material.dart';
 +import 'package:url_launcher/url_launcher_string.dart';
@@ -12,14 +12,17 @@ index 0000000..350ebcf
 +import 'branding_values.dart';
 +import 'custom_about_identity.dart';
 +
-+String brandingText(String key, String fallback) {
++bool brandingUsesChinese() {
 +  var language = bind.mainGetLocalOption(key: 'lang');
 +  if (language.isEmpty || language == 'default') {
 +    language = PlatformDispatcher.instance.locale.toString();
 +  }
 +  language = language.toLowerCase().replaceAll('_', '-');
-+  final suffix =
-+      language.startsWith('zh') && !language.contains('tw') ? '_ZH_CN' : '_EN';
++  return language.startsWith('zh') && !language.contains('tw');
++}
++
++String brandingText(String key, String fallback) {
++  final suffix = brandingUsesChinese() ? '_ZH_CN' : '_EN';
 +  return customBranding['$key$suffix'] ?? customBranding[key] ?? fallback;
 +}
 +
@@ -34,10 +37,21 @@ index 0000000..350ebcf
 +  return name.isEmpty ? original : original.replaceFirst('RustDesk', name);
 +}
 +
++String brandingVariantLabel(String variant, bool wayland, bool chinese) {
++  final name = chinese
++      ? (variant == 'Standard' ? '标准版' : variant == 'SOS' ? 'SOS 远程协助版' : variant)
++      : variant;
++  final flavor = wayland
++      ? (chinese ? ' + Wayland 无人值守' : ' + Wayland unattended')
++      : '';
++  return '${chinese ? "变体" : "Variant"}: $name$flavor';
++}
++
 +List<Widget> brandingAboutDetails() {
 +  final widgets = <Widget>[
 +    if (customAboutVariant.isNotEmpty)
-+      Text('Variant: $customAboutVariant${customAboutWayland ? " + Wayland 无人值守" : ""}'),
++      Text(brandingVariantLabel(customAboutVariant, customAboutWayland,
++          brandingUsesChinese())),
 +  ];
 +  for (final key in [
 +    'CUSTOM_DESCRIPTION',

@@ -124,3 +124,5 @@ inventory. Packaging checks the expected ordinary/unattended display identity.
 Package/protocol versions, native `mainGetVersion` and update ordering are
 unchanged. Public branding Variables cannot override these identity fields.
 Previously built clients retain their existing About text until updated.
+
+About variant labels follow the existing application language selection (or system language in automatic mode): Simplified Chinese shows `变体: 标准版` / `变体: SOS 远程协助版`; English shows `Variant: Standard` / `Variant: SOS`. The Wayland suffix follows the same language. These labels do not change source variant or update identity.

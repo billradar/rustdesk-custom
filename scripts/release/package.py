@@ -175,12 +175,15 @@ elif command == 'package':
     sha = git(tree, 'rev-parse', 'HEAD')
     if EXPECTED_SHA and sha != EXPECTED_SHA:
         raise SystemExit('Unexpected artifact upstream SHA')
+    from scripts.build.windows_printer import stage as stage_printer
+    printer_driver = stage_printer(release, WINDOWS_ARCH)
     folder.mkdir(parents=True)
     shutil.copytree(release, folder / 'rustdesk')
     build_windows_installers(tree, release, folder / 'packages', version)
     # Keep the unpacked bundle and provenance internally; Release/Draft publication
     # selects only the generated Windows installers from packages/.
     info = {
+        'printer_driver': printer_driver,
         'variant': variant,
         'patchset': os.environ.get('PATCHSET', 'v1'),
         'upstream_repository': 'rustdesk/rustdesk',
