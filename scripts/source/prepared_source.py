@@ -35,7 +35,7 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if update_identity!=manifest.get('client_update_identity'):
         raise ValueError('Client update identity differs from prepared-source manifest')
     if any(update_identity[k]!=manifest[v] for k,v in
-           [('version','upstream_version'),('upstream_sha','upstream_sha'),
+           [('repository','custom_repository'),('version','upstream_version'),('upstream_sha','upstream_sha'),
             ('variant','variant'),('build_run','prepare_workflow_run')]):
         raise ValueError('Client update identity differs from build provenance')
     contracts(tree,variant,patchset);check(tree)
@@ -92,7 +92,8 @@ def prepare(base,output,ref,sha,name,bridge):
         identity_channel=os.environ['BUILD_CHANNEL']
         if identity_channel=='stable' and os.environ.get('CLIENT_RELEASE_IDENTITY')!='true':
             identity_channel='ci'
-        update_identity=write_identity(tree, version=profile['upstream_version'], sha=sha,
+        update_identity=write_identity(tree, repository=os.environ['GITHUB_REPOSITORY'],
+                       version=profile['upstream_version'], sha=sha,
                        variant=variant, run=os.environ['GITHUB_RUN_ID'],
                        channel=identity_channel,
                        revision=os.environ.get('CLIENT_PATCH_REVISION', ''))

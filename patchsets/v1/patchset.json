@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "d16a0bcf46d336934bd6c9adb530d079b1645dce6346dcbcdbab1b870f7b9ba3",
+    "common": "3efd3ff68de35f78177035785fc3ab5351d6c722cb3ea8a28f0d012cd1b16ad1",
     "sos": "d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34"
   },
   "runtime_ui": {
@@ -57,6 +57,7 @@
     "channel": "latest-only",
     "integrity": "GitHub HTTPS/API SHA256 and size",
     "independent_update_signatures": "DEFERRED",
-    "runtime_validation": "NOT TESTED"
+    "runtime_validation": "NOT TESTED",
+    "repository": "embedded GITHUB_REPOSITORY; fork-aware"
   }
 }

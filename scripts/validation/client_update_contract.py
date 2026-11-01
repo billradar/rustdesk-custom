@@ -49,7 +49,9 @@ class ClientUpdateTests(unittest.TestCase):
     def test_latest_only_and_no_beta_ui(self):
         module = patch_file("v2", "src/custom_update/mod.rs")
         widget = patch_file("v2", "flutter/lib/common/widgets/custom_update.dart")
-        self.assertIn("/billradar/rustdesk-custom/releases/latest", module)
+        self.assertIn("https://api.github.com/repos/{}/releases/latest", module)
+        self.assertNotIn("billradar/rustdesk-custom", module)
+        self.assertIn("b.repository", module)
         self.assertNotIn("releases/tags/nightly", module)
         self.assertNotIn("参加内测", widget)
         self.assertNotIn("nightly", widget.lower())
@@ -71,10 +73,14 @@ class ClientUpdateTests(unittest.TestCase):
             destination = tree / "src/custom_update/build.json"
             destination.parent.mkdir(parents=True)
             destination.write_text("{}")
-            args = dict(version="1.5.1", sha="a" * 40, variant="standard", run="123",
+            args = dict(repository="fork-owner/custom-client", version="1.5.1", sha="a" * 40, variant="standard", run="123",
                         channel="stable", revision="v2.6")
             self.assertEqual(write_identity(tree, **args)["revision"], "v2.6")
             self.assertEqual(json.loads(destination.read_text())["variant"], "standard")
+            self.assertEqual(json.loads(destination.read_text())["repository"], "fork-owner/custom-client")
+            for invalid in ("", "https://github.com/owner/repo", "owner/repo/extra", "owner/repo?x", "owner/.."):
+                with self.subTest(repository=invalid), self.assertRaises(ValueError):
+                    write_identity(tree, **(args | {"repository": invalid}))
             args.update(variant="sos")
             self.assertEqual(write_identity(tree, **args)["variant"], "sos")
             for invalid in ("", "v2.0", "v2.6/evil"):

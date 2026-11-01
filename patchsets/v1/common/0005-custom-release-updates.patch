@@ -320,17 +320,17 @@ index 4723d7c..22896ee 100644
 +}
 diff --git a/src/custom_update/build.json b/src/custom_update/build.json
 new file mode 100644
-index 0000000..6846bf8
+index 0000000..74d8c65
 --- /dev/null
 +++ b/src/custom_update/build.json
 @@ -0,0 +1 @@
-+{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0"}
++{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0", "repository": ""}
 diff --git a/src/custom_update/mod.rs b/src/custom_update/mod.rs
 new file mode 100644
-index 0000000..3af803c
+index 0000000..4d221a8
 --- /dev/null
 +++ b/src/custom_update/mod.rs
-@@ -0,0 +1,560 @@
+@@ -0,0 +1,594 @@
 +//! Custom Release updates: GitHub HTTPS/API integrity only.
 +//! Independent update signatures are explicitly deferred; APK signatures remain unchanged.
 +use hbb_common::{anyhow::anyhow, bail, ResultType};
@@ -345,13 +345,12 @@ index 0000000..3af803c
 +    time::Duration,
 +};
 +mod policy;
-+const REPOSITORY: &str = "billradar/rustdesk-custom";
-+const API: &str = "https://api.github.com/repos/billradar/rustdesk-custom/releases/latest";
 +pub const MANUAL_INSTALL_ONLY: bool = true;
 +const MAX_ASSET: u64 = 1024 * 1024 * 1024;
 +
 +#[derive(Deserialize)]
 +struct Build {
++    repository: String,
 +    version: String,
 +    revision: Option<String>,
 +    upstream_sha: String,
@@ -394,7 +393,8 @@ index 0000000..3af803c
 +}
 +fn build() -> ResultType<Build> {
 +    let b: Build = serde_json::from_str(include_str!("build.json"))?;
-+    if policy::numeric::<3>(&b.version).is_none()
++    if !policy::repository(&b.repository)
++        || policy::numeric::<3>(&b.version).is_none()
 +        || !policy::hex(&b.upstream_sha, 40)
 +        || !matches!(b.variant.as_str(), "standard" | "sos")
 +        || b.build_run.parse::<u64>().is_err()
@@ -437,9 +437,18 @@ index 0000000..3af803c
 +        }))
 +        .build()?)
 +}
-+fn get_release() -> ResultType<Release> {
++fn release_api(b: &Build) -> ResultType<String> {
++    if !policy::repository(&b.repository) {
++        bail!("Update repository identity unavailable");
++    }
++    Ok(format!(
++        "https://api.github.com/repos/{}/releases/latest",
++        b.repository
++    ))
++}
++fn get_release(b: &Build) -> ResultType<Release> {
 +    let mut response = client()?
-+        .get(API)
++        .get(release_api(b)?)
 +        .timeout(Duration::from_secs(30))
 +        .header("Accept", "application/vnd.github+json")
 +        .send()?
@@ -453,16 +462,17 @@ index 0000000..3af803c
 +        bail!("Release response too large");
 +    }
 +    let r: Release = serde_json::from_slice(&bytes)?;
-+    validate_release(&r)?;
++    validate_release(&r, b)?;
 +    Ok(r)
 +}
-+fn validate_release(r: &Release) -> ResultType<()> {
++fn validate_release(r: &Release, b: &Build) -> ResultType<()> {
++    let repository = &b.repository;
 +    if r.draft
 +        || r.prerelease
 +        || policy::stable_tag(&r.tag_name).is_none()
 +        || r.html_url
 +            != format!(
-+                "https://github.com/{REPOSITORY}/releases/tag/{}",
++                "https://github.com/{repository}/releases/tag/{}",
 +                r.tag_name
 +            )
 +    {
@@ -551,6 +561,7 @@ index 0000000..3af803c
 +    wayland: bool,
 +    format: &str,
 +) -> ResultType<Asset> {
++    let repository = &b.repository;
 +    let (v, _) = policy::stable_tag(&r.tag_name).ok_or_else(|| anyhow!("Invalid Stable tag"))?;
 +    let version = format!("{}.{}.{}", v[0], v[1], v[2]);
 +    let name = policy::package_name(&version, &b.variant, platform, arch, wayland, format)
@@ -568,7 +579,7 @@ index 0000000..3af803c
 +        || !digest.is_some_and(|d| policy::hex(d, 64))
 +        || a.browser_download_url
 +            != format!(
-+                "https://github.com/{REPOSITORY}/releases/download/{}/{}",
++                "https://github.com/{repository}/releases/download/{}/{}",
 +                r.tag_name, name
 +            )
 +    {
@@ -584,7 +595,7 @@ index 0000000..3af803c
 +    let _guard = OPERATION.lock().unwrap();
 +    clear();
 +    let b = build()?;
-+    let r = get_release()?;
++    let r = get_release(&b)?;
 +    let (version, revision) = policy::stable_tag(&r.tag_name).unwrap();
 +    let installed_revision = b
 +        .revision
@@ -647,11 +658,12 @@ index 0000000..3af803c
 +        bail!("Update selection expired; check again");
 +    }
 +    // Revalidate latest immediately before download. Closed/replaced Releases fail closed.
-+    let r = get_release()?;
++    let b = build()?;
++    let r = get_release(&b)?;
 +    if r.id != c.release.id
 +        || r.tag_name != c.release.tag_name
 +        || source(&r)? != source(&c.release)?
-+        || selected_asset(&r, &build()?)? != c.asset
++        || selected_asset(&r, &b)? != c.asset
 +    {
 +        clear();
 +        bail!("Release changed; check again");
@@ -796,6 +808,7 @@ index 0000000..3af803c
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
++    const REPOSITORY: &str = "example/source";
 +    fn release() -> Release {
 +        let tag = "v1.5.1-custom.v2.6";
 +        Release { id:1,tag_name:tag.into(),draft:false,prerelease:false,
@@ -807,6 +820,7 @@ index 0000000..3af803c
 +    }
 +    fn identity() -> Build {
 +        Build {
++            repository: REPOSITORY.into(),
 +            version: "1.5.1".into(),
 +            revision: Some("v2.5".into()),
 +            upstream_sha: "a".repeat(40),
@@ -815,20 +829,40 @@ index 0000000..3af803c
 +        }
 +    }
 +    #[test]
++    fn fork_updates_stay_in_the_embedded_repository() {
++        let mut fork = identity();
++        fork.repository = "fork-owner/fork-client".into();
++        let mut r = release();
++        assert!(validate_release(&r, &fork).is_err());
++        r.html_url = r.html_url.replace(REPOSITORY, &fork.repository);
++        r.assets[0].browser_download_url = r.assets[0]
++            .browser_download_url
++            .replace(REPOSITORY, &fork.repository);
++        assert_eq!(
++            release_api(&fork).unwrap(),
++            "https://api.github.com/repos/fork-owner/fork-client/releases/latest"
++        );
++        assert!(validate_release(&r, &fork).is_ok());
++        assert!(asset_for(&r, &fork, "linux", "x86_64", false, "deb").is_ok());
++        assert!(asset_for(&r, &identity(), "linux", "x86_64", false, "deb").is_err());
++        fork.repository.clear();
++        assert!(release_api(&fork).is_err());
++    }
++    #[test]
 +    fn reject_nonstable_and_foreign_releases() {
 +        let mut r = release();
-+        assert!(validate_release(&r).is_ok());
++        assert!(validate_release(&r, &identity()).is_ok());
 +        r.draft = true;
-+        assert!(validate_release(&r).is_err());
++        assert!(validate_release(&r, &identity()).is_err());
 +        r.draft = false;
 +        r.prerelease = true;
-+        assert!(validate_release(&r).is_err());
++        assert!(validate_release(&r, &identity()).is_err());
 +        r.prerelease = false;
 +        r.tag_name = "nightly".into();
-+        assert!(validate_release(&r).is_err());
++        assert!(validate_release(&r, &identity()).is_err());
 +        r = release();
 +        r.html_url = r.html_url.replace(REPOSITORY, "other/repo");
-+        assert!(validate_release(&r).is_err());
++        assert!(validate_release(&r, &identity()).is_err());
 +    }
 +    #[test]
 +    fn fail_closed_on_metadata_drift() {
@@ -893,10 +927,10 @@ index 0000000..3af803c
 +}
 diff --git a/src/custom_update/policy.rs b/src/custom_update/policy.rs
 new file mode 100644
-index 0000000..2e31ce2
+index 0000000..50e49fc
 --- /dev/null
 +++ b/src/custom_update/policy.rs
-@@ -0,0 +1,230 @@
+@@ -0,0 +1,266 @@
 +//! Release policy shared by both supported patch generations.
 +pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
 +    let parts: Vec<_> = value.split('.').collect();
@@ -946,6 +980,25 @@ index 0000000..2e31ce2
 +}
 +/// Accept both the current Stable publisher and historical private drafts.
 +/// Metadata-looking strings in upstream notes must never supply source identity.
++pub fn repository(value: &str) -> bool {
++    let Some((owner, name)) = value.split_once('/') else {
++        return false;
++    };
++    !owner.is_empty()
++        && owner.len() <= 39
++        && !owner.starts_with('-')
++        && !owner.ends_with('-')
++        && owner
++            .bytes()
++            .all(|c| c.is_ascii_alphanumeric() || c == b'-')
++        && !name.is_empty()
++        && name.len() <= 100
++        && !matches!(name, "." | "..")
++        && name
++            .bytes()
++            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
++}
++
 +pub fn metadata_source(body: &str) -> Option<&str> {
 +    const STABLE: &str = "\n\n## Custom release metadata\n\n";
 +    const LEGACY: &str = "<!-- rustdesk-custom-release-metadata\n";
@@ -1032,6 +1085,23 @@ index 0000000..2e31ce2
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
++    #[test]
++    fn repository_identity_is_a_github_slug_not_a_url() {
++        assert!(repository("fork-owner/custom_client.test"));
++        for invalid in [
++            "",
++            "owner",
++            "owner/repo/extra",
++            "https://github.com/owner/repo",
++            "owner/repo?token=x",
++            "owner/..",
++            "owner/repo#ref",
++            "owner/repo%2fextra",
++            "-owner/repo",
++        ] {
++            assert!(!repository(invalid), "{invalid}");
++        }
++    }
 +    #[test]
 +    fn actual_stable_publisher_metadata() {
 +        let body = include_str!("stable_release_fixture.txt");

@@ -2,7 +2,12 @@
 
 Both Common patch generations include `0005-custom-release-updates.patch`.
 All custom clients, including builds made from upstream Nightly, query only
-`https://api.github.com/repos/billradar/rustdesk-custom/releases/latest`.
+`https://api.github.com/repos/<owner>/<repo>/releases/latest`. The repository is
+embedded from the build's `GITHUB_REPOSITORY`: primary builds follow their own
+Release, and fork builds follow that fork's Release without editing a URL.
+Missing or malformed repository identity disables checking, with no fallback to
+the original repository. Release-page and asset URLs must match the same embedded
+repository. This is a build identity, not an arbitrary runtime URL preference.
 There is no client Nightly update channel, beta checkbox, embedded GitHub token,
 or official-server fallback. The upstream Nightly monitor and build/release
 workflows remain intact.
@@ -10,7 +15,8 @@ workflows remain intact.
 ## Identity and ordering
 
 Prepared source embeds `src/custom_update/build.json` before inventory is frozen.
-Its manifest binds the file to the version, upstream SHA, variant and prepare run.
+Its manifest binds the file to the build repository, version, upstream SHA,
+variant and prepare run.
 Stable preparation receives the patch revision selected by Tag preflight; it must
 not invent one. About displays `1.5.1-custom.v2.6`, for example. Non-release
 builds display `1.5.1-custom.build123` and do not claim a Stable revision.
