@@ -148,3 +148,13 @@ LLVM installation without build credentials or production signing. The local
 retired references and the Node.js 24 entry point. Recheck transitive composite
 Action dependencies when upgrading their pinned revisions. Historical workflow
 runs retain their original Action versions and annotations.
+
+
+Windows ARM64 Flutter setup uses `FLUTTER_ROOT` from the pinned Flutter Action,
+not its `CACHE-PATH` output (which may point to a parent cache directory). The
+shared `scripts/build/prepare_windows_arm64_flutter.ps1` checks required SDK entry
+points before changing its Dart cache, then verifies native ARM64 Dart and the
+release engine. The credential-free Action runtime workflow exercises this same
+script on `windows-11-arm`, rejects a parent cache directory and validates engine
+and Python PE architecture. This verifies toolchain preparation, not a complete
+RustDesk ARM64 package or real-device session.

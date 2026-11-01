@@ -31,6 +31,22 @@ class RuntimeContract(unittest.TestCase):
             self.assertNotIn('flutter-action@2783a3f', text, path)
             self.assertNotIn('KyleMayes/install-llvm-action@', text, path)
 
+    def test_arm64_sdk_setup_uses_real_root_and_shared_smoke_recipe(self):
+        workflow=yaml.safe_load((ROOT/'.github/workflows/build-stable-windows.yml').read_text())
+        setup=next(s for s in workflow['jobs']['build-arm64']['steps']
+                   if s.get('name')=='Install and verify native ARM64 Dart and engine')
+        self.assertIn('prepare_windows_arm64_flutter.ps1',setup['run'])
+        self.assertIn('$env:FLUTTER_ROOT',setup['run'])
+        self.assertNotIn('CACHE-PATH',setup['run'])
+        smoke=yaml.safe_load((ROOT/'.github/workflows/action-runtime.yml').read_text())
+        job=smoke['jobs']['windows-arm64-flutter']
+        self.assertEqual(job['runs-on'],'windows-11-arm')
+        self.assertTrue(any('prepare_windows_arm64_flutter.ps1' in s.get('run','') for s in job['steps']))
+        script=(ROOT/'scripts/build/prepare_windows_arm64_flutter.ps1').read_text()
+        self.assertLess(script.index('Test-Path'),script.index('Remove-Item'))
+        self.assertIn("'windows_arm64'",script)
+        self.assertIn('ENGINE_LIBRARY_SHA256',script)
+
     def test_node24_cached_entrypoint_and_required_input(self):
         node = shutil.which('node')
         if not node:
