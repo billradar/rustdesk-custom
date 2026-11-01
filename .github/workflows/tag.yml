@@ -45,6 +45,12 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
+    - name: Require release App configuration before expensive builds
+      if: inputs.release_mode != 'dry-run'
+      env:
+        RELEASE_APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        RELEASE_APP_KEY_PRESENT: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
+      run: python3 scripts/release/app_credentials.py
     - id: resolve
       env:
         GH_TOKEN: ${{ github.token }}
@@ -401,7 +407,15 @@ jobs:
       with:
         name: ${{ needs.resolve.outputs.lock_artifact }}
         path: .work/stable-lock
+    - name: Mint repository-scoped release App token
+      id: release-app
+      uses: ./.github/actions/release-app-token
+      with:
+        client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     - name: Publish verified existing Stable draft
+      env:
+        GH_TOKEN: ${{ steps.release-app.outputs.token }}
       run: python3 scripts/release/qualification.py publish-existing --channel stable
   release:
     name: '07A · Publish Stable Release'
@@ -464,7 +478,15 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Mint repository-scoped release App token
+      id: release-app
+      uses: ./.github/actions/release-app-token
+      with:
+        client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     - name: Create and publish complete supported Release
+      env:
+        GH_TOKEN: ${{ steps.release-app.outputs.token }}
       run: python3 scripts/release/qualification.py release --channel stable --root .work/collected
   draft:
     name: '07B · Create Stable Draft'
@@ -525,5 +547,13 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Mint repository-scoped release App token
+      id: release-app
+      uses: ./.github/actions/release-app-token
+      with:
+        client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     - name: Create complete supported Draft release
+      env:
+        GH_TOKEN: ${{ steps.release-app.outputs.token }}
       run: python3 scripts/release/qualification.py draft --channel stable --root .work/collected

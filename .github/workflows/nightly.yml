@@ -38,6 +38,12 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
+    - name: Require release App configuration before expensive builds
+      if: inputs.release_mode != 'dry-run'
+      env:
+        RELEASE_APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        RELEASE_APP_KEY_PRESENT: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
+      run: python3 scripts/release/app_credentials.py
     - run: python3 -m pip install -r requirements.txt
     - name: Validate Nightly signing and draft execution context
       env:
@@ -330,5 +336,13 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Mint repository-scoped release App token
+      id: release-app
+      uses: ./.github/actions/release-app-token
+      with:
+        client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     - name: Revalidate signed matrix and create draft or public prerelease
+      env:
+        GH_TOKEN: ${{ steps.release-app.outputs.token }}
       run: python3 scripts/release/nightly.py draft --discovery .work/discovery/nightly-discovery.json
