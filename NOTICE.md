@@ -26,3 +26,7 @@ custom modifications and scripts needed to build and install that version,
 subject to the license's exclusions. Preserve the corresponding upstream license
 and third-party notices with distributed artifacts. This notice is not an
 additional restriction or a replacement for the license terms.
+
+The vendored GitHub LLVM installer under `.github/actions/install-llvm/` is
+Kyle Mayes's `install-llvm-action`, retained under its Apache License 2.0.
+Its original license and immutable source provenance accompany the files.
