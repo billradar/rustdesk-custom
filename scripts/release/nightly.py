@@ -16,6 +16,7 @@ try:
     import tomllib
 except ImportError:
     import tomli as tomllib
+from scripts.release.router_retry_policy import decide
 from scripts.upstream.resolve import api
 from scripts.upstream.patchsets import patchset_for_version, patch_hash
 
@@ -211,25 +212,18 @@ def route(data):
     identity = nightly_identity(identity_data, 'draft', 'true', signing)
     annotate_history(rows, data['upstream_sha'])
     state = route_state(rows, identity, signing=signing, upstream_sha=data['upstream_sha'])
-    print('Nightly route: ' + state)
-    if state == 'EXHAUSTED':
-        raise ValueError('Three attempts failed; inspect logs or dispatch manually')
     if state == 'UNKNOWN':
-        raise ValueError('A matching Nightly run has no discovery artifact; inspect it before dispatching again')
+        raise ValueError('Unresolved Nightly build identity; manual review required')
+    matching = [r for r in rows if r.get('_nightly_identity') == identity
+                and r.get('event') == 'workflow_dispatch'
+                and r.get('head_branch') == 'main'
+                and r.get('display_title', '').endswith(
+                    f' / draft / wayland=true / android-signing={signing}')]
+    state = decide(matching)
+    print('Nightly route: ' + state)
+    if state == 'REVIEW':
+        raise ValueError('Nightly retry requires manual review (cancelled, unknown, or exhausted)')
     if state == 'RETRY':
-        # Bound retries to one per six hours for the exact Nightly build identity.
-        matching = [r for r in rows if r.get('_nightly_identity') == identity
-                    and r.get('event') == 'workflow_dispatch'
-                    and r.get('head_branch') == 'main'
-                    and r.get('display_title', '').endswith(
-                        f' / draft / wayland=true / android-signing={signing}')]
-        if matching:
-            latest = max(datetime.fromisoformat(r['created_at'].replace('Z', '+00:00'))
-                         for r in matching)
-            remaining = 6 * 3600 - (datetime.now(timezone.utc) - latest).total_seconds()
-            if remaining > 0:
-                print(f'Nightly retry cooldown: {int(remaining / 60)} minutes remaining; skip.')
-                return
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true'], check=True)
