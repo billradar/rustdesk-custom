@@ -140,6 +140,7 @@ jobs:
         python3 -m scripts.release.coordinator.contract
         python3 -m scripts.release.coordinator.store_contract
         python3 -m scripts.release.coordinator.reconcile_contract
+        python3 -m scripts.release.coordinator.runtime_contract
         python3 -m scripts.release.router_retry_policy_contract
         python3 -m scripts.release.nightly_router_regression_contract
         python3 -m scripts.release.stable_router_contract

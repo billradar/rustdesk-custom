@@ -175,6 +175,14 @@ class RecoveryTests(unittest.TestCase):
             report=recovery.process({'workflow_run':copy.deepcopy(self.run)},'example/repo',self.output)
             return report,calls
 
+    def test_coordinator_managed_run_has_only_one_retry_authority(self):
+        marker=dict(self.job,id=457,name='Coordinate Nightly build admission',conclusion='success')
+        with patch.object(recovery,'latest_jobs',return_value=[self.job,marker]):
+            report,calls=self.invoke()
+        self.assertTrue(report['coordinator_managed'])
+        self.assertEqual(report['recovery'],'COORDINATOR_MANAGED')
+        self.assertFalse(any('--method' in c.args for c in calls.call_args_list))
+
     def test_partial_retry_keeps_prior_success_and_other_failed_targets(self):
         previous=dict(self.job,run_attempt=1)
         retry=dict(self.job,id=999,run_attempt=2,conclusion='success')

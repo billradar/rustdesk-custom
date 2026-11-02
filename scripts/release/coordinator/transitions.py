@@ -23,12 +23,25 @@ def limits(record):
     return RetryPolicy(**provenance(record).get('retry_policy', {}))
 
 
-def bind_verified(record, token, fence, run_id, custom_sha, run_attempt, now):
+def dispatch_intent(record, token, fence, request_id, now):
+    from .model import dispatch_unknown
+    if str(UUID(request_id)) != request_id or provenance(record).get('dispatch_request_id') == request_id:
+        raise ValueError('Dispatch requires a fresh request token')
+    after = dispatch_unknown(record, token, fence, now).after
+    after = replace(after, source_provenance=updated(record, dispatch_request_id=request_id))
+    return Event(utc(now), 'dispatch_intent', record, after)
+
+
+def bind_verified(record, token, fence, run_id, custom_sha, run_attempt, now, *, official_run_id=''):
     hex_value(custom_sha, 40)
     if type(run_attempt) is not int or run_attempt != 1:
         raise ValueError('Native reruns require a new coordinator authorization')
     base = bind(record, token, fence, run_id, now).after
     worker = dict(workflow_run_id=run_id, custom_repository_sha=custom_sha, run_attempt=run_attempt)
+    if official_run_id:
+        if not isinstance(official_run_id, str) or not re.fullmatch('[1-9][0-9]*', official_run_id):
+            raise ValueError('Invalid official run provenance')
+        worker['official_run_id'] = official_run_id
     after = replace(base, source_provenance=updated(record, worker=worker))
     return Event(utc(now), 'bind_verified', record, after)
 
@@ -128,9 +141,12 @@ def grant_retry(record, actor, reason, now):
 def validate_additional(event):
     r, a, now = event.before, event.after, event.at
     args = (r, r.reservation_id, r.fence)
-    if event.action == 'bind_verified':
+    if event.action == 'dispatch_intent':
+        expected = dispatch_intent(*args, provenance(a)['dispatch_request_id'], now)
+    elif event.action == 'bind_verified':
         worker = provenance(a)['worker']
-        expected = bind_verified(*args, a.workflow_run_id, worker['custom_repository_sha'], worker['run_attempt'], now)
+        expected = bind_verified(*args, a.workflow_run_id, worker['custom_repository_sha'], worker['run_attempt'], now,
+                                 official_run_id=worker.get('official_run_id', ''))
     elif event.action == 'finish':
         expected = finish(*args, a.started_at, a.completed_at, a.state == BuildState.SUCCEEDED,
                           a.failure_class, a.failure_stage, a.failure_reason, observed_at=now)

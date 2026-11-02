@@ -1,0 +1,50 @@
+name: Release Coordinator state maintenance
+'on':
+  workflow_run:
+    workflows: [Stable Release Pipeline, Nightly Build Pipeline]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [nightly, stable]
+        required: true
+      build_identity:
+        type: string
+        required: true
+        description: Existing coordinator key; never a new source selection
+      reason:
+        type: string
+        required: true
+        description: Reviewed reason for one new reservation
+permissions:
+  contents: read
+  actions: read
+jobs:
+  coordinator-state:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/release-coordinator.yml@refs/heads/main', github.repository)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      PYTHONPATH: .
+      GH_TOKEN: ${{ github.token }}
+      RETRY_CHANNEL: ${{ inputs.channel }}
+      RETRY_IDENTITY: ${{ inputs.build_identity }}
+      RETRY_REASON: ${{ inputs.reason }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: main
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - name: Reconcile exact completed run
+      if: github.event_name == 'workflow_run'
+      run: python3 -m scripts.release.coordinator.runtime observe
+    - name: Record one explicit reviewed retry grant
+      if: github.event_name == 'workflow_dispatch'
+      run: python3 -m scripts.release.coordinator.runtime grant

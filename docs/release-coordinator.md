@@ -2,8 +2,9 @@
 
 Baseline: main `95abfaf706766f670dddcecea41530320c0ebb66`, inspected 2026-11-02.
 This is an implementation audit, not proof that concurrency incidents occurred.
-PR 1 supplies dormant identity/state/decision primitives and executable contracts.
-Neither production router imports the new core yet. No state backend exists yet.
+This document records the audit baseline and staged implementation. The current
+branch includes the persistent journal, recovery core and Nightly integration;
+Stable integration is pending. No production activation has been performed.
 
 ## Evidence and priority
 
@@ -250,3 +251,58 @@ rejection. All fixtures run without production credentials. This stage still
 has no production workflow dispatch or backend activation. Rollback: revert
 this PR while dormant; after activation retain journal history and stop admission
 before reverting recovery logic.
+
+## Nightly integration (PR 4)
+
+Nightly's fixed workflow environment enables the shared route path; the resolver
+still selects latest successful official source with no public run/SHA input.
+The normal contract process does not inherit the runtime routing flag. Manual
+main runs and automatic dispatch use the same digest-verified discovery handoff
+and a dedicated admission job. Development dry-run remains isolated and does not
+write production state. Stable routing is unchanged at this stage.
+
+The router persists a unique dispatch-request UUID before HTTP. The UUID is
+necessary even with one reservation UUID: two simultaneous writers could otherwise
+produce byte-identical commits and both regard the same idempotent ref update as
+permission to dispatch. Different request UUIDs produce sibling commits, so only
+one wins. Response loss never authorizes a resend. An unstarted RESERVED intent
+can resume safely; DISPATCH_UNKNOWN requires a verified arriving run or review.
+A changed latest Nightly source is admitted under its actual resolved identity;
+obsolete reservations are reconciled without dispatching obsolete source.
+
+An immutable per-run ref under `heads/release-coordinator-runs/v1/` points to the
+admission snapshot. It is evidence lookup, not a lock. Before source preparation,
+compilation, signing, aggregation and release writing, a read-only guard checks
+this index against the current identity journal, UUID/fence, run ID/attempt,
+custom commit and available source SHA. Denied runs may point at another worker's
+snapshot, which cannot pass their guard. Ordinary guards need only Contents read;
+only state writers query Actions and write journals. Signing's sparse checkout
+adds only the reviewed guard modules and their standard-library dependencies;
+PIN handling, dedicated runner, Environment and v2/v3 gates are unchanged.
+
+`release-coordinator.yml` observes completion from trusted main and can record an
+explicit actor/reason grant for one new reservation of an existing identity. It
+cannot build, sign, publish or select a different source. Old completion events
+cannot modify a newer reservation. The existing reliability observer reports
+coordinator-managed batches without independently rerunning a leaf job; legacy
+runs retain their existing targeted-recovery behavior.
+
+Public Nightly release still requires explicit manual release mode and all
+existing signed-package/Draft/digest checks. The router can dispatch only Draft
+with its frozen configuration; direct publication mode is rejected by the shared
+dispatch interface. No coordinator code calls a release or signing API.
+
+Historical runs without a durable index still require valid legacy discovery.
+An unknown/expired historical identity or unclassified legacy failure requires
+manual review, never a free build. The first migration can therefore require
+operator reconciliation; this conservative availability limitation is deliberate.
+Journal inventory currently fails closed above 1000 identities per channel;
+large long-lived repositories need a separately reviewed archive/index strategy.
+No live GitHub state-ref writes, signing, public release or release deletion were
+used in verification; transport contracts and a real local Git server cover the
+atomic primitive, while live deployment/ruleset validation remains separate.
+
+Rollback: stop Nightly routing and new admissions first, retain all journals and
+run indexes, reconcile active workers and ambiguous dispatches, then revert the
+integration. Do not simply enable artifact-only legacy dispatch while fenced
+reservations are still live. Existing completed releases and tags are unchanged.
