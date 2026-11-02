@@ -193,7 +193,15 @@ def route():
                               patch_hash('common', data['patchset']),
                               patch_hash('sos', data['patchset']), None,
                               wayland_enabled, policy_sha256, signing_enabled)
-    state = run_state(workflow_runs(data['upstream_tag'], identity, signing_enabled))
+    matches = workflow_runs(data['upstream_tag'], identity, signing_enabled)
+    state = run_state(matches)
+    if state == 'RETRY' and matches:
+        from datetime import datetime, timezone
+        latest = max(datetime.fromisoformat(r['created_at'].replace('Z', '+00:00')) for r in matches)
+        elapsed = (datetime.now(timezone.utc) - latest).total_seconds()
+        if elapsed < 6 * 3600:
+            print(f"Stable retry cooldown: {int((6 * 3600 - elapsed) / 60)} minutes remaining; skip.")
+            return
     if state == 'ACTIVE':
         print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
         return
