@@ -25,7 +25,7 @@ WORKFLOW = '.github/workflows/release-coordinator-integration.yml'
 REPOSITORY = 'billradar/rustdesk-custom'
 
 
-def trusted_context():
+def trusted_context(*, branch=BRANCH, workflow_path=WORKFLOW):
     repo = os.environ.get('GITHUB_REPOSITORY')
     if repo != REPOSITORY or os.environ.get('COORDINATOR_INTEGRATION_ALLOW_WRITE') != 'true':
         raise ValueError('Explicit isolated test context required')
@@ -36,13 +36,13 @@ def trusted_context():
         pr = data['pull_request']
         number = data['number']
         if (type(number) is not int or number <= 0 or pr['head']['repo']['full_name'] != repo
-                or pr['base']['repo']['full_name'] != repo or pr['head']['ref'] != BRANCH
-                or os.environ.get('GITHUB_HEAD_REF') != BRANCH
-                or workflow != f'{repo}/{WORKFLOW}@refs/pull/{number}/merge'
+                or pr['base']['repo']['full_name'] != repo or pr['head']['ref'] != branch
+                or os.environ.get('GITHUB_HEAD_REF') != branch
+                or workflow != f'{repo}/{workflow_path}@refs/pull/{number}/merge'
                 or os.environ.get('GITHUB_REF') != f'refs/pull/{number}/merge'):
             raise ValueError('Untrusted test pull request')
     elif event == 'workflow_dispatch':
-        if workflow != f'{repo}/{WORKFLOW}@refs/heads/main' or os.environ.get('GITHUB_REF') != 'refs/heads/main':
+        if workflow != f'{repo}/{workflow_path}@refs/heads/main' or os.environ.get('GITHUB_REF') != 'refs/heads/main':
             raise ValueError('Manual tests require reviewed main workflow')
     else:
         raise ValueError('Unsupported integration event')

@@ -32,3 +32,5 @@
 - [Unified Release Coordinator audit and staged design](release-coordinator.md): experimental identity/state core, evidence, backend constraints and rollout gates.
 
 - [Release Coordinator 上线前核查与历史迁移](release-coordinator-preactivation.md)：实际保护配置、逐条历史证据、未应用的保护规则和保守迁移步骤。
+
+- [Coordinator ref protection validation](release-coordinator-protection.md) — isolated server canaries and journal/index ruleset deployment evidence.
