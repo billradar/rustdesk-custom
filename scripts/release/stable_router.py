@@ -7,6 +7,7 @@ import tempfile
 import re
 import subprocess
 
+from scripts.release.router_retry_policy import decide
 from scripts.release.channel import build_identity, release_preflight, wayland_identity
 from scripts.upstream.patchsets import patch_hash, patchset_for_version
 from scripts.upstream.resolve import api, choose_stable
@@ -193,12 +194,13 @@ def route():
                               patch_hash('common', data['patchset']),
                               patch_hash('sos', data['patchset']), None,
                               wayland_enabled, policy_sha256, signing_enabled)
-    state = run_state(workflow_runs(data['upstream_tag'], identity, signing_enabled))
-    if state == 'ACTIVE':
-        print(f"A Stable Draft build is already active for {data['upstream_tag']}; skip.")
+    matches = workflow_runs(data['upstream_tag'], identity, signing_enabled)
+    state = decide(matches)
+    if state in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+        print(f"Stable matching build state={state}; skip.")
         return
-    if state == 'EXHAUSTED':
-        raise ValueError('Stable Draft retry budget exhausted; manual review required')
+    if state == 'REVIEW':
+        raise ValueError('Stable retry requires manual review (cancelled, unknown, or exhausted)')
 
     dispatch(data['upstream_tag'])
     print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
