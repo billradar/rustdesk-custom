@@ -1,0 +1,61 @@
+name: Mac ARM64 Flutter recipe compatibility
+'on':
+  pull_request:
+    paths:
+    - '.github/workflows/macos-arm64-compatibility.yml'
+    - '.github/workflows/build-platform.yml'
+    - '.github/workflows/build-stable-platforms.yml'
+    - 'scripts/build/macos_arm64*'
+    - 'scripts/platform/platform_adapter.py'
+    - 'scripts/platform/platform_commands.py'
+    - 'metadata/build/macos-arm64-policy.json'
+    - 'metadata/platform/adapter-profiles.json'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: macos-arm64-recipe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-and-sdk:
+    name: Verify native Mac ARM SDK and reviewed source helper
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: .
+      UPSTREAM_EXPECTED_SHA: 4ec4ec3d14e5e191b1bbc53003bd37f9357c7d11
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Isolated reviewed parser environment
+      run: |
+        python3 -m venv .work/python
+        .work/python/bin/python -m pip install -r requirements.txt
+        echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
+    - name: Fetch exact reviewed official source without production inputs
+      run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/mac-smoke
+    - name: Verify recipe before running upstream helper or SDK commands
+      id: profile
+      run: python3 -m scripts.build.macos_arm64 profile .work/mac-smoke
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+      with:
+        flutter-version: ${{ steps.profile.outputs.flutter }}
+        channel: stable
+    - name: Verify native SDK and GNU-sed source adaptation
+      run: |
+        python3 - <<'PY'
+        from scripts.build.macos_arm64 import profile,verify_sdk
+        verify_sdk(profile('.work/mac-smoke'))
+        PY
+        flutter config --no-enable-swift-package-manager
+        brew install gnu-sed
+        export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
+        (cd .work/mac-smoke && bash .github/patches/apply_flutter_3.44_source_patches.sh)
+        python3 - <<'PY'
+        import subprocess
+        from scripts.build.macos_arm64 import TRANSFORMS
+        changed=subprocess.check_output(['git','-C','.work/mac-smoke','diff','--name-only'],text=True).splitlines()
+        if set(changed)!=set(TRANSFORMS):raise ValueError('Source helper changed an unexpected file inventory')
+        print('Native Mac ARM SDK and reviewed source helper: PASS; application compilation/runtime not tested')
+        PY

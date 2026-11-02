@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "signature": "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f",
+      "runner": "macos-14",
+      "target": "aarch64-apple-darwin",
+      "triplet": "arm64-osx",
+      "rust": "1.81",
+      "flutter": "3.44.9",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "bridge_signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+      "bridge_flutter": "3.44.8",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "patch_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
+      "source_workflow_sha256": "62c2ee5637964270a4c78a74ec8bcb1b5017fe159c00f61be8dcfb69a3aac43c"
+    }
+  ]
+}

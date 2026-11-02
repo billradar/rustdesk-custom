@@ -5,7 +5,11 @@ from pathlib import Path
 from scripts.platform.platform_adapter import check,render
 root,platform,arch,phase=sys.argv[1:];root=Path(root).resolve();profile,job=check(root,platform,arch)
 names={('macos','setup'):['Install build runtime','Install NASM','Patch flutter','Workaround for flutter issue'],('macos','build'):['Build rustdesk'],('android','deps'):['Install vcpkg dependencies'],('android','native'):['Build rustdesk lib'],('android','package'):['Build rustdesk']}
-for name in names[(platform,phase)]:
+selected=names[(platform,phase)]
+if platform=='macos' and arch=='aarch64' and phase=='setup' and profile.get('macos_flutter344'):
+ selected=[n for n in selected if n!='Patch flutter']
+ selected.insert(0,'Keep CocoaPods for Flutter 3.44 (arm64)')
+for name in selected:
  s=next(s for s in job['steps'] if s.get('name')==name)
  script=render(s['run'],profile).replace('/workspace',str(root))
  if platform=='macos':

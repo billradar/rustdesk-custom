@@ -131,6 +131,7 @@ jobs:
         set -euo pipefail
         python3 scripts/upstream/interface_review_contract.py
         python3 scripts/build/build_adapter_contract.py
+        python3 -m scripts.build.macos_arm64_contract
         python3 scripts/platform/wayland_contract.py
         python3 scripts/release/production_contract.py
         python3 scripts/release/qualification_contract.py

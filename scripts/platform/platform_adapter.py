@@ -20,13 +20,19 @@ def inspect(tree,platform,arch):
  if platform=='android':
   for p in ['flutter/build_android_deps.sh','flutter/ndk_arm64.sh','flutter/ndk_arm.sh','flutter/ndk_x64.sh','flutter/android/app/build.gradle']:
    identity['files'][p]=hashlib.sha256((tree/p).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
- result={'platform':platform,'architecture':arch,'runner':runner,'target':row.get('target'),'triplet':row.get('vcpkg-triplet'),'official_matrix':row,'signature':digest(identity),'rust':env.get('MAC_RUST_VERSION') if platform=='macos' else env['RUST_VERSION'],'flutter':env.get('ANDROID_FLUTTER_VERSION') if platform=='android' else env['FLUTTER_VERSION'],'vcpkg':env['VCPKG_COMMIT_ID'],'ndk':env.get('NDK_VERSION'),'cargo_ndk':env.get('CARGO_NDK_VERSION'),'cmake':env.get('VCPKG_CMAKE_VERSION',''),'official_disabled':job.get('if') is False,'tools':env}
+ result={'platform':platform,'architecture':arch,'runner':runner,'target':row.get('target'),'triplet':row.get('vcpkg-triplet'),'official_matrix':row,'signature':digest(identity),'rust':env.get('MAC_RUST_VERSION') if platform=='macos' else env['RUST_VERSION'],'flutter':env.get('ANDROID_FLUTTER_VERSION') if platform=='android' else env.get('FLUTTER_MACOS_ARM_VERSION',env['FLUTTER_VERSION']) if platform=='macos' and arch=='aarch64' else env['FLUTTER_VERSION'],'vcpkg':env['VCPKG_COMMIT_ID'],'ndk':env.get('NDK_VERSION'),'cargo_ndk':env.get('CARGO_NDK_VERSION'),'cmake':env.get('VCPKG_CMAKE_VERSION',''),'official_disabled':job.get('if') is False,'tools':env}
  return result,job
 
 def check(tree,platform,arch):
+ if platform=='macos' and arch=='aarch64' and (Path(tree)/'macos-arm64-transform.json').exists():
+  from scripts.build.macos_arm64 import verified
+  return verified(tree)
  p,j=inspect(tree,platform,arch);known=json.loads((ROOT/'metadata/platform/adapter-profiles.json').read_text())
  if p['signature'] not in known['approved'].get(platform,[]):raise ValueError('BUILD_COMPAT: unreviewed official '+platform+' build interface; observed signature='+p['signature'])
  if p['official_disabled']:raise ValueError('BUILD_COMPAT: official job is disabled')
+ if platform=='macos' and arch=='aarch64' and p['tools'].get('FLUTTER_MACOS_ARM_VERSION'):
+  from scripts.build.macos_arm64 import check_profile
+  p=check_profile(tree,p)
  return p,j
 
 def render(text,profile):
@@ -60,5 +66,5 @@ if __name__=='__main__':
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(p,indent=2)+'\n')
  if os.environ.get('GITHUB_OUTPUT'):
   with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-   for k in ['runner','rust','flutter','vcpkg','target','triplet','ndk','cargo_ndk','cmake']:f.write(k+'='+str(p.get(k) or '')+'\n')
+   for k in ['runner','rust','flutter','vcpkg','target','triplet','ndk','cargo_ndk','cmake','macos_flutter344']:f.write(k+'='+(str(p.get(k) or '').lower() if k=='macos_flutter344' else str(p.get(k) or ''))+'\n')
  print('Reviewed platform build interface: PASS')
