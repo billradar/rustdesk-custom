@@ -143,15 +143,47 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertFalse(data['draft_needed'])
             self.assertFalse(data['publish_existing'])
 
+    def test_untagged_draft_preflight_downloads_exact_checksum_asset(self):
+        import hashlib,subprocess
+        self._assets.stop()
+        existing=self.draft_fixture('v1','2')
+        for index,asset in enumerate(existing['assets'],1):asset['id']=700+index
+        sums=''.join(a['digest'][7:]+'  '+a['name']+'\n' for a in existing['assets'] if a['name']!='SHA256SUMS').encode()
+        checksum=existing['assets'][0]
+        checksum.update(size=len(sums),digest='sha256:'+hashlib.sha256(sums).hexdigest())
+        def api(path,missing=False):
+            if '/releases/tags/' in path:return None
+            if '/releases?per_page=' in path:return [existing]
+            self.fail('Unexpected API '+path)
+        def download(args,**kwargs):
+            if args[:3]==['gh','release','download']:
+                raise subprocess.CalledProcessError(1,args,stderr='release not found')
+            self.assertEqual(args,['gh','api','repos/'+channel.REPOSITORY+'/releases/assets/701',
+                                   '--header','Accept: application/octet-stream'])
+            self.assertTrue(kwargs['check']);self.assertNotIn('input',kwargs)
+            kwargs['stdout'].write(sums)
+        try:
+            with patch.object(channel,'release_rows',return_value=[existing]), \
+                 patch.object(channel,'api',side_effect=api), \
+                 patch.object(channel.subprocess,'run',side_effect=download) as command:
+                result=channel.release_preflight(self.discovery('v1'))
+            command.assert_called_once()
+            self.assertEqual(existing['tag_name'],'untagged-123')
+            self.assertEqual(result['release_tag'],'v1.4.9-custom.v1.2')
+            self.assertFalse(result['build_needed']);self.assertFalse(result['draft_needed'])
+            self.assertTrue(result['publish_existing'])
+        finally:self._assets.start()
+
     def test_remote_sha256_manifest_must_match_github_asset_digests(self):
         import hashlib
         self._assets.stop()
         package=b'package';package_hash=hashlib.sha256(package).hexdigest()
         sums=(package_hash+'  package.deb\n').encode();sums_hash=hashlib.sha256(sums).hexdigest()
-        assets=[{'name':'SHA256SUMS','state':'uploaded','size':len(sums),'digest':'sha256:'+sums_hash},
+        assets=[{'id':701,'name':'SHA256SUMS','state':'uploaded','size':len(sums),'digest':'sha256:'+sums_hash},
                 {'name':'package.deb','state':'uploaded','size':len(package),'digest':'sha256:'+package_hash}]
         def download(args,**kwargs):
-            Path(args[-1],'SHA256SUMS').write_bytes(sums)
+            self.assertEqual(args[2],'repos/'+channel.REPOSITORY+'/releases/assets/701')
+            kwargs['stdout'].write(sums)
         try:
             with patch.object(channel.subprocess,'run',side_effect=download):
                 self.assertTrue(channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',assets))
@@ -161,6 +193,36 @@ class ChannelPolicyTests(unittest.TestCase):
                     channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',bad)
         finally:
             self._assets.start()
+
+    def test_checksum_asset_id_and_size_fail_closed_before_download(self):
+        self._assets.stop()
+        asset=dict(id=701,name='SHA256SUMS',state='uploaded',size=1,digest='sha256:'+'a'*64)
+        try:
+            for value in (None,False,True,0,-1,'701','701/../../secrets'):
+                with self.subTest(value=value),patch.object(channel.subprocess,'run') as command:
+                    with self.assertRaisesRegex(ValueError,'asset ID'):
+                        channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[dict(asset,id=value)])
+                    command.assert_not_called()
+            with patch.object(channel.subprocess,'run') as command:
+                with self.assertRaisesRegex(ValueError,'download limit'):
+                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[dict(asset,size=1024*1024+1)])
+                command.assert_not_called()
+        finally:self._assets.start()
+
+    def test_checksum_asset_download_failure_and_tamper_never_reuse(self):
+        import subprocess
+        self._assets.stop()
+        asset=dict(id=701,name='SHA256SUMS',state='uploaded',size=1,digest='sha256:'+'a'*64)
+        try:
+            with patch.object(channel.subprocess,'run',side_effect=subprocess.CalledProcessError(1,['gh','api'])) as command:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[asset])
+                command.assert_called_once()
+            def tamper(args,**kwargs):kwargs['stdout'].write(b'tampered')
+            with patch.object(channel.subprocess,'run',side_effect=tamper):
+                with self.assertRaisesRegex(ValueError,'does not match the GitHub asset digest'):
+                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[asset])
+        finally:self._assets.start()
 
     def test_custom_commit_does_not_change_identity_but_wayland_does(self):
         base=self.discovery('v1')
