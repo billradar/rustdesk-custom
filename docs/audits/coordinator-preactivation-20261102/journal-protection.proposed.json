@@ -1,0 +1,23 @@
+{
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/release-coordinator/v1/stable/*",
+        "refs/heads/release-coordinator/v1/nightly/*"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "coordinator-journal-append-only",
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    }
+  ],
+  "target": "branch"
+}

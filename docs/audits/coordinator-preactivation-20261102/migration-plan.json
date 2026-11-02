@@ -1,0 +1,2146 @@
+{
+  "automatic_retry_authorized": false,
+  "blockers": [
+    "Production journal and run-index ruleset protection not configured/verified",
+    "Classic branch protections and self-hosted runner access control require administrative inspection",
+    "A reviewed legacy import/alias mechanism does not yet exist; this plan is not an executable state seed",
+    "Unknown legacy identity and missing original reuse producers remain REVIEW_REQUIRED",
+    "Release checksum payloads were not downloaded; no release reuse/publication gate is bypassed"
+  ],
+  "captured_at": "2026-11-02T14:23:07.751260+00:00",
+  "deployment_ready": false,
+  "environment": {
+    "branch_policies": [
+      {
+        "id": 61823144,
+        "name": "main",
+        "node_id": "MDE2OkdhdGVCcmFuY2hQb2xpY3k2MTgyMzE0NA==",
+        "type": "branch"
+      }
+    ],
+    "can_admins_bypass": false,
+    "deployment_branch_policy": {
+      "custom_branch_policies": true,
+      "protected_branches": false
+    },
+    "name": "android-production-signing",
+    "protection_rules": [
+      {
+        "id": 67530055,
+        "node_id": "GA_kwDOU2tp2M4EBm1H",
+        "type": "branch_policy"
+      }
+    ],
+    "runner_access_control_verified": false,
+    "runner_inventory_verified": false,
+    "secret_values_read": false
+  },
+  "history": {
+    "archived_identity_documents_byte_exact": 25,
+    "artifact_archives_downloaded": 25,
+    "artifact_archives_sha256_verified": 25,
+    "attempts_including_prior": 34,
+    "deleted_history_verifiable": false,
+    "job_records": 951,
+    "matched_main_build_runs": 25,
+    "pages": 7,
+    "prior_conclusions": {
+      "cancelled": 4,
+      "failure": 4,
+      "success": 1
+    },
+    "repository_runs_scanned": 650,
+    "unique_run_ids": 650
+  },
+  "implementation_base_sha": "b442d1de6ab84de23de478f09ced993f1bee1d5f",
+  "kind": "read-only-migration-plan-not-runtime-state",
+  "main_ruleset": {
+    "_links": {
+      "html": {
+        "href": "https://github.com/billradar/rustdesk-custom/rules/24412604"
+      },
+      "self": {
+        "href": "https://api.github.com/repos/billradar/rustdesk-custom/rulesets/24412604"
+      }
+    },
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/heads/main"
+        ]
+      }
+    },
+    "created_at": "2026-10-03T17:16:47.021+08:00",
+    "current_user_can_bypass": "never",
+    "enforcement": "active",
+    "id": 24412604,
+    "name": "main-production-trust-path",
+    "node_id": "RRS_lACqUmVwb3NpdG9yec5Ta2nYzgF0gbw",
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "parameters": {
+          "allowed_merge_methods": [
+            "merge",
+            "squash",
+            "rebase"
+          ],
+          "dismiss_stale_reviews_on_push": true,
+          "require_code_owner_review": false,
+          "require_extra_approval_for_unattributed_changes": true,
+          "require_last_push_approval": false,
+          "required_approving_review_count": 0,
+          "required_review_thread_resolution": true,
+          "required_reviewers": []
+        },
+        "type": "pull_request"
+      }
+    ],
+    "source": "billradar/rustdesk-custom",
+    "source_type": "Repository",
+    "target": "branch",
+    "updated_at": "2026-10-03T17:16:47.054+08:00"
+  },
+  "main_sha": "95abfaf706766f670dddcecea41530320c0ebb66",
+  "migration_plan_only": true,
+  "official_source_evidence": [
+    {
+      "conclusion": "success",
+      "event": "schedule",
+      "head_branch": "master",
+      "head_repository": "rustdesk/rustdesk",
+      "head_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73",
+      "id": 41366206478,
+      "path": ".github/workflows/flutter-nightly.yml",
+      "repository": "rustdesk/rustdesk",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "schedule",
+      "head_branch": "master",
+      "head_repository": "rustdesk/rustdesk",
+      "head_sha": "04360797addc71138ea30e6c630c073811d9a1d5",
+      "id": 40793066432,
+      "path": ".github/workflows/flutter-nightly.yml",
+      "repository": "rustdesk/rustdesk",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "schedule",
+      "head_branch": "master",
+      "head_repository": "rustdesk/rustdesk",
+      "head_sha": "eb239024503160707cca87ba6cef5fbfb8fa3f0d",
+      "id": 40607796869,
+      "path": ".github/workflows/flutter-nightly.yml",
+      "repository": "rustdesk/rustdesk",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "event": "schedule",
+      "head_branch": "master",
+      "head_repository": "rustdesk/rustdesk",
+      "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+      "id": 40146600534,
+      "path": ".github/workflows/flutter-nightly.yml",
+      "repository": "rustdesk/rustdesk",
+      "status": "completed"
+    },
+    {
+      "http_status": 404,
+      "id": 41280309181,
+      "status": "UNAVAILABLE"
+    }
+  ],
+  "production_state_written": false,
+  "proposed_rulesets_applied": false,
+  "releases": [
+    {
+      "api_digest_inventory_complete": true,
+      "asset_count": 32,
+      "automation_state": "complete",
+      "build_identity": "0d5dd098c5ce4211570ace802496f331fa90fd431969b692b0aa21e9a5b9859e",
+      "checksum_payload_verified": false,
+      "custom_repository_sha": "82859cd32d4608e6507314de1cdd5cf9ebb2860c",
+      "declared_inventory_matches": true,
+      "draft": true,
+      "id": 431170313,
+      "name": "v1.5.1-custom.v2.1",
+      "prerelease": false,
+      "proposed_action": "KEEP_UNCHANGED; preserve complete Draft; existing remote checksum/publication gates remain mandatory",
+      "tag_name": "untagged-ae5bef8b7a54e85070ed",
+      "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73"
+    },
+    {
+      "api_digest_inventory_complete": true,
+      "asset_count": 32,
+      "automation_state": "complete",
+      "build_identity": null,
+      "checksum_payload_verified": false,
+      "custom_repository_sha": "95abfaf706766f670dddcecea41530320c0ebb66",
+      "declared_inventory_matches": true,
+      "draft": true,
+      "id": 431350507,
+      "name": "nightly",
+      "prerelease": true,
+      "proposed_action": "KEEP_UNCHANGED; preserve complete Draft; existing remote checksum/publication gates remain mandatory",
+      "tag_name": "nightly",
+      "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73"
+    },
+    {
+      "api_digest_inventory_complete": true,
+      "asset_count": 32,
+      "automation_state": "complete",
+      "build_identity": "d9cb2c710b9efbd9f127fca98da58431597c1c92f4c2ac340edb76bc24a65bff",
+      "checksum_payload_verified": false,
+      "custom_repository_sha": "bed8113783f8e9da9ae0ae9a4b300f68bc445ddd",
+      "declared_inventory_matches": true,
+      "draft": true,
+      "id": 430489827,
+      "name": "v1.5.0-custom.v2.6",
+      "prerelease": false,
+      "proposed_action": "KEEP_UNCHANGED; preserve complete Draft; existing remote checksum/publication gates remain mandatory",
+      "tag_name": "untagged-1adf51dab8dd95750d11",
+      "upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17"
+    }
+  ],
+  "repository": "billradar/rustdesk-custom",
+  "rulesets_observed": [
+    {
+      "_links": {
+        "html": {
+          "href": "https://github.com/billradar/rustdesk-custom/rules/24412604"
+        },
+        "self": {
+          "href": "https://api.github.com/repos/billradar/rustdesk-custom/rulesets/24412604"
+        }
+      },
+      "created_at": "2026-10-03T17:16:47.021+08:00",
+      "enforcement": "active",
+      "id": 24412604,
+      "name": "main-production-trust-path",
+      "node_id": "RRS_lACqUmVwb3NpdG9yec5Ta2nYzgF0gbw",
+      "source": "billradar/rustdesk-custom",
+      "source_type": "Repository",
+      "target": "branch",
+      "updated_at": "2026-10-03T17:16:47.054+08:00"
+    }
+  ],
+  "runs": [
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"23e5bb471a040d62f0a6ad52591fb30784265b73\",\n  \"upstream_ref\": \"23e5bb471a040d62f0a6ad52591fb30784265b73\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"41366206478\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/41366206478\",\n  \"common_patch_hash\": \"ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\"\n}\n",
+          "digest": "sha256:e12ffa90853a3f377ea2dac16857089570392f9ffeaa0b86599cc53416fb6f25",
+          "download_sha256": "e12ffa90853a3f377ea2dac16857089570392f9ffeaa0b86599cc53416fb6f25",
+          "expires_at": "2027-01-31T09:38:34Z",
+          "id": 13129958353,
+          "json_sha256": "1b0da93771f4c461f0a6a1bd54f1405aadc5d9ec37b39b079d231b944c98af63",
+          "name": "nightly-discovery-41422335564"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": "c46008d9ac6d7e56accc4c1e295e841efd2cf8c1db69b12b085dfe779164cf1b",
+      "custom_repository_sha": "95abfaf706766f670dddcecea41530320c0ebb66",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 31,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-11-02T10:56:01Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "a3b5d1145d568983717400958c43a3178d1e56e551a4e3a6493fa11e7e91adad",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 19,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73",
+        "id": 41366206478,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 41422335564,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 125218246633,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73"
+      },
+      "title": "Nightly latest / 95abfaf706766f670dddcecea41530320c0ebb66 / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/41422335564",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73",
+        "id": 41366206478,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"android_signing_enabled\": true,\n  \"build_identity\": \"0d5dd098c5ce4211570ace802496f331fa90fd431969b692b0aa21e9a5b9859e\",\n  \"channel\": \"stable\",\n  \"common_patch_hash\": \"ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a\",\n  \"custom_repository_sha\": \"82859cd32d4608e6507314de1cdd5cf9ebb2860c\",\n  \"patchset\": \"v2\",\n  \"schema\": \"stable-build-lock-v1\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"upstream_ref\": \"1.5.1\",\n  \"upstream_sha\": \"23e5bb471a040d62f0a6ad52591fb30784265b73\",\n  \"upstream_tag\": \"1.5.1\",\n  \"version\": \"1.5.1\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\",\n  \"workflow_run\": \"41398573672\",\n  \"patch_revision\": \"v2.1\",\n  \"revision\": \"v2.1\",\n  \"release_tag\": \"v1.5.1-custom.v2.1\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false,\n  \"rebuild_reason\": \"NEW_PATCH_REVISION\"\n}\n",
+          "digest": "sha256:416def08a28da3ecdf27a58c60abfae563eccc5fd8d8403104c391938691fefd",
+          "download_sha256": "416def08a28da3ecdf27a58c60abfae563eccc5fd8d8403104c391938691fefd",
+          "expires_at": "2027-01-31T06:13:34Z",
+          "id": 13119973995,
+          "json_sha256": "584da22b709c0d31ca354eca108c73d160018e0c42c282e6dd815e94c5f61725",
+          "name": "release-preflight-41398573672"
+        },
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"android_signing_enabled\": true,\n  \"build_identity\": \"0d5dd098c5ce4211570ace802496f331fa90fd431969b692b0aa21e9a5b9859e\",\n  \"channel\": \"stable\",\n  \"common_patch_hash\": \"ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a\",\n  \"custom_repository_sha\": \"82859cd32d4608e6507314de1cdd5cf9ebb2860c\",\n  \"patchset\": \"v2\",\n  \"schema\": \"stable-build-lock-v1\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"upstream_ref\": \"1.5.1\",\n  \"upstream_sha\": \"23e5bb471a040d62f0a6ad52591fb30784265b73\",\n  \"upstream_tag\": \"1.5.1\",\n  \"version\": \"1.5.1\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\",\n  \"workflow_run\": \"41398573672\"\n}\n",
+          "digest": "sha256:217ff0cacf0585c1b49b24cdaee328f3afab4035dbcce27caaa9572cd9092486",
+          "download_sha256": "217ff0cacf0585c1b49b24cdaee328f3afab4035dbcce27caaa9572cd9092486",
+          "expires_at": "2027-01-31T06:13:34Z",
+          "id": 13119944190,
+          "json_sha256": "822ea4084b5a5228dcacc018593129e88736f2d177584014d9a71cbd152a3ef5",
+          "name": "stable-build-lock-41398573672-1"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": "e3fc1025a3af8830537446ecf5aa5218e42185de65d10a1b1dbd38f275233d48",
+      "custom_repository_sha": "82859cd32d4608e6507314de1cdd5cf9ebb2860c",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 34,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-11-02T07:25:06Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "0d5dd098c5ce4211570ace802496f331fa90fd431969b692b0aa21e9a5b9859e",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 19,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 41398573672,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 125136852678,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73"
+      },
+      "title": "Stable 1.5.1 / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/41398573672"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"23e5bb471a040d62f0a6ad52591fb30784265b73\",\n  \"upstream_ref\": \"23e5bb471a040d62f0a6ad52591fb30784265b73\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"41280309181\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/41280309181\",\n  \"common_patch_hash\": \"c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\"\n}\n",
+          "digest": "sha256:520883352178fffda44808d126c89c0bc9a616e448321d22b45e210ec1a12f68",
+          "download_sha256": "520883352178fffda44808d126c89c0bc9a616e448321d22b45e210ec1a12f68",
+          "expires_at": "2027-01-30T09:53:33Z",
+          "id": 13079086246,
+          "json_sha256": "0b996962a3fc662b112b94b9af4798e54e31b49cf5931aac798f5935ea11eabe",
+          "name": "nightly-discovery-41292973439"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": "7fa822c3f1a3291dce82f69bd3875484d797c48a5c970136b0126c141a02545c",
+      "custom_repository_sha": "bed8113783f8e9da9ae0ae9a4b300f68bc445ddd",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 62,
+      "latest_attempt": 2,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-11-01T11:05:44Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "43689e62d6b58d651678dc62b450c61b6bf7d8141256f54b700b124b95bb42cd",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2
+      ],
+      "observed_compile_step_count": 34,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "original_official_run": {
+        "http_status": 404,
+        "id": 41280309181,
+        "status": "UNAVAILABLE"
+      },
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "USER_OR_WORKFLOW_CANCELLED",
+          "conclusion": "cancelled",
+          "entered_compile": true,
+          "failed_job_evidence": [],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "provenance_review_reason": "Original official run returns 404; retain original ID. Another verified official success proves the same SHA; Run ID is provenance, never part of Build Identity.",
+      "run_id": 41292973439,
+      "signing_jobs": [
+        {
+          "conclusion": "cancelled",
+          "id": 124812012506,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        },
+        {
+          "conclusion": "success",
+          "id": 124822319105,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73"
+      },
+      "title": "Nightly latest / bed8113783f8e9da9ae0ae9a4b300f68bc445ddd / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/41292973439",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73",
+        "id": 41366206478,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"android_signing_enabled\": true,\n  \"build_identity\": \"d9cb2c710b9efbd9f127fca98da58431597c1c92f4c2ac340edb76bc24a65bff\",\n  \"channel\": \"stable\",\n  \"common_patch_hash\": \"c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6\",\n  \"custom_repository_sha\": \"bed8113783f8e9da9ae0ae9a4b300f68bc445ddd\",\n  \"patchset\": \"v2\",\n  \"schema\": \"stable-build-lock-v1\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"upstream_ref\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\",\n  \"workflow_run\": \"41289240322\"\n}\n",
+          "digest": "sha256:72e9abdd99d90add715d05a5fd5ed13336b19c41cacb0d1b6f94f81e1cb7ba1e",
+          "download_sha256": "72e9abdd99d90add715d05a5fd5ed13336b19c41cacb0d1b6f94f81e1cb7ba1e",
+          "expires_at": "2027-01-30T08:31:44Z",
+          "id": 13076641063,
+          "json_sha256": "7c2d7e5f51e8eee716d23db28b545d08639cfac83876a14eccf53b6ad85767aa",
+          "name": "stable-build-lock-41289240322-1"
+        },
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"android_signing_enabled\": true,\n  \"build_identity\": \"d9cb2c710b9efbd9f127fca98da58431597c1c92f4c2ac340edb76bc24a65bff\",\n  \"channel\": \"stable\",\n  \"common_patch_hash\": \"c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6\",\n  \"custom_repository_sha\": \"bed8113783f8e9da9ae0ae9a4b300f68bc445ddd\",\n  \"patchset\": \"v2\",\n  \"schema\": \"stable-build-lock-v1\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"upstream_ref\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\",\n  \"workflow_run\": \"41289240322\",\n  \"patch_revision\": \"v2.6\",\n  \"revision\": \"v2.6\",\n  \"release_tag\": \"v1.5.0-custom.v2.6\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false,\n  \"rebuild_reason\": \"NEW_PATCH_REVISION\"\n}\n",
+          "digest": "sha256:f1baa80dc2568fd084684e8c95bba968684ac93884ff0e052be49b3a375999ef",
+          "download_sha256": "f1baa80dc2568fd084684e8c95bba968684ac93884ff0e052be49b3a375999ef",
+          "expires_at": "2027-01-30T08:31:44Z",
+          "id": 13076074129,
+          "json_sha256": "32c199c1aa96fbff07d28e4188af247c68729b1266548aa6b67eb3957d495a80",
+          "name": "release-preflight-41289240322"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": "983122dbf9b512a378956e6d1f03bb6d8242787656409e9787377a5faad72f08",
+      "custom_repository_sha": "bed8113783f8e9da9ae0ae9a4b300f68bc445ddd",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 34,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-11-01T09:53:01Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "d9cb2c710b9efbd9f127fca98da58431597c1c92f4c2ac340edb76bc24a65bff",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 19,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 41289240322,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 124804214361,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17"
+      },
+      "title": "Stable latest / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/41289240322"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"04360797addc71138ea30e6c630c073811d9a1d5\",\n  \"upstream_ref\": \"04360797addc71138ea30e6c630c073811d9a1d5\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"40793066432\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/40793066432\",\n  \"common_patch_hash\": \"7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\"\n}\n",
+          "digest": "sha256:51a7d324923b808f4c9ba61012046b02f32c13b6d2558faa9c57b27228f91027",
+          "download_sha256": "51a7d324923b808f4c9ba61012046b02f32c13b6d2558faa9c57b27228f91027",
+          "expires_at": "2027-01-27T17:47:01Z",
+          "id": 12919407797,
+          "json_sha256": "e9d9aa0cfcb0fd4778a97a1e2a62b64428d027154de4da04c44a0887fdf8db79",
+          "name": "nightly-discovery-40924598685"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": "e44966ae7135b77c5f94a08fa6489ed4fb1514d67deb3c13114a64147425176b",
+      "custom_repository_sha": "c2e9cfb5769f23fde07a6240526b3f3e59391700",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 62,
+      "latest_attempt": 2,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-30T10:46:11Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "7f2a9512f31cf91c627e4488889c03a8ca9fde941b7efb608c32e4c05c153541",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2
+      ],
+      "observed_compile_step_count": 37,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "04360797addc71138ea30e6c630c073811d9a1d5",
+        "id": 40793066432,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "UNKNOWN_FAILURE",
+          "conclusion": "failure",
+          "entered_compile": true,
+          "failed_job_evidence": [
+            {
+              "failed_steps": [],
+              "id": 123630309336,
+              "name": "android-build / Build Android targets (android, x86_64, standard, true, SUPPORTED, ubuntu-24.04, android-x86_64-s... / android-x86_64-standard"
+            }
+          ],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40924598685,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 123642851356,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        },
+        {
+          "conclusion": "success",
+          "id": 124015292537,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "04360797addc71138ea30e6c630c073811d9a1d5"
+      },
+      "title": "Nightly latest / c2e9cfb5769f23fde07a6240526b3f3e59391700 / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40924598685",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "04360797addc71138ea30e6c630c073811d9a1d5",
+        "id": 40793066432,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"eb239024503160707cca87ba6cef5fbfb8fa3f0d\",\n  \"upstream_ref\": \"eb239024503160707cca87ba6cef5fbfb8fa3f0d\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"40607796869\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/40607796869\",\n  \"common_patch_hash\": \"7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\"\n}\n",
+          "digest": "sha256:5bf6624ca5a55d3bb8be2ea71100995f6ae2247471cee824e46d1df4e4813d3b",
+          "download_sha256": "5bf6624ca5a55d3bb8be2ea71100995f6ae2247471cee824e46d1df4e4813d3b",
+          "expires_at": "2027-01-26T17:39:51Z",
+          "id": 12838640340,
+          "json_sha256": "1c4c5a71beb78b8cdfdc60eb4c5fbe85af248630a4902d93b932cb952994e044",
+          "name": "nightly-discovery-40737839195"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": "a7713138a844cff168e569c769c988e7bef811521404e3a1691c5a01c5159a86",
+      "custom_repository_sha": "c2e9cfb5769f23fde07a6240526b3f3e59391700",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 62,
+      "latest_attempt": 2,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-30T09:45:36Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "665b101b2d2d1a752c64e113af7fbc0389d39647727b5a55d60a42f38c97587a",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2
+      ],
+      "observed_compile_step_count": 36,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "eb239024503160707cca87ba6cef5fbfb8fa3f0d",
+        "id": 40607796869,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "UNKNOWN_FAILURE",
+          "conclusion": "failure",
+          "entered_compile": true,
+          "failed_job_evidence": [
+            {
+              "failed_steps": [
+                "Official-compatible compile, package and independent gates"
+              ],
+              "id": 122994281853,
+              "name": "android-build / Build Android targets (android, x86_64, standard, true, SUPPORTED, ubuntu-24.04, android-x86_64-s... / android-x86_64-standard"
+            }
+          ],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40737839195,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 123012162893,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        },
+        {
+          "conclusion": "success",
+          "id": 123990227835,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "eb239024503160707cca87ba6cef5fbfb8fa3f0d"
+      },
+      "title": "Nightly latest / c2e9cfb5769f23fde07a6240526b3f3e59391700 / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40737839195",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "eb239024503160707cca87ba6cef5fbfb8fa3f0d",
+        "id": 40607796869,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"android_signing_enabled\": true,\n  \"build_identity\": \"5f8fe0d1895ae06470967e86fdf6bc630ce762fad5bb6df742ebd32a85a6faef\",\n  \"channel\": \"stable\",\n  \"common_patch_hash\": \"7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845\",\n  \"custom_repository_sha\": \"923bd2ca79ce5bc1c99bc9abfbfcc1d086c85cff\",\n  \"patchset\": \"v2\",\n  \"schema\": \"stable-build-lock-v1\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"upstream_ref\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\",\n  \"workflow_run\": \"40647868248\",\n  \"release_tag\": \"v1.5.0-custom.v2.5\",\n  \"patch_revision\": \"v2.5\",\n  \"revision\": \"v2.5\",\n  \"build_needed\": false,\n  \"draft_needed\": false,\n  \"publish_existing\": true\n}\n",
+          "digest": "sha256:0ef172d4d1af377886e032e5294829e1f31cbdc2ce70e93e53d98ffc4a67c45c",
+          "download_sha256": "0ef172d4d1af377886e032e5294829e1f31cbdc2ce70e93e53d98ffc4a67c45c",
+          "expires_at": "2027-01-26T07:05:41Z",
+          "id": 12798645215,
+          "json_sha256": "814fe94ad930aec270187746970e4bb59ac9992ed8cb85ac170433d3ae560a13",
+          "name": "release-preflight-40647868248"
+        },
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"android_signing_enabled\": true,\n  \"build_identity\": \"5f8fe0d1895ae06470967e86fdf6bc630ce762fad5bb6df742ebd32a85a6faef\",\n  \"channel\": \"stable\",\n  \"common_patch_hash\": \"7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845\",\n  \"custom_repository_sha\": \"5595d949720711f755fd0f737933c86721b70aea\",\n  \"patchset\": \"v2\",\n  \"schema\": \"stable-build-lock-v1\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"upstream_ref\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\",\n  \"workflow_run\": \"40647868248\"\n}\n",
+          "digest": "sha256:9da3ad8271c3fc9d0be5bc483cd0c95363eeba68314185def089262461329dc7",
+          "download_sha256": "9da3ad8271c3fc9d0be5bc483cd0c95363eeba68314185def089262461329dc7",
+          "expires_at": "2027-01-26T07:05:41Z",
+          "id": 12797613299,
+          "json_sha256": "328cf584dd901a38d0a920f45aac6e8119487a77167c9c7b4018f4d41931d92b",
+          "name": "stable-build-lock-40647868248-1"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": "036c3d4ee00a0b69b8f94e7d891d42b05991fedafda127a0b346d48d2dd85a32",
+      "custom_repository_sha": "5595d949720711f755fd0f737933c86721b70aea",
+      "disposition": "NO_BUILD_REUSE",
+      "job_count": 12,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-28T07:06:08Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "5f8fe0d1895ae06470967e86fdf6bc630ce762fad5bb6df742ebd32a85a6faef",
+      "no_build_reuse": true,
+      "observed_compile_attempts": [],
+      "observed_compile_step_count": 0,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "prior_attempts": [],
+      "proposed_action": "NO_NEW_ATTEMPT; verify referenced original producer/release before any alias import",
+      "referenced_custom_sha": "923bd2ca79ce5bc1c99bc9abfbfcc1d086c85cff",
+      "referenced_release": "v1.5.0-custom.v2.5",
+      "run_id": 40647868248,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 122680948571,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17"
+      },
+      "title": "Stable 1.5.0 / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40647868248"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_ref\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"40146600534\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/40146600534\",\n  \"common_patch_hash\": \"7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"wayland_policy_sha256\": \"ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9\"\n}\n",
+          "digest": "sha256:eb17c90e272fcc022ec5e72db47cb180017e2a78e5659ca6845bee8a72aa892c",
+          "download_sha256": "eb17c90e272fcc022ec5e72db47cb180017e2a78e5659ca6845bee8a72aa892c",
+          "expires_at": "2027-01-25T17:24:14Z",
+          "id": 12764113854,
+          "json_sha256": "7f91b584de28b764459d0e8ca415d54ae8e3c05483e23c962f386940a16808a1",
+          "name": "nightly-discovery-40550247760"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": "8e2e810e81efe05eca07d9e8690027f131e7d42b845507f2ebcb955e9d29b50d",
+      "custom_repository_sha": "923bd2ca79ce5bc1c99bc9abfbfcc1d086c85cff",
+      "disposition": "VERIFIED_LEGACY_SUCCESS_IDENTITY",
+      "job_count": 31,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-27T21:04:03Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "9ebfed67f66a6af9d65466c6c56df8bffa6287609c1575d8557e608c2a33d759",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 19,
+      "options": {
+        "android_signing_enabled": true,
+        "release_mode": "draft",
+        "wayland_included": true,
+        "wayland_policy_sha256": "ff64c6c7d76447648d0e88c6d855cd04437bb179963f2f13d0eb279dbfe8e9e9"
+      },
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40550247760,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 122462381096,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": {
+        "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe"
+      },
+      "title": "Nightly latest / 923bd2ca79ce5bc1c99bc9abfbfcc1d086c85cff / draft / wayland=true / android-signing=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40550247760",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"patchset\": \"v2\",\n  \"custom_repository_sha\": \"17e9bd7756ec8dae217e967064c6f255df2654c8\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"b00f2b58053bebe545887a6bb10ad0aee9066b7ac7ed7d259c8e76b1e342ee23\",\n  \"patch_revision\": \"v2.4\",\n  \"revision\": \"v2.4\",\n  \"release_tag\": \"v1.5.0-custom.v2.4\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false,\n  \"build_identity\": \"81a9df540baff40b421134975f377c5ce1bf53e7c6d59dd3d7bb624baa855925\",\n  \"rebuild_reason\": \"NEW_PATCH_REVISION\"\n}\n",
+          "digest": "sha256:9b14b4aff65adf5c59d2d3af738c8ba714355e721d525d733d97542fc84c0b5a",
+          "download_sha256": "9b14b4aff65adf5c59d2d3af738c8ba714355e721d525d733d97542fc84c0b5a",
+          "expires_at": "2027-01-25T13:16:17Z",
+          "id": 12736279365,
+          "json_sha256": "27a7cc2758599c1a312917db17670560b84b63ed45f49da989b9c00e7019be38",
+          "name": "release-preflight-40510561738"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "17e9bd7756ec8dae217e967064c6f255df2654c8",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 32,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-27T14:37:04Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "81a9df540baff40b421134975f377c5ce1bf53e7c6d59dd3d7bb624baa855925",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 17,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40510561738,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 122229995397,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable 1.5.0 / draft / wayland=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40510561738"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_ref\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"40146600534\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/40146600534\",\n  \"common_patch_hash\": \"d0400a8bbd15cb3a116b1266b5c04148145a695482c474a3ea0c89b2b354506c\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\"\n}\n",
+          "digest": "sha256:2ef919e444098c89b3d241ebb09369df3772a1d154a19b893011513efd6777cd",
+          "download_sha256": "2ef919e444098c89b3d241ebb09369df3772a1d154a19b893011513efd6777cd",
+          "expires_at": "2027-01-25T05:12:50Z",
+          "id": 12711511836,
+          "json_sha256": "5a6672798378c130f934b8928142d28d1b5f7cf6ed1ab4b3e5f9743d584f3722",
+          "name": "nightly-discovery-40454023730"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "4c96aed2a1ba1c6b0dbb9295dd2cdf311eb29975",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "Historical signing selection is not explicit",
+      "job_count": 29,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-27T06:48:31Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 17,
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40454023730,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 122048870498,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Nightly latest / 4c96aed2a1ba1c6b0dbb9295dd2cdf311eb29975 / draft / wayland=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40454023730",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"patchset\": \"v2\",\n  \"custom_repository_sha\": \"4c96aed2a1ba1c6b0dbb9295dd2cdf311eb29975\",\n  \"wayland_included\": true,\n  \"wayland_policy_sha256\": \"b00f2b58053bebe545887a6bb10ad0aee9066b7ac7ed7d259c8e76b1e342ee23\",\n  \"patch_revision\": \"v2.3\",\n  \"revision\": \"v2.3\",\n  \"release_tag\": \"v1.5.0-custom.v2.3\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false,\n  \"build_identity\": \"501b87e65983055fcac9bc565347759b04169c861be5832d80574843d4a155d8\",\n  \"rebuild_reason\": \"NEW_PATCH_REVISION\"\n}\n",
+          "digest": "sha256:2a8ed9d7cfdbab63d33043b9dd45a413a55f4a0310c6bf99aa60c679461aab71",
+          "download_sha256": "2a8ed9d7cfdbab63d33043b9dd45a413a55f4a0310c6bf99aa60c679461aab71",
+          "expires_at": "2027-01-25T05:07:24Z",
+          "id": 12710939758,
+          "json_sha256": "ee6e2a91b8f3eaac54e938cf7e2918e73947ef84bab608f7bda00f3f0e554f2f",
+          "name": "release-preflight-40453508604"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "4c96aed2a1ba1c6b0dbb9295dd2cdf311eb29975",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 32,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-27T06:40:06Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "501b87e65983055fcac9bc565347759b04169c861be5832d80574843d4a155d8",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 17,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40453508604,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 122032724794,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable 1.5.0 / draft / wayland=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40453508604"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"patchset\": \"v2\",\n  \"patch_revision\": \"v2.2\",\n  \"revision\": \"v2.2\",\n  \"release_tag\": \"v1.5.0-custom.v2.2\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false,\n  \"build_identity\": \"2561a75bd2b3cde043c2979a02efde784cb4be139fb78c9bf75dd241302670fd\",\n  \"rebuild_reason\": \"NEW_PATCH_REVISION\"\n}\n",
+          "digest": "sha256:d080b9b23c690909b59c64434c974de3c712a47f69cf4421c38b0cc9407d6968",
+          "download_sha256": "d080b9b23c690909b59c64434c974de3c712a47f69cf4421c38b0cc9407d6968",
+          "expires_at": "2027-01-24T12:35:23Z",
+          "id": 12650162508,
+          "json_sha256": "33ec3a18af10e0e3a6d2cea24ab3cdd2432bce8bab1c359a8e5a8c6ef2f93b56",
+          "name": "release-preflight-40323682122"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "4e0ed1229877af40c06c7651d44a259bd5c7d853",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 94,
+      "latest_attempt": 3,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-26T14:59:56Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "2561a75bd2b3cde043c2979a02efde784cb4be139fb78c9bf75dd241302670fd",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2,
+        3
+      ],
+      "observed_compile_step_count": 51,
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "USER_OR_WORKFLOW_CANCELLED",
+          "conclusion": "cancelled",
+          "entered_compile": true,
+          "failed_job_evidence": [],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        },
+        {
+          "attempt": 2,
+          "automatic_retry_allowed": false,
+          "classification": "USER_OR_WORKFLOW_CANCELLED",
+          "conclusion": "cancelled",
+          "entered_compile": true,
+          "failed_job_evidence": [],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40323682122,
+      "signing_jobs": [
+        {
+          "conclusion": "cancelled",
+          "id": 121623095336,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        },
+        {
+          "conclusion": "success",
+          "id": 121623921805,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        },
+        {
+          "conclusion": "success",
+          "id": 121644530131,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 3,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable latest / draft",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40323682122"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_ref\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"40146600534\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/40146600534\",\n  \"common_patch_hash\": \"d0400a8bbd15cb3a116b1266b5c04148145a695482c474a3ea0c89b2b354506c\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\"\n}\n",
+          "digest": "sha256:aa2f4b06552f6dd08e9c4608fae1310a9181d43712741992c40069f6b29b1a34",
+          "download_sha256": "aa2f4b06552f6dd08e9c4608fae1310a9181d43712741992c40069f6b29b1a34",
+          "expires_at": "2027-01-24T10:29:29Z",
+          "id": 12642958842,
+          "json_sha256": "5a6672798378c130f934b8928142d28d1b5f7cf6ed1ab4b3e5f9743d584f3722",
+          "name": "nightly-discovery-40307813132"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "4e0ed1229877af40c06c7651d44a259bd5c7d853",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "Historical signing selection is not explicit",
+      "job_count": 58,
+      "latest_attempt": 2,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-26T12:30:59Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2
+      ],
+      "observed_compile_step_count": 33,
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "USER_OR_WORKFLOW_CANCELLED",
+          "conclusion": "cancelled",
+          "entered_compile": true,
+          "failed_job_evidence": [],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40307813132,
+      "signing_jobs": [
+        {
+          "conclusion": "cancelled",
+          "id": 121555416853,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        },
+        {
+          "conclusion": "success",
+          "id": 121566675831,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Nightly latest / 4e0ed1229877af40c06c7651d44a259bd5c7d853 / draft / wayland=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40307813132",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"channel\": \"nightly\",\n  \"upstream_repository\": \"rustdesk/rustdesk\",\n  \"upstream_sha\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_ref\": \"1297da6d186e58d9096be24072ae3998cdbbf8fe\",\n  \"upstream_tag\": \"\",\n  \"upstream_version\": \"1.5.1\",\n  \"patchset\": \"v2\",\n  \"official_run_id\": \"40146600534\",\n  \"official_run_url\": \"https://github.com/rustdesk/rustdesk/actions/runs/40146600534\",\n  \"common_patch_hash\": \"d0400a8bbd15cb3a116b1266b5c04148145a695482c474a3ea0c89b2b354506c\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\"\n}\n",
+          "digest": "sha256:b2c1bdec64aff4c39784d727bf647529489ba0cb729d8ce6f61dcc90bb407923",
+          "download_sha256": "b2c1bdec64aff4c39784d727bf647529489ba0cb729d8ce6f61dcc90bb407923",
+          "expires_at": "2027-01-24T06:39:24Z",
+          "id": 12631239168,
+          "json_sha256": "5a6672798378c130f934b8928142d28d1b5f7cf6ed1ab4b3e5f9743d584f3722",
+          "name": "nightly-discovery-40281097212"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "9afabaa5e9355b01f18530a27bdeb6471093481b",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "Historical signing selection is not explicit",
+      "job_count": 29,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-26T07:52:29Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 17,
+      "original_official_run": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      },
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 40281097212,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 121446009693,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Nightly latest / 9afabaa5e9355b01f18530a27bdeb6471093481b / draft / wayland=true",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/40281097212",
+      "verified_official_source_evidence": {
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "master",
+        "head_repository": "rustdesk/rustdesk",
+        "head_sha": "1297da6d186e58d9096be24072ae3998cdbbf8fe",
+        "id": 40146600534,
+        "path": ".github/workflows/flutter-nightly.yml",
+        "repository": "rustdesk/rustdesk",
+        "status": "completed"
+      }
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"patchset\": \"v2\",\n  \"patch_revision\": \"v2.1\",\n  \"revision\": \"v2.1\",\n  \"release_tag\": \"v1.5.0-custom.v2.1\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false,\n  \"build_identity\": \"80493b63f56d487fb74995fda2e0e96968a3618b712de6ed858cd25bb548845c\",\n  \"rebuild_reason\": \"NEW_PATCH_REVISION\"\n}\n",
+          "digest": "sha256:98f6f22f67384d60777977e007272585fa3fe8765306d075b44da60dff6ed632",
+          "download_sha256": "98f6f22f67384d60777977e007272585fa3fe8765306d075b44da60dff6ed632",
+          "expires_at": "2027-01-09T04:15:46Z",
+          "id": 11691875395,
+          "json_sha256": "3f42deb789ffe3e969f355a14a92df52cb1a5d6fe171abcbced90e9ba2c46a34",
+          "name": "release-preflight-38111020257"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "37ea290b348e8c6b1d03cf2f6b0fbc88a65f472f",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 75,
+      "latest_attempt": 3,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-11T05:39:40Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": "80493b63f56d487fb74995fda2e0e96968a3618b712de6ed858cd25bb548845c",
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2,
+        3
+      ],
+      "observed_compile_step_count": 39,
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "PRODUCTION_SIGNING_FAILURE",
+          "conclusion": "failure",
+          "entered_compile": true,
+          "failed_job_evidence": [
+            {
+              "failed_steps": [
+                "Production Android signing"
+              ],
+              "id": 114392228501,
+              "name": "05 \u00b7 Sign Stable Android production artifacts (YubiKey PIV 9C)"
+            }
+          ],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        },
+        {
+          "attempt": 2,
+          "automatic_retry_allowed": false,
+          "classification": "PRODUCTION_SIGNING_FAILURE",
+          "conclusion": "failure",
+          "entered_compile": true,
+          "failed_job_evidence": [
+            {
+              "failed_steps": [
+                "Production Android signing"
+              ],
+              "id": 114395586820,
+              "name": "05 \u00b7 Sign Stable Android production artifacts (YubiKey PIV 9C)"
+            }
+          ],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 38111020257,
+      "signing_jobs": [
+        {
+          "conclusion": "failure",
+          "id": 114392228501,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        },
+        {
+          "conclusion": "failure",
+          "id": 114395586820,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        },
+        {
+          "conclusion": "success",
+          "id": 114397484963,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 3,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable latest / draft",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/38111020257"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false\n}\n",
+          "digest": "sha256:05e617bffe2a05440585d7785606f29c117ab55f77ef95292f92ddc614f0e1cd",
+          "download_sha256": "05e617bffe2a05440585d7785606f29c117ab55f77ef95292f92ddc614f0e1cd",
+          "expires_at": "2027-01-05T17:17:47Z",
+          "id": 11500197068,
+          "json_sha256": "2dad43d1f93be1d8367c0188dcd8b1f450a8b8bb2e5cc5b07b187c0f33f12816",
+          "name": "release-preflight-37657952527"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "f760a25db0de351dd186597093425465f3cf05ed",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 25,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-07T18:23:23Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 13,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37657952527,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 112932573834,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable latest / draft",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37657952527"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": true,\n  \"draft_needed\": true,\n  \"publish_existing\": false\n}\n",
+          "digest": "sha256:234855c385535e34aa4b042e23ff6703887bf2155809fd177a81c04c1c2dd7f9",
+          "download_sha256": "234855c385535e34aa4b042e23ff6703887bf2155809fd177a81c04c1c2dd7f9",
+          "expires_at": "2027-01-05T12:11:27Z",
+          "id": 11481570607,
+          "json_sha256": "2dad43d1f93be1d8367c0188dcd8b1f450a8b8bb2e5cc5b07b187c0f33f12816",
+          "name": "release-preflight-37612132102"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "11daf94b6282303d15c2d161e721ef245d30c2b3",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 50,
+      "latest_attempt": 2,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-07T13:25:01Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1,
+        2
+      ],
+      "observed_compile_step_count": 26,
+      "prior_attempts": [
+        {
+          "attempt": 1,
+          "automatic_retry_allowed": false,
+          "classification": "HISTORICAL_SUCCESS",
+          "conclusion": "success",
+          "entered_compile": true,
+          "failed_job_evidence": [],
+          "reason": "Preserve historical outcome; latest success is not overwritten; no retroactive retry"
+        }
+      ],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37612132102,
+      "signing_jobs": [
+        {
+          "conclusion": "success",
+          "id": 112775593686,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        },
+        {
+          "conclusion": "success",
+          "id": 112800542531,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 2,
+          "runner_group_name": "Default",
+          "runner_id": 21,
+          "runner_name": "raspberrypi-rustdesk-signing"
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable latest / draft",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37612132102"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": false,\n  \"draft_needed\": false,\n  \"publish_existing\": true\n}\n",
+          "digest": "sha256:c6af78cbece8aca9410198c9effdb27b207fad6a3f8caefe38d994a221dcbb19",
+          "download_sha256": "c6af78cbece8aca9410198c9effdb27b207fad6a3f8caefe38d994a221dcbb19",
+          "expires_at": "2027-01-05T01:49:33Z",
+          "id": 11456295368,
+          "json_sha256": "2ce09c29856eeb10199f0b3b856320c4e531e9a4bb4c8931952174db55fc7854",
+          "name": "release-preflight-37558994519"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "4a2439a08a8d68c11f88e5bd940b1d92ae332dad",
+      "disposition": "NO_BUILD_IDENTITY_REVIEW",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 11,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-07T01:49:54Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": true,
+      "observed_compile_attempts": [],
+      "observed_compile_step_count": 0,
+      "prior_attempts": [],
+      "proposed_action": "NO_NEW_ATTEMPT; verify referenced original producer/release before any alias import",
+      "referenced_custom_sha": null,
+      "referenced_release": "v1.5.0-custom.1",
+      "run_id": 37558994519,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 112591841393,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable 1.5.0 / dry-run",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37558994519"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": false,\n  \"draft_needed\": false,\n  \"publish_existing\": true\n}\n",
+          "digest": "sha256:22373597117516fd25c1c4de54ce88a7c0fcacf61790bd00998eea79fe803019",
+          "download_sha256": "22373597117516fd25c1c4de54ce88a7c0fcacf61790bd00998eea79fe803019",
+          "expires_at": "2027-01-05T00:52:08Z",
+          "id": 11454182510,
+          "json_sha256": "2ce09c29856eeb10199f0b3b856320c4e531e9a4bb4c8931952174db55fc7854",
+          "name": "release-preflight-37554194185"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "1f3cf3f6dcaf4543d5d7818fa5da6f554beddacf",
+      "disposition": "NO_BUILD_IDENTITY_REVIEW",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 11,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-07T00:52:28Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": true,
+      "observed_compile_attempts": [],
+      "observed_compile_step_count": 0,
+      "prior_attempts": [],
+      "proposed_action": "NO_NEW_ATTEMPT; verify referenced original producer/release before any alias import",
+      "referenced_custom_sha": null,
+      "referenced_release": "v1.5.0-custom.1",
+      "run_id": 37554194185,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 112576594422,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable latest / draft",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37554194185"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": true,\n  \"draft_needed\": true\n}\n",
+          "digest": "sha256:4093704a38cc72c6eb72da9de7d51ff0ca34fe39029c7d2d3a4f2921eb77ce90",
+          "download_sha256": "4093704a38cc72c6eb72da9de7d51ff0ca34fe39029c7d2d3a4f2921eb77ce90",
+          "expires_at": "2027-01-03T12:36:01Z",
+          "id": 11345760888,
+          "json_sha256": "249747e2df81d0a42f8887902b8f443ed80afbee5a715150b7a0fc04b5a2c62c",
+          "name": "release-preflight-37310654296"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "29a73e953625b54bbe3b1302f847b059e8fc6d91",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 45,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-05T13:53:14Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 13,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37310654296,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 111781146032,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable Release Pipeline",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37310654296"
+    },
+    {
+      "artifact_evidence": [],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 27,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-05T08:45:56Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 13,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37279734509,
+      "signing_jobs": [],
+      "source_identity": null,
+      "title": "Nightly Build Pipeline",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37279734509"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": true,\n  \"draft_needed\": true\n}\n",
+          "digest": "sha256:e49fa08933b7217a57edb5befda79448f6e13676d53547e1d65109eed8f0abdb",
+          "download_sha256": "e49fa08933b7217a57edb5befda79448f6e13676d53547e1d65109eed8f0abdb",
+          "expires_at": "2027-01-02T09:50:21Z",
+          "id": 11299324025,
+          "json_sha256": "249747e2df81d0a42f8887902b8f443ed80afbee5a715150b7a0fc04b5a2c62c",
+          "name": "release-preflight-37193423254"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 32,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-04T11:05:52Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 13,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37193423254,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 111422451115,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable Release Pipeline",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37193423254"
+    },
+    {
+      "artifact_evidence": [
+        {
+          "archive_digest_verified": true,
+          "archived_document_utf8": "{\n  \"upstream_tag\": \"1.5.0\",\n  \"version\": \"1.5.0\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"official_release_id\": 396443202,\n  \"revision\": \"1\",\n  \"release_tag\": \"v1.5.0-custom.1\",\n  \"upstream_ref\": \"1.5.0\",\n  \"channel\": \"stable\",\n  \"build_needed\": true,\n  \"draft_needed\": true\n}\n",
+          "digest": "sha256:efc9299b2e47e670eb68c68ec02cab12e3440223fc6991a23e2bc86b8b1cb575",
+          "download_sha256": "efc9299b2e47e670eb68c68ec02cab12e3440223fc6991a23e2bc86b8b1cb575",
+          "expires_at": "2027-01-02T07:44:07Z",
+          "id": 11296924455,
+          "json_sha256": "249747e2df81d0a42f8887902b8f443ed80afbee5a715150b7a0fc04b5a2c62c",
+          "name": "release-preflight-37186687889"
+        }
+      ],
+      "automatic_retry_allowed": false,
+      "channel": "stable",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 32,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-04T09:28:24Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 13,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37186687889,
+      "signing_jobs": [
+        {
+          "conclusion": "skipped",
+          "id": 111406750782,
+          "labels": [
+            "self-hosted",
+            "linux",
+            "arm64",
+            "rustdesk-signing",
+            "android-signing",
+            "yubikey"
+          ],
+          "run_attempt": 1,
+          "runner_group_name": null,
+          "runner_id": null,
+          "runner_name": null
+        }
+      ],
+      "source_identity": null,
+      "title": "Stable Release Pipeline",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37186687889"
+    },
+    {
+      "artifact_evidence": [],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 28,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-04T08:47:31Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 13,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 37185958897,
+      "signing_jobs": [],
+      "source_identity": null,
+      "title": "Nightly Build Pipeline",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37185958897"
+    },
+    {
+      "artifact_evidence": [],
+      "automatic_retry_allowed": false,
+      "channel": "nightly",
+      "coordinator_build_identity": null,
+      "custom_repository_sha": "31068343275299000954cf7e7d92ebdb186436b4",
+      "disposition": "REVIEW_REQUIRED",
+      "identity_review_reason": "No complete lock/discovery artifact",
+      "job_count": 13,
+      "latest_attempt": 1,
+      "latest_conclusion": "success",
+      "latest_job_completed_at": "2026-10-01T14:52:46Z",
+      "latest_status": "completed",
+      "ledger_import_allowed": false,
+      "legacy_build_identity": null,
+      "no_build_reuse": false,
+      "observed_compile_attempts": [
+        1
+      ],
+      "observed_compile_step_count": 2,
+      "prior_attempts": [],
+      "proposed_action": "HOLD_REBUILD; retain legacy evidence; no state import or retry authorization",
+      "run_id": 36872771101,
+      "signing_jobs": [],
+      "source_identity": null,
+      "title": "Nightly Build Pipeline",
+      "url": "https://github.com/billradar/rustdesk-custom/actions/runs/36872771101"
+    }
+  ],
+  "schema_version": 1,
+  "summary": {
+    "active_build_runs": 0,
+    "compile_attempts_observed": 31,
+    "dispositions": {
+      "NO_BUILD_IDENTITY_REVIEW": 2,
+      "NO_BUILD_REUSE": 1,
+      "REVIEW_REQUIRED": 15,
+      "VERIFIED_LEGACY_SUCCESS_IDENTITY": 7
+    },
+    "no_build_runs": 3
+  },
+  "workflow_checks": [
+    {
+      "file": ".github/workflows/tag.yml",
+      "ref": "95abfaf706766f670dddcecea41530320c0ebb66",
+      "sha256": "09f250f854dd97b28d923e4953d97fc349e6c3122978aed7df3d2502ba9e8177",
+      "signer_isolation": "PASS"
+    },
+    {
+      "file": ".github/workflows/nightly.yml",
+      "ref": "95abfaf706766f670dddcecea41530320c0ebb66",
+      "sha256": "0bb4886174e9bce2ee92f719da0170c0b5f0a3cf468116545eda05ef70caae39",
+      "signer_isolation": "PASS"
+    },
+    {
+      "file": ".github/workflows/tag.yml",
+      "ref": "b442d1de6ab84de23de478f09ced993f1bee1d5f",
+      "sha256": "48a0e40f998bda43646233d66de4d31159bc62b5db905e72b74e34eb18221922",
+      "signer_isolation": "PASS"
+    },
+    {
+      "file": ".github/workflows/nightly.yml",
+      "ref": "b442d1de6ab84de23de478f09ced993f1bee1d5f",
+      "sha256": "b34bc6ee179e8559cef7610506293519dea4d0134090ef97afa401ec455c3af8",
+      "signer_isolation": "PASS"
+    }
+  ]
+}
