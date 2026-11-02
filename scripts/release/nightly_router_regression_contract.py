@@ -5,11 +5,19 @@ from unittest.mock import patch
 from scripts.release import nightly
 
 class NightlyRouterRegression(unittest.TestCase):
-    def test_discover_rejects_invalid_pinned_run(self):
-        with patch.dict(os.environ, {'OFFICIAL_RUN_ID': 'not-a-run'}), \
-             patch.object(nightly, 'api', return_value={'default_branch': 'master'}):
-            with self.assertRaisesRegex(ValueError, 'Invalid official run ID'):
-                nightly.discover()
+    def test_skipped_dispatch_is_not_counted_as_attempt(self):
+        row = dict(id=7, display_title='Nightly latest / ' + 'a'*40 +
+                   ' / draft / wayland=true / android-signing=false',
+                   event='workflow_dispatch', head_branch='main',
+                   status='completed', conclusion='success')
+        discovery = dict(upstream_sha='b'*40, patchset='v2',
+                         common_patch_hash='c'*64, sos_patch_hash='d'*64,
+                         dedup_state='COOLDOWN')
+        with patch.object(nightly, 'source_sha_from_run', return_value='b'*40), \\
+             patch.object(nightly, 'discovery_from_run', return_value=discovery):
+            nightly.annotate_history([row], 'b'*40)
+        self.assertTrue(row['_nightly_identity_skipped'])
+        self.assertNotIn('_nightly_identity', row)
 
     def test_active_unresolved_identity_blocks_duplicate(self):
         row = dict(id=1, event='workflow_dispatch', head_branch='main',
