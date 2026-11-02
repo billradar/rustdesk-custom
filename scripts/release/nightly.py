@@ -212,6 +212,9 @@ def route(data):
     identity = nightly_identity(identity_data, 'draft', 'true', signing)
     annotate_history(rows, data['upstream_sha'])
     state = route_state(rows, identity, signing=signing, upstream_sha=data['upstream_sha'])
+    if state == 'ACTIVE':
+        print('Nightly route: ACTIVE (including unresolved pending discovery); skip.')
+        return
     if state == 'UNKNOWN':
         raise ValueError('Unresolved Nightly build identity; manual review required')
     matching = [r for r in rows if r.get('_nightly_identity') == identity
