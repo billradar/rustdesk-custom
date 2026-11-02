@@ -116,7 +116,9 @@ def validate_event(event):
         expected = advance(*args, after.state, at, failure_class=after.failure_class,
                            failure_stage=after.failure_stage, failure_reason=after.failure_reason)
     else:
-        raise ValueError('Unsupported journal action')
+        from .transitions import validate_additional
+        validate_additional(event)
+        return
     if expected != event:
         raise ValueError('Event differs from validated state transition')
 

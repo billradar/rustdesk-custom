@@ -212,3 +212,41 @@ scripts.release.coordinator.store_contract` and the existing domain list.
 PR 2 rollback: revert the storage module and its contract wiring. No active
 coordinator state exists from this PR. After activation, retain journals and
 stop admission before reverting any runtime integration.
+
+## Classified retry and reconciliation implementation (PR 3)
+
+`retry.py`, `transitions.py` and `reconcile.py` implement dormant recovery core.
+Defaults are three actual compile-stage entries, with a separate maximum of six
+reservation epochs to bound repeated prebuild infrastructure failures. Skips
+change neither counter. Backoff starts at six hours from actual job completion,
+doubles to a 24-hour base ceiling and adds bounded 0–25% jitter. Limits are
+frozen in provenance when configured; invalid or excessive limits fail closed.
+
+Generic failure, compilation, Patch, contract, signature, integrity, unknown
+identity, cancellation and safety rejection never qualify automatically. Live
+log classification currently recognizes only the existing explicit SDK download
+and runner shutdown evidence on leaf build jobs. Other typed transient classes
+are available to verified evidence producers; absence of such evidence remains
+manual review. Logs are inspected in memory and not printed or journaled.
+
+The reconciler verifies exact repository, workflow path, main branch, custom
+commit, run ID and run attempt. Native GitHub reruns require a fresh explicit
+coordinator authorization and cannot silently reuse an old reservation. Actual
+compile step timestamps determine build entry; the latest observed job completion
+determines completion time. An active bound run is never stolen after expiry;
+its same fenced lease can be extended. Unknown dispatch is never resent on expiry.
+Success requires actual build and aggregate evidence and remains terminal.
+
+An explicit manual grant records actor, reason, timestamp and the next fence. It
+permits one new reservation and is consumed there; it cannot change source,
+signing or publication gates. The runtime workflow/UI for such grants will be
+introduced with channel integration. Retries must recheck the old Actions run is
+terminal immediately before the atomic replacement; stale snapshots fail CAS.
+
+`reconcile_contract` covers bounded build and reservation budgets, completion-time
+cooldown/jitter, cancellation/signing rejection, active-run lease recovery,
+ambiguous dispatch, stale worker results, exact-run provenance and native-rerun
+rejection. All fixtures run without production credentials. This stage still
+has no production workflow dispatch or backend activation. Rollback: revert
+this PR while dormant; after activation retain journal history and stop admission
+before reverting recovery logic.
