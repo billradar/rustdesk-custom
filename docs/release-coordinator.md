@@ -366,3 +366,40 @@ are live. Monitor structured REVIEW/UNKNOWN logs and Git API rate limits; invent
 above 1000 identities requires a reviewed archive plan. Revalidate tests after any
 matrix, signing-profile or source-policy change and review an explicit identity
 policy migration before expanding identity fields.
+
+## Isolated live Git API verification supplement
+
+The supplemental validation PR adds `integration.py`, which uses the unmodified
+GitRefStore and real GitHub Git API under `heads/coordinator-integration/v1/`.
+The dedicated integration workflow is read-only globally; only its isolated
+state-writing job receives Contents write. It has no Actions dispatch permission,
+Environment, signing/publication credentials, or production build calls. Automatic
+PR execution is confined to the named same-repository validation branch, with
+matching checks in Python. Forks and pull_request_target are rejected. Future
+manual execution requires the reviewed exact main workflow; there are no inputs.
+
+Each execution generates an unpredictable run-specific session and exactly three
+synthetic test refs. Existing refs are never adopted. The transport rejects
+production journals, normal branches, tags, Releases, Actions dispatches, force
+updates, deletion, foreign repositories, and trees containing executable files.
+It retains test refs as audit evidence; the namespace is not queried by production
+routers. Nothing checks out or executes these orphan state commits. No cleanup
+uses an unsafe read-then-delete operation. Future retention maintenance must be
+separately reviewed and limited to this test namespace.
+
+Seven checks cover same-identity atomic creation, independent identities/channels,
+competing single-parent updates, fresh-worker recovery, an accepted real write
+with injected lost acknowledgement, a 503 injected before a ref request with no
+replay, and rejection of an old synthetic worker after a replacement epoch. The
+503/timeouts are transport fault injections around real storage operations;
+no outage of GitHub infrastructure or actual Runner termination is claimed.
+Synthetic run numbers are state fixtures, not Actions completion evidence. This
+supplement validates the storage primitive rather than dispatch, production
+signing or publication. Both failures and successes produce sanitized summaries
+with the attempted test refs, session and API count; authentication is never
+printed or stored. Offline integration_contract checks the allowlist, context,
+workflow isolation and complete harness against the atomic in-memory transport.
+
+Live result: pending execution of the supplemental PR workflow. The preceding
+five stage PRs remain unmerged; their prior green CI is unchanged. Live Environment
+protection and deployed production behavior remain independently unverified.
