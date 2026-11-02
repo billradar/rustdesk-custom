@@ -155,7 +155,8 @@ class NightlyTests(unittest.TestCase):
             nightly.route({'official_run_id':'17','upstream_sha':'b'*40,'patchset':'v2',
                            'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
-            self.assertFalse(any(x.startswith(('official_run_id=', 'expected_sha=')) for x in args))
+            self.assertIn('official_run_id=17', args)
+            self.assertFalse(any(x.startswith('expected_sha=') for x in args))
             self.assertIn('release_mode=draft',args)
             self.assertEqual(args[args.index('--repo')+1],clone)
             self.assertEqual(args[args.index('--ref')+1],'main')
@@ -210,7 +211,8 @@ class NightlyTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['resolve']['if'])
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
         self.assertTrue(w['run-name'].startswith('Nightly latest /'))
-        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland'})
+        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland', 'official_run_id'})
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['official_run_id']['default'], '')
         resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
@@ -266,7 +268,7 @@ class NightlyTests(unittest.TestCase):
 
     def test_polling_and_unique_plan_artifacts(self):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
-        self.assertEqual(w['on']['schedule'],[{'cron':'23 2 * * *'}])
+        self.assertEqual(w['on']['schedule'],[{'cron':'23 2 * * *'}, {'cron':'41 8 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
         self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
