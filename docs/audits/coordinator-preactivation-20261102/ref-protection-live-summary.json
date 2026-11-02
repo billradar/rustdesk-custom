@@ -1,0 +1,74 @@
+{
+  "bypass_visibility": {
+    "26375171": "not_exposed_to_token",
+    "26375414": "not_exposed_to_token"
+  },
+  "limitation": "Synthetic Git state only; no production state, build, signing or publication",
+  "positive_controls": [
+    "journal_create",
+    "journal_fast_forward",
+    "index_create"
+  ],
+  "protected_storage": {
+    "api_calls": 139,
+    "checks": [
+      "same_identity_one_reservation",
+      "different_identity_and_channel_independence",
+      "sibling_update_one_winner",
+      "worker_restart_recovery",
+      "accepted_write_lost_acknowledgement",
+      "write_503_no_replay",
+      "expired_epoch_stale_worker_rejected"
+    ],
+    "limitation": "Git storage integration only; synthetic run evidence, no Actions dispatch or signing/publication",
+    "refs": [
+      "refs/heads/coordinator-integration/v1/nightly/f6924ab677b1dcb52f7bfca03fdcc657e0da742a58b31adb4ef5df224479514c",
+      "refs/heads/coordinator-integration/v1/stable/3102a32db281bb146881fbd62515cd8b811151737eb22a1897147a5ad8f7e1ca",
+      "refs/heads/coordinator-integration/v1/stable/923dc34889a6067873bc5ae32d4c5dac089c2742ea015b23c04e3326387eeaaf"
+    ],
+    "result": "PASS",
+    "schema_version": 1,
+    "session": "41467995091-cafd7870-8c58-4ca1-ab47-9ce85bf3445a:protected-races"
+  },
+  "refs": [
+    "refs/heads/coordinator-integration/v1/stable/3fff758c86d0fa2449a5ba951f2e9cc2f0e9564bef232e8e7c47ea798e802f34",
+    "refs/heads/coordinator-integration-index/v1/c1146486ea4a250a08d22740474d93ab742d6aa59659971ea4ce6a639191fc20",
+    "refs/heads/coordinator-integration/v1/nightly/f6924ab677b1dcb52f7bfca03fdcc657e0da742a58b31adb4ef5df224479514c",
+    "refs/heads/coordinator-integration/v1/stable/3102a32db281bb146881fbd62515cd8b811151737eb22a1897147a5ad8f7e1ca",
+    "refs/heads/coordinator-integration/v1/stable/923dc34889a6067873bc5ae32d4c5dac089c2742ea015b23c04e3326387eeaaf"
+  ],
+  "rejections": [
+    {
+      "check": "journal_non_fast_forward",
+      "status": 422,
+      "unchanged": true
+    },
+    {
+      "check": "journal_deletion",
+      "status": 422,
+      "unchanged": true
+    },
+    {
+      "check": "index_fast_forward",
+      "status": 422,
+      "unchanged": true
+    },
+    {
+      "check": "index_forced_update",
+      "status": 422,
+      "unchanged": true
+    },
+    {
+      "check": "index_deletion",
+      "status": 422,
+      "unchanged": true
+    }
+  ],
+  "result": "PASS",
+  "ruleset_ids": [
+    26375171,
+    26375414
+  ],
+  "schema_version": 1,
+  "session": "41467995091-cafd7870-8c58-4ca1-ab47-9ce85bf3445a"
+}

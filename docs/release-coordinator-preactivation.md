@@ -111,3 +111,7 @@ Nightly `41292973439` 的原官方 Run `41280309181` 现返回 404。它的归�
 用户完成登录后，已实际打开 Runner 列表/详情、Branches、Actions General、Actions Policies 页面。账号为 billradar。当前签名 Runner 在线空闲，六个标签与配置相符；经典保护没有列出规则，Actions Policies 明确显示尚未创建策略。默认令牌只读，Actions 创建/批准 PR 关闭，fork 审批仅首次贡献者。没有点击任何 Save、Remove 或新建策略按钮，也没有读取凭据或密钥内容。页面地址、选中值和核查范围记录在 migration-plan.json 的 administrative_ui_followup。
 
 Runner 标签是调度条件，不是专属访问授权的证明。当前 UI 没有展示签名工作流独占白名单，且没有任何新增 Actions Policies；不能据此宣称硬件 Runner 已实现强隔离。建议在受控上线前单独评估是否需要审批所有外部贡献者，以及是否采用受限工作流 Runner 组或独立私有签名仓库。这是待评估的加固选项，不是已经验证的可利用缺陷；本次不擅自更改审批或签名语义。
+
+## 后续隔离保护验证（PR #175）
+
+已创建并经管理 API 确认 Active、无 bypass 的隔离 ruleset：journal `26375171`、run-index `26375414`。真实运行 `41467995091` 通过 3 项正向操作、5 项服务器 422 拒绝/原 head 不变核对及 7 项受保护存储检查。详见 [验证记录](release-coordinator-protection.md)。生产两份配置仍未应用：功能 CI `41467994953` 在官方上游 `6aec306…` 的未知 bridge 构建接口门禁失败，需独立 staging 审查并重新验证；不以修改身份、来源选择或测试断言掩盖失败。
