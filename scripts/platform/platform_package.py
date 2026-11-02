@@ -68,6 +68,9 @@ def validate(folder):
  elif i['signed_status'] not in ('NOT ENABLED','TEST SIGNED / NOT PRODUCTION SIGNED'):raise ValueError('Signing policy mismatch')
  for p in folder.rglob('*'):
   if p.is_file():scan(p.read_bytes())
+ if i['platform']=='macos' and i['architecture']=='aarch64':
+  from scripts.build.macos_arm64 import requires_receipt,validate_receipt
+  if requires_receipt(i,m):validate_receipt(folder,i)
  if i['platform']=='android':
   validation_native=folder/'validation'/'librustdesk.so'
   if (folder/'validation').is_symlink() or not validation_native.is_file() or validation_native.is_symlink() or not validation_native.resolve().is_relative_to(folder.resolve()):raise ValueError('ARCH: canonical Android validation binary missing or unsafe')
@@ -165,6 +168,11 @@ def create(tree,platform,arch,variant):
  from scripts.source.update_identity import verify_about_identity
  verify_about_identity(tree,unattended=os.environ.get('BUILD_FLAVOR')=='unattended-wayland')
  tree=Path(tree);values=configured();m=json.loads((tree/'source-manifest.json').read_text());profile=json.loads(Path('.work/platform-profile.json').read_text())
+ mac_receipt_required=False
+ if platform=='macos' and arch=='aarch64':
+  from scripts.build.macos_arm64 import requires_receipt,verified
+  mac_receipt_required=requires_receipt(profile,m)
+  if mac_receipt_required:verified(tree)
  if platform in ('linux','macos'):
   library=tree/('target/release/liblibrustdesk.so' if platform=='linux' else 'target/release/liblibrustdesk.dylib')
  else:
@@ -219,6 +227,10 @@ def create(tree,platform,arch,variant):
  signed='TEST SIGNED / NOT PRODUCTION SIGNED' if platform=='android' else 'NOT ENABLED'
  info={k:m[k] for k in ('variant','upstream_repository','upstream_ref','upstream_version','upstream_sha','patchset','common_patch_hash','sos_patch_hash','custom_repository','custom_repository_sha')}
  info.update(channel=channel,platform=platform,architecture=arch,platform_patch_hash=None,prepared_source_identity=sha(tree/'source-manifest.json'),prepare_run=m['prepare_workflow_run'],build_run=os.environ['GITHUB_RUN_ID'],workflow_run=os.environ['GITHUB_RUN_ID'],build_job=os.environ.get('GITHUB_JOB'),runner=os.environ.get('RUNNER_OS'),runner_arch=os.environ.get('RUNNER_ARCH'),runner_image=os.environ.get('ImageOS'),package_type=kind,signed_status=signed,configuration='PRODUCTION',configuration_validation='PASS',password_validation_method='compiler-mir-and-package-native-identity' if platform=='android' else 'built-library-native-bridge',server_config_fingerprint=server_fingerprint(),build_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED',architecture_validation='PASS',package_validation='PASS',credential_scan='PASS',platform_adapter_signature=profile['signature'],build_toolchain={k:profile[k] for k in ['rust','flutter','vcpkg','ndk','cargo_ndk']})
+ if mac_receipt_required:
+  from scripts.build.macos_arm64 import RECEIPT
+  info['macos_flutter344']=True
+  shutil.copy2(tree/RECEIPT,dest/RECEIPT)
  if flavor:
   from scripts.platform.wayland import POLICY,policy_for_built_tree
   pin=policy_for_built_tree(tree,arch)

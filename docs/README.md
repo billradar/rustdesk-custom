@@ -40,3 +40,5 @@
 - [三条旧 Nightly 来源补证](release-coordinator-nightly-source-recovery.md) — 旧式 Artifact 与日志交叉核查；不修改冻结目录或授权重试。
 
 - [Final coordinator integration and controlled cutover](release-coordinator-final-integration.md)
+
+- [Reviewed macOS ARM64 Flutter 3.44 migration](macos-arm64-flutter344.md)

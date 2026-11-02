@@ -4,6 +4,7 @@ env:
 'on':
   workflow_call:
     inputs:
+      macos_bridge_artifact: {type: string, default: ""}
       platform: {type: string, required: true}
       arch: {type: string, required: true}
       variant: {type: string, required: true}
@@ -104,6 +105,23 @@ jobs:
       with:
         flutter-version: ${{ steps.profile.outputs.flutter }}
         channel: stable
+    - name: Verify Mac ARM bridge artifact ownership
+      if: inputs.platform == 'macos' && inputs.arch == 'aarch64' && steps.profile.outputs.macos_flutter344 == 'true'
+      env:
+        MACOS_BRIDGE_ARTIFACT: ${{ inputs.macos_bridge_artifact }}
+      run: |
+        [[ "$MACOS_BRIDGE_ARTIFACT" == "macos-arm64-bridge-$GITHUB_RUN_ID" ]] || { echo 'Mac ARM bridge must belong to this run'; exit 1; }
+    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+      if: inputs.platform == 'macos' && inputs.arch == 'aarch64' && steps.profile.outputs.macos_flutter344 == 'true'
+      with:
+        name: ${{ inputs.macos_bridge_artifact }}
+        path: .work/macos-arm64-bridge
+    - name: Apply verified Mac ARM source and bridge transformation
+      if: inputs.platform == 'macos' && inputs.arch == 'aarch64' && steps.profile.outputs.macos_flutter344 == 'true'
+      run: |
+        brew install gnu-sed
+        export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
+        python3 -m scripts.build.macos_arm64 transform "$PREPARED_SOURCE_DIR" --bridge .work/macos-arm64-bridge
     - name: Android official host dependencies
       id: dependencies
       if: inputs.platform == 'android'

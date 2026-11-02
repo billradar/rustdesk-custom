@@ -43,14 +43,83 @@ jobs:
         name: target-plan-platforms-${{ github.run_id }}
         path: .work/target-plan.json
         if-no-files-found: error
+  macos-arm64-bridge:
+    name: Generate reviewed macOS ARM64 bridge
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.profile.outputs.required == 'true' && format('macos-arm64-bridge-{0}', github.run_id) || '' }}
+    env:
+      UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Verify current coordinator worker admission
+      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (github.workflow == 'Nightly Build Pipeline' || github.workflow == 'Stable Release Pipeline')
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.release.coordinator.runtime guard
+    - run: python3 -m pip install -r requirements.txt
+    - name: Fetch frozen official source
+      run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/macos-arm64-bridge
+    - name: Review Mac ARM bridge requirement before dependencies
+      id: profile
+      run: python3 -m scripts.build.macos_arm64 profile .work/macos-arm64-bridge
+    - name: Install reviewed bridge host dependencies
+      if: steps.profile.outputs.required == 'true'
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y clang cmake libclang-dev libgtk-3-dev llvm-dev nasm ninja-build pkg-config
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      if: steps.profile.outputs.required == 'true'
+      with:
+        toolchain: ${{ steps.profile.outputs.bridge_rust }}
+        components: rustfmt
+    - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+      if: steps.profile.outputs.required == 'true'
+      with:
+        flutter-version: ${{ steps.profile.outputs.bridge_flutter }}
+        channel: stable
+    - name: Generate exact-source Mac ARM bridge
+      if: steps.profile.outputs.required == 'true'
+      working-directory: .work/macos-arm64-bridge
+      env:
+        CARGO_EXPAND: ${{ steps.profile.outputs.cargo_expand }}
+        FRB: ${{ steps.profile.outputs.frb }}
+      run: |
+        cargo install cargo-expand --version "$CARGO_EXPAND" --locked
+        cargo install flutter_rust_bridge_codegen --version "$FRB" --features uuid --locked
+        bash .github/patches/apply_flutter_3.44_source_patches.sh
+        (cd flutter && flutter pub get)
+        flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+        cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
+        cd "$GITHUB_WORKSPACE"
+        python3 -m scripts.build.macos_arm64 bridge-info .work/macos-arm64-bridge
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: steps.profile.outputs.required == 'true'
+      with:
+        name: macos-arm64-bridge-${{ github.run_id }}
+        path: |
+          .work/macos-arm64-bridge/src/bridge_generated.rs
+          .work/macos-arm64-bridge/src/bridge_generated.io.rs
+          .work/macos-arm64-bridge/flutter/lib/generated_bridge.dart
+          .work/macos-arm64-bridge/flutter/lib/generated_bridge.freezed.dart
+          .work/macos-arm64-bridge/flutter/macos/Runner/bridge_generated.h
+          .work/macos-arm64-bridge/flutter/ios/Runner/bridge_generated.h
+          .work/macos-arm64-bridge/macos-arm64-bridge-info.json
+        if-no-files-found: error
   platforms:
     name: Build Linux and macOS targets
-    needs: plan
+    needs: [plan, macos-arm64-bridge]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     uses: ./.github/workflows/build-platform.yml
     with:
+      macos_bridge_artifact: ${{ needs.macos-arm64-bridge.outputs.artifact }}
       platform: ${{ matrix.platform }}
       arch: ${{ matrix.arch }}
       variant: ${{ matrix.variant }}
