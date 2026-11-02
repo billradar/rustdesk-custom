@@ -102,7 +102,7 @@ def reserve_retry(record, token, now, lease, *, creator=None, purpose=None):
         raise ValueError('Retry is not authorized')
     data = provenance(record)
     if purpose is not None:
-        if purpose != data.get('purpose') and not (record.channel == 'stable' and data.get('purpose') == 'dry-run' and purpose in ('draft', 'release')):
+        if purpose != data.get('purpose') and not (record.channel == 'stable' and data.get('purpose') in ('dry-run', 'draft', 'release') and purpose in ('draft', 'release')):
             raise ValueError('Retry cannot change build purpose')
         data['purpose'] = purpose
         data['build'] = dict(data['build'], release_mode=purpose)

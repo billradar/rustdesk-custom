@@ -101,6 +101,30 @@ class StableRuntimeContract(unittest.TestCase):
         self.assertEqual(snap.record.attempt,1);self.assertEqual(provenance(snap.record)['purpose'],'draft')
         self.assertTrue(production.admit(snap,stable_run('124'),NOW+timedelta(hours=1)))
 
+    def test_production_mode_retries_keep_authorization_and_publication_gates(self):
+        from .transitions import grant_retry, retry_schedule
+        from .retry import Failure, RetryPolicy
+        for old_mode,new_mode,manual in (('draft','release',True),('release','draft',False)):
+            with self.subTest(old=old_mode,new=new_mode,manual=manual):
+                api=RuntimeAPI();old=Coordinator(api,REPO,identity('stable',release_mode=old_mode))
+                snap=old.claim(NOW,'123',lambda:'EMPTY');old.admit(snap,stable_run(),NOW)
+                snap=old.journal.load();completed=NOW+timedelta(minutes=5)
+                snap=old.journal.append(finish(snap.record,snap.record.reservation_id,snap.record.fence,NOW,
+                      completed,False,(Failure.COMPILE if manual else Failure.SDK).value,'build','fixture'),snap)
+                when=NOW+timedelta(minutes=10)
+                event=grant_retry(snap.record,'maintainer','Reviewed correction',when) if manual else retry_schedule(
+                      snap.record,when,RetryPolicy().next_retry(snap.record,0))
+                snap=old.journal.append(event,snap)
+                api.runs['123']=dict(stable_run(),status='completed',conclusion='failure')
+                new=Coordinator(api,REPO,identity('stable',release_mode=new_mode))
+                if not manual:
+                    cooling=new.claim(when,'124',lambda:'EMPTY')
+                    self.assertEqual(cooling.record.fence,1);self.assertEqual(cooling.record.attempt,1)
+                snap=new.claim(NOW+timedelta(hours=8),'124',lambda:'EMPTY')
+                self.assertEqual(snap.record.attempt,1);self.assertEqual(provenance(snap.record)['purpose'],new_mode)
+                self.assertTrue(new.admit(snap,stable_run('124'),NOW+timedelta(hours=8)))
+                with self.assertRaises(ValueError):new.dispatch(snap,dict(release_mode='release',include_wayland=True,upstream_ref='v1.5.1'),when)
+
     def test_upgrade_budget_and_one_epoch_grant(self):
         _,_,success=self.successful_dry_run();record=replace(success.record,attempt=3);now=NOW+timedelta(hours=1)
         with self.assertRaises(ValueError):reserve_upgrade(record,TOKEN,'draft','124',now,now+timedelta(hours=6))

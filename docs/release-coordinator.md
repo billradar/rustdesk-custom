@@ -328,8 +328,10 @@ epoch for draft/release, records the previous successful run and preserves the
 cumulative attempt budget. The prior success stays in immutable journal ancestry.
 This is the sole explicit successful-purpose transition, never an ordinary
 success-to-failure overwrite. Production success remains deduplicated. A failed
-dry-run may change purpose only when its retry is independently authorized by the
-normal classification/cooldown or an explicit actor/reason grant. Default budgets
+dry-run may advance to production, and failed draft/release may switch between
+production modes, only when the retry is independently authorized by normal
+classification/cooldown or an explicit actor/reason grant. Production cannot
+be downgraded to dry-run to bypass its gates. Default budgets
 are three actual compile attempts and six reservation epochs; an explicit grant
 authorizes only one next epoch and never changes signing/publication gates.
 
