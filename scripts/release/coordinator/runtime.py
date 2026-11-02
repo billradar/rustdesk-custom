@@ -127,7 +127,11 @@ def put_index(api, repo, run_id, snapshot):
 
 
 class Coordinator:
-    def __init__(self, api, repo, identity, *, evidence=None, source_provenance=None):
+    def __init__(self, api, repo, identity, *, evidence=None, source_provenance=None, legacy_catalog=None):
+        # State-writer paths only: sparse-checkout worker/signing guards never
+        # load the historical catalog or acquire additional API permissions.
+        from .legacy import for_repository
+        self.legacy = legacy_catalog if legacy_catalog is not None else for_repository(repo)
         self.api, self.repo, self.identity = api, repo, identity
         keys = ('official_run_id', 'official_run_url', 'upstream_repository', 'upstream_ref',
                 'upstream_tag', 'upstream_version', 'version')
@@ -137,6 +141,14 @@ class Coordinator:
 
     def claim(self, now, creator, legacy_check):
         """Read/qualify/reserve, with CAS retries only after a fresh decision."""
+        archived = self.legacy.decision(self.identity)
+        if archived != 'NO_OP':
+            print(json.dumps(dict(schema_version=1, channel=self.identity.channel,
+                build_identity=self.identity.key, legacy_decision=archived,
+                evidence_run_ids=self.legacy.blockers(self.identity)), sort_keys=True))
+            if archived == 'SUCCESS_HOLD':
+                return None
+            raise ValueError('Archived historical identity/producer requires review')
         for _ in range(4):
             snapshot = self.journal.load()
             try:
@@ -248,11 +260,13 @@ def history(api, repo, channel):
 
 def nightly_history(api, repo, identity, current=''):
     from scripts.release import nightly
+    from .legacy import for_repository
     rows = history(api, repo, 'nightly')
     if current:
         # The current run has not been indexed yet and must be present in history.
         rows = nightly.prior_history(rows, current)
-    nightly.annotate_history(rows, identity.source.upstream_sha)
+    catalog = for_repository(repo)
+    nightly.annotate_history([row for row in rows if not catalog.annotate_nightly(row)], identity.source.upstream_sha)
     state = nightly.route_state(rows, identity.historical_digest, identity.release_mode,
                                 str(identity.wayland_included).lower(), current,
                                 str(identity.android_signing_enabled).lower(), identity.source.upstream_sha)
@@ -364,6 +378,8 @@ def observe():
 
 def stable_history(api, repo, identity, current=''):
     from scripts.release import stable_router
+    from .legacy import for_repository
+    catalog = for_repository(repo)
     rows=history(api,repo,'stable')
     selected=[]
     suffix=f" / wayland={str(identity.wayland_included).lower()} / android-signing={str(identity.android_signing_enabled).lower()}"
@@ -373,7 +389,9 @@ def stable_history(api, repo, identity, current=''):
         if not title.startswith('Stable ') or suffix not in title: continue
         if row.get('status')!='completed': return 'ACTIVE'
         # Reconstruct every relevant lock, including old manually named runs.
-        if stable_router.recorded_identity(row)!=identity.historical_digest: continue
+        archived = catalog.historical_identity(row, 'stable')
+        recorded = archived.historical_digest if archived is not None else stable_router.recorded_identity(row)
+        if recorded!=identity.historical_digest: continue
         if row.get('conclusion')=='success' and ' / dry-run /' not in title: return 'SUCCESS'
         if ' / dry-run /' in title and row.get('conclusion')=='success': continue
         selected.append(row)

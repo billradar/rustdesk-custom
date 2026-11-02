@@ -67,8 +67,8 @@ Custom commit remains provenance for both channels. Qualification still matches 
 The historical adapter reconstructs Stable v4 and current unversioned Nightly digests exactly.
 The old Stable v3 release-verification path remains in channel.py; it is not replaced by this adapter.
 New namespace keys must not cause fresh builds merely because the ledger is empty.
-Legacy checks require verified lock/discovery/release evidence from existing gates and exact legacy digest comparison. Known active/successful history blocks a fresh reservation; unknown or failed history does not bootstrap a journal. An operator-assisted legacy import protocol remains separate work.
-Unknown versions, missing artifacts and conflicting aliases enter REVIEW_REQUIRED.
+Legacy checks require verified lock/discovery/release evidence from existing gates and exact legacy digest comparison. Known active/successful history blocks a fresh reservation; unknown or failed history does not bootstrap a journal. The later [legacy evidence supplement](release-coordinator-legacy.md) implements an offline protected-main evidence catalog; it does not seed worker state or activate migration.
+Unknown versions, missing evidence and conflicting aliases fail closed. Reviewed archived success evidence may replace expired Artifact lookups; unknown archive evidence remains a hold.
 An identity digest is not evidence of artifact integrity or publication authorization.
 
 ## State vocabulary and transitions
@@ -406,3 +406,7 @@ Live result: [run 41456872443](https://github.com/billradar/rustdesk-custom/acti
 ## Ref protection canaries
 
 `protection.py` and `release-coordinator-protection.yml` validate the reviewed mirror rulesets in isolated `coordinator-integration/v1/{stable,nightly}/*` and `coordinator-integration-index/v1/*` namespaces. The same-repository PR branch is fixed to `coordinator/08-ref-protection-validation-20261102`; future manual execution requires reviewed main. The existing integration harness still forbids force and deletion. The separate canary interface allows exactly five negative probes on two newly created unpredictable refs, retaining them as evidence. Journal creation/fast-forward and index creation must succeed; journal rewind/delete and index fast-forward/forced-update/delete must return 422 and preserve exact heads. Authentication, rate-limit and infrastructure errors fail the test. Seven existing storage race/fault checks then run under the journal protection. No production ref, tag, Release, build, signing or dispatch endpoint is used. See [protection validation](release-coordinator-protection.md) for deployment evidence and rollback.
+
+## Legacy evidence migration supplement
+
+See [legacy catalog design and cutover limits](release-coordinator-legacy.md). The catalog records 7 exact producer success holds and 18 review holds from the pinned source audit, with freshly checked run/attempt/job metadata. It is a static protected-main code artifact, distinct from the live journal. No migration state was written, no reservation was fabricated, and production activation remains unauthorized. Three unscoped historical Nightly records are explicit cutover blockers.
