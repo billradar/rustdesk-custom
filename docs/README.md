@@ -36,3 +36,5 @@
 - [Coordinator ref protection validation](release-coordinator-protection.md) — isolated server canaries and journal/index ruleset deployment evidence.
 
 - [Coordinator legacy evidence migration](release-coordinator-legacy.md) — content-addressed evidence, conservative admission holds, offline import/recovery and cutover limits.
+
+- [三条旧 Nightly 来源补证](release-coordinator-nightly-source-recovery.md) — 旧式 Artifact 与日志交叉核查；不修改冻结目录或授权重试。

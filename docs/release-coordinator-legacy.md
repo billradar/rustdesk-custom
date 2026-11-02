@@ -146,3 +146,12 @@ integration. Do not remove a success hold or review hold to force a rebuild, and
 do not re-enable artifact-only routing while reservations are active. Restoring
 an older catalog with removed evidence is an explicit reviewed migration rather
 than routine rollback.
+
+## Later source-only audit
+
+The [2026-11-03 source recovery audit](release-coordinator-nightly-source-recovery.md)
+found retained legacy channel-discovery/validation artifacts and confirmed source
+SHAs for the three originally unscoped Nightly rows. The frozen v1 catalog still
+contains its original unscoped holds; this audit does not install a resolution or
+promote old artifact-only builds to modern production success. A reviewed
+append-only source-scope resolution can use the independently archived evidence.
