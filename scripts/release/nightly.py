@@ -35,7 +35,6 @@ def repository():
 
 
 def discover(run_id=''):
-    run_id = run_id or os.environ.get('OFFICIAL_RUN_ID', '')
     branch = api(f'repos/{OFFICIAL}')['default_branch']
     if run_id:
         if not re.fullmatch(r'[1-9][0-9]*', str(run_id)):
@@ -185,6 +184,9 @@ def annotate_history(rows, upstream_sha=None):
         if not match:
             continue
         data = discovery_from_run(row)
+        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+            row['_nightly_identity_skipped'] = True
+            continue
         if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
                 or (upstream_sha and data and data['upstream_sha'] != upstream_sha)):
             row['_nightly_identity_unresolved'] = True
@@ -229,7 +231,6 @@ def route(data):
         raise ValueError('Nightly retry requires manual review (cancelled, unknown, or exhausted)')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
-                        '-f', 'official_run_id=' + data['official_run_id'],
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true'], check=True)
 
@@ -283,9 +284,15 @@ def dedup():
         state = decide(matching)
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review')
-    if state == 'COOLDOWN':
-        raise ValueError('Nightly retry cooldown is active; no duplicate build permitted')
-    skip = state in ('ACTIVE', 'SUCCESS')
+    skip = state in ('ACTIVE', 'SUCCESS', 'COOLDOWN')
+    if skip:
+        # This dispatch did not build. Preserve provenance but never count it
+        # as an attempted build or as a successful completed build.
+        discovery_path = Path('.work/nightly-discovery.json')
+        if discovery_path.is_file():
+            discovery = json.loads(discovery_path.read_text())
+            discovery['dedup_state'] = state
+            discovery_path.write_text(json.dumps(discovery, indent=2) + '\n')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('skip=' + str(skip).lower() + '\n')
