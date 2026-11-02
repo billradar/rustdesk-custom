@@ -57,7 +57,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.workflow == 'Nightly Build Pipeline'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (github.workflow == 'Nightly Build Pipeline' || github.workflow == 'Stable Release Pipeline')
       env:
         GH_TOKEN: ${{ github.token }}
       run: python3 -m scripts.release.coordinator.runtime guard

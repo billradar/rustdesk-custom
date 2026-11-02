@@ -261,7 +261,9 @@ class ParallelGateTests(unittest.TestCase):
             self.assertNotIn('continue-on-error',jobs[name])
     def test_clients_and_draft_remain_downstream_of_complete_compatibility(self):
         tag=self.workflow('tag.yml')['jobs']
-        self.assertEqual(set(tag['prepare']['needs']),{'resolve','draft-preflight'})
+        self.assertEqual(set(tag['prepare']['needs']),{'resolve','draft-preflight','coordinator-admit'})
+        self.assertIn("needs.coordinator-admit.outputs.allow == 'true'", tag['prepare']['if'])
+        self.assertEqual(set(tag['coordinator-admit']['needs']), {'resolve','draft-preflight'})
         self.assertNotIn('qualification',tag['prepare']['needs'])
         self.assertNotIn('qualification',tag['windows-build']['needs'])
         self.assertIn('prepare',tag['windows-build']['needs'])

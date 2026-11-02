@@ -14,7 +14,7 @@ from .identity import BuildIdentity, SourceIdentity, canonical, hex_value
 from .model import BuildState, PolicyState, Record, ReservationState, reserve
 from .reconcile import ActionsEvidence, Reconciler, WORKFLOWS, log_decision
 from .store import APIError, AmbiguousWrite, Conflict, GitHubAPI, GitRefStore, decode_record, parse_time, timestamp
-from .transitions import bind_verified, dispatch_intent, grant_retry, provenance, reserve_retry
+from .transitions import bind_verified, dispatch_intent, grant_retry, grant_upgrade, provenance, reserve_retry, reserve_upgrade
 
 INDEX = 'heads/release-coordinator-runs/v1/'
 
@@ -155,18 +155,29 @@ class Coordinator:
                     raise ValueError('Journal source identity drift')
                 snapshot = Reconciler(self.journal, self.evidence).refresh(snapshot, now)
                 r = snapshot.record
+                if (r.channel == 'stable' and r.state == BuildState.SUCCEEDED
+                        and provenance(r).get('purpose') == 'dry-run' and self.identity.release_mode != 'dry-run'):
+                    if self.evidence.run(r)['status'] != 'completed':
+                        raise ValueError('Cannot upgrade an active dry-run')
+                    return self.journal.append(reserve_upgrade(r, str(uuid4()), self.identity.release_mode,
+                                               str(creator), now, now+timedelta(hours=6)), snapshot)
                 if r.state == BuildState.FAILED and r.policy_state == PolicyState.COOLDOWN and r.next_retry_at and now >= r.next_retry_at:
                     # Reconciler has just verified the exact bound run is terminal.
-                    return self.journal.append(reserve_retry(r, str(uuid4()), now, now+timedelta(hours=6), creator=str(creator)), snapshot)
+                    return self.journal.append(reserve_retry(r, str(uuid4()), now, now+timedelta(hours=6), creator=str(creator), purpose=self.identity.release_mode), snapshot)
                 return snapshot
             except Conflict:
                 continue
         raise Conflict('Admission contention exceeds bounded reevaluation')
 
     def dispatch(self, snapshot, inputs, now):
+        allowed = {'release_mode', 'include_wayland'}
+        if self.identity.channel == 'stable':
+            allowed.add('upstream_ref')
+            if inputs.get('upstream_ref') != self.source_provenance.get('upstream_ref') or not re.fullmatch(r'v?[0-9]+\.[0-9]+\.[0-9]+', str(inputs.get('upstream_ref',''))):
+                raise ValueError('Stable dispatch must use the resolved official tag')
         if (inputs.get('release_mode') != 'draft' or inputs.get('include_wayland') is not self.identity.wayland_included
-                or set(inputs) != {'release_mode', 'include_wayland'}):
-            raise ValueError('Nightly routing only authorizes the frozen private Draft configuration')
+                or set(inputs) != allowed):
+            raise ValueError('Routing only authorizes the frozen private Draft configuration')
         if snapshot is None or snapshot.record.reservation_state != ReservationState.RESERVED:
             return False
         try:
@@ -194,6 +205,12 @@ class Coordinator:
             raise ValueError('Completed run cannot claim a new reservation')
         if type(run.get('run_attempt')) is not int or run['run_attempt'] != 1:
             raise ValueError('Native rerun is not a fresh coordinator dispatch')
+        if r.channel == 'stable':
+            old_purpose = provenance(r).get('purpose')
+            compatible = old_purpose == self.identity.release_mode or (old_purpose in ('draft','release') and self.identity.release_mode in ('draft','release'))
+            if not compatible:
+                put_index(self.api, self.repo, str(run['id']), snapshot)
+                return False
         if r.reservation_state in (ReservationState.RESERVED, ReservationState.DISPATCH_UNKNOWN):
             data = provenance(r)
             if str(run['id']) != data['creator'] and parse_time(run['created_at']) < parse_time(data['reservation_created_at']):
@@ -306,7 +323,8 @@ def admit_nightly(path, digest):
 
 
 def guard():
-    repo = context('nightly.yml', ('workflow_dispatch',))
+    channel = 'stable' if os.environ.get('GITHUB_WORKFLOW_REF') == repository()+'/.github/workflows/tag.yml@refs/heads/main' else 'nightly'
+    repo = context('tag.yml' if channel == 'stable' else 'nightly.yml', ('workflow_dispatch',))
     api = GitHubAPI()
     indexed = index_record(api, repo, os.environ['GITHUB_RUN_ID'])
     if indexed is None:
@@ -314,7 +332,7 @@ def guard():
     journal = GitRefStore(api, repo, indexed.channel, indexed.build_identity)
     snapshot = journal.load()
     r = snapshot.record if snapshot else None
-    if (r is None or r.channel != 'nightly' or r.workflow_run_id != os.environ['GITHUB_RUN_ID']
+    if (r is None or r.channel != channel or r.workflow_run_id != os.environ['GITHUB_RUN_ID']
             or (r.reservation_id, r.fence) != (indexed.reservation_id, indexed.fence)
             or r.state not in (BuildState.QUEUED, BuildState.RUNNING) or r.policy_state.value != 'READY'
             or (os.environ.get('UPSTREAM_EXPECTED_SHA') and r.upstream_sha != os.environ['UPSTREAM_EXPECTED_SHA'])
@@ -343,14 +361,74 @@ def observe():
     Reconciler(GitRefStore(api, repo, r.channel, r.build_identity), ActionsEvidence(api, repo)).refresh(snapshot, clock())
 
 
+
+def stable_history(api, repo, identity, current=''):
+    from scripts.release import stable_router
+    rows=history(api,repo,'stable')
+    selected=[]
+    suffix=f" / wayland={str(identity.wayland_included).lower()} / android-signing={str(identity.android_signing_enabled).lower()}"
+    for row in rows:
+        if str(row['id'])==current: continue
+        title=row.get('display_title','')
+        if not title.startswith('Stable ') or suffix not in title: continue
+        if row.get('status')!='completed': return 'ACTIVE'
+        # Reconstruct every relevant lock, including old manually named runs.
+        if stable_router.recorded_identity(row)!=identity.historical_digest: continue
+        if row.get('conclusion')=='success' and ' / dry-run /' not in title: return 'SUCCESS'
+        if ' / dry-run /' in title and row.get('conclusion')=='success': continue
+        selected.append(row)
+    return 'REVIEW' if selected else 'EMPTY'
+
+
+def route_stable():
+    from scripts.release import stable_router, stable_lock
+    repo=context('upstream-stable.yml',('schedule','workflow_dispatch'))
+    stable_router.verify_context()
+    data=stable_router.discovery()
+    api,now=GitHubAPI(),clock()
+    recover_all(api,repo,'stable',now)
+    completed=stable_router.latest_completed_version()
+    same=(os.environ.get('GITHUB_EVENT_NAME')=='workflow_dispatch' and os.environ.get('ALLOW_SAME_VERSION','false').lower()=='true')
+    if completed and stable_router.version_tuple(data['version'])<=stable_router.version_tuple(completed) and not same:
+        outputs(dispatched=False,state='VERSION_NOT_ADVANCED');return
+    if stable_router.existing_build(data):
+        outputs(dispatched=False,state='COMPLETE_RELEASE_EXISTS');return
+    locked=stable_lock.plan(data,data['patchset'])
+    identity=build(locked,'stable','draft')
+    coordinator=Coordinator(api,repo,identity,source_provenance=locked)
+    snapshot=coordinator.claim(now,os.environ['GITHUB_RUN_ID'],lambda:stable_history(api,repo,identity))
+    sent=coordinator.dispatch(snapshot,dict(release_mode='draft',include_wayland=True,upstream_ref=data['upstream_tag']),now)
+    outputs(dispatched=sent,build_identity=identity.key)
+
+
+def admit_stable():
+    from scripts.release import stable_lock
+    repo=context('tag.yml',('workflow_dispatch',))
+    locked=stable_lock.current() # Existing digest, source/run/custom/options gates.
+    identity=build(locked,'stable',os.environ['RELEASE_MODE'])
+    api,now=GitHubAPI(),clock()
+    run_id=os.environ['GITHUB_RUN_ID']
+    run=api.request('GET',f'repos/{repo}/actions/runs/{run_id}')
+    if (str(run.get('id'))!=run_id or run.get('head_sha')!=os.environ['GITHUB_SHA']
+            or run.get('repository',{}).get('full_name')!=repo
+            or run.get('head_repository',{}).get('full_name')!=repo or run.get('head_branch')!='main'
+            or run.get('event')!='workflow_dispatch' or run.get('path','').split('@')[0]!=WORKFLOWS['stable']
+            or run.get('status')=='completed' or type(run.get('run_attempt')) is not int or run['run_attempt']!=1):
+        raise ValueError('Untrusted Stable admission run')
+    coordinator=Coordinator(api,repo,identity,source_provenance=locked)
+    snapshot=coordinator.claim(now,run_id,lambda:stable_history(api,repo,identity,run_id))
+    outputs(allow=coordinator.admit(snapshot,run,now),build_identity=identity.key)
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=('admit-nightly', 'guard', 'observe', 'grant'))
+    parser.add_argument('mode', choices=('admit-nightly', 'admit-stable', 'guard', 'observe', 'grant'))
     parser.add_argument('--discovery', type=Path)
     parser.add_argument('--digest')
     args = parser.parse_args()
     if args.mode == 'admit-nightly':
         admit_nightly(args.discovery, args.digest)
+    elif args.mode == 'admit-stable':
+        admit_stable()
     elif args.mode == 'guard':
         guard()
     elif args.mode == 'observe':
@@ -367,7 +445,8 @@ def main():
         if evidence.run(snapshot.record)['status'] != 'completed':
             raise ValueError('Cannot retry an active run')
         snapshot = Reconciler(journal, evidence).refresh(snapshot, now)
-        journal.append(grant_retry(snapshot.record, os.environ['GITHUB_ACTOR'], os.environ['RETRY_REASON'], now), snapshot)
+        method = grant_upgrade if snapshot.record.state == BuildState.SUCCEEDED else grant_retry
+        journal.append(method(snapshot.record, os.environ['GITHUB_ACTOR'], os.environ['RETRY_REASON'], now), snapshot)
 
 
 if __name__ == '__main__':

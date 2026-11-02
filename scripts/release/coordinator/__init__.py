@@ -1,1 +1,1 @@
-"""Opt-in release coordination primitives; routers are not migrated yet."""
+"""Shared release identities, fenced journals, admission and recovery."""

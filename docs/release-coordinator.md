@@ -3,8 +3,7 @@
 Baseline: main `95abfaf706766f670dddcecea41530320c0ebb66`, inspected 2026-11-02.
 This is an implementation audit, not proof that concurrency incidents occurred.
 This document records the audit baseline and staged implementation. The current
-branch includes the persistent journal, recovery core and Nightly integration;
-Stable integration is pending. No production activation has been performed.
+branch includes the persistent journal, recovery core and both Nightly and Stable integrations. No production activation has been performed.
 
 ## Evidence and priority
 
@@ -49,7 +48,7 @@ Main action-runtime run `41405202264` was cancelled; no cause is inferred from i
 Historical routers `41398546403` (Stable) and `41292946468` (Nightly) completed successfully; success may mean a safe skip.
 The connector rejects workflow-file-name run-list endpoints; repository run history was used instead.
 Actual Environment protection rules, runner access configuration and secret policy cannot be read through the available connector. YAML isolation was inspected; live Environment protection remains unverified.
-The execution environment failed initialization, so no local Python tests have been executed.
+The initial execution environment failed initialization. Subsequent stages restored execution; local contracts and each PR CI are recorded in the PRs. This initial limitation is historical.
 
 ## Identity contract
 
@@ -68,7 +67,7 @@ Custom commit remains provenance for both channels. Qualification still matches 
 The historical adapter reconstructs Stable v4 and current unversioned Nightly digests exactly.
 The old Stable v3 release-verification path remains in channel.py; it is not replaced by this adapter.
 New namespace keys must not cause fresh builds merely because the ledger is empty.
-Import requires verified lock/discovery/release evidence from existing gates, exact legacy digest comparison, then an audited alias record.
+Legacy checks require verified lock/discovery/release evidence from existing gates and exact legacy digest comparison. Known active/successful history blocks a fresh reservation; unknown or failed history does not bootstrap a journal. An operator-assisted legacy import protocol remains separate work.
 Unknown versions, missing artifacts and conflicting aliases enter REVIEW_REQUIRED.
 An identity digest is not evidence of artifact integrity or publication authorization.
 
@@ -106,9 +105,7 @@ Readmission and fencing-token renewal require the transactional backend and PR 3
 | Actions artifacts/cache/concurrency | no atomic durable identity admission | existing permissions | evidence/throughput tools only; rejected as lock backend |
 
 Technical direction: retain backend-neutral pure decisions now.
-Git-ref ledger is the lowest-deployment-cost candidate, but is NOT approved for live integration under the current no-permission-expansion requirement.
-PostgreSQL satisfies correctness without changing GITHUB_TOKEN only after a real authenticated service exists.
-There is no existing authorized durable writer/service verified in this audit. PR 2 live activation is blocked rather than degrading atomicity.
+Git-ref journal was selected after explicit user authorization on 2026-11-02 for Contents write only on coordinator state-writing jobs. Ordinary workers keep Contents read. PostgreSQL remains an alternative if these narrowly scoped permissions are unavailable. No server, credentials or Actions artifact lock is introduced. Production activation still requires review/merge and isolated live API/ruleset validation.
 
 For the Git-ref candidate, each identity owns a journal head.
 Every candidate commit has the exact observed head as its only parent and stores the next record plus event.
@@ -122,7 +119,7 @@ GitHub reference API: https://docs.github.com/en/rest/git/refs
 ## Dispatch, retry and reconciliation plan
 
 The dispatch transaction must persist INTENT before HTTP. A timeout/5xx after sending is ambiguous; never automatically resend.
-Bind by unique reservation token in an internal, non-publication-authorizing correlation interface.
+Bind a verified trusted-main run with the resolved identity, epoch creation time and atomic fence. No new public dispatch input is added; a late/duplicate run can bind at most one current epoch and all workers require their immutable admission index.
 No matching run after a timeout is not proof that GitHub rejected dispatch.
 Fail closed for indefinite ambiguity; operator resolution must be audited and cannot waive signing/publication gates.
 Router-selected Nightly may be superseded before downstream resolution by design. Downstream must resolve latest-successful, then obtain admission for that actual identity before any build. It must not silently build the router's stale selection.
@@ -259,7 +256,7 @@ still selects latest successful official source with no public run/SHA input.
 The normal contract process does not inherit the runtime routing flag. Manual
 main runs and automatic dispatch use the same digest-verified discovery handoff
 and a dedicated admission job. Development dry-run remains isolated and does not
-write production state. Stable routing is unchanged at this stage.
+write production state. Stable routing was unchanged in PR 4; PR 5 adds the corresponding Stable integration.
 
 The router persists a unique dispatch-request UUID before HTTP. The UUID is
 necessary even with one reservation UUID: two simultaneous writers could otherwise
@@ -306,3 +303,64 @@ Rollback: stop Nightly routing and new admissions first, retain all journals and
 run indexes, reconcile active workers and ambiguous dispatches, then revert the
 integration. Do not simply enable artifact-only legacy dispatch while fenced
 reservations are still live. Existing completed releases and tags are unchanged.
+
+## Stable integration (PR 5)
+
+Stable's fixed routing step enables the shared core; its separate resolver still
+selects the latest official Stable release. Reconciliation runs before the original
+completed-version and exact-release preflight checks. Automatic scheduling does
+not backfill historical Stable versions. An explicit manual upstream tag remains
+available through Tag; same-version router checks retain the existing explicit
+`allow_same_version` opt-in. Nightly still follows only latest successful official
+source; recovery never dispatches superseded historical identities.
+
+Tag downloads and revalidates its original same-run Stable Lock (digest, source,
+custom commit, current run, patch hashes, signing and Wayland options) before
+reservation binding. Source preparation requires admission on main. Development
+dry-run remains isolated; development draft/release fails explicitly. Existing
+publish-existing goes through its original complete-Draft/remote-digest gates and
+does not create a new build reservation. New aggregation, Draft and release
+writing have an additional read-only worker guard before the release App step.
+
+Stable's existing identity deliberately excludes publication mode. A successful
+dry-run cannot satisfy a production Draft: `reserve_upgrade` creates a new fenced
+epoch for draft/release, records the previous successful run and preserves the
+cumulative attempt budget. The prior success stays in immutable journal ancestry.
+This is the sole explicit successful-purpose transition, never an ordinary
+success-to-failure overwrite. Production success remains deduplicated. A failed
+dry-run may change purpose only when its retry is independently authorized by the
+normal classification/cooldown or an explicit actor/reason grant. Default budgets
+are three actual compile attempts and six reservation epochs; an explicit grant
+authorizes only one next epoch and never changes signing/publication gates.
+
+| Event | From | To | Constraint |
+| --- | --- | --- | --- |
+| reserve_upgrade | Stable dry-run SUCCEEDED | DISCOVERED / RESERVED | old exact run terminal, new UUID/fence, budget or one explicit grant |
+| grant_upgrade | Stable dry-run SUCCEEDED | same result with authorization | reviewed actor/reason, only next fence |
+| reserve_retry purpose change | FAILED dry-run | reserved draft/release | all normal retry gates, cumulative attempts preserved |
+
+`stable_runtime_contract` exercises actual Stable Lock creation/reading with and
+without Wayland, positive admission/guards, digest tampering, foreign runs,
+manual retry/purpose upgrades, budget/grant consumption, latest-version behavior,
+unknown legacy evidence and signing/publication workflow isolation. Existing
+channel/security/qualification contracts remain enabled. Legacy helpers remain
+for historical evidence and regression compatibility; fixed production router
+paths share Coordinator instead of the old artifact-only dispatch decision.
+
+Operational limits: native GitHub reruns (attempt > 1) are rejected; use an explicit
+reviewed coordinator grant followed by a fresh workflow_dispatch for known terminal
+failures. A pre-existing native rerun, missing initial legacy identity, or ambiguous
+dispatch with no arriving verified worker may require operator reconciliation.
+No timeout clears an uncertain reservation. No live signing/build/publication or
+GitHub state-ref fault injection was performed; the bare local Git race test is
+not a claim of deployed GitHub integration validation.
+
+Rollback and maintenance: disable both routers and new admissions, preserve both
+journal/index namespaces, reconcile active runs and unknown dispatches, then revert
+PR 5/PR 4 integration in reverse order. Keep the shared core/observer until active
+workers terminate. Never delete journal heads to force a build, never force-update
+or merge their histories, and never re-enable legacy dispatch while reservations
+are live. Monitor structured REVIEW/UNKNOWN logs and Git API rate limits; inventory
+above 1000 identities requires a reviewed archive plan. Revalidate tests after any
+matrix, signing-profile or source-policy change and review an explicit identity
+policy migration before expanding identity fields.
