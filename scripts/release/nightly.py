@@ -184,6 +184,9 @@ def annotate_history(rows, upstream_sha=None):
         if not match:
             continue
         data = discovery_from_run(row)
+        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+            row['_nightly_identity_skipped'] = True
+            continue
         if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
                 or (upstream_sha and data and data['upstream_sha'] != upstream_sha)):
             row['_nightly_identity_unresolved'] = True
@@ -270,11 +273,26 @@ def dedup():
     annotate_history(rows, identity_data['upstream_sha'])
     state = route_state(rows, identity, mode, wayland, current, signing, identity_data['upstream_sha'])
     print('Nightly dedup: ' + state)
-    if state == 'EXHAUSTED':
-        raise ValueError('Three attempts failed for this exact source/build identity; inspect logs before retrying')
     if state == 'UNKNOWN':
         raise ValueError('A matching Nightly run has no discovery artifact; inspect it before retrying')
-    skip = state in ('ACTIVE', 'SUCCESS')
+    if state != 'ACTIVE':
+        title_suffix = f' / {mode} / wayland={wayland} / android-signing={signing}'
+        matching = [r for r in rows if r.get('_nightly_identity') == identity
+                    and r.get('display_title', '').endswith(title_suffix)
+                    and r.get('event') == 'workflow_dispatch'
+                    and r.get('head_branch') == 'main']
+        state = decide(matching)
+    if state == 'REVIEW':
+        raise ValueError('Nightly retry requires manual review')
+    skip = state in ('ACTIVE', 'SUCCESS', 'COOLDOWN')
+    if skip:
+        # This dispatch did not build. Preserve provenance but never count it
+        # as an attempted build or as a successful completed build.
+        discovery_path = Path('.work/nightly-discovery.json')
+        if discovery_path.is_file():
+            discovery = json.loads(discovery_path.read_text())
+            discovery['dedup_state'] = state
+            discovery_path.write_text(json.dumps(discovery, indent=2) + '\n')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('skip=' + str(skip).lower() + '\n')

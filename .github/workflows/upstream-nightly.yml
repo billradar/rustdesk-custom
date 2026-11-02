@@ -3,6 +3,8 @@ name: Upstream Nightly Router
   schedule:
     # Official Nightly starts at 00:00 UTC; check off the hour at 02:23 UTC.
     - cron: '23 2 * * *'
+    # Backup check in case the primary scheduled event is delayed or dropped.
+    - cron: '41 8 * * *'
   workflow_dispatch: {}
 permissions:
   contents: read
