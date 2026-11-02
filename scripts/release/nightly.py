@@ -283,7 +283,9 @@ def dedup():
         state = decide(matching)
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review')
-    skip = state in ('ACTIVE', 'SUCCESS', 'COOLDOWN')
+    if state == 'COOLDOWN':
+        raise ValueError('Nightly retry cooldown is active; no duplicate build permitted')
+    skip = state in ('ACTIVE', 'SUCCESS')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('skip=' + str(skip).lower() + '\n')
