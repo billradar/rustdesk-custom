@@ -233,7 +233,7 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 
 ### Experimental release coordinator foundation
 
-`scripts/release/coordinator/` contains dormant versioned identity, immutable state and pure admission decisions. Neither router is migrated yet. Read `docs/release-coordinator.md` before extending it. Preserve historical digest/reuse semantics; an empty ledger is not proof of no prior build. Run `python3 -m scripts.release.coordinator.contract`, the retry-policy and Nightly-router regression contracts, and affected existing contracts. Do not activate a Git-ref backend by broadening Nightly permissions or exposing the publication App to routers; the durable-writer constraint is unresolved.
+`scripts/release/coordinator/` contains dormant versioned identity, immutable state and pure admission decisions. Neither router is migrated yet. Read `docs/release-coordinator.md` before extending it. Preserve historical digest/reuse semantics; an empty ledger is not proof of no prior build. Run `python3 -m scripts.release.coordinator.contract`, the retry-policy and Nightly-router regression contracts, and affected existing contracts. The user authorized Contents write only for coordinator state-writing jobs on 2026-11-02. The Git-ref journal is implemented but not yet activated; never expose the publication App to routers or broaden ordinary CI/build/signing job permissions. Run `python3 -m scripts.release.coordinator.store_contract` when changing persistence.
 
 ## 7. CI classification and contracts
 

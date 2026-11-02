@@ -176,3 +176,39 @@ python3 -m scripts.signing.android_signing_contract
 
 Also run the existing full compat-check domain list. PR checks do not authorize production dispatch/signing/publication.
 Concurrency, actual storage recovery and live fencing are NOT proven by PR 1's pure-model tests.
+
+## Persistent journal implementation (PR 2)
+
+`coordinator/store.py` now implements the GitHub Git Database transport and journal.
+The user authorized only coordinator state-writing jobs to use Contents write on
+2026-11-02. Ordinary build/CI/signing/publication permissions remain unchanged;
+this PR does not yet add any production job or activate the backend.
+
+Each ref is `heads/release-coordinator/v1/{channel}/{build-key}`. Trees contain
+only canonical `state.json` and `event.json`; they are orphan journal histories,
+never source checkouts. Every update has one observed parent and force=false.
+The backend revalidates the event against model transitions, verifies identity,
+compares the previous snapshot, and rejects sibling updates. It never merges,
+resets or deletes refs. Loaded events must agree with the current and parent
+state and ancestry. Missing ref (404) is distinguished from permissions,
+rate-limit or infrastructure errors. Historical channel evidence is still
+mandatory at the caller; absent ledger does not authorize a rebuild.
+
+Final-ref response loss is resolved only by reading the journal back. Exact
+candidate-head equality proves success. Conflicts require a fresh decision;
+all other uncertain results remain ambiguous and are not replayed. Blob/tree/
+commit writes that fail leave no valid reservation and never dispatch work.
+Reads retry at most three times for 429/5xx/transport errors; writes never replay.
+Unknown response/schema, merged history and extra state files fail closed.
+
+Local contracts use an in-memory GitHub-shaped API for deterministic races and
+fault injection, plus two actual concurrent non-force pushes to a temporary
+bare Git server. This proves the single-parent fast-forward primitive; it is
+not a claim that live GitHub permission/ruleset integration has been exercised.
+No production refs, releases, tags, signing credentials or external services
+are used by these contracts. Run `python3 -m
+scripts.release.coordinator.store_contract` and the existing domain list.
+
+PR 2 rollback: revert the storage module and its contract wiring. No active
+coordinator state exists from this PR. After activation, retain journals and
+stop admission before reverting any runtime integration.
