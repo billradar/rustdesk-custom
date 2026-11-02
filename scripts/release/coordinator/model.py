@@ -75,7 +75,8 @@ class Record:
         provenance = json.loads(self.source_provenance)
         if type(provenance) is not dict or canonical(provenance).decode() != self.source_provenance:
             raise ValueError("Provenance must be a canonical JSON object")
-        for value in (self.created_at, self.started_at, self.completed_at,
+        utc(self.created_at)
+        for value in (self.started_at, self.completed_at,
                       self.lease_expires_at, self.next_retry_at):
             if value is not None:
                 utc(value)
@@ -95,6 +96,10 @@ class Record:
                 raise ValueError("Invalid workflow run")
         if self.reservation_state == ReservationState.BOUND and not self.workflow_run_id:
             raise ValueError("Bound reservation requires a run")
+        if self.workflow_run_id and self.reservation_state != ReservationState.BOUND:
+            raise ValueError("Unbound reservation has a run")
+        if self.reservation_state == ReservationState.BOUND and self.state == BuildState.DISCOVERED:
+            raise ValueError("Bound reservation must have queued build evidence")
         if self.state != BuildState.DISCOVERED and self.reservation_state != ReservationState.BOUND:
             raise ValueError("Build state requires a bound reservation")
         if self.state in (BuildState.RUNNING, BuildState.SUCCEEDED) and not self.started_at:
@@ -103,10 +108,14 @@ class Record:
             raise ValueError("Started build requires a real attempt")
         if self.state in (BuildState.SUCCEEDED, BuildState.FAILED) and not self.completed_at:
             raise ValueError("Terminal build requires completion evidence")
+        if self.completed_at and self.state not in (BuildState.SUCCEEDED, BuildState.FAILED):
+            raise ValueError("Nonterminal build has completion evidence")
+        if self.state == BuildState.FAILED and not all((self.failure_class, self.failure_stage, self.failure_reason)):
+            raise ValueError("Failure evidence is required")
 
 
 def owned(record, reservation_id, fence):
-    if (record.reservation_id != reservation_id or record.fence != fence
+    if (type(fence) is not int or record.reservation_id != reservation_id or record.fence != fence
             or record.reservation_state == ReservationState.NONE):
         raise ValueError("Stale reservation writer")
 
@@ -117,6 +126,11 @@ class Event:
     action: str
     before: Record
     after: Record
+
+    def __post_init__(self):
+        utc(self.at)
+        if self.at < (self.before.completed_at or self.before.started_at or self.before.created_at):
+            raise ValueError("Out-of-order state event")
 
 
 def reserve(record, reservation_id, now, lease):

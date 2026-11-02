@@ -110,7 +110,7 @@ class StateContract(unittest.TestCase):
     def test_stale_worker_and_duplicate_reservation(self):
         with self.assertRaises(ValueError):
             reserve(reserved(), TOKEN, NOW, NOW + timedelta(hours=1))
-        for token, fence in ((TOKEN, 2), ('22222222-2222-4222-8222-222222222222', 1)):
+        for token, fence in ((TOKEN, True), (TOKEN, 2), ('22222222-2222-4222-8222-222222222222', 1)):
             with self.subTest(token=token, fence=fence), self.assertRaises(ValueError):
                 bind(reserved(), token, fence, '123', NOW)
 
@@ -147,7 +147,7 @@ class StateContract(unittest.TestCase):
 
     def test_invalid_state_and_time_rejected(self):
         for changes in (dict(schema_version=2), dict(state='RUNNING'),
-                        dict(attempt=-1), dict(created_at=NOW.replace(tzinfo=None)),
+                        dict(attempt=-1), dict(created_at=None), dict(created_at=NOW.replace(tzinfo=None)),
                         dict(source_provenance='{"z": 1}'),
                         dict(state=BuildState.SUCCEEDED),
                         dict(reservation_id=TOKEN)):
@@ -155,6 +155,12 @@ class StateContract(unittest.TestCase):
                 replace(discovered(), **changes)
         with self.assertRaises(ValueError):
             advance(queued(), TOKEN, 1, BuildState.SUCCEEDED, NOW)
+        with self.assertRaises(ValueError):
+            bind(reserved(), TOKEN, 1, '123', NOW - timedelta(seconds=1))
+        with self.assertRaises(ValueError):
+            replace(queued(), state=BuildState.FAILED, completed_at=NOW)
+        with self.assertRaises(ValueError):
+            replace(queued(), completed_at=NOW)
 
 
 if __name__ == '__main__':
