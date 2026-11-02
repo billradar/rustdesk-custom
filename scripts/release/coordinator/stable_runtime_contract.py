@@ -170,6 +170,36 @@ class StableRuntimeContract(unittest.TestCase):
              patch('scripts.release.stable_router.recorded_identity',side_effect=ValueError('expired')),self.assertRaises(ValueError):
             stable_history(RuntimeAPI(),REPO,identity())
 
+    def test_two_queued_stable_admissions_create_one_real_reservation(self):
+        title='Stable v1.5.1 / draft / wayland=true / android-signing=false'
+        first=dict(stable_run('123'),run_number=10,display_title=title)
+        later=dict(stable_run('124'),run_number=11,display_title=title,status='queued')
+        rows=[later,first];api=RuntimeAPI();api.runs={'123':first,'124':later}
+        build_identity=identity('stable');c=Coordinator(api,REPO,build_identity)
+        with patch('scripts.release.coordinator.runtime.history',return_value=rows), \
+             patch('scripts.release.stable_router.recorded_identity',side_effect=AssertionError('Later lock queried')):
+            self.assertEqual(stable_history(api,REPO,build_identity,'123'),'EMPTY')
+            snap=c.claim(NOW,'123',lambda:stable_history(api,REPO,build_identity,'123'))
+            self.assertTrue(c.admit(snap,first,NOW))
+            snap=c.claim(NOW,'124',lambda:self.fail('Managed epoch re-entered legacy history'))
+            self.assertFalse(c.admit(snap,later,NOW))
+        record=c.journal.load().record
+        self.assertEqual(record.workflow_run_id,'123');self.assertEqual(record.attempt,0)
+        self.assertEqual(record.state,BuildState.QUEUED)
+        self.assertEqual(index_record(api,REPO,'123').workflow_run_id,'123')
+        self.assertEqual(index_record(api,REPO,'124').workflow_run_id,'123')
+
+    def test_unindexed_success_without_verified_producer_requires_review(self):
+        title='Stable v1.5.1 / draft / wayland=true / android-signing=false'
+        old=dict(stable_run('122'),run_number=9,display_title=title,status='completed',conclusion='success')
+        current=dict(stable_run(),run_number=10,display_title=title)
+        with patch('scripts.release.coordinator.runtime.history',return_value=[current,old]), \
+             patch('scripts.release.stable_router.recorded_identity',return_value=identity('stable').historical_digest):
+            self.assertEqual(stable_history(RuntimeAPI(),REPO,identity('stable'),'123'),'REVIEW')
+        for rows in ([old],[dict(current,run_number=None),old],[current,dict(old,run_number=None)]):
+            with patch('scripts.release.coordinator.runtime.history',return_value=rows),self.assertRaises(ValueError):
+                stable_history(RuntimeAPI(),REPO,identity('stable'),'123')
+
     def test_stable_wiring_keeps_publication_and_signing_isolation(self):
         w=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text());jobs=w['jobs']
         self.assertEqual(set(w['on']['workflow_dispatch']['inputs']),{'release_mode','upstream_ref','include_wayland'})

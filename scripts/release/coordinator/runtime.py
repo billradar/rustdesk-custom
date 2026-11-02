@@ -385,6 +385,16 @@ def stable_history(api, repo, identity, current=''):
     from .legacy import for_repository
     catalog = for_repository(repo)
     rows=history(api,repo,'stable')
+    if current:
+        # Queue order must precede history-based admission. Otherwise an older
+        # worker can skip for a later dispatch and leave a false success behind.
+        present=[r for r in rows if str(r.get('id'))==str(current)]
+        if len(present)!=1:
+            raise ValueError('Current Stable run is missing/duplicated in admission history')
+        for row in rows:
+            if type(row.get('run_number')) is not int or row['run_number'] <= 0:
+                raise ValueError('Stable history has no trustworthy run order')
+        rows=[r for r in rows if r['run_number'] < present[0]['run_number']]
     selected=[]
     suffix=f" / wayland={str(identity.wayland_included).lower()} / android-signing={str(identity.android_signing_enabled).lower()}"
     for row in rows:
@@ -398,7 +408,11 @@ def stable_history(api, repo, identity, current=''):
         archived = catalog.historical_identity(row, 'stable')
         recorded = archived.historical_digest if archived is not None else stable_router.recorded_identity(row)
         if recorded!=identity.historical_digest: continue
-        if row.get('conclusion')=='success' and ' / dry-run /' not in title: return 'SUCCESS'
+        if row.get('conclusion')=='success' and ' / dry-run /' not in title:
+            # A lock proves configuration, not that packages were built. Only
+            # reviewed archived producer evidence may provide a success alias;
+            # managed workers are already handled by their journal/run index.
+            return 'SUCCESS' if archived is not None else 'REVIEW'
         if ' / dry-run /' in title and row.get('conclusion')=='success': continue
         selected.append(row)
     return 'REVIEW' if selected else 'EMPTY'

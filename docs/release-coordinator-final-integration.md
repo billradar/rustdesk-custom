@@ -6,6 +6,8 @@ This integration collects the independently reviewed implementation PRs #168–#
 
 The three old Nightly runs retain their original catalog records. A pinned, versioned functional metadata overlay binds the recovered source evidence to each exact record. It narrows review holds to the two verified upstream SHAs, without inventing release mode, official-run identity, Wayland policy, signing success or modern build success. Matching sources still require review. Other sources proceed through existing history, atomic reservation and downstream gates. The history adapter explicitly honors catalog review decisions even for old titles without modern option suffixes.
 
+The final integration review also identified a Stable queue-order race. Admission now excludes later workflow run numbers before legacy inspection, fails closed on missing/invalid run ordering, and requires reviewed producer evidence before treating an unindexed successful workflow as build success. A lock alone proves configuration. Two regression tests reproduced the original defects before the fix and verify one admitted reservation plus conservative handling of no-build success.
+
 ## Validation
 
 Local execution on the final correction passed all 27 commands from the repository contract and the compatibility workflow's release/domain contract step, including all coordinator contracts, router regressions, Stable Lock, Wayland and Android signing contracts. The legacy contract contains 26 tests, including four new source-resolution fault/regression tests. GitHub CI and exact-head Codex review must also complete before this change is considered merge-ready; their actual results belong in the PR.
