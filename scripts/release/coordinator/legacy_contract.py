@@ -141,6 +141,15 @@ class LegacyContract(unittest.TestCase):
         self.assertEqual(catalog.decision(build),'SUCCESS_HOLD')
         self.assertEqual(catalog.blockers(build),[41422335564])
 
+    def test_runtime_does_not_depend_on_docs_only_audit_file(self):
+        with patch('scripts.release.coordinator.legacy.AUDIT',Path('/missing/offline-audit.json')):
+            catalog=load()
+            build=identity(self.success['audit_row'])
+            self.assertEqual(catalog.decision(build),'SUCCESS_HOLD')
+            api=RuntimeAPI()
+            self.assertIsNone(Coordinator(api,REPOSITORY,build).claim(NOW,'123',lambda:self.fail('Artifact lookup')))
+            self.assertEqual(api.refs,{})
+
     def test_partial_identity_only_produces_scoped_or_channel_review(self):
         record=next(r for r in self.records if identity(r['audit_row']) is None and source_hint(r['audit_row']))
         build=identity(self.success['audit_row']);build=replace(build,channel=record['audit_row']['channel'],

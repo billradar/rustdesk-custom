@@ -34,8 +34,11 @@ schema/source-audit migration, not editing the frozen original audit to fill gap
 
 The source audit is pinned to exact SHA-256
 `9cb18b82b52c6f4aa12c80dc6fe9b3053c090099708048787b94c65d59209b65`.
-The implementation verifies that every imported row is byte-equivalent JSON data
-from that reviewed audit, not merely a caller-supplied row labeled with its hash.
+Offline capture verifies the complete source-audit bytes. Runtime validates each
+record against the separately pinned canonical `source-rows.json` hash index in
+functional metadata. This binds every imported row to the exact reviewed JSON data,
+not merely a caller-supplied row labeled with the audit hash. Runtime has no
+dependency on docs-only files; changing functional metadata runs the full CI path.
 Every original archived JSON document is checked against its recorded raw SHA-256;
 original verified ZIP digests are retained as prior audit evidence. This phase did
 not download the ZIPs again or revalidate native Release asset digests.

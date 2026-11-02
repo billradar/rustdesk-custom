@@ -17,6 +17,7 @@ REPOSITORY = 'billradar/rustdesk-custom'
 AUDIT = ROOT/'docs/audits/coordinator-preactivation-20261102/migration-plan.json'
 AUDIT_SHA256 = '9cb18b82b52c6f4aa12c80dc6fe9b3053c090099708048787b94c65d59209b65'
 CATALOG = ROOT/'metadata/release/coordinator-legacy'
+ROW_INDEX_SHA256 = 'fb79b9318bd089ed2a6780ee7ac31d64dee7afbbe705e836bb111b426b5aeedd'
 WORKFLOWS = {'stable': '.github/workflows/tag.yml', 'nightly': '.github/workflows/nightly.yml'}
 RUN_FIELDS = ('id', 'run_attempt', 'head_sha', 'head_branch', 'event', 'path',
               'status', 'conclusion', 'display_title')
@@ -34,6 +35,23 @@ def audited_rows():
     require(value['repository'] == REPOSITORY and value['migration_plan_only'] is True,
             'Unexpected source audit')
     return {row['run_id']: row for row in value['runs']}
+
+
+def approved_row_digests():
+    # Operational readers depend only on functional metadata, never docs-only
+    # files. The offline capture still verifies the original whole-audit bytes.
+    path = CATALOG/'source-rows.json'
+    require(path.is_file() and not path.is_symlink(), 'Missing/nonregular reviewed row index')
+    raw = path.read_bytes()
+    require(hashlib.sha256(raw).hexdigest() == ROW_INDEX_SHA256, 'Reviewed row index changed')
+    value = json.loads(raw)
+    require(canonical(value) == raw and set(value) == {'schema_version','source_audit_sha256','row_sha256'}
+            and type(value['schema_version']) is int and value['schema_version'] == 1
+            and value['source_audit_sha256'] == AUDIT_SHA256, 'Unknown reviewed row index')
+    for run_id, checksum in value['row_sha256'].items():
+        require(re.fullmatch('[1-9][0-9]*',run_id) is not None, 'Invalid archived run key')
+        hex_value(checksum,64)
+    return value['row_sha256']
 
 
 def document(row):
@@ -169,11 +187,11 @@ class Catalog:
     def __init__(self, records=()):
         records = copy.deepcopy(list(records))
         self._records = {}
-        approved = audited_rows() if records else {}
+        approved = approved_row_digests() if records else {}
         for record in records:
             require(set(record) == {'audit_row','observation'}, 'Unknown legacy record schema')
             row = record['audit_row']
-            require(approved.get(row.get('run_id')) == row, 'Record is not the exact reviewed audit row')
+            require(approved.get(str(row.get('run_id'))) == digest(row), 'Record is not the exact reviewed audit row')
             validate_observation(row, record['observation'])
             key = (row['channel'], row['run_id'])
             require(key not in self._records, 'Duplicate historical run')
