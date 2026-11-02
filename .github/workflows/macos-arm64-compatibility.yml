@@ -54,7 +54,8 @@ jobs:
         (cd .work/mac-smoke && bash .github/patches/apply_flutter_3.44_source_patches.sh)
         python3 - <<'PY'
         import subprocess
-        from scripts.build.macos_arm64 import TRANSFORMS
+        from scripts.build.macos_arm64 import TRANSFORMS,original,verify_sdk
+        verify_sdk(original('.work/mac-smoke')[0])
         changed=subprocess.check_output(['git','-C','.work/mac-smoke','diff','--name-only'],text=True).splitlines()
         if set(changed)!=set(TRANSFORMS):raise ValueError('Source helper changed an unexpected file inventory')
         print('Native Mac ARM SDK and reviewed source helper: PASS; application compilation/runtime not tested')

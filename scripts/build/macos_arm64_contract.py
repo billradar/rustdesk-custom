@@ -215,6 +215,7 @@ class MacWorkflowContract(unittest.TestCase):
         sdk=next(i for i,s in enumerate(steps) if 'flutter-action' in s.get('uses',''))
         self.assertLess(review,sdk)
         self.assertIn('verify_sdk',steps[-1]['run'])
+        self.assertIn("original('.work/mac-smoke')",steps[-1]['run'])
         self.assertIn('application compilation/runtime not tested',steps[-1]['run'])
 
     def test_macos_setup_respects_official_sdk_conditional(self):
