@@ -231,6 +231,10 @@ Never assume a file exists because an old guide mentions it. Nightly is owned by
 
 `force_rebuild` is a current input of `ci.yml`; do not assume it exists in `tag.yml`. `promote_stable` is not a current workflow interface. Never document or add an input based on memory rather than the live YAML.
 
+### Experimental release coordinator foundation
+
+`scripts/release/coordinator/` contains dormant versioned identity, immutable state and pure admission decisions. Neither router is migrated yet. Read `docs/release-coordinator.md` before extending it. Preserve historical digest/reuse semantics; an empty ledger is not proof of no prior build. Run `python3 -m scripts.release.coordinator.contract`, the retry-policy and Nightly-router regression contracts, and affected existing contracts. Do not activate a Git-ref backend by broadening Nightly permissions or exposing the publication App to routers; the durable-writer constraint is unresolved.
+
 ## 7. CI classification and contracts
 
 Action runtime maintenance: current JavaScript Actions use Node.js 24. The local LLVM installer preserves upstream v2.0.9 code with a runtime-only metadata change and hash/Apache-license provenance; read `.github/actions/install-llvm/README.md`. Run `scripts.validation.action_runtime_contract` and the credential-free `action-runtime.yml` Windows smoke workflow when changing these dependencies. Preserve source toolchain versions and signing isolation. Windows ARM64 SDK preparation uses the shared `prepare_windows_arm64_flutter.ps1` and `FLUTTER_ROOT`, never a cache-container output; the Action runtime workflow exercises it on a native ARM64 runner.

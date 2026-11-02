@@ -13,7 +13,7 @@ class NightlyRouterRegression(unittest.TestCase):
         discovery = dict(upstream_sha='b'*40, patchset='v2',
                          common_patch_hash='c'*64, sos_patch_hash='d'*64,
                          dedup_state='COOLDOWN')
-        with patch.object(nightly, 'source_sha_from_run', return_value='b'*40), \\
+        with patch.object(nightly, 'source_sha_from_run', return_value='b'*40), \
              patch.object(nightly, 'discovery_from_run', return_value=discovery):
             nightly.annotate_history([row], 'b'*40)
         self.assertTrue(row['_nightly_identity_skipped'])
