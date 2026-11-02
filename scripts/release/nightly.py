@@ -217,6 +217,19 @@ def route(data):
     if state == 'UNKNOWN':
         raise ValueError('A matching Nightly run has no discovery artifact; inspect it before dispatching again')
     if state == 'RETRY':
+        # Bound retries to one per six hours for the exact Nightly build identity.
+        matching = [r for r in rows if r.get('_nightly_identity') == identity
+                    and r.get('event') == 'workflow_dispatch'
+                    and r.get('head_branch') == 'main'
+                    and r.get('display_title', '').endswith(
+                        f' / draft / wayland=true / android-signing={signing}')]
+        if matching:
+            latest = max(datetime.fromisoformat(r['created_at'].replace('Z', '+00:00'))
+                         for r in matching)
+            remaining = 6 * 3600 - (datetime.now(timezone.utc) - latest).total_seconds()
+            if remaining > 0:
+                print(f'Nightly retry cooldown: {int(remaining / 60)} minutes remaining; skip.')
+                return
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true'], check=True)
