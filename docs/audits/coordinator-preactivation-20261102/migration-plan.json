@@ -1,8 +1,50 @@
 {
+  "administrative_ui_followup": {
+    "account": "billradar",
+    "actions_policy_entries_visible": 0,
+    "actions_settings": {
+      "actions_can_create_and_approve_pull_requests": false,
+      "all_external_contributors_approval": false,
+      "allowed_actions": "all",
+      "default_workflow_permissions": "read_contents_and_packages",
+      "fork_pull_request_approval": "first_time_contributors",
+      "require_full_sha_pinning": false,
+      "retention_days": 90
+    },
+    "authenticated_session_observed": true,
+    "classic_branch_protection_entries_visible": 0,
+    "limitation": "Repository UI configuration verified; hardware host filesystem/device permissions and runner service isolation are outside this web inspection.",
+    "pages": {
+      "actions_policies": "https://github.com/billradar/rustdesk-custom/settings/actions/rules",
+      "actions_settings": "https://github.com/billradar/rustdesk-custom/settings/actions",
+      "classic_protection": "https://github.com/billradar/rustdesk-custom/settings/branches",
+      "runner_detail": "https://github.com/billradar/rustdesk-custom/settings/actions/runners/21",
+      "runner_list": "https://github.com/billradar/rustdesk-custom/settings/actions/runners"
+    },
+    "runner": {
+      "active_jobs": 0,
+      "configuration": "Linux arm64",
+      "host_isolation_verified": false,
+      "id": 21,
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "ARM64",
+        "rustdesk-signing",
+        "android-signing",
+        "yubikey"
+      ],
+      "name": "raspberrypi-rustdesk-signing",
+      "status": "Idle",
+      "workflow_allowlist_control_observed": false
+    },
+    "settings_changed": false,
+    "verified_at": "2026-11-02T14:45:47.465484+00:00"
+  },
   "automatic_retry_authorized": false,
   "blockers": [
-    "Production journal and run-index ruleset protection not configured/verified",
-    "Classic branch protections and self-hosted runner access control require administrative inspection",
+    "Production journal and run-index proposals remain unapplied; no matching ruleset or classic protection entry observed",
+    "Runner workflow restriction and hardware host isolation still require separate assessment; UI shows first-time-contributor fork approval only",
     "A reviewed legacy import/alias mechanism does not yet exist; this plan is not an executable state seed",
     "Unknown legacy identity and missing original reuse producers remain REVIEW_REQUIRED",
     "Release checksum payloads were not downloaded; no release reuse/publication gate is bypassed"
@@ -31,8 +73,10 @@
         "type": "branch_policy"
       }
     ],
+    "runner_access_control_scope": "Repository UI and fork policies inspected; no per-workflow runner allowlist control shown; host isolation not verified.",
     "runner_access_control_verified": false,
-    "runner_inventory_verified": false,
+    "runner_inventory_verified": true,
+    "runner_repository_configuration_verified": true,
     "secret_values_read": false
   },
   "history": {
