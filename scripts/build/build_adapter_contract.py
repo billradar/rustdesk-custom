@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Ensure an interface review never becomes an allow-all compatibility rule."""
 import copy
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -62,6 +63,50 @@ class AdapterContract(unittest.TestCase):
         new=next(p for p in policy if p['signature']==current['signature'])
         self.assertEqual({k:v for k,v in old.items() if k!='signature'},
                          {k:v for k,v in new.items() if k!='signature'})
+
+    def test_bridge_comment_review_is_exact_and_preserves_executable_commands(self):
+        evidence=json.loads((adapter.ROOT/'docs/upstream-interface-reviews/bridge-comments-20261102.json').read_text())
+        old,new=evidence['bridge_old_utf8'],evidence['bridge_new_utf8']
+        old_comment,new_comment=evidence['replacement_old_shell_comments'],evidence['replacement_new_shell_comments']
+        self.assertEqual(old.count(old_comment),1)
+        self.assertEqual(new.count(new_comment),1)
+        self.assertTrue(all(line.lstrip().startswith('#') for line in (old_comment+'\n'+new_comment).splitlines()))
+        # Shell comments remain strings in YAML; replace only the two reviewed
+        # full-line comments, without general comment/whitespace normalization.
+        self.assertEqual(yaml.safe_load(old.replace(old_comment,new_comment)),yaml.safe_load(new))
+        self.assertEqual(old.replace(old_comment,new_comment).replace(
+            '# Dedicated bridge for the Windows arm64 build (Flutter 3.44); runs in parallel.',
+            '# Dedicated bridge for the Windows and macOS arm64 builds (Flutter 3.44); runs in parallel.'),new)
+        before,after=evidence['old_critical'],evidence['new_critical']
+        self.assertEqual(before['windows_job'],after['windows_job'])
+        self.assertEqual(before['tools'],after['tools'])
+        bridge='.github/workflows/bridge.yml'
+        self.assertEqual([k for k in before['files'] if before['files'][k]!=after['files'][k]],[bridge])
+        for text,critical in ((old,before),(new,after)):
+            self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),critical['files'][bridge])
+        profiles=json.loads((adapter.ROOT/'metadata/build/adapter-profiles.json').read_text())['profiles']
+        reviewed=next(p for p in profiles if p['id']=='reviewed-151-6aec30')
+        previous=next(p for p in profiles if p['id']=='reviewed-151-94c321')
+        self.assertEqual(adapter.digest(after),reviewed['signature'])
+        self.assertEqual(adapter.digest(before),previous['signature'])
+        self.assertEqual(reviewed['reviewed_upstream_sha'],evidence['new_upstream_sha'])
+        self.assertEqual(reviewed['critical'],{k:v for k,v in after.items() if k!='windows_job'})
+        ignored={'id','signature','reviewed_upstream_sha','review_notes','critical'}
+        self.assertEqual({k:v for k,v in previous.items() if k not in ignored},
+                         {k:v for k,v in reviewed.items() if k not in ignored})
+        policy=json.loads((adapter.ROOT/'metadata/build/windows-arm64-policy.json').read_text())['profiles']
+        arm_old=next(p for p in policy if p['signature']==previous['signature'])
+        arm_new=next(p for p in policy if p['signature']==reviewed['signature'])
+        self.assertEqual({k:v for k,v in arm_old.items() if k not in ('signature','patch_sha256')},
+                         {k:v for k,v in arm_new.items() if k not in ('signature','patch_sha256')})
+        for label,arm in (('old',arm_old),('new',arm_new)):
+            text=evidence['source_patch_'+label+'_utf8']
+            self.assertEqual(hashlib.sha256(text.encode()).hexdigest(),arm['patch_sha256'])
+            self.assertEqual(text.count('set -euo pipefail\n'),1)
+            header,body=text.split('set -euo pipefail\n')
+            self.assertTrue(all(not line.strip() or line.startswith('#') for line in header.splitlines()))
+        self.assertEqual(evidence['source_patch_old_utf8'].split('set -euo pipefail\n')[1],
+                         evidence['source_patch_new_utf8'].split('set -euo pipefail\n')[1])
 
 
 if __name__=='__main__':unittest.main()

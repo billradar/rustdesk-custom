@@ -158,3 +158,26 @@ release engine. The credential-free Action runtime workflow exercises this same
 script on `windows-11-arm`, rejects a parent cache directory and validates engine
 and Python PE architecture. This verifies toolchain preparation, not a complete
 RustDesk ARM64 package or real-device session.
+
+## Exact bridge-comment interface review (2026-11-02)
+
+Official SHA `6aec3069aec486ad7df07429a0a1ee411fc8d73a` changed three
+`bridge.yml` comment lines relative to `94c321d05ce02ee73304e6cf99187e2d4d96e409`:
+one YAML comment and two full-line Bash comments in the bridge dependency step.
+Replacing exactly those three texts reproduces the new file byte-for-byte. YAML
+parsing alone retains Bash comments as strings; the review compares the parsed
+workflow after replacing only the two known Bash comment lines. The complete
+Windows job, tools and other critical file digests are unchanged. The ARM64
+source-patch header also changes comments; its complete executable body from
+`set -euo pipefail` onward is byte-identical. Its new raw SHA-256 is registered
+separately without relaxing source receipt verification. Both static x64 and native ARM64 profile checks were executed.
+
+The exact new signature is `f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6`,
+registered as `reviewed-151-6aec30`; its ARM64 recipe differs only by that parent
+signature and the exact header-comment source-patch digest. [Archived evidence](upstream-interface-reviews/bridge-comments-20261102.json)
+contains both original bridge files, the exact diff and complete critical inputs.
+The adapter contract verifies these relationships and retains negative tests for
+missing reviews, raw-file drift, toolchain drift and unknown runners. Production
+hashing does not strip comments or normalize unknown interfaces. This review
+changes no source resolution, patches, matrix, Wayland, signing or publication
+authorization, and does not claim native package/runtime validation.
