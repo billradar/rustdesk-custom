@@ -388,6 +388,8 @@ def stable_history(api, repo, identity, current=''):
         title=row.get('display_title','')
         if not title.startswith('Stable ') or suffix not in title: continue
         if row.get('status')!='completed': return 'ACTIVE'
+        if catalog.unrelated_source(row, 'stable', identity.source.upstream_sha):
+            continue
         # Reconstruct every relevant lock, including old manually named runs.
         archived = catalog.historical_identity(row, 'stable')
         recorded = archived.historical_digest if archived is not None else stable_router.recorded_identity(row)

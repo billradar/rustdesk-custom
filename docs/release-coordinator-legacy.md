@@ -83,8 +83,10 @@ IDs without claiming the existence of a build result record.
 Both history adapters can use complete archived success evidence. They compare
 live run provenance/attempt against the captured observation before replacing
 Artifact lookup; a native rerun, changed source/custom SHA, conclusion, event,
-workflow or repository fails closed. Unknown records never become successful
-aliases. Missing future history still uses the original conservative path.
+workflow or repository fails closed. Stable checks a verified archived source
+SHA before demanding producer success, so an unrelated old review/no-build record
+does not block a new source; matching/unscoped evidence still holds. Unknown
+records never become successful aliases. Missing future history still uses the original conservative path.
 Workers, including sparse-checkout production signing guards, do not load this
 catalog and acquire no new permissions or secrets. Stable Lock, source resolvers,
 Wayland/matrix, Android Environment/Runner and publication/digest gates are unchanged.
@@ -104,10 +106,12 @@ python3 -m scripts.release.coordinator.legacy_contract
 
 Capture accepts only GET under this repository's Actions run endpoints. It never
 calls a mutation API. Preparation refuses replacement/deletion of existing rows,
-uses exclusive object creation and is idempotent for identical input. A crash
-between complete object creation and head installation leaves an invalid partial
-workspace; rerunning prepare validates and resumes its pending head. Missing or
-conflicting objects remain blocked. This is offline recovery, not a claim of an
+writes a deterministic pending intent before exclusive object creation and is
+idempotent for identical input. A restart with exactly the same validated input
+can reconstruct an object missing after that intent; different input is rejected.
+A crash after complete object creation resumes only after the entire chain is
+validated. Standalone resume refuses missing objects; truncated/conflicting
+objects remain blocked. This is offline recovery, not a claim of an
 online multi-file filesystem transaction. Never commit a partial workspace.
 
 Concurrent PR imports made from the same tip produce distinct child objects;

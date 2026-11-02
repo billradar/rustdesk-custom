@@ -104,6 +104,26 @@ class LegacyContract(unittest.TestCase):
              patch('scripts.release.stable_router.recorded_identity',side_effect=AssertionError('Artifact expired')):
             self.assertEqual(stable_history(RuntimeAPI(),REPOSITORY,build),'SUCCESS')
 
+    def test_unrelated_stable_review_evidence_does_not_block_a_new_source(self):
+        record=next(r for r in self.records if r['audit_row']['run_id']==40647868248)
+        catalog=Catalog([record]);row=api_run(record)
+        build=identity(self.stable['audit_row'])
+        build=replace(build,source=replace(build.source,common_patch_hash='a'*64))
+        self.assertEqual(catalog.decision(build),'NO_OP')
+        with patch('scripts.release.coordinator.runtime.history',return_value=[row]), \
+             patch('scripts.release.coordinator.legacy.for_repository',return_value=catalog), \
+             patch('scripts.release.stable_router.recorded_identity',side_effect=AssertionError('Unrelated archive must not download')):
+            self.assertEqual(stable_history(RuntimeAPI(),REPOSITORY,build),'EMPTY')
+            c=Coordinator(RuntimeAPI(),REPOSITORY,build,legacy_catalog=catalog)
+            snapshot=c.claim(NOW,'123',lambda:stable_history(c.api,REPOSITORY,build))
+            self.assertEqual(snapshot.record.attempt,0)
+        same=replace(build,source=replace(build.source,upstream_sha=source_hint(record['audit_row'])))
+        self.assertEqual(catalog.decision(same),'REVIEW_HOLD')
+        with self.assertRaisesRegex(ValueError,'requires review'):
+            Coordinator(RuntimeAPI(),REPOSITORY,same,legacy_catalog=catalog).claim(NOW,'123',lambda:'EMPTY')
+        row['run_attempt']+=1
+        with self.assertRaisesRegex(ValueError,'drift'):catalog.unrelated_source(row,'stable',build.source.upstream_sha)
+
     def test_run_attempt_repository_source_event_and_path_drift_fail_closed(self):
         for change in (dict(run_attempt=2),dict(head_sha='a'*40),dict(status='in_progress'),
                        dict(conclusion='failure'),dict(event='pull_request'),dict(path='.github/workflows/ci.yml'),
@@ -165,6 +185,26 @@ class LegacyContract(unittest.TestCase):
             self.assertEqual(len(resume(root).records),2)
             self.assertFalse((root/'head.pending').exists())
             self.assertEqual(prepare([self.success,self.stable],root),json.loads((root/'head.json').read_text())['catalog_sha256'])
+
+    def test_crash_after_intent_before_object_is_reconstructed_from_exact_input(self):
+        original=Path.open
+        for initial in (True,False):
+            with tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp)/'catalog'
+                if not initial:prepare([self.success],root)
+                def interrupted(path,*args,**kwargs):
+                    if path.parent.name=='objects' and args and args[0]=='xb':
+                        raise OSError('Injected crash before object creation')
+                    return original(path,*args,**kwargs)
+                with patch.object(Path,'open',interrupted):
+                    with self.assertRaises(OSError):prepare([self.success,self.stable],root)
+                self.assertTrue((root/'head.pending').is_file())
+                with self.assertRaises(ValueError):resume(root)
+                with self.assertRaisesRegex(ValueError,'differs'):
+                    prepare([self.success],root)
+                key=prepare([self.success,self.stable],root)
+                self.assertEqual(len(load(root).records),2)
+                self.assertEqual(key,prepare([self.success,self.stable],root))
 
     def test_missing_tampered_unknown_schema_or_noncanonical_catalog_fails_closed(self):
         for fault in ('missing','tampered','schema','noncanonical'):

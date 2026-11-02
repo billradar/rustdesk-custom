@@ -217,6 +217,14 @@ class Catalog:
         require(result is not None, 'Archived historical identity/producer requires review')
         return result
 
+    def unrelated_source(self, run, channel, upstream_sha):
+        record = self._records.get((channel, run.get('id')))
+        if record is None:
+            return False
+        require(fingerprint(run) == record['observation']['run'], 'Archived run provenance/attempt drift')
+        archived_sha = source_hint(record['audit_row'])
+        return bool(archived_sha and archived_sha != upstream_sha)
+
     def annotate_nightly(self, run):
         record = self._records.get(('nightly', run.get('id')))
         if record is None:

@@ -71,15 +71,24 @@ def prepare(records, directory):
     """
     catalog = Catalog(records)
     directory = Path(directory)
-    if (directory/'head.pending').exists():
-        resume(directory)
+    temporary = directory/'head.pending'
+    pending = temporary.exists()
+    if pending:
+        require(temporary.is_file() and not temporary.is_symlink(), 'Nonregular pending catalog head')
+        candidate = json.loads(temporary.read_bytes())
+        hex_key = candidate.get('catalog_sha256', '')
+        from .identity import hex_value
+        hex_value(hex_key, 64)
+        if (directory/'objects'/(hex_key+'.json')).exists():
+            resume(directory)
+            pending = False
     previous = ''
-    if directory.exists() and any(directory.iterdir()):
+    if (directory/'head.json').exists():
         existing = load(directory)
         previous = json.loads((directory/'head.json').read_text())['catalog_sha256']
         require(all(catalog.records.get(k) == v for k,v in existing.records.items()),
                 'Cannot delete or replace archived evidence')
-        if catalog.records == existing.records:
+        if catalog.records == existing.records and not pending:
             return previous  # Idempotent import emits no new object.
     value = dict(schema_version=1, kind='legacy-dedup-catalog', repository=REPOSITORY,
                  source_audit_sha256=AUDIT_SHA256, previous_catalog_sha256=previous,
@@ -87,16 +96,19 @@ def prepare(records, directory):
     raw = canonical(value);key = hashlib.sha256(raw).hexdigest()
     target = directory/'objects'/(key+'.json')
     target.parent.mkdir(parents=True,exist_ok=True)
+    head = canonical(dict(schema_version=1,catalog_sha256=key))
+    # Intent precedes object creation. A restart with the same verified input
+    # may reconstruct a missing object; different input cannot adopt the intent.
+    if pending:
+        require(temporary.read_bytes() == head, 'Pending import differs from supplied evidence')
+    else:
+        with temporary.open('xb') as stream:stream.write(head)
     # Immutable content objects never overwrite an existing path.
     if target.exists():
         require(target.read_bytes() == raw, 'Existing legacy object conflict')
     else:
         with target.open('xb') as stream:stream.write(raw)
-    head = canonical(dict(schema_version=1,catalog_sha256=key))
-    temporary = directory/'head.pending'
-    with temporary.open('xb') as stream:stream.write(head)
-    temporary.replace(directory/'head.json')
-    load(directory)
+    resume(directory)
     return key
 
 
