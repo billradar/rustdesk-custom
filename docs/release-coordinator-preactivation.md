@@ -1,14 +1,14 @@
 # Release Coordinator 上线前保护核查与历史迁移方案
 
-核查日期：2026-11-02。权威线上基线：`95abfaf706766f670dddcecea41530320c0ebb66`；实现审查基线：PR #173 的 `b442d1de6ab84de23de478f09ced993f1bee1d5f`。本报告是只读审计及迁移设计，不是生产状态，也不是重试授权。
+核查日期：2026-11-02。权威线上基线：`95abfaf706766f670dddcecea41530320c0ebb66`；实现审查基线：PR #173 的 `b442d1de6ab84de23de478f09ced993f1bee1d5f`。初始核查为只读审计及迁移设计；后续专用 refs 保护的应用记录见文末及独立验证报告。本清单不是生产构建状态，也不是重试授权。
 
 ## 实际核查结果
 
 | 项目 | 证据及结论 | 状态 |
 | --- | --- | --- |
 | main 保护 | ruleset `24412604` 活跃；目标仅 `refs/heads/main`；禁止删除、非快进；要求 PR、解决评审线程；无 bypass；必需审批人数为 0 | 已核查；不更改现有主分支规则 |
-| 状态日志保护 | 包含父级的 ruleset 清单只返回上述 main 规则，没有匹配生产 journal 的 ruleset | 待应用专用保护；登录后的经典保护页面未列出任何规则 |
-| 运行索引保护 | 同一 ruleset 清单没有匹配生产 run-index 的规则 | 待应用不可变索引保护 |
+| 状态日志保护 | 包含父级的 ruleset 清单只返回上述 main 规则，没有匹配生产 journal 的 ruleset | 后续已应用 Active ruleset `26377532`；初始清单作为历史证据保留 |
+| 运行索引保护 | 同一 ruleset 清单没有匹配生产 run-index 的规则 | 后续已应用 Active ruleset `26377769` |
 | 签名 Environment | 公开只读 API 读取到 `android-production-signing`；custom branch policy 唯一记录为 branch `main`；`can_admins_bypass=false` | 已核查 |
 | 人工审批 | Environment 的 protection_rules 只含 branch_policy，未列 required_reviewers/wait_timer | 当前允许 main 自动签名的既有语义；本次不擅自增加审批门禁 |
 | 签名隔离 | 对 main 与待合并实现的 Tag/Nightly YAML 均核对：相同 Environment、6 个专用标签、同一硬件 concurrency、唯一签名步骤绑定 PIN；源码 SHA-256 在清单中 | 结构核查通过；没有读取任何密钥值 |
@@ -26,7 +26,7 @@ Environment 原始只读端点：`GET /repos/billradar/rustdesk-custom/environme
 - [journal-protection.proposed.json](audits/coordinator-preactivation-20261102/journal-protection.proposed.json)：仅匹配生产 Stable/Nightly journal；禁止删除和非快进；保留正常创建、快进更新。
 - [run-index-protection.proposed.json](audits/coordinator-preactivation-20261102/run-index-protection.proposed.json)：仅匹配生产 run-index；允许创建，禁止更新、删除及非快进；无 bypass。
 
-**这两份 JSON 尚未应用。**连接器没有规则写入能力。不得给 journal 加 `pull_request`、`required_signatures`、禁止所有 update 或限制 creation：这些会阻断当前 GitRefStore 的直接原子追加。索引独立设置 update 限制，不覆盖 journal。规则依据：[GitHub repository rules REST schema](https://docs.github.com/en/rest/repos/rules)。应用前后先在隔离测试命名空间验证等价规则下的创建、允许的快进及预期拒绝，不能把无规则环境中的已通过测试当成受规则保护后的兼容性证明。
+**这两份 JSON 对应的规则已在隔离验证及组合 CI 通过后应用。**规则创建使用登录后的管理页面，连接器负责只读核验；详见文末记录。不得给 journal 加 `pull_request`、`required_signatures`、禁止所有 update 或限制 creation：这些会阻断当前 GitRefStore 的直接原子追加。索引独立设置 update 限制，不覆盖 journal。规则依据：[GitHub repository rules REST schema](https://docs.github.com/en/rest/repos/rules)。应用前后先在隔离测试命名空间验证等价规则下的创建、允许的快进及预期拒绝，不能把无规则环境中的已通过测试当成受规则保护后的兼容性证明。
 
 ## 完整历史清点
 
@@ -114,4 +114,6 @@ Runner 标签是调度条件，不是专属访问授权的证明。当前 UI 没
 
 ## 后续隔离保护验证（PR #175）
 
-已创建并经管理 API 确认 Active、无 bypass 的隔离 ruleset：journal `26375171`、run-index `26375414`。真实运行 `41467995091` 通过 3 项正向操作、5 项服务器 422 拒绝/原 head 不变核对及 7 项受保护存储检查。详见 [验证记录](release-coordinator-protection.md)。生产两份配置仍未应用：功能 CI `41467994953` 在官方上游 `6aec306…` 的未知 bridge 构建接口门禁失败，需独立 staging 审查并重新验证；不以修改身份、来源选择或测试断言掩盖失败。
+已创建并经管理 API 确认 Active、无 bypass 的隔离 ruleset：journal `26375171`、run-index `26375414`。真实运行 `41467995091` 通过 3 项正向操作、5 项服务器 422 拒绝/原 head 不变核对及 7 项受保护存储检查。详见 [验证记录](release-coordinator-protection.md)。该初始阶段生产配置暂停应用：功能 CI `41467994953` 在官方上游 `6aec306…` 的未知 bridge 构建接口门禁失败。后续独立 PR #176 审核了 workflow 注释及 ARM64 script 文件头注释的精确摘要变化，未改变可执行命令或放宽未知接口门禁；组合 CI `41469907832` 在精确提交 `bd12f7a…` 成功，旧失败记录保留。
+
+最终应用：journal `26377532`、run-index `26377769` 已启用且无 bypass；API 原始响应及空的生产 refs 清单见 [应用证据](audits/coordinator-preactivation-20261102/ref-protection-applied.json)。main 提交与规则未变。尚未合并 PR、启用 Coordinator Router、导入历史状态或触发签名/发布。完整验证范围、旧失败与新成功的区别及回滚要求见 [保护验证报告](release-coordinator-protection.md)。

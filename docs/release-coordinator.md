@@ -353,9 +353,10 @@ Operational limits: native GitHub reruns (attempt > 1) are rejected; use an expl
 reviewed coordinator grant followed by a fresh workflow_dispatch for known terminal
 failures. A pre-existing native rerun, missing initial legacy identity, or ambiguous
 dispatch with no arriving verified worker may require operator reconciliation.
-No timeout clears an uncertain reservation. No live signing/build/publication or
-GitHub state-ref fault injection was performed; the bare local Git race test is
-not a claim of deployed GitHub integration validation.
+No timeout clears an uncertain reservation. No production signing/build/publication was performed for coordinator validation.
+The later isolated supplements below execute real GitHub storage races and
+transport fault injections against synthetic test refs; they do not prove
+production workflow dispatch or deployed worker behavior.
 
 Rollback and maintenance: disable both routers and new admissions, preserve both
 journal/index namespaces, reconcile active runs and unknown dispatches, then revert
