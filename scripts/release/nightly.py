@@ -200,6 +200,9 @@ def route(data):
     if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')):
         raise ValueError('Nightly router requires trusted main context')
+    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
+        from scripts.release.coordinator.runtime import route_nightly
+        return route_nightly(data)
     rows = []
     for page in range(1, 11):
         batch = api(f'repos/{repo}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
@@ -254,6 +257,10 @@ def dedup():
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                 output.write('skip=false\nstate=RETRY\n')
         print('Nightly dedup: development dry-run is isolated from production history')
+        return
+    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
+        from scripts.release.coordinator.runtime import outputs
+        outputs(skip=False, state='COORDINATOR_ADMISSION_REQUIRED')
         return
     rows = []
     for page in range(1, 11):

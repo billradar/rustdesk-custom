@@ -228,7 +228,7 @@ class NightlyTests(unittest.TestCase):
             self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
         for name,j in w['jobs'].items():
             if name!='android-sign':self.assertNotIn('environment',j)
-            if name!='draft':self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name not in ('draft','coordinator-admit'):self.assertNotIn('write',json.dumps(j.get('permissions',{})))
             if name!='android-sign':self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(j))
         signer=w['jobs']['android-sign'];tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']['android-sign']
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
@@ -268,7 +268,7 @@ class NightlyTests(unittest.TestCase):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
         self.assertEqual(w['on']['schedule'],[{'cron':'23 2 * * *'}, {'cron':'41 8 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
-        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
+        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'write','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
         names=[]
         for family in ['platforms','android']:

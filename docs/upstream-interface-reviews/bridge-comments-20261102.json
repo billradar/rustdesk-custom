@@ -1,0 +1,584 @@
+{
+  "bridge_diff": "--- 94c321d05ce02ee73304e6cf99187e2d4d96e409\n+++ 6aec3069aec486ad7df07429a0a1ee411fc8d73a\n@@ -25,7 +25,7 @@\n               flutter-version: \"3.22.3\",\n               artifact-name: \"bridge-artifact\",\n             }\n-          # Dedicated bridge for the Windows arm64 build (Flutter 3.44); runs in parallel.\n+          # Dedicated bridge for the Windows and macOS arm64 builds (Flutter 3.44); runs in parallel.\n           - {\n               target: x86_64-unknown-linux-gnu,\n               os: ubuntu-22.04,\n@@ -92,8 +92,8 @@\n             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.\n             sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml\n           else\n-            # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the\n-            # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.\n+            # Flutter 3.44 bridge for Windows/macOS arm64: match those builds' source/pubspec state so\n+            # the generated *.freezed.dart compiles against the same Flutter/freezed they resolve.\n             bash .github/patches/apply_flutter_3.44_source_patches.sh\n           fi\n           pushd flutter && flutter pub get && popd\n",
+  "bridge_new_utf8": "# This yaml shares the build bridge steps with ci and nightly.\nname: Build flutter-rust-bridge\n# 2023-11-23 18:00:00+00:00\n\non:\n  workflow_call:\n\nenv:\n  CARGO_EXPAND_VERSION: \"1.0.95\"\n  FLUTTER_RUST_BRIDGE_VERSION: \"1.80.1\"\n  RUST_VERSION: \"1.75\" # https://github.com/rustdesk/rustdesk/discussions/7503\n\njobs:\n  generate_bridge:\n    runs-on: ${{ matrix.job.os }}\n    strategy:\n      fail-fast: false\n      matrix:\n        job:\n          # Default bridge for every platform still on Flutter 3.24.5 (generated with 3.22.3).\n          - {\n              target: x86_64-unknown-linux-gnu,\n              os: ubuntu-22.04,\n              extra-build-args: \"\",\n              flutter-version: \"3.22.3\",\n              artifact-name: \"bridge-artifact\",\n            }\n          # Dedicated bridge for the Windows and macOS arm64 builds (Flutter 3.44); runs in parallel.\n          - {\n              target: x86_64-unknown-linux-gnu,\n              os: ubuntu-22.04,\n              extra-build-args: \"\",\n              flutter-version: \"3.44.8\",\n              artifact-name: \"bridge-artifact-flutter-3.44\",\n            }\n    steps:\n      - name: Checkout source code\n        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n        with:\n          submodules: recursive\n\n      - name: Install prerequisites\n        run: |\n          sudo apt-get install ca-certificates -y\n          sudo apt-get update -y\n          sudo apt-get install -y \\\n            clang \\\n            cmake \\\n            curl \\\n            gcc \\\n            git \\\n            g++ \\\n            libclang-dev \\\n            libgtk-3-dev \\\n            llvm-dev \\\n            nasm \\\n            ninja-build \\\n            pkg-config \\\n            wget\n\n      - name: Install Rust toolchain\n        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1\n        with:\n          toolchain: ${{ env.RUST_VERSION }}\n          targets: ${{ matrix.job.target }}\n          components: \"rustfmt\"\n\n      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2\n        with:\n          prefix-key: bridge-${{ matrix.job.os }}\n\n      - name: Cache Bridge\n        id: cache-bridge\n        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3\n        with:\n          path: /tmp/flutter_rust_bridge\n          key: bridge-${{ matrix.job.flutter-version }}\n\n      - name: Install flutter\n        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2\n        with:\n          channel: \"stable\"\n          flutter-version: ${{ matrix.job.flutter-version }}\n          cache: true\n\n      - name: Install flutter rust bridge deps\n        shell: bash\n        run: |\n          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked\n          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features \"uuid\" --locked\n          if [[ \"${{ matrix.job.flutter-version }}\" == \"3.22.3\" ]]; then\n            # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.\n            sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml\n          else\n            # Flutter 3.44 bridge for Windows/macOS arm64: match those builds' source/pubspec state so\n            # the generated *.freezed.dart compiles against the same Flutter/freezed they resolve.\n            bash .github/patches/apply_flutter_3.44_source_patches.sh\n          fi\n          pushd flutter && flutter pub get && popd\n\n      - name: Run flutter rust bridge\n        run: |\n          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h\n          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h\n\n      - name: Upload Artifact\n        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1\n        with:\n          name: ${{ matrix.job.artifact-name }}\n          path: |\n            ./src/bridge_generated.rs\n            ./src/bridge_generated.io.rs\n            ./flutter/lib/generated_bridge.dart\n            ./flutter/lib/generated_bridge.freezed.dart\n            ./flutter/macos/Runner/bridge_generated.h\n            ./flutter/ios/Runner/bridge_generated.h\n",
+  "bridge_old_utf8": "# This yaml shares the build bridge steps with ci and nightly.\nname: Build flutter-rust-bridge\n# 2023-11-23 18:00:00+00:00\n\non:\n  workflow_call:\n\nenv:\n  CARGO_EXPAND_VERSION: \"1.0.95\"\n  FLUTTER_RUST_BRIDGE_VERSION: \"1.80.1\"\n  RUST_VERSION: \"1.75\" # https://github.com/rustdesk/rustdesk/discussions/7503\n\njobs:\n  generate_bridge:\n    runs-on: ${{ matrix.job.os }}\n    strategy:\n      fail-fast: false\n      matrix:\n        job:\n          # Default bridge for every platform still on Flutter 3.24.5 (generated with 3.22.3).\n          - {\n              target: x86_64-unknown-linux-gnu,\n              os: ubuntu-22.04,\n              extra-build-args: \"\",\n              flutter-version: \"3.22.3\",\n              artifact-name: \"bridge-artifact\",\n            }\n          # Dedicated bridge for the Windows arm64 build (Flutter 3.44); runs in parallel.\n          - {\n              target: x86_64-unknown-linux-gnu,\n              os: ubuntu-22.04,\n              extra-build-args: \"\",\n              flutter-version: \"3.44.8\",\n              artifact-name: \"bridge-artifact-flutter-3.44\",\n            }\n    steps:\n      - name: Checkout source code\n        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n        with:\n          submodules: recursive\n\n      - name: Install prerequisites\n        run: |\n          sudo apt-get install ca-certificates -y\n          sudo apt-get update -y\n          sudo apt-get install -y \\\n            clang \\\n            cmake \\\n            curl \\\n            gcc \\\n            git \\\n            g++ \\\n            libclang-dev \\\n            libgtk-3-dev \\\n            llvm-dev \\\n            nasm \\\n            ninja-build \\\n            pkg-config \\\n            wget\n\n      - name: Install Rust toolchain\n        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1\n        with:\n          toolchain: ${{ env.RUST_VERSION }}\n          targets: ${{ matrix.job.target }}\n          components: \"rustfmt\"\n\n      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2\n        with:\n          prefix-key: bridge-${{ matrix.job.os }}\n\n      - name: Cache Bridge\n        id: cache-bridge\n        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3\n        with:\n          path: /tmp/flutter_rust_bridge\n          key: bridge-${{ matrix.job.flutter-version }}\n\n      - name: Install flutter\n        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2\n        with:\n          channel: \"stable\"\n          flutter-version: ${{ matrix.job.flutter-version }}\n          cache: true\n\n      - name: Install flutter rust bridge deps\n        shell: bash\n        run: |\n          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked\n          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features \"uuid\" --locked\n          if [[ \"${{ matrix.job.flutter-version }}\" == \"3.22.3\" ]]; then\n            # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.\n            sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml\n          else\n            # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the\n            # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.\n            bash .github/patches/apply_flutter_3.44_source_patches.sh\n          fi\n          pushd flutter && flutter pub get && popd\n\n      - name: Run flutter rust bridge\n        run: |\n          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h\n          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h\n\n      - name: Upload Artifact\n        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1\n        with:\n          name: ${{ matrix.job.artifact-name }}\n          path: |\n            ./src/bridge_generated.rs\n            ./src/bridge_generated.io.rs\n            ./flutter/lib/generated_bridge.dart\n            ./flutter/lib/generated_bridge.freezed.dart\n            ./flutter/macos/Runner/bridge_generated.h\n            ./flutter/ios/Runner/bridge_generated.h\n",
+  "new_critical": {
+    "files": {
+      ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759",
+      ".github/workflows/bridge.yml": "bc3714806b91f7a99748e68540c136103c7a7f7333703047e75a6f21bae61ae7",
+      ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+      "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+      "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46"
+    },
+    "tools": {
+      "FLUTTER_VERSION": "3.24.5",
+      "LLVM_VERSION": "15.0.6",
+      "RUST_VERSION": "1.75",
+      "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+    },
+    "windows_job": {
+      "name": "${{ matrix.job.target }}",
+      "needs": [
+        "build-RustDeskTempTopMostWindow",
+        "generate-bridge"
+      ],
+      "runs-on": "${{ matrix.job.os }}",
+      "steps": [
+        {
+          "name": "Export GitHub Actions cache environment variables",
+          "uses": "actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410",
+          "with": {
+            "script": "core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');\ncore.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');\n"
+          }
+        },
+        {
+          "name": "Checkout source code",
+          "uses": "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "with": {
+            "submodules": "recursive"
+          }
+        },
+        {
+          "name": "Restore bridge files",
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}",
+            "path": "./"
+          }
+        },
+        {
+          "name": "Install LLVM and Clang",
+          "uses": "KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0",
+          "with": {
+            "version": "${{ env.LLVM_VERSION }}"
+          }
+        },
+        {
+          "id": "flutter",
+          "name": "Install flutter",
+          "uses": "subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225",
+          "with": {
+            "architecture": "x64",
+            "channel": "stable",
+            "flutter-version": "${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}"
+          }
+        },
+        {
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "name": "Force arm64 Dart SDK + engine",
+          "run": "$flutterRoot = \"${{ steps.flutter.outputs['CACHE-PATH'] }}\"\nWrite-Host \"PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE\"\nWrite-Host \"Flutter root: $flutterRoot\"\nRemove-Item -Force \"$flutterRoot\\bin\\cache\\engine-dart-sdk.stamp\" -ErrorAction SilentlyContinue\n& \"$flutterRoot\\bin\\internal\\update_dart_sdk.ps1\"\n# Confirm the Dart we ended up with is arm64 (\"on windows_arm64\"); fail loudly if not.\n$dartVer = & \"$flutterRoot\\bin\\dart.bat\" --version 2>&1 | Out-String\nWrite-Host $dartVer\nif ($dartVer -notmatch \"windows_arm64\") {\n  Write-Error \"Expected an arm64 Dart SDK but got: $dartVer\"\n  exit 1\n}\n& \"$flutterRoot\\bin\\flutter.bat\" precache --windows\n# Fail fast if precache pulled the wrong-arch Windows engine: an arm64 Dart should\n# fetch windows-arm64 engine artifacts. Bailing here saves the ~25min Rust build.\n$engineDir = \"$flutterRoot\\bin\\cache\\artifacts\\engine\"\nWrite-Host \"Engine artifacts present:\"\nGet-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host\nif (-not (Test-Path \"$engineDir\\windows-arm64-release\")) {\n  Write-Error \"Expected windows-arm64-release engine artifacts but they are missing (wrong-arch SDK).\"\n  exit 1\n}\n"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'x86_64' }}",
+          "name": "Replace engine with rustdesk custom flutter engine",
+          "run": "flutter doctor -v\nflutter precache --windows\nInvoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip\nExpand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release\nmv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/\n"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'x86_64' }}",
+          "name": "Patch flutter",
+          "run": "cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))\ncd $(dirname $(dirname $(which flutter)))\nif [[ \"3.24.5\" == ${{env.FLUTTER_VERSION}} ]]; then\n  git apply flutter_3.24.4_dropdown_menu_enableFilter.diff\nfi\n",
+          "shell": "bash"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "name": "Patch RustDesk sources for Flutter 3.44 (arm64)",
+          "run": "bash .github/patches/apply_flutter_3.44_source_patches.sh",
+          "shell": "bash"
+        },
+        {
+          "name": "Install Rust toolchain",
+          "uses": "dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9",
+          "with": {
+            "components": "rustfmt",
+            "targets": "${{ matrix.job.target }}",
+            "toolchain": "${{ env.SCITER_RUST_VERSION }}"
+          }
+        },
+        {
+          "uses": "Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32",
+          "with": {
+            "prefix-key": "${{ matrix.job.os }}"
+          }
+        },
+        {
+          "name": "Setup vcpkg with Github Actions binary cache",
+          "uses": "lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2",
+          "with": {
+            "doNotCache": false,
+            "vcpkgDirectory": "C:\\vcpkg",
+            "vcpkgGitCommitId": "${{ env.VCPKG_COMMIT_ID }}"
+          }
+        },
+        {
+          "env": {
+            "VCPKG_DEFAULT_HOST_TRIPLET": "${{ matrix.job.vcpkg-triplet }}"
+          },
+          "name": "Install vcpkg dependencies",
+          "run": "if ! $VCPKG_ROOT/vcpkg \\\n  install \\\n  --triplet ${{ matrix.job.vcpkg-triplet }} \\\n  --x-install-root=\"$VCPKG_ROOT/installed\"; then\n  find \"${VCPKG_ROOT}/\" -name \"*.log\" | while read -r _1; do\n    echo \"$_1:\"\n    echo \"======\"\n    cat \"$_1\"\n    echo \"======\"\n    echo \"\"\n  done\n  exit 1\nfi\nhead -n 100 \"${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log\" || true\n",
+          "shell": "bash"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "name": "Set SODIUM_LIB_DIR (arm64)",
+          "run": "echo \"SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib\" >> \"$GITHUB_ENV\"",
+          "shell": "bash"
+        },
+        {
+          "name": "Build rustdesk",
+          "run": "# Windows: build RustDesk\n# --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix\npython3 .\\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}\nmv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk\n\n# Download usbmmidd_v2.zip and extract it to ./rustdesk\nInvoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip\nExpand-Archive usbmmidd_v2.zip -DestinationPath .\nRemove-Item -Path usbmmidd_v2\\Win32 -Recurse\nRemove-Item -Path \"usbmmidd_v2\\deviceinstaller64.exe\", \"usbmmidd_v2\\deviceinstaller.exe\", \"usbmmidd_v2\\usbmmidd.bat\"\nmv -Force .\\usbmmidd_v2 ./rustdesk\n\n# Download printer driver files and extract them to ./rustdesk\ntry {\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums\n\n  # Check and move the files\n  $checksum_driver = (Select-String -Path .\\sha256sums -Pattern '^([a-fA-F0-9]{64}) \\*rustdesk_printer_driver_v4-1.4\\.zip$').Matches.Groups[1].Value\n  $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256\n  $checksum_adapter = (Select-String -Path .\\sha256sums -Pattern '^([a-fA-F0-9]{64}) \\*printer_driver_adapter\\.zip$').Matches.Groups[1].Value\n  $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256\n  if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {\n      Write-Output \"rustdesk_printer_driver_v4-1.4, checksums match, extract the file.\"\n      Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .\n      mkdir ./rustdesk/drivers\n      mv -Force .\\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver\n      Expand-Archive printer_driver_adapter.zip -DestinationPath .\n      mv -Force .\\printer_driver_adapter.dll ./rustdesk\n  } elseif ($checksum_driver -ne $downloadsum_driver.Hash) {\n      Write-Output \"rustdesk_printer_driver_v4-1.4, checksums do not match, ignore the file.\"\n  } else {\n      Write-Output \"printer_driver_adapter.dll, checksums do not match, ignore the file.\"\n  }\n} catch {\n    Write-Host \"Ingore the printer driver error.\"\n}\n"
+        },
+        {
+          "if": "${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}",
+          "name": "Run the Rust tests",
+          "run": "# The build's own features, so the tests see the code that ships.\nFEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)\ncargo test --locked --release --lib --features \"$FEATURES\"\n# Its Windows tests run nowhere else.\ncargo test --locked --release -p clipboard\n",
+          "shell": "bash"
+        },
+        {
+          "continue-on-error": true,
+          "name": "find Runner.res",
+          "run": "runner_res=$(find . -name \"Runner.res\");\nif [ \"$runner_res\" == \"\" ]; then\n  echo \"Runner.res: not found\";\nelse\n  echo \"Runner.res: $runner_res\";\n  cp $runner_res ./libs/portable/Runner.res;\n  echo \"list ./libs/portable/Runner.res\";\n  ls -l ./libs/portable/Runner.res;\nfi\n",
+          "shell": "bash"
+        },
+        {
+          "if": "${{ inputs.upload-artifact }}",
+          "name": "Download RustDeskTempTopMostWindow artifacts",
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "${{ matrix.job.arch == 'aarch64' && 'topmostwindow-artifacts-ARM64' || 'topmostwindow-artifacts-x64' }}",
+            "path": "./rustdesk"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Upload unsigned",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-windows-${{ matrix.job.arch }}",
+            "path": "rustdesk"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Sign rustdesk files",
+          "run": "pip3 install requests argparse\nBASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./rustdesk/\n",
+          "shell": "bash"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true'",
+          "name": "Verify Windows Flutter version",
+          "run": "$reportedVersion = (& \".\\rustdesk\\rustdesk.exe\" --version | Out-String).Trim()\nif ($LASTEXITCODE -ne 0) {\n  throw \"rustdesk --version exited with $LASTEXITCODE\"\n}\nif ($reportedVersion -cne $env:VERSION) {\n  throw \"RustDesk reports version '$reportedVersion', expected '$env:VERSION'\"\n}\n",
+          "shell": "powershell"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Verify template payload signatures",
+          "run": "Get-ChildItem ./rustdesk -Recurse -File -ErrorAction Stop |\n  Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |\n  ForEach-Object {\n    $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop\n    if ($signature.Status -ne 'Valid') { throw \"Invalid template payload signature: $($_.FullName) ($($signature.Status))\" }\n  }\n",
+          "shell": "powershell"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Build template packer",
+          "run": "sed -i '/dpiAware/d' res/manifest.xml\npushd ./libs/portable\npip3 install -r requirements.txt\npython3 ./generate.py -f ../../rustdesk/ -e rustdesk.exe -l 11 -t \"${{ matrix.job.target }}\" --exclude-exe\npopd\nmkdir -p ./packer-template\ncp ./target/${{ matrix.job.target }}/release/rustdesk-portable-packer.exe ./packer-template/rustdesk-template-${{ matrix.job.arch }}.exe\n",
+          "shell": "bash"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Upload unsigned template packer",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "rustdesk-unsigned-packer-template-${{ matrix.job.arch }}",
+            "path": "./packer-template"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Build self-extracted executable",
+          "run": "sed -i '/dpiAware/d' res/manifest.xml\npushd ./libs/portable\npip3 install -r requirements.txt\npython3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe\npopd\nmkdir -p ./SignOutput\nmv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe\n",
+          "shell": "bash"
+        },
+        {
+          "name": "Add MSBuild to PATH",
+          "uses": "microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce",
+          "with": {
+            "msbuild-architecture": "${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86' }}"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Build msi",
+          "run": "pushd ./res/msi\npython preprocess.py --arp -d ../../rustdesk\nnuget restore msi.sln\n$msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }\nmsbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10\n$msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1\nmv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi\nsha256sum ../../SignOutput/rustdesk-*.msi\n"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Build pre-built MSI template",
+          "run": "git checkout -- res/msi\ncp -r ./rustdesk ./rustdesk-msi-template\nmv ./rustdesk-msi-template/rustdesk.exe ./rustdesk-msi-template/RDAPPNAM.exe\nSet-Content -Path ./rustdesk-msi-template/custom.txt -Value 'placeholder' -NoNewline\n$assets = './rustdesk-msi-template/data/flutter_assets/assets'\nNew-Item -ItemType Directory -Force -Path $assets | Out-Null\nforeach ($a in 'icon.ico','icon.png','logo.png','logo_light.png','logo_dark.png') {\n  Set-Content -Path \"$assets/$a\" -Value 'placeholder' -NoNewline\n}\npushd ./res/msi\npython preprocess.py --arp --template --revision-version 0 -d ../../rustdesk-msi-template --app-name RDAPPNAM\n$msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }\nmsbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform\nmsbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10\n$msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1\npopd\nmkdir ./msi-template\nmv $msi.FullName ./msi-template/rustdesk-template-${{ matrix.job.arch }}.msi\ngit checkout -- res/msi\nrm -r -fo ./rustdesk-msi-template\n"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Upload unsigned msi template",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-msi-template-${{ matrix.job.arch }}",
+            "path": "./msi-template"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Sign rustdesk self-extracted file",
+          "run": "BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput\n",
+          "shell": "bash"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Upload signed Windows Flutter EXE",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "windows-flutter-${{ matrix.job.arch }}-exe",
+            "path": "./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Upload signed Windows Flutter MSI",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "windows-flutter-${{ matrix.job.arch }}-msi",
+            "path": "./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true'",
+          "name": "Publish Release",
+          "uses": "softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844",
+          "with": {
+            "files": "./SignOutput/rustdesk-*.msi\n./SignOutput/rustdesk-*.exe\n",
+            "prerelease": true,
+            "tag_name": "${{ env.TAG_NAME }}"
+          }
+        }
+      ],
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "job": [
+            {
+              "arch": "x86_64",
+              "build-args": "--vram",
+              "flutter-arch": "x64",
+              "os": "windows-2022",
+              "target": "x86_64-pc-windows-msvc",
+              "vcpkg-triplet": "x64-windows-static"
+            },
+            {
+              "arch": "aarch64",
+              "build-args": "",
+              "flutter-arch": "arm64",
+              "os": "windows-11-arm",
+              "target": "aarch64-pc-windows-msvc",
+              "vcpkg-triplet": "arm64-windows-static"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "new_signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+  "new_upstream_sha": "6aec3069aec486ad7df07429a0a1ee411fc8d73a",
+  "old_critical": {
+    "files": {
+      ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759",
+      ".github/workflows/bridge.yml": "b519191d9d9bd7f4350cc978c8fd6db366cf3152206835620a73f09a165b4d05",
+      ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+      "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+      "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46"
+    },
+    "tools": {
+      "FLUTTER_VERSION": "3.24.5",
+      "LLVM_VERSION": "15.0.6",
+      "RUST_VERSION": "1.75",
+      "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+    },
+    "windows_job": {
+      "name": "${{ matrix.job.target }}",
+      "needs": [
+        "build-RustDeskTempTopMostWindow",
+        "generate-bridge"
+      ],
+      "runs-on": "${{ matrix.job.os }}",
+      "steps": [
+        {
+          "name": "Export GitHub Actions cache environment variables",
+          "uses": "actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410",
+          "with": {
+            "script": "core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');\ncore.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');\n"
+          }
+        },
+        {
+          "name": "Checkout source code",
+          "uses": "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+          "with": {
+            "submodules": "recursive"
+          }
+        },
+        {
+          "name": "Restore bridge files",
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "${{ matrix.job.arch == 'aarch64' && 'bridge-artifact-flutter-3.44' || 'bridge-artifact' }}",
+            "path": "./"
+          }
+        },
+        {
+          "name": "Install LLVM and Clang",
+          "uses": "KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0",
+          "with": {
+            "version": "${{ env.LLVM_VERSION }}"
+          }
+        },
+        {
+          "id": "flutter",
+          "name": "Install flutter",
+          "uses": "subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225",
+          "with": {
+            "architecture": "x64",
+            "channel": "stable",
+            "flutter-version": "${{ matrix.job.arch == 'aarch64' && env.FLUTTER_WINDOWS_ARM_VERSION || env.FLUTTER_VERSION }}"
+          }
+        },
+        {
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "name": "Force arm64 Dart SDK + engine",
+          "run": "$flutterRoot = \"${{ steps.flutter.outputs['CACHE-PATH'] }}\"\nWrite-Host \"PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE\"\nWrite-Host \"Flutter root: $flutterRoot\"\nRemove-Item -Force \"$flutterRoot\\bin\\cache\\engine-dart-sdk.stamp\" -ErrorAction SilentlyContinue\n& \"$flutterRoot\\bin\\internal\\update_dart_sdk.ps1\"\n# Confirm the Dart we ended up with is arm64 (\"on windows_arm64\"); fail loudly if not.\n$dartVer = & \"$flutterRoot\\bin\\dart.bat\" --version 2>&1 | Out-String\nWrite-Host $dartVer\nif ($dartVer -notmatch \"windows_arm64\") {\n  Write-Error \"Expected an arm64 Dart SDK but got: $dartVer\"\n  exit 1\n}\n& \"$flutterRoot\\bin\\flutter.bat\" precache --windows\n# Fail fast if precache pulled the wrong-arch Windows engine: an arm64 Dart should\n# fetch windows-arm64 engine artifacts. Bailing here saves the ~25min Rust build.\n$engineDir = \"$flutterRoot\\bin\\cache\\artifacts\\engine\"\nWrite-Host \"Engine artifacts present:\"\nGet-ChildItem $engineDir -Directory | Select-Object -ExpandProperty Name | Write-Host\nif (-not (Test-Path \"$engineDir\\windows-arm64-release\")) {\n  Write-Error \"Expected windows-arm64-release engine artifacts but they are missing (wrong-arch SDK).\"\n  exit 1\n}\n"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'x86_64' }}",
+          "name": "Replace engine with rustdesk custom flutter engine",
+          "run": "flutter doctor -v\nflutter precache --windows\nInvoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip\nExpand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release\nmv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/\n"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'x86_64' }}",
+          "name": "Patch flutter",
+          "run": "cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))\ncd $(dirname $(dirname $(which flutter)))\nif [[ \"3.24.5\" == ${{env.FLUTTER_VERSION}} ]]; then\n  git apply flutter_3.24.4_dropdown_menu_enableFilter.diff\nfi\n",
+          "shell": "bash"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "name": "Patch RustDesk sources for Flutter 3.44 (arm64)",
+          "run": "bash .github/patches/apply_flutter_3.44_source_patches.sh",
+          "shell": "bash"
+        },
+        {
+          "name": "Install Rust toolchain",
+          "uses": "dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9",
+          "with": {
+            "components": "rustfmt",
+            "targets": "${{ matrix.job.target }}",
+            "toolchain": "${{ env.SCITER_RUST_VERSION }}"
+          }
+        },
+        {
+          "uses": "Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32",
+          "with": {
+            "prefix-key": "${{ matrix.job.os }}"
+          }
+        },
+        {
+          "name": "Setup vcpkg with Github Actions binary cache",
+          "uses": "lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2",
+          "with": {
+            "doNotCache": false,
+            "vcpkgDirectory": "C:\\vcpkg",
+            "vcpkgGitCommitId": "${{ env.VCPKG_COMMIT_ID }}"
+          }
+        },
+        {
+          "env": {
+            "VCPKG_DEFAULT_HOST_TRIPLET": "${{ matrix.job.vcpkg-triplet }}"
+          },
+          "name": "Install vcpkg dependencies",
+          "run": "if ! $VCPKG_ROOT/vcpkg \\\n  install \\\n  --triplet ${{ matrix.job.vcpkg-triplet }} \\\n  --x-install-root=\"$VCPKG_ROOT/installed\"; then\n  find \"${VCPKG_ROOT}/\" -name \"*.log\" | while read -r _1; do\n    echo \"$_1:\"\n    echo \"======\"\n    cat \"$_1\"\n    echo \"======\"\n    echo \"\"\n  done\n  exit 1\nfi\nhead -n 100 \"${VCPKG_ROOT}/buildtrees/ffmpeg/build-${{ matrix.job.vcpkg-triplet }}-rel-out.log\" || true\n",
+          "shell": "bash"
+        },
+        {
+          "if": "${{ matrix.job.arch == 'aarch64' }}",
+          "name": "Set SODIUM_LIB_DIR (arm64)",
+          "run": "echo \"SODIUM_LIB_DIR=$VCPKG_ROOT/installed/${{ matrix.job.vcpkg-triplet }}/lib\" >> \"$GITHUB_ENV\"",
+          "shell": "bash"
+        },
+        {
+          "name": "Build rustdesk",
+          "run": "# Windows: build RustDesk\n# --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix\npython3 .\\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}\nmv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk\n\n# Download usbmmidd_v2.zip and extract it to ./rustdesk\nInvoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip\nExpand-Archive usbmmidd_v2.zip -DestinationPath .\nRemove-Item -Path usbmmidd_v2\\Win32 -Recurse\nRemove-Item -Path \"usbmmidd_v2\\deviceinstaller64.exe\", \"usbmmidd_v2\\deviceinstaller.exe\", \"usbmmidd_v2\\usbmmidd.bat\"\nmv -Force .\\usbmmidd_v2 ./rustdesk\n\n# Download printer driver files and extract them to ./rustdesk\ntry {\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip\n  Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums\n\n  # Check and move the files\n  $checksum_driver = (Select-String -Path .\\sha256sums -Pattern '^([a-fA-F0-9]{64}) \\*rustdesk_printer_driver_v4-1.4\\.zip$').Matches.Groups[1].Value\n  $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256\n  $checksum_adapter = (Select-String -Path .\\sha256sums -Pattern '^([a-fA-F0-9]{64}) \\*printer_driver_adapter\\.zip$').Matches.Groups[1].Value\n  $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256\n  if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {\n      Write-Output \"rustdesk_printer_driver_v4-1.4, checksums match, extract the file.\"\n      Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .\n      mkdir ./rustdesk/drivers\n      mv -Force .\\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver\n      Expand-Archive printer_driver_adapter.zip -DestinationPath .\n      mv -Force .\\printer_driver_adapter.dll ./rustdesk\n  } elseif ($checksum_driver -ne $downloadsum_driver.Hash) {\n      Write-Output \"rustdesk_printer_driver_v4-1.4, checksums do not match, ignore the file.\"\n  } else {\n      Write-Output \"printer_driver_adapter.dll, checksums do not match, ignore the file.\"\n  }\n} catch {\n    Write-Host \"Ingore the printer driver error.\"\n}\n"
+        },
+        {
+          "if": "${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}",
+          "name": "Run the Rust tests",
+          "run": "# The build's own features, so the tests see the code that ships.\nFEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)\ncargo test --locked --release --lib --features \"$FEATURES\"\n# Its Windows tests run nowhere else.\ncargo test --locked --release -p clipboard\n",
+          "shell": "bash"
+        },
+        {
+          "continue-on-error": true,
+          "name": "find Runner.res",
+          "run": "runner_res=$(find . -name \"Runner.res\");\nif [ \"$runner_res\" == \"\" ]; then\n  echo \"Runner.res: not found\";\nelse\n  echo \"Runner.res: $runner_res\";\n  cp $runner_res ./libs/portable/Runner.res;\n  echo \"list ./libs/portable/Runner.res\";\n  ls -l ./libs/portable/Runner.res;\nfi\n",
+          "shell": "bash"
+        },
+        {
+          "if": "${{ inputs.upload-artifact }}",
+          "name": "Download RustDeskTempTopMostWindow artifacts",
+          "uses": "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+          "with": {
+            "name": "${{ matrix.job.arch == 'aarch64' && 'topmostwindow-artifacts-ARM64' || 'topmostwindow-artifacts-x64' }}",
+            "path": "./rustdesk"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Upload unsigned",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-windows-${{ matrix.job.arch }}",
+            "path": "rustdesk"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Sign rustdesk files",
+          "run": "pip3 install requests argparse\nBASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./rustdesk/\n",
+          "shell": "bash"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true'",
+          "name": "Verify Windows Flutter version",
+          "run": "$reportedVersion = (& \".\\rustdesk\\rustdesk.exe\" --version | Out-String).Trim()\nif ($LASTEXITCODE -ne 0) {\n  throw \"rustdesk --version exited with $LASTEXITCODE\"\n}\nif ($reportedVersion -cne $env:VERSION) {\n  throw \"RustDesk reports version '$reportedVersion', expected '$env:VERSION'\"\n}\n",
+          "shell": "powershell"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Verify template payload signatures",
+          "run": "Get-ChildItem ./rustdesk -Recurse -File -ErrorAction Stop |\n  Where-Object { $_.Extension -eq '.exe' -or ($_.Extension -eq '.dll' -and $_.FullName -notmatch 'RustDeskPrinterDriver|usbmmidd_v2') } |\n  ForEach-Object {\n    $signature = Get-AuthenticodeSignature -LiteralPath $_.FullName -ErrorAction Stop\n    if ($signature.Status -ne 'Valid') { throw \"Invalid template payload signature: $($_.FullName) ($($signature.Status))\" }\n  }\n",
+          "shell": "powershell"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Build template packer",
+          "run": "sed -i '/dpiAware/d' res/manifest.xml\npushd ./libs/portable\npip3 install -r requirements.txt\npython3 ./generate.py -f ../../rustdesk/ -e rustdesk.exe -l 11 -t \"${{ matrix.job.target }}\" --exclude-exe\npopd\nmkdir -p ./packer-template\ncp ./target/${{ matrix.job.target }}/release/rustdesk-portable-packer.exe ./packer-template/rustdesk-template-${{ matrix.job.arch }}.exe\n",
+          "shell": "bash"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Upload unsigned template packer",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "rustdesk-unsigned-packer-template-${{ matrix.job.arch }}",
+            "path": "./packer-template"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Build self-extracted executable",
+          "run": "sed -i '/dpiAware/d' res/manifest.xml\npushd ./libs/portable\npip3 install -r requirements.txt\npython3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe\npopd\nmkdir -p ./SignOutput\nmv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe\n",
+          "shell": "bash"
+        },
+        {
+          "name": "Add MSBuild to PATH",
+          "uses": "microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce",
+          "with": {
+            "msbuild-architecture": "${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86' }}"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Build msi",
+          "run": "pushd ./res/msi\npython preprocess.py --arp -d ../../rustdesk\nnuget restore msi.sln\n$msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }\nmsbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10\n$msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1\nmv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi\nsha256sum ../../SignOutput/rustdesk-*.msi\n"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Build pre-built MSI template",
+          "run": "git checkout -- res/msi\ncp -r ./rustdesk ./rustdesk-msi-template\nmv ./rustdesk-msi-template/rustdesk.exe ./rustdesk-msi-template/RDAPPNAM.exe\nSet-Content -Path ./rustdesk-msi-template/custom.txt -Value 'placeholder' -NoNewline\n$assets = './rustdesk-msi-template/data/flutter_assets/assets'\nNew-Item -ItemType Directory -Force -Path $assets | Out-Null\nforeach ($a in 'icon.ico','icon.png','logo.png','logo_light.png','logo_dark.png') {\n  Set-Content -Path \"$assets/$a\" -Value 'placeholder' -NoNewline\n}\npushd ./res/msi\npython preprocess.py --arp --template --revision-version 0 -d ../../rustdesk-msi-template --app-name RDAPPNAM\n$msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }\nmsbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform\nmsbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10\n$msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1\npopd\nmkdir ./msi-template\nmv $msi.FullName ./msi-template/rustdesk-template-${{ matrix.job.arch }}.msi\ngit checkout -- res/msi\nrm -r -fo ./rustdesk-msi-template\n"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true'",
+          "name": "Upload unsigned msi template",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "rustdesk-unsigned-msi-template-${{ matrix.job.arch }}",
+            "path": "./msi-template"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Sign rustdesk self-extracted file",
+          "run": "BASE_URL=${{ env.SIGN_BASE_URL }} SECRET_KEY=${{ secrets.SIGN_SECRET_KEY }} python3 res/job.py sign_files ./SignOutput\n",
+          "shell": "bash"
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Upload signed Windows Flutter EXE",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "windows-flutter-${{ matrix.job.arch }}-exe",
+            "path": "./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.exe"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA == 'true' && env.SIGN_BASE_URL != '-2'",
+          "name": "Upload signed Windows Flutter MSI",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "if-no-files-found": "error",
+            "name": "windows-flutter-${{ matrix.job.arch }}-msi",
+            "path": "./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi"
+          }
+        },
+        {
+          "if": "env.UPLOAD_ARTIFACT == 'true' && env.PUBLISH_UPDATE_METADATA != 'true'",
+          "name": "Publish Release",
+          "uses": "softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844",
+          "with": {
+            "files": "./SignOutput/rustdesk-*.msi\n./SignOutput/rustdesk-*.exe\n",
+            "prerelease": true,
+            "tag_name": "${{ env.TAG_NAME }}"
+          }
+        }
+      ],
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "job": [
+            {
+              "arch": "x86_64",
+              "build-args": "--vram",
+              "flutter-arch": "x64",
+              "os": "windows-2022",
+              "target": "x86_64-pc-windows-msvc",
+              "vcpkg-triplet": "x64-windows-static"
+            },
+            {
+              "arch": "aarch64",
+              "build-args": "",
+              "flutter-arch": "arm64",
+              "os": "windows-11-arm",
+              "target": "aarch64-pc-windows-msvc",
+              "vcpkg-triplet": "arm64-windows-static"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "old_signature": "ce995eb6df567c3c25d41a2322e1ce82f4adae3fbf9d0d05d80a3d1fb60e733c",
+  "old_upstream_sha": "94c321d05ce02ee73304e6cf99187e2d4d96e409",
+  "replacement_new_shell_comments": "            # Flutter 3.44 bridge for Windows/macOS arm64: match those builds' source/pubspec state so\n            # the generated *.freezed.dart compiles against the same Flutter/freezed they resolve.",
+  "replacement_old_shell_comments": "            # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the\n            # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.",
+  "review_scope": "Exact static critical interface; no build, signing, publication or runtime claim",
+  "schema_version": 1,
+  "source_patch_diff": "--- 94c321d05ce02ee73304e6cf99187e2d4d96e409\n+++ 6aec3069aec486ad7df07429a0a1ee411fc8d73a\n@@ -2,19 +2,22 @@\n # Applies the Flutter 3.44-only source/pubspec changes on the fly, in CI only.\n #\n # Windows arm64 needs Flutter >= 3.44 (the first stable release shipping an arm64 Dart SDK +\n-# engine), which renamed DialogTheme/TabBarTheme -> *Data and needs newer extended_text/\n-# google_fonts. Every other platform is still on Flutter 3.24.5, where the old names/versions\n-# are required, so these changes are kept OUT of the committed sources and applied here instead.\n+# engine), and macOS arm64 builds with 3.44 for its NSTextInputContext crash fix\n+# (https://github.com/rustdesk/rustdesk/issues/16817). 3.44 renamed DialogTheme/TabBarTheme ->\n+# *Data and needs newer extended_text/google_fonts. Every other platform is still on Flutter\n+# 3.24.5, where the old names/versions are required, so these changes are kept OUT of the\n+# committed sources and applied here instead.\n #\n-# Used by BOTH the Windows arm64 build (flutter-build.yml) and its dedicated bridge artifact\n-# (bridge.yml) so they share an identical 3.44 source state -- the generated *.freezed.dart must\n-# compile against the same Flutter/freezed version the arm64 build resolves.\n+# Used by BOTH arm64 builds (flutter-build.yml) and their shared bridge artifact (bridge.yml) so\n+# they share an identical 3.44 source state -- the generated *.freezed.dart must compile against\n+# the same Flutter/freezed version the arm64 builds resolve.\n #\n # Remove this script (and commit the changes) once upstream bumps Flutter across the board.\n #\n # Run from the repository root. sed is used (not a git-apply patch) because the checked-out\n # sources are CRLF on the windows-11-arm runner; the substitutions below are anchor-free and\n-# therefore CRLF-safe.\n+# therefore CRLF-safe. The calls are GNU sed (`sed -i` without a suffix); the macOS arm64 job\n+# puts GNU sed first on PATH because BSD sed rejects them.\n set -euo pipefail\n \n readonly NO_MATCHES=0\n",
+  "source_patch_new_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
+  "source_patch_new_utf8": "#!/usr/bin/env bash\n# Applies the Flutter 3.44-only source/pubspec changes on the fly, in CI only.\n#\n# Windows arm64 needs Flutter >= 3.44 (the first stable release shipping an arm64 Dart SDK +\n# engine), and macOS arm64 builds with 3.44 for its NSTextInputContext crash fix\n# (https://github.com/rustdesk/rustdesk/issues/16817). 3.44 renamed DialogTheme/TabBarTheme ->\n# *Data and needs newer extended_text/google_fonts. Every other platform is still on Flutter\n# 3.24.5, where the old names/versions are required, so these changes are kept OUT of the\n# committed sources and applied here instead.\n#\n# Used by BOTH arm64 builds (flutter-build.yml) and their shared bridge artifact (bridge.yml) so\n# they share an identical 3.44 source state -- the generated *.freezed.dart must compile against\n# the same Flutter/freezed version the arm64 builds resolve.\n#\n# Remove this script (and commit the changes) once upstream bumps Flutter across the board.\n#\n# Run from the repository root. sed is used (not a git-apply patch) because the checked-out\n# sources are CRLF on the windows-11-arm runner; the substitutions below are anchor-free and\n# therefore CRLF-safe. The calls are GNU sed (`sed -i` without a suffix); the macOS arm64 job\n# puts GNU sed first on PATH because BSD sed rejects them.\nset -euo pipefail\n\nreadonly NO_MATCHES=0\nreadonly SINGLE_MATCH=1\nreadonly THEME_MATCHES=2\n\nhas_exact_count() {\n  local -r expected_count=\"$1\"\n  local -r pattern=\"$2\"\n  local -r file=\"$3\"\n  local actual_count\n  [[ -r \"$file\" ]] || return 1\n  actual_count=\"$(grep -cF \"$pattern\" \"$file\" || true)\"\n  [[ \"$actual_count\" -eq \"$expected_count\" ]]\n}\n\n# The target background-color line must directly follow DialogThemeData in the selected range.\nhas_dialog_background_in_theme_range() {\n  local -r start_pattern=\"$1\"\n  local -r end_pattern=\"$2\"\n  local -r target_pattern=\"$3\"\n  local -r file=\"$4\"\n  awk -v start_pattern=\"$start_pattern\" \\\n    -v end_pattern=\"$end_pattern\" \\\n    -v target_pattern=\"$target_pattern\" '\n      index($0, start_pattern) {\n        in_theme = 1\n        next\n      }\n      in_theme && index($0, end_pattern) {\n        exit\n      }\n      in_theme && index($0, \"dialogTheme: DialogThemeData(\") {\n        if (getline > 0) {\n          line = $0\n          sub(/\\r$/, \"\", line)\n          sub(/^[[:space:]]+/, \"\", line)\n          matched = line == target_pattern\n        }\n        exit\n      }\n      END {\n        exit matched ? 0 : 1\n      }\n    ' \"$file\"\n}\n\nvalidate_patch_inputs() {\n  if [[ ! -f flutter/lib/common.dart || ! -r flutter/lib/common.dart ]]; then\n    echo \"Flutter 3.44 source patch input is missing or unreadable: flutter/lib/common.dart\" >&2\n    return 1\n  fi\n  if [[ ! -f flutter/pubspec.yaml || ! -r flutter/pubspec.yaml ]]; then\n    echo \"Flutter 3.44 source patch input is missing or unreadable: flutter/pubspec.yaml\" >&2\n    return 1\n  fi\n}\n\nis_complete_patch_state() {\n  has_exact_count \"$THEME_MATCHES\" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$THEME_MATCHES\" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'extended_text: 15.0.2' flutter/pubspec.yaml &&\n    has_exact_count \"$SINGLE_MATCH\" 'google_fonts: ^8.1.0' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'tabBarTheme: const TabBarTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'extended_text: 14.0.0' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&\n    has_dialog_background_in_theme_range 'static ThemeData lightTheme = ThemeData(' \\\n      'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' \\\n      flutter/lib/common.dart &&\n    has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \\\n      'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),' \\\n      flutter/lib/common.dart\n}\n\nis_unpatched_state() {\n  has_exact_count \"$THEME_MATCHES\" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$THEME_MATCHES\" 'tabBarTheme: const TabBarTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'extended_text: 14.0.0' flutter/pubspec.yaml &&\n    has_exact_count \"$SINGLE_MATCH\" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'extended_text: 15.0.2' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'google_fonts: ^8.1.0' flutter/pubspec.yaml\n}\n\nif ! validate_patch_inputs; then\n  exit 1\nfi\n\nif is_complete_patch_state; then\n  echo \"Flutter 3.44 source patches already applied.\"\n  git --no-pager diff -- flutter/lib/common.dart flutter/pubspec.yaml\n  exit 0\nfi\n\nif ! is_unpatched_state; then\n  echo \"Flutter 3.44 source patches are partially applied or their anchors have drifted.\" >&2\n  exit 1\nfi\n\n# ThemeData API renames (Flutter 3.27+):\nsed -i 's/dialogTheme: DialogTheme(/dialogTheme: DialogThemeData(/g' flutter/lib/common.dart\nsed -i 's/tabBarTheme: const TabBarTheme(/tabBarTheme: const TabBarThemeData(/g' flutter/lib/common.dart\nsed -i '/static ThemeData lightTheme = ThemeData(/,/static ThemeData darkTheme = ThemeData(/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\\\n      backgroundColor: Colors.white,/' flutter/lib/common.dart\nsed -i '/static ThemeData darkTheme = ThemeData(/,/scrollbarTheme: scrollbarThemeDark,/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\\\n      backgroundColor: Color(0xFF18191E),/' flutter/lib/common.dart\n# Dependency bumps required by the newer Dart/Flutter:\nsed -i 's/extended_text: 14.0.0/extended_text: 15.0.2/' flutter/pubspec.yaml\nsed -i 's/google_fonts: \\^6.2.1/google_fonts: ^8.1.0/' flutter/pubspec.yaml\n\n# Fail loudly if any expected substitution did not produce the complete state.\nif ! is_complete_patch_state; then\n  echo \"Flutter 3.44 source patches did not produce the expected state.\" >&2\n  exit 1\nfi\n\ngit --no-pager diff -- flutter/lib/common.dart flutter/pubspec.yaml\n",
+  "source_patch_old_sha256": "5d1400a5361dd14b366adb4ae28d82933528e727eaf6fe9dc6a43b3b744ff210",
+  "source_patch_old_utf8": "#!/usr/bin/env bash\n# Applies the Flutter 3.44-only source/pubspec changes on the fly, in CI only.\n#\n# Windows arm64 needs Flutter >= 3.44 (the first stable release shipping an arm64 Dart SDK +\n# engine), which renamed DialogTheme/TabBarTheme -> *Data and needs newer extended_text/\n# google_fonts. Every other platform is still on Flutter 3.24.5, where the old names/versions\n# are required, so these changes are kept OUT of the committed sources and applied here instead.\n#\n# Used by BOTH the Windows arm64 build (flutter-build.yml) and its dedicated bridge artifact\n# (bridge.yml) so they share an identical 3.44 source state -- the generated *.freezed.dart must\n# compile against the same Flutter/freezed version the arm64 build resolves.\n#\n# Remove this script (and commit the changes) once upstream bumps Flutter across the board.\n#\n# Run from the repository root. sed is used (not a git-apply patch) because the checked-out\n# sources are CRLF on the windows-11-arm runner; the substitutions below are anchor-free and\n# therefore CRLF-safe.\nset -euo pipefail\n\nreadonly NO_MATCHES=0\nreadonly SINGLE_MATCH=1\nreadonly THEME_MATCHES=2\n\nhas_exact_count() {\n  local -r expected_count=\"$1\"\n  local -r pattern=\"$2\"\n  local -r file=\"$3\"\n  local actual_count\n  [[ -r \"$file\" ]] || return 1\n  actual_count=\"$(grep -cF \"$pattern\" \"$file\" || true)\"\n  [[ \"$actual_count\" -eq \"$expected_count\" ]]\n}\n\n# The target background-color line must directly follow DialogThemeData in the selected range.\nhas_dialog_background_in_theme_range() {\n  local -r start_pattern=\"$1\"\n  local -r end_pattern=\"$2\"\n  local -r target_pattern=\"$3\"\n  local -r file=\"$4\"\n  awk -v start_pattern=\"$start_pattern\" \\\n    -v end_pattern=\"$end_pattern\" \\\n    -v target_pattern=\"$target_pattern\" '\n      index($0, start_pattern) {\n        in_theme = 1\n        next\n      }\n      in_theme && index($0, end_pattern) {\n        exit\n      }\n      in_theme && index($0, \"dialogTheme: DialogThemeData(\") {\n        if (getline > 0) {\n          line = $0\n          sub(/\\r$/, \"\", line)\n          sub(/^[[:space:]]+/, \"\", line)\n          matched = line == target_pattern\n        }\n        exit\n      }\n      END {\n        exit matched ? 0 : 1\n      }\n    ' \"$file\"\n}\n\nvalidate_patch_inputs() {\n  if [[ ! -f flutter/lib/common.dart || ! -r flutter/lib/common.dart ]]; then\n    echo \"Flutter 3.44 source patch input is missing or unreadable: flutter/lib/common.dart\" >&2\n    return 1\n  fi\n  if [[ ! -f flutter/pubspec.yaml || ! -r flutter/pubspec.yaml ]]; then\n    echo \"Flutter 3.44 source patch input is missing or unreadable: flutter/pubspec.yaml\" >&2\n    return 1\n  fi\n}\n\nis_complete_patch_state() {\n  has_exact_count \"$THEME_MATCHES\" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$THEME_MATCHES\" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'extended_text: 15.0.2' flutter/pubspec.yaml &&\n    has_exact_count \"$SINGLE_MATCH\" 'google_fonts: ^8.1.0' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'tabBarTheme: const TabBarTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'extended_text: 14.0.0' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&\n    has_dialog_background_in_theme_range 'static ThemeData lightTheme = ThemeData(' \\\n      'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' \\\n      flutter/lib/common.dart &&\n    has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \\\n      'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),' \\\n      flutter/lib/common.dart\n}\n\nis_unpatched_state() {\n  has_exact_count \"$THEME_MATCHES\" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$THEME_MATCHES\" 'tabBarTheme: const TabBarTheme(' flutter/lib/common.dart &&\n    has_exact_count \"$SINGLE_MATCH\" 'extended_text: 14.0.0' flutter/pubspec.yaml &&\n    has_exact_count \"$SINGLE_MATCH\" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&\n    has_exact_count \"$NO_MATCHES\" 'extended_text: 15.0.2' flutter/pubspec.yaml &&\n    has_exact_count \"$NO_MATCHES\" 'google_fonts: ^8.1.0' flutter/pubspec.yaml\n}\n\nif ! validate_patch_inputs; then\n  exit 1\nfi\n\nif is_complete_patch_state; then\n  echo \"Flutter 3.44 source patches already applied.\"\n  git --no-pager diff -- flutter/lib/common.dart flutter/pubspec.yaml\n  exit 0\nfi\n\nif ! is_unpatched_state; then\n  echo \"Flutter 3.44 source patches are partially applied or their anchors have drifted.\" >&2\n  exit 1\nfi\n\n# ThemeData API renames (Flutter 3.27+):\nsed -i 's/dialogTheme: DialogTheme(/dialogTheme: DialogThemeData(/g' flutter/lib/common.dart\nsed -i 's/tabBarTheme: const TabBarTheme(/tabBarTheme: const TabBarThemeData(/g' flutter/lib/common.dart\nsed -i '/static ThemeData lightTheme = ThemeData(/,/static ThemeData darkTheme = ThemeData(/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\\\n      backgroundColor: Colors.white,/' flutter/lib/common.dart\nsed -i '/static ThemeData darkTheme = ThemeData(/,/scrollbarTheme: scrollbarThemeDark,/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\\\n      backgroundColor: Color(0xFF18191E),/' flutter/lib/common.dart\n# Dependency bumps required by the newer Dart/Flutter:\nsed -i 's/extended_text: 14.0.0/extended_text: 15.0.2/' flutter/pubspec.yaml\nsed -i 's/google_fonts: \\^6.2.1/google_fonts: ^8.1.0/' flutter/pubspec.yaml\n\n# Fail loudly if any expected substitution did not produce the complete state.\nif ! is_complete_patch_state; then\n  echo \"Flutter 3.44 source patches did not produce the expected state.\" >&2\n  exit 1\nfi\n\ngit --no-pager diff -- flutter/lib/common.dart flutter/pubspec.yaml\n"
+}

@@ -44,6 +44,11 @@ jobs:
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with: {persist-credentials: false}
+    - name: Verify current coordinator worker admission
+      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (github.workflow == 'Nightly Build Pipeline' || github.workflow == 'Stable Release Pipeline')
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.release.coordinator.runtime guard
     - name: Isolated reviewed parser environment
       run: |
         python3 -m venv .work/python

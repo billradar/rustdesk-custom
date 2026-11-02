@@ -176,6 +176,9 @@ def dispatch(tag):
 
 def route():
     verify_context()
+    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
+        from scripts.release.coordinator.runtime import route_stable
+        return route_stable()
     data = discovery()
     completed_version = latest_completed_version()
     allow_same_version = (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'

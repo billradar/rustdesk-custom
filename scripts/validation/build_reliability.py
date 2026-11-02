@@ -134,13 +134,15 @@ def process(event, repo, output):
                     pass  # Unknown is not retryable; no raw log output/persistence.
         reason = classify(job, annotations, log)
         report['jobs'].append(report_job(job, reason))
+    managed = any(j['name'] in ('Coordinate Nightly build admission', 'Coordinate Stable build admission') for j in jobs)
+    report['coordinator_managed'] = managed
     candidates = [j for j in report['jobs'] if j['retry_eligible']]
     output.parent.mkdir(parents=True, exist_ok=True)
     # Save evidence before any mutation, and update it even when the API rejects a retry.
     try:
         if candidates:
-            report['recovery'] = 'MANUAL_REVIEW'
-            if (retry_mode and run['conclusion'] == 'failure' and run['run_attempt'] < MAX_ATTEMPTS
+            report['recovery'] = 'COORDINATOR_MANAGED' if managed else 'MANUAL_REVIEW'
+            if (not managed and retry_mode and run['conclusion'] == 'failure' and run['run_attempt'] < MAX_ATTEMPTS
                     and os.environ.get('BUILD_INFRA_AUTO_RETRY_ENABLED', 'true') == 'true'):
                 # Only trusted main history may regain the original workflow's privileges.
                 comparison = api(f'repos/{repo}/compare/{run["head_sha"]}...main')

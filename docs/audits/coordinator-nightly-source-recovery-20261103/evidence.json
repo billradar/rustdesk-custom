@@ -1,0 +1,644 @@
+{
+  "artifact_archives_verified": 16,
+  "authority_main_sha": "95abfaf706766f670dddcecea41530320c0ebb66",
+  "finding": "The earlier audit selected modern discovery/lock artifact names and missed retained channel-discovery/channel-validation artifacts. Source SHAs were recoverable; this is not proof of a current production Build Identity.",
+  "implementation_base_sha": "35905fec1668c1c526dd7f0836ea235ac5c13d88",
+  "kind": "legacy-nightly-source-recovery-audit",
+  "limitations": [
+    "No native package binary or Release remote asset digest revalidation",
+    "No new source selection, build dispatch, signing, release mutation or journal writes",
+    "No modern release_mode inferred from legacy artifact-only workflows",
+    "Historical source scopes may be migrated only through a separately reviewed resolution schema; frozen audit/catalog unchanged"
+  ],
+  "merge_or_activation_authorized": false,
+  "observed_at_utc": "2026-11-02T16:46:26.171085+00:00",
+  "production_state_written": false,
+  "repository": "billradar/rustdesk-custom",
+  "retry_authorized": false,
+  "runs": [
+    {
+      "artifacts": [
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"result\": \"PASS\",\n  \"channel\": \"nightly\",\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"patchset\": \"v2\",\n  \"common_patch_hash\": \"a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"signing\": \"NOT ENABLED\",\n  \"credential_scan\": \"KNOWN PATTERNS ONLY\",\n  \"Phase3 baseline comparison\": \"NOT APPLICABLE: different upstream SHA\"\n}\n",
+              "path": "channel-validation.json",
+              "sha256": "79bd313f3f1b108e8efcf277a750bd67a2b92829dd52867df2859e4ee2f25caa",
+              "size": 528
+            }
+          ],
+          "github_digest": "sha256:53c50e9f77f85068f5e65fefed22712fd4c8f837faf043c0ba287324200e39e3",
+          "id": 11171131175,
+          "name": "channel-validation-36872771101",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "31068343275299000954cf7e7d92ebdb186436b4",
+            "id": 36872771101,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "53c50e9f77f85068f5e65fefed22712fd4c8f837faf043c0ba287324200e39e3"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"known_validated_mapping\": false,\n  \"patchsets\": [\n    {\n      \"patchset\": \"v2\",\n      \"status\": \"PREFLIGHT_COMPATIBLE\",\n      \"checks\": {\n        \"standard\": \"PATCH / CONFIG / STRUCTURAL API PASS\",\n        \"sos\": \"PATCH / CONFIG / STRUCTURAL API PASS\"\n      },\n      \"coverage\": \"Static selection only; real Rust/Flutter/Bridge must pass downstream\",\n      \"full_compatibility\": \"COMPATIBLE\"\n    },\n    {\n      \"patchset\": \"v1\",\n      \"status\": \"INCOMPATIBLE\",\n      \"checks\": {},\n      \"reason\": \"Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION\"\n    }\n  ],\n  \"selected\": \"v2\",\n  \"overall\": \"PASS\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"Rust fast check\": \"PASS\",\n  \"Flutter Analyze\": \"PASS\",\n  \"Bridge\": \"PASS\",\n  \"Windows helper\": \"PASS\"\n}\n",
+              "path": "compatibility-report.json",
+              "sha256": "93962d2494d0b9f48bdeb076021666e1f22c4bf42fef61bee818891d34f7f74f",
+              "size": 877
+            }
+          ],
+          "github_digest": "sha256:019de85ddfdb294b8f16815a1a3388966b5a7f3c5d511642704a9199c39fa646",
+          "id": 11168686129,
+          "name": "generation-compatibility-36872771101",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "31068343275299000954cf7e7d92ebdb186436b4",
+            "id": 36872771101,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "019de85ddfdb294b8f16815a1a3388966b5a7f3c5d511642704a9199c39fa646"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"known_validated_mapping\": false,\n  \"patchsets\": [\n    {\n      \"patchset\": \"v2\",\n      \"status\": \"PREFLIGHT_COMPATIBLE\",\n      \"checks\": {\n        \"standard\": \"PATCH / CONFIG / STRUCTURAL API PASS\",\n        \"sos\": \"PATCH / CONFIG / STRUCTURAL API PASS\"\n      },\n      \"coverage\": \"Static selection only; real Rust/Flutter/Bridge must pass downstream\"\n    },\n    {\n      \"patchset\": \"v1\",\n      \"status\": \"INCOMPATIBLE\",\n      \"checks\": {},\n      \"reason\": \"Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION\"\n    }\n  ],\n  \"selected\": \"v2\",\n  \"overall\": \"PREFLIGHT_PASS\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\"\n}\n",
+              "path": "patchset-selection.json",
+              "sha256": "a81e50ac34d62a65afbb6e91a46fd1bd4d7db4aacb301dfbd2cbfc3edb485520",
+              "size": 739
+            },
+            {
+              "archived_json_utf8": "{\n  \"signature\": \"f7e2a62a707393c4ea97c42fe00a5a9cca89c87666a11e64e643dd028c663489\",\n  \"upstream_version\": \"1.5.0\",\n  \"runner\": \"windows-2022\",\n  \"rust\": \"1.75\",\n  \"flutter\": \"3.24.5\",\n  \"llvm\": \"15.0.6\",\n  \"vcpkg\": \"9e593bb18ea69cc5095e012465dcd675a822ed0d\",\n  \"bridge_rust\": \"1.75\",\n  \"cargo_expand\": \"1.0.95\",\n  \"frb\": \"1.80.1\",\n  \"bridge_flutter\": \"3.22.3\",\n  \"helper_commit\": \"ecd8d6a139eee76845ea66423fb739af450fda90\",\n  \"source_sbom_requested\": true,\n  \"reviewed_profile\": \"development-20261001\",\n  \"Build Compatibility\": \"PASS\"\n}\n",
+              "path": "build-profile.json",
+              "sha256": "f49c3f729951384333ad5a71dfb33e041bc8de943ff64b310c65df78e2c045c1",
+              "size": 538
+            }
+          ],
+          "github_digest": "sha256:64aa9c83fbfa64e059fdd0ee3ae68b2382a7ad6b8063d3a3a2042d82cc0e688a",
+          "id": 11167981651,
+          "name": "patchset-selection-36872771101",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "31068343275299000954cf7e7d92ebdb186436b4",
+            "id": 36872771101,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "64aa9c83fbfa64e059fdd0ee3ae68b2382a7ad6b8063d3a3a2042d82cc0e688a"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\",\n  \"upstream_branch\": \"master\",\n  \"upstream_ref\": \"master\",\n  \"upstream_tag\": \"\",\n  \"build_needed\": true,\n  \"draft_needed\": false,\n  \"revision\": \"1\",\n  \"channel\": \"nightly\"\n}\n",
+              "path": "channel.json",
+              "sha256": "26f9c70e81618979739d3858a40bcf2d04b726d9cd5c26a9af02f4ba100140b8",
+              "size": 238
+            }
+          ],
+          "github_digest": "sha256:77d5fca69d2113b714803da02af697a565b43eb798b6f72ef4e1ede60bc598c6",
+          "id": 11167417555,
+          "name": "channel-discovery-36872771101",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "31068343275299000954cf7e7d92ebdb186436b4",
+            "id": 36872771101,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "77d5fca69d2113b714803da02af697a565b43eb798b6f72ef4e1ede60bc598c6"
+        }
+      ],
+      "disposition": "SOURCE_CONFIRMED_REVIEW_REQUIRED",
+      "historical_files": {
+        ".github/workflows/nightly.yml": {
+          "sha256": "13756819d8ee70a507677c635f9f8efa937706650a1e8a36ce1419ae94728819",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/31068343275299000954cf7e7d92ebdb186436b4/.github/workflows/nightly.yml"
+        },
+        "scripts/patchsets.py": {
+          "sha256": "f1a9d0fbb4a992c50b6cc47d667f6bfc45649ecd8b3ec27e797d3c550c928ac9",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/31068343275299000954cf7e7d92ebdb186436b4/scripts/patchsets.py"
+        },
+        "scripts/phase4.py": {
+          "sha256": "263727260038a0be9f141f144b888412e0a5b70ef3e0614092b3c99c5edb8848",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/31068343275299000954cf7e7d92ebdb186436b4/scripts/phase4.py"
+        }
+      },
+      "legacy_source_policy": "official-default-branch-tip; not official successful-run resolver",
+      "patch_verification": {
+        "common": {
+          "files": [
+            "patchsets/v2/common/0001-hbb-server-defaults.patch",
+            "patchsets/v2/common/0002-client-defaults.patch",
+            "patchsets/v2/common/0003-hide-cm-setting.patch"
+          ],
+          "sha256": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7"
+        },
+        "sos": {
+          "files": [
+            "patchsets/v2/sos/0001-sos-mode.patch",
+            "patchsets/v2/sos/0002-sos-home.patch",
+            "patchsets/v2/sos/0003-sos-settings.patch"
+          ],
+          "sha256": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        }
+      },
+      "run": {
+        "attempt": 1,
+        "conclusion": "success",
+        "event": "workflow_dispatch",
+        "head_branch": "main",
+        "head_repository": "billradar/rustdesk-custom",
+        "id": 36872771101,
+        "path": ".github/workflows/nightly.yml",
+        "repository": "billradar/rustdesk-custom",
+        "sha": "31068343275299000954cf7e7d92ebdb186436b4",
+        "status": "completed",
+        "url": "https://github.com/billradar/rustdesk-custom/actions/runs/36872771101"
+      },
+      "source_identity": {
+        "common_patch_hash": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_repository": "rustdesk/rustdesk",
+        "upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"result\": \"PASS\",\n  \"channel\": \"nightly\",\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"patchset\": \"v2\",\n  \"common_patch_hash\": \"a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"signing\": \"NOT ENABLED\",\n  \"credential_scan\": \"KNOWN PATTERNS ONLY\",\n  \"Phase3 baseline comparison\": \"NOT APPLICABLE: different upstream SHA\"\n}\n",
+              "path": "channel-validation.json",
+              "sha256": "8dee6e54257c2e8baafd4673ae68b46ec390f6ae5d3776ac4923fa8f95ec1203",
+              "size": 528
+            }
+          ],
+          "github_digest": "sha256:7a6643f68f3737d1a63021349653eef12b6a0dfd03826730b7198f8a77fd23d6",
+          "id": 11297537700,
+          "name": "channel-validation-37185958897",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+            "id": 37185958897,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "7a6643f68f3737d1a63021349653eef12b6a0dfd03826730b7198f8a77fd23d6"
+        },
+        {
+          "documents": [
+            {
+              "path": "SHA256SUMS",
+              "sha256": "f85d97da87b40a360722b0d4d120bfabf9a2d1a4c1843912619441b9a8f9b331",
+              "size": 44142
+            },
+            {
+              "archived_json_utf8": "{\n  \"result\": \"PASS\",\n  \"required_gate\": \"PASS\",\n  \"targets\": {\n    \"windows-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"windows-x86_64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-x86_64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-aarch64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-aarch64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-x86_64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-aarch64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-aarch64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"android-aarch64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"android-armv7-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"android-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    }\n  },\n  \"errors\": [],\n  \"channel\": \"nightly\",\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"patchset\": \"v2\",\n  \"build_run\": \"37185958897\",\n  \"custom_repository_sha\": \"43fca9be84a91fb27fef0eebe53f3a2636004521\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"code_signing\": \"DESKTOP NOT ENABLED; ANDROID TEST ONLY\"\n}\n",
+              "path": "aggregate.json",
+              "sha256": "3e872873e1cac764be382439defccc4eb9dab4b2a1846f322fa39d01d84405c2",
+              "size": 2001
+            }
+          ],
+          "github_digest": "sha256:8d4cc57f705d41a62263da3de4e15215b109eb8d164ba78486c317fd13d3341a",
+          "id": 11297504715,
+          "name": "platform-aggregate-37185958897",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+            "id": 37185958897,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "8d4cc57f705d41a62263da3de4e15215b109eb8d164ba78486c317fd13d3341a"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"known_validated_mapping\": false,\n  \"patchsets\": [\n    {\n      \"patchset\": \"v2\",\n      \"status\": \"PREFLIGHT_COMPATIBLE\",\n      \"checks\": {\n        \"standard\": \"PATCH / CONFIG / STRUCTURAL API PASS\",\n        \"sos\": \"PATCH / CONFIG / STRUCTURAL API PASS\"\n      },\n      \"coverage\": \"Static selection only; real Rust/Flutter/Bridge must pass downstream\"\n    },\n    {\n      \"patchset\": \"v1\",\n      \"status\": \"INCOMPATIBLE\",\n      \"checks\": {},\n      \"reason\": \"Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION\"\n    }\n  ],\n  \"selected\": \"v2\",\n  \"overall\": \"PREFLIGHT_PASS\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\"\n}\n",
+              "path": "patchset-selection.json",
+              "sha256": "175f09a49b1d56822e1751263f0cc7a94a7eed1c3463fa3937accc7763c1ccbc",
+              "size": 739
+            },
+            {
+              "archived_json_utf8": "{\n  \"signature\": \"f7e2a62a707393c4ea97c42fe00a5a9cca89c87666a11e64e643dd028c663489\",\n  \"upstream_version\": \"1.5.0\",\n  \"runner\": \"windows-2022\",\n  \"rust\": \"1.75\",\n  \"flutter\": \"3.24.5\",\n  \"llvm\": \"15.0.6\",\n  \"vcpkg\": \"9e593bb18ea69cc5095e012465dcd675a822ed0d\",\n  \"bridge_rust\": \"1.75\",\n  \"cargo_expand\": \"1.0.95\",\n  \"frb\": \"1.80.1\",\n  \"bridge_flutter\": \"3.22.3\",\n  \"helper_commit\": \"ecd8d6a139eee76845ea66423fb739af450fda90\",\n  \"source_sbom_requested\": true,\n  \"reviewed_profile\": \"development-20261001\",\n  \"Build Compatibility\": \"PASS\"\n}\n",
+              "path": "build-profile.json",
+              "sha256": "f49c3f729951384333ad5a71dfb33e041bc8de943ff64b310c65df78e2c045c1",
+              "size": 538
+            }
+          ],
+          "github_digest": "sha256:c13ffd3cce706f26942f2a0f3b335d2e4fe4a5404adc7fcb5e088250ab515405",
+          "id": 11296982894,
+          "name": "patchset-selection-37185958897",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+            "id": 37185958897,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "c13ffd3cce706f26942f2a0f3b335d2e4fe4a5404adc7fcb5e088250ab515405"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"known_validated_mapping\": false,\n  \"patchsets\": [\n    {\n      \"patchset\": \"v2\",\n      \"status\": \"PREFLIGHT_COMPATIBLE\",\n      \"checks\": {\n        \"standard\": \"PATCH / CONFIG / STRUCTURAL API PASS\",\n        \"sos\": \"PATCH / CONFIG / STRUCTURAL API PASS\"\n      },\n      \"coverage\": \"Static selection only; real Rust/Flutter/Bridge must pass downstream\",\n      \"full_compatibility\": \"COMPATIBLE\"\n    },\n    {\n      \"patchset\": \"v1\",\n      \"status\": \"INCOMPATIBLE\",\n      \"checks\": {},\n      \"reason\": \"Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION\"\n    }\n  ],\n  \"selected\": \"v2\",\n  \"overall\": \"PASS\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"Rust fast check\": \"PASS\",\n  \"Flutter Analyze\": \"PASS\",\n  \"Bridge\": \"PASS\",\n  \"Windows helper\": \"PASS\"\n}\n",
+              "path": "compatibility-report.json",
+              "sha256": "929289002b04881727aecdbd6bf316502e1cfb2ce118439cb750f9ccc18647d9",
+              "size": 877
+            }
+          ],
+          "github_digest": "sha256:c641d73627e452a9a86d14e7aa63747307195adc606de2e2bbf4892bea5f45d4",
+          "id": 11296824086,
+          "name": "generation-compatibility-37185958897",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+            "id": 37185958897,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "c641d73627e452a9a86d14e7aa63747307195adc606de2e2bbf4892bea5f45d4"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"channel\": \"nightly\",\n  \"selected\": [\n    {\n      \"platform\": \"windows\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"runner\": \"windows-2022\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"evidence_run\": 36865945733,\n      \"phase4_regression\": \"PASS\",\n      \"id\": \"windows-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"nightly_evidence_run\": 36872771101,\n      \"phase5_regression\": \"PASS\",\n      \"phase5_evidence_run\": 36902005326\n    },\n    {\n      \"platform\": \"windows\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"sos\",\n      \"runner\": \"windows-2022\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"evidence_run\": 36865945733,\n      \"phase4_regression\": \"PASS\",\n      \"id\": \"windows-x86_64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"nightly_evidence_run\": 36872771101,\n      \"phase5_regression\": \"PASS\",\n      \"phase5_evidence_run\": 36902005326\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04\",\n      \"id\": \"linux-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986096,\n      \"artifact_id\": 11184422700,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04\",\n      \"id\": \"linux-x86_64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986264,\n      \"artifact_id\": 11186135657,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04-arm\",\n      \"id\": \"linux-aarch64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986319,\n      \"artifact_id\": 11185205887,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04-arm\",\n      \"id\": \"linux-aarch64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986436,\n      \"artifact_id\": 11185255736,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-15-intel\",\n      \"id\": \"macos-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986330,\n      \"artifact_id\": 11185723228,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-15-intel\",\n      \"id\": \"macos-x86_64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986238,\n      \"artifact_id\": 11186785524,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-14\",\n      \"id\": \"macos-aarch64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986042,\n      \"artifact_id\": 11184336769,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-14\",\n      \"id\": \"macos-aarch64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986700,\n      \"artifact_id\": 11185095830,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"android\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-24.04\",\n      \"id\": \"android-aarch64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986187,\n      \"artifact_id\": 11186832321,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\",\n      \"artifact_signing\": \"DEBUG/TEST ONLY\",\n      \"production_signing_identity\": \"NOT VALIDATED\",\n      \"production_signing_phase\": \"Phase 5.1\",\n      \"production_signing_identity_validation\": \"PENDING REAL PHASE 5.1 ACTIONS VALIDATION\",\n      \"build_support\": \"SUPPORTED\"\n    },\n    {\n      \"platform\": \"android\",\n      \"arch\": \"armv7\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-24.04\",\n      \"id\": \"android-armv7-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986336,\n      \"artifact_id\": 11186747723,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\",\n      \"artifact_signing\": \"DEBUG/TEST ONLY\",\n      \"production_signing_identity\": \"NOT VALIDATED\",\n      \"production_signing_phase\": \"Phase 5.1\",\n      \"production_signing_identity_validation\": \"PENDING REAL PHASE 5.1 ACTIONS VALIDATION\",\n      \"build_support\": \"SUPPORTED\"\n    },\n    {\n      \"platform\": \"android\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-24.04\",\n      \"id\": \"android-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986769,\n      \"artifact_id\": 11185990466,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\",\n      \"artifact_signing\": \"DEBUG/TEST ONLY\",\n      \"production_signing_identity\": \"NOT VALIDATED\",\n      \"production_signing_phase\": \"Phase 5.1\",\n      \"production_signing_identity_validation\": \"PENDING REAL PHASE 5.1 ACTIONS VALIDATION\",\n      \"build_support\": \"SUPPORTED\"\n    }\n  ],\n  \"include_experimental\": true\n}\n",
+              "path": "target-plan.json",
+              "sha256": "e9a54fbae395381ed521713f4e166d9c21c1c1d6840c09fc9df56c22e7511389",
+              "size": 14531
+            }
+          ],
+          "github_digest": "sha256:feb2a809823fe9298ac69aabcab1a2cf3c51a263819e26980b11468e7ea9a090",
+          "id": 11296794035,
+          "name": "target-plan-37185958897",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+            "id": 37185958897,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "feb2a809823fe9298ac69aabcab1a2cf3c51a263819e26980b11468e7ea9a090"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"upstream_branch\": \"master\",\n  \"upstream_ref\": \"master\",\n  \"upstream_tag\": \"\",\n  \"build_needed\": true,\n  \"draft_needed\": false,\n  \"revision\": \"1\",\n  \"channel\": \"nightly\"\n}\n",
+              "path": "channel.json",
+              "sha256": "2745b8054f3967be5cd339d1545a15998aa26a5e7df81d1b3dd69eea423891b1",
+              "size": 238
+            }
+          ],
+          "github_digest": "sha256:d925a57407ba6cf77a4e07e556ceeaaf90cddcc1fdda4608b282d4551e861eb5",
+          "id": 11296773370,
+          "name": "channel-discovery-37185958897",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+            "id": 37185958897,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "d925a57407ba6cf77a4e07e556ceeaaf90cddcc1fdda4608b282d4551e861eb5"
+        }
+      ],
+      "disposition": "SOURCE_CONFIRMED_REVIEW_REQUIRED",
+      "historical_files": {
+        ".github/workflows/nightly.yml": {
+          "sha256": "afba30749eb6a1cec49ca8bfd4ef9939929ab85e0c83e848346465fb8d323d2a",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/43fca9be84a91fb27fef0eebe53f3a2636004521/.github/workflows/nightly.yml"
+        },
+        "scripts/patchsets.py": {
+          "sha256": "f1a9d0fbb4a992c50b6cc47d667f6bfc45649ecd8b3ec27e797d3c550c928ac9",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/43fca9be84a91fb27fef0eebe53f3a2636004521/scripts/patchsets.py"
+        },
+        "scripts/phase4.py": {
+          "sha256": "327eee012939e0bbaf7266e5393634c428a7770dec84fa708b499b524560cc24",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/43fca9be84a91fb27fef0eebe53f3a2636004521/scripts/phase4.py"
+        }
+      },
+      "legacy_source_policy": "official-default-branch-tip; not official successful-run resolver",
+      "patch_verification": {
+        "common": {
+          "files": [
+            "patchsets/v2/common/0001-hbb-server-defaults.patch",
+            "patchsets/v2/common/0002-client-defaults.patch",
+            "patchsets/v2/common/0003-hide-cm-setting.patch"
+          ],
+          "sha256": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7"
+        },
+        "sos": {
+          "files": [
+            "patchsets/v2/sos/0001-sos-mode.patch",
+            "patchsets/v2/sos/0002-sos-home.patch",
+            "patchsets/v2/sos/0003-sos-settings.patch"
+          ],
+          "sha256": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        }
+      },
+      "run": {
+        "attempt": 1,
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "main",
+        "head_repository": "billradar/rustdesk-custom",
+        "id": 37185958897,
+        "path": ".github/workflows/nightly.yml",
+        "repository": "billradar/rustdesk-custom",
+        "sha": "43fca9be84a91fb27fef0eebe53f3a2636004521",
+        "status": "completed",
+        "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37185958897"
+      },
+      "source_identity": {
+        "common_patch_hash": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_repository": "rustdesk/rustdesk",
+        "upstream_sha": "e5bc204fe4dacc4db9c3cdb1f1338813986c89e7"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "documents": [
+            {
+              "path": "SHA256SUMS",
+              "sha256": "1474d440d2de3e2676409698a0e676068b07663bf745706da2c19fb41ea6ad16",
+              "size": 44142
+            },
+            {
+              "archived_json_utf8": "{\n  \"result\": \"PASS\",\n  \"required_gate\": \"PASS\",\n  \"targets\": {\n    \"windows-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"windows-x86_64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-x86_64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-aarch64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"linux-aarch64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-x86_64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-aarch64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"macos-aarch64-sos\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"android-aarch64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"android-armv7-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    },\n    \"android-x86_64-standard\": {\n      \"result\": \"PASS\",\n      \"required\": true,\n      \"support_status\": \"SUPPORTED\"\n    }\n  },\n  \"errors\": [],\n  \"channel\": \"nightly\",\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"patchset\": \"v2\",\n  \"build_run\": \"37279734509\",\n  \"custom_repository_sha\": \"fc41b84a50b1dc46fd656801c2617c2905e91bd0\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"code_signing\": \"DESKTOP NOT ENABLED; ANDROID TEST ONLY\"\n}\n",
+              "path": "aggregate.json",
+              "sha256": "4e6c76807d0e78435d3aa91a00d27f9da325f116f9abcd04e86d9089f51c270a",
+              "size": 2001
+            }
+          ],
+          "github_digest": "sha256:79443f5d3a99958f03f2c1cf606a3302de5d974585c3ef362fd905cb5d91567f",
+          "id": 11333654956,
+          "name": "platform-aggregate-37279734509",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+            "id": 37279734509,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "79443f5d3a99958f03f2c1cf606a3302de5d974585c3ef362fd905cb5d91567f"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"result\": \"PASS\",\n  \"channel\": \"nightly\",\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"patchset\": \"v2\",\n  \"common_patch_hash\": \"a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7\",\n  \"sos_patch_hash\": \"076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"signing\": \"NOT ENABLED\",\n  \"credential_scan\": \"KNOWN PATTERNS ONLY\",\n  \"Phase3 baseline comparison\": \"NOT APPLICABLE: different upstream SHA\"\n}\n",
+              "path": "channel-validation.json",
+              "sha256": "8dee6e54257c2e8baafd4673ae68b46ec390f6ae5d3776ac4923fa8f95ec1203",
+              "size": 528
+            }
+          ],
+          "github_digest": "sha256:69fd6b3ed8643bf4fa7ca092e74f0c6cfe12ba229bd1449c4e0850ad857bf6af",
+          "id": 11333124473,
+          "name": "channel-validation-37279734509",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+            "id": 37279734509,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "69fd6b3ed8643bf4fa7ca092e74f0c6cfe12ba229bd1449c4e0850ad857bf6af"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"known_validated_mapping\": false,\n  \"patchsets\": [\n    {\n      \"patchset\": \"v2\",\n      \"status\": \"PREFLIGHT_COMPATIBLE\",\n      \"checks\": {\n        \"standard\": \"PATCH / CONFIG / STRUCTURAL API PASS\",\n        \"sos\": \"PATCH / CONFIG / STRUCTURAL API PASS\"\n      },\n      \"coverage\": \"Static selection only; real Rust/Flutter/Bridge must pass downstream\",\n      \"full_compatibility\": \"COMPATIBLE\"\n    },\n    {\n      \"patchset\": \"v1\",\n      \"status\": \"INCOMPATIBLE\",\n      \"checks\": {},\n      \"reason\": \"Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION\"\n    }\n  ],\n  \"selected\": \"v2\",\n  \"overall\": \"PASS\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\",\n  \"Rust fast check\": \"PASS\",\n  \"Flutter Analyze\": \"PASS\",\n  \"Bridge\": \"PASS\",\n  \"Windows helper\": \"PASS\"\n}\n",
+              "path": "compatibility-report.json",
+              "sha256": "929289002b04881727aecdbd6bf316502e1cfb2ce118439cb750f9ccc18647d9",
+              "size": 877
+            }
+          ],
+          "github_digest": "sha256:28c824cf47e9adf2241aaf9975cc33df4876b1dd23c81b77316273f209fbbc12",
+          "id": 11332565524,
+          "name": "generation-compatibility-37279734509",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+            "id": 37279734509,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "28c824cf47e9adf2241aaf9975cc33df4876b1dd23c81b77316273f209fbbc12"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"channel\": \"nightly\",\n  \"selected\": [\n    {\n      \"platform\": \"windows\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"runner\": \"windows-2022\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"evidence_run\": 36865945733,\n      \"phase4_regression\": \"PASS\",\n      \"id\": \"windows-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"nightly_evidence_run\": 36872771101,\n      \"phase5_regression\": \"PASS\",\n      \"phase5_evidence_run\": 36902005326\n    },\n    {\n      \"platform\": \"windows\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"sos\",\n      \"runner\": \"windows-2022\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"evidence_run\": 36865945733,\n      \"phase4_regression\": \"PASS\",\n      \"id\": \"windows-x86_64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"nightly_evidence_run\": 36872771101,\n      \"phase5_regression\": \"PASS\",\n      \"phase5_evidence_run\": 36902005326\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04\",\n      \"id\": \"linux-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986096,\n      \"artifact_id\": 11184422700,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04\",\n      \"id\": \"linux-x86_64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986264,\n      \"artifact_id\": 11186135657,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04-arm\",\n      \"id\": \"linux-aarch64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986319,\n      \"artifact_id\": 11185205887,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"linux\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-22.04-arm\",\n      \"id\": \"linux-aarch64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986436,\n      \"artifact_id\": 11185255736,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-15-intel\",\n      \"id\": \"macos-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986330,\n      \"artifact_id\": 11185723228,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-15-intel\",\n      \"id\": \"macos-x86_64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986238,\n      \"artifact_id\": 11186785524,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-14\",\n      \"id\": \"macos-aarch64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986042,\n      \"artifact_id\": 11184336769,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"macos\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"sos\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"macos-14\",\n      \"id\": \"macos-aarch64-sos\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986700,\n      \"artifact_id\": 11185095830,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\",\n        \"standard_sos_source_pairing\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\"\n    },\n    {\n      \"platform\": \"android\",\n      \"arch\": \"aarch64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-24.04\",\n      \"id\": \"android-aarch64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986187,\n      \"artifact_id\": 11186832321,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\",\n      \"artifact_signing\": \"DEBUG/TEST ONLY\",\n      \"production_signing_identity\": \"NOT VALIDATED\",\n      \"production_signing_phase\": \"Phase 5.1\",\n      \"production_signing_identity_validation\": \"PENDING REAL PHASE 5.1 ACTIONS VALIDATION\",\n      \"build_support\": \"SUPPORTED\"\n    },\n    {\n      \"platform\": \"android\",\n      \"arch\": \"armv7\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-24.04\",\n      \"id\": \"android-armv7-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986336,\n      \"artifact_id\": 11186747723,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\",\n      \"artifact_signing\": \"DEBUG/TEST ONLY\",\n      \"production_signing_identity\": \"NOT VALIDATED\",\n      \"production_signing_phase\": \"Phase 5.1\",\n      \"production_signing_identity_validation\": \"PENDING REAL PHASE 5.1 ACTIONS VALIDATION\",\n      \"build_support\": \"SUPPORTED\"\n    },\n    {\n      \"platform\": \"android\",\n      \"arch\": \"x86_64\",\n      \"variant\": \"standard\",\n      \"enabled\": true,\n      \"support_status\": \"SUPPORTED\",\n      \"runner\": \"ubuntu-24.04\",\n      \"id\": \"android-x86_64-standard\",\n      \"required\": true,\n      \"experimental\": false,\n      \"evidence_run\": 36902005326,\n      \"validation\": \"PASS\",\n      \"evidence_job\": 110508986769,\n      \"artifact_id\": 11185990466,\n      \"support_scope\": \"BUILD ONLY\",\n      \"validated_upstream_sha\": \"6c578292e8ebbbec708b76986ba8c4bc7c509747\",\n      \"validated_patchset\": \"v1\",\n      \"runtime_ui_validation\": \"SKIPPED BY USER\",\n      \"real_remote_session_validation\": \"NOT TESTED\",\n      \"nightly_cross_platform_validation\": \"NOT TESTED\",\n      \"promotion_gates\": {\n        \"compatibility\": \"PASS\",\n        \"prepared_source_integrity\": \"PASS\",\n        \"build\": \"PASS\",\n        \"package\": \"PASS\",\n        \"architecture\": \"PASS\",\n        \"checksum\": \"PASS\",\n        \"build_info\": \"PASS\",\n        \"provenance\": \"PASS\",\n        \"configuration\": \"PASS\",\n        \"known_credential_scan\": \"PASS\",\n        \"artifact\": \"PASS\"\n      },\n      \"code_signing\": \"NOT ENABLED\",\n      \"artifact_signing\": \"DEBUG/TEST ONLY\",\n      \"production_signing_identity\": \"NOT VALIDATED\",\n      \"production_signing_phase\": \"Phase 5.1\",\n      \"production_signing_identity_validation\": \"PENDING REAL PHASE 5.1 ACTIONS VALIDATION\",\n      \"build_support\": \"SUPPORTED\"\n    }\n  ],\n  \"include_experimental\": true\n}\n",
+              "path": "target-plan.json",
+              "sha256": "e9a54fbae395381ed521713f4e166d9c21c1c1d6840c09fc9df56c22e7511389",
+              "size": 14531
+            }
+          ],
+          "github_digest": "sha256:5981cc6e0bab7ac005d77d6734557ca598dc661c3f3a8cdb3ec718bd4329f6aa",
+          "id": 11332230756,
+          "name": "target-plan-37279734509",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+            "id": 37279734509,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "5981cc6e0bab7ac005d77d6734557ca598dc661c3f3a8cdb3ec718bd4329f6aa"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"upstream_branch\": \"master\",\n  \"upstream_ref\": \"master\",\n  \"upstream_tag\": \"\",\n  \"build_needed\": true,\n  \"draft_needed\": false,\n  \"revision\": \"1\",\n  \"channel\": \"nightly\"\n}\n",
+              "path": "channel.json",
+              "sha256": "2745b8054f3967be5cd339d1545a15998aa26a5e7df81d1b3dd69eea423891b1",
+              "size": 238
+            }
+          ],
+          "github_digest": "sha256:ec516a9ab09c289e49694110bcbb641483263a8345f3b2a523dcd989e937ba3b",
+          "id": 11332010139,
+          "name": "channel-discovery-37279734509",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+            "id": 37279734509,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "ec516a9ab09c289e49694110bcbb641483263a8345f3b2a523dcd989e937ba3b"
+        },
+        {
+          "documents": [
+            {
+              "archived_json_utf8": "{\n  \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\",\n  \"known_validated_mapping\": false,\n  \"patchsets\": [\n    {\n      \"patchset\": \"v2\",\n      \"status\": \"PREFLIGHT_COMPATIBLE\",\n      \"checks\": {\n        \"standard\": \"PATCH / CONFIG / STRUCTURAL API PASS\",\n        \"sos\": \"PATCH / CONFIG / STRUCTURAL API PASS\"\n      },\n      \"coverage\": \"Static selection only; real Rust/Flutter/Bridge must pass downstream\"\n    },\n    {\n      \"patchset\": \"v1\",\n      \"status\": \"INCOMPATIBLE\",\n      \"checks\": {},\n      \"reason\": \"Missing generation configuration API: OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION\"\n    }\n  ],\n  \"selected\": \"v2\",\n  \"overall\": \"PREFLIGHT_PASS\",\n  \"runtime_ui\": \"SKIPPED BY USER\",\n  \"real_remote_session\": \"NOT TESTED\"\n}\n",
+              "path": "patchset-selection.json",
+              "sha256": "175f09a49b1d56822e1751263f0cc7a94a7eed1c3463fa3937accc7763c1ccbc",
+              "size": 739
+            },
+            {
+              "archived_json_utf8": "{\n  \"signature\": \"f7e2a62a707393c4ea97c42fe00a5a9cca89c87666a11e64e643dd028c663489\",\n  \"upstream_version\": \"1.5.0\",\n  \"runner\": \"windows-2022\",\n  \"rust\": \"1.75\",\n  \"flutter\": \"3.24.5\",\n  \"llvm\": \"15.0.6\",\n  \"vcpkg\": \"9e593bb18ea69cc5095e012465dcd675a822ed0d\",\n  \"bridge_rust\": \"1.75\",\n  \"cargo_expand\": \"1.0.95\",\n  \"frb\": \"1.80.1\",\n  \"bridge_flutter\": \"3.22.3\",\n  \"helper_commit\": \"ecd8d6a139eee76845ea66423fb739af450fda90\",\n  \"source_sbom_requested\": true,\n  \"reviewed_profile\": \"development-20261001\",\n  \"Build Compatibility\": \"PASS\"\n}\n",
+              "path": "build-profile.json",
+              "sha256": "f49c3f729951384333ad5a71dfb33e041bc8de943ff64b310c65df78e2c045c1",
+              "size": 538
+            }
+          ],
+          "github_digest": "sha256:9c195c0ecef5f803f2800f75300f586162eca519b150c2404590f9a4822f51f6",
+          "id": 11331324085,
+          "name": "patchset-selection-37279734509",
+          "workflow_run": {
+            "head_branch": "main",
+            "head_repository_id": 1399548376,
+            "head_sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+            "id": 37279734509,
+            "repository_id": 1399548376
+          },
+          "zip_sha256": "9c195c0ecef5f803f2800f75300f586162eca519b150c2404590f9a4822f51f6"
+        }
+      ],
+      "disposition": "SOURCE_CONFIRMED_REVIEW_REQUIRED",
+      "historical_files": {
+        ".github/workflows/nightly.yml": {
+          "sha256": "db095b9722f03912d359c0c4f3baa8efd8f09e2d83f34df5a34fd3a3627b5516",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/fc41b84a50b1dc46fd656801c2617c2905e91bd0/.github/workflows/nightly.yml"
+        },
+        "scripts/patchsets.py": {
+          "sha256": "f1a9d0fbb4a992c50b6cc47d667f6bfc45649ecd8b3ec27e797d3c550c928ac9",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/fc41b84a50b1dc46fd656801c2617c2905e91bd0/scripts/patchsets.py"
+        },
+        "scripts/phase4.py": {
+          "sha256": "327eee012939e0bbaf7266e5393634c428a7770dec84fa708b499b524560cc24",
+          "source_url": "https://github.com/billradar/rustdesk-custom/blob/fc41b84a50b1dc46fd656801c2617c2905e91bd0/scripts/phase4.py"
+        }
+      },
+      "legacy_source_policy": "official-default-branch-tip; not official successful-run resolver",
+      "patch_verification": {
+        "common": {
+          "files": [
+            "patchsets/v2/common/0001-hbb-server-defaults.patch",
+            "patchsets/v2/common/0002-client-defaults.patch",
+            "patchsets/v2/common/0003-hide-cm-setting.patch"
+          ],
+          "sha256": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7"
+        },
+        "sos": {
+          "files": [
+            "patchsets/v2/sos/0001-sos-mode.patch",
+            "patchsets/v2/sos/0002-sos-home.patch",
+            "patchsets/v2/sos/0003-sos-settings.patch"
+          ],
+          "sha256": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        }
+      },
+      "run": {
+        "attempt": 1,
+        "conclusion": "success",
+        "event": "schedule",
+        "head_branch": "main",
+        "head_repository": "billradar/rustdesk-custom",
+        "id": 37279734509,
+        "path": ".github/workflows/nightly.yml",
+        "repository": "billradar/rustdesk-custom",
+        "sha": "fc41b84a50b1dc46fd656801c2617c2905e91bd0",
+        "status": "completed",
+        "url": "https://github.com/billradar/rustdesk-custom/actions/runs/37279734509"
+      },
+      "source_identity": {
+        "common_patch_hash": "a62750763d0ddec4f8f0358b20060db7734ef9e2b7a84cbc400b7a38c2f2c8e7",
+        "patchset": "v2",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "upstream_repository": "rustdesk/rustdesk",
+        "upstream_sha": "e5bc204fe4dacc4db9c3cdb1f1338813986c89e7"
+      }
+    }
+  ],
+  "runtime_catalog_modified": false,
+  "sanitized_log_excerpts": [
+    {
+      "excerpts": [
+        "2026-10-01T13:59:07.6166825Z   \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\","
+      ],
+      "job_id": 110404480191
+    },
+    {
+      "excerpts": [
+        "2026-10-04T07:30:03.8065762Z   \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\","
+      ],
+      "job_id": 111387791366
+    },
+    {
+      "excerpts": [
+        "2026-10-05T07:47:42.8048762Z   \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\","
+      ],
+      "job_id": 111664747841
+    },
+    {
+      "excerpts": [
+        "2026-10-01T13:59:21.8442768Z Upstream SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T13:59:24.3604548Z   \"upstream_sha\": \"fada664df7a294d1d1a9ca3e7cd3637069122f17\","
+      ],
+      "job_id": 110404563053
+    },
+    {
+      "excerpts": [
+        "2026-10-04T07:30:15.6343543Z Upstream SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:30:18.4070481Z   \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\","
+      ],
+      "job_id": 111387816269
+    },
+    {
+      "excerpts": [
+        "2026-10-05T07:47:55.5219133Z Upstream SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:47:58.5290083Z   \"upstream_sha\": \"e5bc204fe4dacc4db9c3cdb1f1338813986c89e7\","
+      ],
+      "job_id": 111664799078
+    },
+    {
+      "excerpts": [
+        "2026-10-01T14:08:55.4187908Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:08:56.6778219Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:00.5567709Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:01.0256991Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:02.9083429Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:03.8647410Z Upstream SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:11.2895360Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:11.3243754Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "2026-10-01T14:09:12.6943700Z   UPSTREAM_EXPECTED_SHA: fada664df7a294d1d1a9ca3e7cd3637069122f17"
+      ],
+      "job_id": 110408806116
+    },
+    {
+      "excerpts": [
+        "2026-10-04T07:38:24.9674183Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:25.7281122Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:27.1387042Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:28.5040355Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:30.9608507Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:32.1700791Z Upstream SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:40.9582043Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:40.9995649Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-04T07:38:43.4709287Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7"
+      ],
+      "job_id": 111389103872
+    },
+    {
+      "excerpts": [
+        "2026-10-05T07:56:10.0284844Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:10.6043911Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:11.9665646Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:12.7320779Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:14.7001282Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:15.9751829Z Upstream SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:21.4159447Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:21.4380904Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7",
+        "2026-10-05T07:56:22.9156977Z   UPSTREAM_EXPECTED_SHA: e5bc204fe4dacc4db9c3cdb1f1338813986c89e7"
+      ],
+      "job_id": 111667344065
+    }
+  ],
+  "schema_version": 1,
+  "user_date": "2026-11-03 Asia/Shanghai"
+}

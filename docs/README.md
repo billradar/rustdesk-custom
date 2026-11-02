@@ -28,3 +28,15 @@
 - Nightly 同步、触发时间和构建门禁见 [工作流与发布流程](workflows-and-release.md#nightly-同步与构建)。
 
 - [Release GitHub App authentication](release-app.md): exact-commit release permissions, one-time setup and credential boundaries.
+
+- [Unified Release Coordinator audit and staged design](release-coordinator.md): experimental identity/state core, evidence, backend constraints and rollout gates.
+
+- [Release Coordinator 上线前核查与历史迁移](release-coordinator-preactivation.md)：实际保护配置、逐条历史证据、未应用的保护规则和保守迁移步骤。
+
+- [Coordinator ref protection validation](release-coordinator-protection.md) — isolated server canaries and journal/index ruleset deployment evidence.
+
+- [Coordinator legacy evidence migration](release-coordinator-legacy.md) — content-addressed evidence, conservative admission holds, offline import/recovery and cutover limits.
+
+- [三条旧 Nightly 来源补证](release-coordinator-nightly-source-recovery.md) — 旧式 Artifact 与日志交叉核查；不修改冻结目录或授权重试。
+
+- [Final coordinator integration and controlled cutover](release-coordinator-final-integration.md)

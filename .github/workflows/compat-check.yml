@@ -137,6 +137,16 @@ jobs:
         python3 scripts/release/channel_contract.py
         python3 scripts/release/nightly_contract.py
         python3 -m scripts.release.stable_lock_contract
+        python3 -m scripts.release.coordinator.contract
+        python3 -m scripts.release.coordinator.store_contract
+        python3 -m scripts.release.coordinator.reconcile_contract
+        python3 -m scripts.release.coordinator.runtime_contract
+        python3 -m scripts.release.coordinator.stable_runtime_contract
+        python3 -m scripts.release.coordinator.integration_contract
+        python3 -m scripts.release.coordinator.protection_contract
+        python3 -m scripts.release.coordinator.legacy_contract
+        python3 -m scripts.release.router_retry_policy_contract
+        python3 -m scripts.release.nightly_router_regression_contract
         python3 -m scripts.release.stable_router_contract
         python3 -m scripts.release.stable_tag_contract
         python3 -m scripts.validation.build_reliability_contract

@@ -162,6 +162,39 @@
           ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
         }
       }
+    },
+    {
+      "signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+      "upstream_version": "1.5.1",
+      "runner": "windows-2022",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "llvm": "15.0.6",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "bridge_flutter": "3.22.3",
+      "helper_commit": "ecd8d6a139eee76845ea66423fb739af450fda90",
+      "source_sbom_requested": true,
+      "id": "reviewed-151-6aec30",
+      "reviewed_upstream_sha": "6aec3069aec486ad7df07429a0a1ee411fc8d73a",
+      "review_notes": "Reviewed against exact 94c321d05ce02ee73304e6cf99187e2d4d96e409. The only critical-file change is three comment lines in bridge.yml: one YAML comment and two full-line Bash comments in Install flutter rust bridge deps. Replacing exactly these known comment texts reproduces the new file byte-for-byte; workflow values and executable shell commands are unchanged. The complete Windows job, tools, other critical-file hashes and bridge matrix are unchanged. The separate ARM64 source-patch script changes its comment-only header; its complete body from set -euo pipefail onward is byte-identical. Its new exact raw hash is registered separately. Approve these exact signatures only; raw critical-file hashing and all source/patch/API/platform/signing/publication gates remain enabled. This static review does not establish native build/runtime success.",
+      "critical": {
+        "tools": {
+          "RUST_VERSION": "1.75",
+          "FLUTTER_VERSION": "3.24.5",
+          "LLVM_VERSION": "15.0.6",
+          "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+        },
+        "files": {
+          "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+          "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46",
+          ".github/workflows/bridge.yml": "bc3714806b91f7a99748e68540c136103c7a7f7333703047e75a6f21bae61ae7",
+          ".github/workflows/third-party-RustDeskTempTopMostWindow.yml": "6c545ad6ac5d20e2c6334fd136c388cffa0fb04cb76623be4abb1e583e1c0a9f",
+          ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff": "7663824d8d728990a49e7a43e081fd1269f536a10987b576ba8f0bb766d2c759"
+        }
+      }
     }
   ]
 }

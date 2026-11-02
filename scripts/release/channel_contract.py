@@ -204,7 +204,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertNotIn('queue', jobs['android-sign'].get('concurrency', {}))
-        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing','coordinator-admit'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
@@ -212,7 +212,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
         self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
         self.assertIn('inputs.upstream_ref',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
-        self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
+        self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight','coordinator-admit'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
         self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
         self.assertEqual(jobs['platforms-build']['uses'],'./.github/workflows/build-stable-platforms.yml')
