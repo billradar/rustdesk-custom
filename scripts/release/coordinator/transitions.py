@@ -92,7 +92,7 @@ def retry_schedule(record, now, next_retry_at):
     return Event(utc(now), 'retry_schedule', record, after)
 
 
-def reserve_retry(record, token, now, lease):
+def reserve_retry(record, token, now, lease, *, creator=None):
     owned(record, record.reservation_id, record.fence)
     manual = provenance(record).get('manual_grant', {}).get('next_fence') == record.fence + 1
     if (record.state != BuildState.FAILED or record.policy_state != PolicyState.COOLDOWN
@@ -101,9 +101,13 @@ def reserve_retry(record, token, now, lease):
             or str(UUID(token)) != token or token == record.reservation_id):
         raise ValueError('Retry is not authorized')
     data = provenance(record)
-    for key in ('worker', 'manual_grant', 'retry_decided'):
+    for key in ('worker', 'manual_grant', 'retry_decided', 'dispatch_request_id'):
         data.pop(key, None)
     data['reservation_created_at'] = timestamp(now)
+    if creator is not None:
+        if not isinstance(creator, str) or not re.fullmatch('[1-9][0-9]*', creator):
+            raise ValueError('Invalid retry reservation creator')
+        data['creator'] = creator
     after = replace(record, state=BuildState.DISCOVERED, reservation_state=ReservationState.RESERVED,
                     policy_state=PolicyState.READY, reservation_id=token, fence=record.fence + 1,
                     workflow_run_id='', started_at=None, completed_at=None, lease_expires_at=lease,
@@ -155,7 +159,7 @@ def validate_additional(event):
     elif event.action == 'retry_schedule':
         expected = retry_schedule(r, now, a.next_retry_at)
     elif event.action == 'reserve_retry':
-        expected = reserve_retry(r, a.reservation_id, now, a.lease_expires_at)
+        expected = reserve_retry(r, a.reservation_id, now, a.lease_expires_at, creator=provenance(a).get('creator'))
     elif event.action == 'renew':
         expected = renew(*args, now, a.lease_expires_at)
     elif event.action == 'hold':

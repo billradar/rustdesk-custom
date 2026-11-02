@@ -89,6 +89,25 @@ class RuntimeContract(unittest.TestCase):
             self.assertIsNotNone(index_record(api, REPO, run_id))
         self.assertEqual(c.journal.load().record.attempt, 0)
 
+    def test_manual_retry_claimant_can_bind_its_new_epoch_in_all_modes(self):
+        from .transitions import provenance
+        for mode in ('dry-run','draft','release'):
+            with self.subTest(mode=mode):
+                api=RuntimeAPI();c=Coordinator(api,REPO,identity('nightly',release_mode=mode))
+                snap=c.claim(NOW,'123',lambda:'EMPTY')
+                self.assertTrue(c.admit(snap,run(),NOW))
+                old=c.journal.load()
+                failed=c.journal.append(finish(old.record,old.record.reservation_id,old.record.fence,
+                    NOW,NOW+timedelta(minutes=5),False,Failure.COMPILE.value,'build','fixture'),old)
+                granted=c.journal.append(grant_retry(failed.record,'maintainer','Reviewed fix',NOW+timedelta(minutes=10)),failed)
+                api.runs['123']=dict(run(),status='completed',conclusion='failure')
+                snap=c.claim(NOW+timedelta(hours=1),'124',lambda:'EMPTY')
+                self.assertEqual(provenance(snap.record)['creator'],'124')
+                self.assertEqual(snap.record.fence,2)
+                self.assertTrue(c.admit(snap,run('124'),NOW+timedelta(hours=1)))
+                with self.assertRaises(ValueError): c.admit(snap,api.runs['123'],NOW+timedelta(hours=1))
+                with self.assertRaises(ValueError): c.admit(snap,run('123'),NOW+timedelta(hours=1))
+
     def test_unknown_history_never_bootstraps_reservation(self):
         api = RuntimeAPI()
         c = Coordinator(api, REPO, identity('nightly'))

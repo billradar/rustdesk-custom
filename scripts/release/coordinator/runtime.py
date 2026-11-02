@@ -157,7 +157,7 @@ class Coordinator:
                 r = snapshot.record
                 if r.state == BuildState.FAILED and r.policy_state == PolicyState.COOLDOWN and r.next_retry_at and now >= r.next_retry_at:
                     # Reconciler has just verified the exact bound run is terminal.
-                    return self.journal.append(reserve_retry(r, str(uuid4()), now, now+timedelta(hours=6)), snapshot)
+                    return self.journal.append(reserve_retry(r, str(uuid4()), now, now+timedelta(hours=6), creator=str(creator)), snapshot)
                 return snapshot
             except Conflict:
                 continue
@@ -190,6 +190,8 @@ class Coordinator:
                 or run.get('head_branch') != 'main' or run.get('event') != 'workflow_dispatch'
                 or run.get('path', '').split('@')[0] != WORKFLOWS[self.identity.channel]):
             raise ValueError('Foreign or untrusted admission run')
+        if run.get('status') == 'completed':
+            raise ValueError('Completed run cannot claim a new reservation')
         if type(run.get('run_attempt')) is not int or run['run_attempt'] != 1:
             raise ValueError('Native rerun is not a fresh coordinator dispatch')
         if r.reservation_state in (ReservationState.RESERVED, ReservationState.DISPATCH_UNKNOWN):
@@ -295,6 +297,7 @@ def admit_nightly(path, digest):
     if (str(run.get('id')) != run_id or run.get('head_sha') != os.environ['GITHUB_SHA']
             or run.get('head_repository', {}).get('full_name') != repo or run.get('head_branch') != 'main'
             or run.get('event') != 'workflow_dispatch' or run.get('path', '').split('@')[0] != WORKFLOWS['nightly']
+            or run.get('status') == 'completed'
             or type(run.get('run_attempt')) is not int or run['run_attempt'] != 1):
         raise ValueError('Untrusted admission run')
     coordinator = Coordinator(api, repo, identity, source_provenance=discovery)
