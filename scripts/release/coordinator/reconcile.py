@@ -79,7 +79,7 @@ class ActionsEvidence:
 
 def build_start(jobs):
     starts = [parse_time(s['started_at']) for j in jobs if target_job(j)
-              for s in j.get('steps', []) if s.get('name') in COMPILE_STEPS
+              for s in (j.get('steps') or []) if s.get('name') in COMPILE_STEPS
               and s.get('status') in ('in_progress', 'completed') and s.get('started_at')]
     return min(starts) if starts else None
 

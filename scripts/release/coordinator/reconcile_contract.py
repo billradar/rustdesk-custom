@@ -210,6 +210,24 @@ class RetryReconcileContract(unittest.TestCase):
             bind_verified(replace(snap.record, state=BuildState.DISCOVERED,
                 reservation_state=ReservationState.RESERVED, workflow_run_id=''), TOKEN, 1, '123', 'a'*40, 2, NOW)
 
+    def test_long_retry_after_is_not_retried_early(self):
+        import urllib.error
+        from unittest.mock import patch
+        from .store import APIError, GitHubAPI
+        sleeps = []
+        api = GitHubAPI('fictional-test-token', sleep=sleeps.append)
+        error = urllib.error.HTTPError('https://api.github.com', 429, 'rate limited', {'Retry-After': '120'}, None)
+        with patch('urllib.request.urlopen', side_effect=error) as call:
+            with self.assertRaises(APIError) as result:
+                api.request('GET', 'repos/example/test/git/ref/heads/state')
+            self.assertEqual(result.exception.retry_after, 120)
+            self.assertEqual(call.call_count, 1)
+            self.assertEqual(sleeps, [])
+
+    def test_queued_job_without_step_list_is_not_build_entry(self):
+        from .reconcile import build_start
+        self.assertIsNone(build_start([dict(name='platforms-build / linux-x86_64-standard', steps=None)]))
+
     def test_unknown_logs_never_imply_infrastructure(self):
         evidence = ActionsEvidence(None, 'example/release-test', logs=lambda _: 'error: compiler failed')
         jobs = [dict(id=1, name='platforms-build / linux-x86_64-standard', conclusion='failure', steps=[{}])]

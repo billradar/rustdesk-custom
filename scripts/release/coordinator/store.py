@@ -58,8 +58,8 @@ class GitHubAPI:
                 # Do not log the HTTP body or Authorization headers.
                 delay = error.headers.get('Retry-After', '0')
                 delay = int(delay) if delay.isdigit() else 0
-                if method == 'GET' and attempt < 2 and (error.code == 429 or 500 <= error.code < 600):
-                    self.sleep(min(max(delay, 2 ** attempt), 30))
+                if method == 'GET' and attempt < 2 and delay <= 30 and (error.code == 429 or 500 <= error.code < 600):
+                    self.sleep(max(delay, 2 ** attempt))
                     continue
                 raise APIError(error.code, delay) from None
             except (TimeoutError, urllib.error.URLError):
