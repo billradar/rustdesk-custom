@@ -35,6 +35,7 @@ def repository():
 
 
 def discover(run_id=''):
+    run_id = run_id or os.environ.get('OFFICIAL_RUN_ID', '')
     branch = api(f'repos/{OFFICIAL}')['default_branch']
     if run_id:
         if not re.fullmatch(r'[1-9][0-9]*', str(run_id)):
@@ -228,6 +229,7 @@ def route(data):
         raise ValueError('Nightly retry requires manual review (cancelled, unknown, or exhausted)')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
+                        '-f', 'official_run_id=' + data['official_run_id'],
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true'], check=True)
 
@@ -270,11 +272,18 @@ def dedup():
     annotate_history(rows, identity_data['upstream_sha'])
     state = route_state(rows, identity, mode, wayland, current, signing, identity_data['upstream_sha'])
     print('Nightly dedup: ' + state)
-    if state == 'EXHAUSTED':
-        raise ValueError('Three attempts failed for this exact source/build identity; inspect logs before retrying')
     if state == 'UNKNOWN':
         raise ValueError('A matching Nightly run has no discovery artifact; inspect it before retrying')
-    skip = state in ('ACTIVE', 'SUCCESS')
+    if state != 'ACTIVE':
+        title_suffix = f' / {mode} / wayland={wayland} / android-signing={signing}'
+        matching = [r for r in rows if r.get('_nightly_identity') == identity
+                    and r.get('display_title', '').endswith(title_suffix)
+                    and r.get('event') == 'workflow_dispatch'
+                    and r.get('head_branch') == 'main']
+        state = decide(matching)
+    if state == 'REVIEW':
+        raise ValueError('Nightly retry requires manual review')
+    skip = state in ('ACTIVE', 'SUCCESS', 'COOLDOWN')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('skip=' + str(skip).lower() + '\n')
