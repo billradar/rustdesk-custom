@@ -38,7 +38,9 @@ class IntegrationContract(unittest.TestCase):
                ('DELETE',base+'git/refs/'+key,None),
                ('POST','repos/other/repo/git/refs',{'ref':'refs/'+key,'sha':'b'*40}),
                ('POST',base+'git/trees',{'tree':[{'path':'.github/workflows/evil.yml','content':'bad'}]}),
-               ('POST',base+'git/commits',{'message':'bad','tree':'a'*40,'parents':['b'*40]})]
+               ('POST',base+'git/commits',{'message':'bad','tree':'a'*40,'parents':['b'*40]}),
+               ('POST',base+'git/commits',{'message':'coordinator: reserve','tree':'a'*40,'parents':[], 'author':{},'committer':{}}),
+               ('POST',base+'git/trees',{'tree':[{'path':p,'mode':'100644','type':'blob','sha':'b'*40} for p in ('state.json','event.json')]})]
         for method,path,data in cases:
             with self.subTest(path=path),self.assertRaises(ValueError):api.request(method,path,data)
         self.assertEqual(raw.objects,{})

@@ -57,7 +57,7 @@ class IsolatedAPI:
         if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
             raise ValueError('Invalid test repository')
         self.api, self.base = api, 'repos/'+repository+'/git/'
-        self.refs, self.commits = set(), set()
+        self.refs, self.commits, self.blobs, self.trees = set(), set(), set(), set()
         self.lock = Lock()
         self.barrier = None
         self.barrier_refs = set()
@@ -97,12 +97,12 @@ class IsolatedAPI:
             allowed = (set(data) == {'tree'} and len(rows) == 2
                 and {r.get('path') for r in rows} == {'state.json','event.json'}
                 and all(set(r) == {'path','mode','type','sha'} and r['mode'] == '100644'
-                        and r['type'] == 'blob' and re.fullmatch('[0-9a-f]{40}', r['sha']) for r in rows))
+                        and r['type'] == 'blob' and r['sha'] in self.blobs for r in rows))
         elif method == 'POST' and suffix == 'commits':
             allowed = (isinstance(data, dict) and set(data) == {'message','tree','parents','author','committer'}
                 and isinstance(data['parents'], list) and len(data['parents']) <= 1
                 and all(p in self.commits for p in data['parents'])
-                and re.fullmatch('[0-9a-f]{40}', data['tree']) is not None
+                and data['tree'] in self.trees
                 and data['message'].startswith('coordinator: '))
         elif method == 'POST' and suffix == 'refs':
             ref = data.get('ref','').removeprefix('refs/') if isinstance(data, dict) else ''
@@ -123,9 +123,9 @@ class IsolatedAPI:
         if fault == 'before_503':
             raise APIError(503)
         result = self.api.request(method, path, data)
-        if method == 'POST' and suffix == 'commits':
+        if method == 'POST' and suffix in ('blobs', 'trees', 'commits'):
             with self.lock:
-                self.commits.add(result['sha'])
+                {'blobs':self.blobs, 'trees':self.trees, 'commits':self.commits}[suffix].add(result['sha'])
         if fault == 'after_timeout':
             raise AmbiguousWrite('Injected lost ref-update acknowledgement')
         return result

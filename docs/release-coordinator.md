@@ -400,6 +400,4 @@ with the attempted test refs, session and API count; authentication is never
 printed or stored. Offline integration_contract checks the allowlist, context,
 workflow isolation and complete harness against the atomic in-memory transport.
 
-Live result: pending execution of the supplemental PR workflow. The preceding
-five stage PRs remain unmerged; their prior green CI is unchanged. Live Environment
-protection and deployed production behavior remain independently unverified.
+Live result: [run 41456872443](https://github.com/billradar/rustdesk-custom/actions/runs/41456872443) succeeded on commit `9d43579c3cb88ef077dd4bc8134a7bc444592a37`, with all seven checks PASS and three isolated refs recorded in its uploaded summary. This is actual GitHub Git API storage verification, with synthetic run evidence and injected transport faults. A follow-up tightens object ownership as well: state trees can reference only blobs created by this test transport, and commits can reference only its state-only trees. The preceding five stage PRs remain unmerged; their prior green CI is unchanged. Live Environment protection and deployed production behavior remain independently unverified.
