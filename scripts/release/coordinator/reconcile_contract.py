@@ -210,6 +210,45 @@ class RetryReconcileContract(unittest.TestCase):
             bind_verified(replace(snap.record, state=BuildState.DISCOVERED,
                 reservation_state=ReservationState.RESERVED, workflow_run_id=''), TOKEN, 1, '123', 'a'*40, 2, NOW)
 
+    def test_android_build_prefix_is_not_a_production_signing_job(self):
+        evidence = ActionsEvidence(None, 'example/release-test',
+                                  logs=lambda _: 'INFRASTRUCTURE: SDK_INSTALL_RETRY_EXHAUSTED')
+        job = dict(id=1, name='04C · Build Stable Android artifacts for signing / android-aarch64-standard',
+                   conclusion='failure', steps=[dict(name='Prepare Android SDK', conclusion='failure')])
+        self.assertEqual(evidence.failure({'conclusion':'failure'}, [job])[0], Failure.SDK)
+        signer = dict(id=2, name='05 · Sign Stable Android production artifacts (YubiKey PIV 9C)', conclusion='failure')
+        self.assertEqual(evidence.failure({'conclusion':'failure'}, [job, signer])[0], Failure.SIGNING)
+
+    def test_job_evidence_rejects_newer_or_missing_attempt(self):
+        _, _, snap = bound()
+        class API:
+            attempt = 2
+            def request(self, *args):
+                row = dict(id=1, name='aggregate', run_attempt=self.attempt)
+                return {'jobs':[row]}
+        api = API()
+        evidence = ActionsEvidence(api, 'example/release-test')
+        for attempt in (2, None, True):
+            api.attempt = attempt
+            with self.assertRaises(ValueError): evidence.jobs(snap.record)
+        api.attempt = 1
+        self.assertEqual(len(evidence.jobs(snap.record)), 1)
+
+    def test_run_revalidated_after_jobs_and_before_terminal_commit(self):
+        for change_at in (2, 3):
+            with self.subTest(change_at=change_at):
+                _, journal, snap = bound()
+                class RerunEvidence(FakeEvidence):
+                    def run(self, record):
+                        run = super().run(record)
+                        if self.calls >= change_at:
+                            run['status'] = 'in_progress'
+                            run['conclusion'] = None
+                        return run
+                result = Reconciler(journal, RerunEvidence(conclusion='success')).refresh(snap, NOW+timedelta(hours=1))
+                self.assertEqual(result, snap)
+                self.assertEqual(journal.load().record.state, BuildState.QUEUED)
+
     def test_late_binding_preserves_actual_times_and_monotonic_events(self):
         api = MemoryAPI()
         journal = store(api)

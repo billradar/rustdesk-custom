@@ -12,6 +12,12 @@ from .transitions import (finish, hold, limits, observe_start, provenance, renew
 COMPILE_STEPS = {'Official-compatible compile, package and independent gates',
                  'Build and verify selected variant'}
 WORKFLOWS = {'stable': '.github/workflows/tag.yml', 'nightly': '.github/workflows/nightly.yml'}
+SIGNING_JOBS = {'android-sign', '05 · Sign Stable Android production artifacts (YubiKey PIV 9C)',
+                'Sign Nightly Android production artifacts (YubiKey PIV 9C)'}
+
+
+def same_run(first, second):
+    return all(first.get(k) == second.get(k) for k in ('id', 'status', 'conclusion', 'run_attempt', 'head_sha'))
 
 
 def log_decision(record, decision):
@@ -37,6 +43,7 @@ class ActionsEvidence:
                 or run.get('head_branch') != 'main' or run.get('event') != 'workflow_dispatch'
                 or run.get('path', '').split('@')[0] != WORKFLOWS[record.channel]
                 or run.get('head_sha') != worker.get('custom_repository_sha')
+                or type(run.get('run_attempt')) is not int
                 or run.get('run_attempt') != worker.get('run_attempt')
                 or worker.get('workflow_run_id') != record.workflow_run_id):
             raise ValueError('Run provenance/attempt mismatch')
@@ -47,6 +54,9 @@ class ActionsEvidence:
         for page in range(1, 101):
             result = self.api.request('GET', f'repos/{self.repository}/actions/runs/{record.workflow_run_id}/jobs?filter=all&per_page=100&page={page}')
             batch = result['jobs']
+            expected_attempt = provenance(record)['worker']['run_attempt']
+            if any(type(j.get('run_attempt')) is not int or j['run_attempt'] != expected_attempt for j in batch):
+                raise ValueError('Job evidence contains an unauthorized run attempt')
             rows.extend(batch)
             if len(batch) < 100:
                 return latest_jobs(rows)
@@ -58,12 +68,12 @@ class ActionsEvidence:
         failures = [j for j in jobs if j.get('conclusion') not in ('success', 'skipped', None)]
         if not failures:
             return Failure.UNKNOWN, 'workflow', 'No trustworthy failure-stage evidence'
+        for job in failures:
+            if job.get('name') in SIGNING_JOBS:
+                return Failure.SIGNING, job['name'], 'Production signing or signing gate failed'
         categories = []
         for job in failures:
             name = job.get('name', '')
-            lowered = name.lower()
-            if 'sign' in lowered:
-                return Failure.SIGNING, name, 'Production signing or signing gate failed'
             if not target_job(job):
                 return Failure.UNKNOWN, name, 'Non-leaf build or safety gate failed'
             try:
@@ -101,9 +111,13 @@ class Reconciler:
             return snapshot
         try:
             run = self.evidence.run(r)
+            jobs = self.evidence.jobs(r)
+            fresh = self.evidence.run(r)
         except ValueError:
             return self.journal.append(hold(r, now, 'Run provenance or attempt changed; operator review required'), snapshot)
-        jobs = self.evidence.jobs(r)
+        if not same_run(run, fresh):
+            log_decision(r, 'DEFER_CHANGED_RUN')
+            return snapshot
         started = build_start(jobs)
         if run['status'] != 'completed':
             if r.state in (BuildState.SUCCEEDED, BuildState.FAILED):
@@ -132,6 +146,13 @@ class Reconciler:
             category, stage, reason = self.evidence.failure(run, jobs) if not successful else ('', '', '')
             event = finish(r, r.reservation_id, r.fence, started, completed, successful,
                            category.value if isinstance(category, Failure) else category, stage, reason, observed_at=now)
+            try:
+                final_run = self.evidence.run(r)
+            except ValueError:
+                return self.journal.append(hold(r, now, 'Run attempt changed while classifying completion'), snapshot)
+            if not same_run(run, final_run):
+                log_decision(r, 'DEFER_CHANGED_RUN')
+                return snapshot
             snapshot = self.journal.append(event, snapshot)
             r = snapshot.record
         if r.state == BuildState.FAILED and 'retry_decided' not in provenance(r):
