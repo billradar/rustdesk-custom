@@ -45,7 +45,7 @@ class FakeEvidence:
                      status=self.status, conclusion=self.conclusion,
                      completed_at=(NOW + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'),
                      steps=[dict(name='Official-compatible compile, package and independent gates',
-                                 status='completed', started_at=(NOW + timedelta(minutes=1)).isoformat().replace('+00:00', 'Z'))] if self.started else [])]
+                                 status='completed', conclusion=self.conclusion, started_at=(NOW + timedelta(minutes=1)).isoformat().replace('+00:00', 'Z'))] if self.started else [])]
         if self.conclusion == 'success':
             rows.append(dict(id=2, name='aggregate', status='completed', conclusion='success',
                              completed_at=(NOW + timedelta(minutes=6)).isoformat().replace('+00:00', 'Z')))
@@ -209,6 +209,43 @@ class RetryReconcileContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             bind_verified(replace(snap.record, state=BuildState.DISCOVERED,
                 reservation_state=ReservationState.RESERVED, workflow_run_id=''), TOKEN, 1, '123', 'a'*40, 2, NOW)
+
+    def test_late_binding_preserves_actual_times_and_monotonic_events(self):
+        api = MemoryAPI()
+        journal = store(api)
+        snap = journal.append(reserve(discovered(), TOKEN, NOW, NOW+timedelta(hours=1)))
+        late = NOW+timedelta(hours=2)
+        snap = journal.append(bind_verified(snap.record, TOKEN, 1, '123', 'a'*40, 1, late), snap)
+        active = Reconciler(journal, FakeEvidence(status='in_progress')).refresh(snap, late+timedelta(minutes=1))
+        self.assertEqual(active.record.started_at, NOW+timedelta(minutes=1))
+        self.assertGreaterEqual(active.at, snap.at)
+        done = Reconciler(journal, FakeEvidence(conclusion='success')).refresh(active, late+timedelta(minutes=2))
+        self.assertEqual(done.record.completed_at, NOW+timedelta(minutes=6))
+        self.assertGreaterEqual(done.at, active.at)
+        self.assertEqual(done.record.attempt, 1)
+
+    def test_late_completion_after_hold_uses_observation_time(self):
+        from .transitions import hold
+        _, journal, snap = bound()
+        late = NOW+timedelta(hours=2)
+        snap = journal.append(hold(snap.record, late, 'Earlier observation required review'), snap)
+        done = Reconciler(journal, FakeEvidence(conclusion='success')).refresh(snap, late+timedelta(minutes=1))
+        self.assertEqual(done.record.state, BuildState.SUCCEEDED)
+        self.assertEqual(done.record.policy_state, PolicyState.READY)
+        self.assertEqual(done.record.completed_at, NOW+timedelta(minutes=6))
+        self.assertEqual(done.at, late+timedelta(minutes=1))
+
+    def test_skipped_compile_timestamp_does_not_consume_build_attempt(self):
+        from .reconcile import build_start
+        _, journal, snap = bound()
+        evidence = FakeEvidence()
+        jobs = evidence.jobs(snap.record)
+        jobs[0]['steps'][0]['conclusion'] = 'skipped'
+        self.assertIsNone(build_start(jobs))
+        evidence.jobs = lambda _: jobs
+        done = Reconciler(journal, evidence).refresh(snap, NOW+timedelta(hours=1), sample=0)
+        self.assertEqual(done.record.attempt, 0)
+        self.assertEqual(done.record.policy_state, PolicyState.COOLDOWN)
 
     def test_long_retry_after_is_not_retried_early(self):
         import urllib.error

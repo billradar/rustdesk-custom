@@ -33,7 +33,7 @@ def bind_verified(record, token, fence, run_id, custom_sha, run_attempt, now):
     return Event(utc(now), 'bind_verified', record, after)
 
 
-def finish(record, token, fence, started_at, completed_at, success, failure_class='', stage='', reason=''):
+def finish(record, token, fence, started_at, completed_at, success, failure_class='', stage='', reason='', *, observed_at=None):
     owned(record, token, fence)
     utc(completed_at)
     if type(success) is not bool:
@@ -45,11 +45,22 @@ def finish(record, token, fence, started_at, completed_at, success, failure_clas
         raise ValueError('Build start evidence changed')
     if success:
         after = advance(after, token, fence, BuildState.SUCCEEDED, completed_at).after
+        after = replace(after, policy_state=PolicyState.READY, failure_class='', failure_stage='', failure_reason='')
     else:
         failure_class = Failure(failure_class).value
         after = advance(after, token, fence, BuildState.FAILED, completed_at,
                         failure_class=failure_class, failure_stage=stage, failure_reason=reason).after
-    return Event(completed_at, 'finish', record, after)
+    observed_at = utc(observed_at) if observed_at is not None else completed_at
+    if observed_at < completed_at:
+        raise ValueError('Observation precedes actual completion')
+    return Event(observed_at, 'finish', record, after)
+
+
+def observe_start(record, token, fence, started_at, observed_at):
+    if utc(observed_at) < utc(started_at):
+        raise ValueError('Observation precedes actual start')
+    after = advance(record, token, fence, BuildState.RUNNING, started_at).after
+    return Event(observed_at, 'observe_start', record, after)
 
 
 def retry_schedule(record, now, next_retry_at):
@@ -122,7 +133,9 @@ def validate_additional(event):
         expected = bind_verified(*args, a.workflow_run_id, worker['custom_repository_sha'], worker['run_attempt'], now)
     elif event.action == 'finish':
         expected = finish(*args, a.started_at, a.completed_at, a.state == BuildState.SUCCEEDED,
-                          a.failure_class, a.failure_stage, a.failure_reason)
+                          a.failure_class, a.failure_stage, a.failure_reason, observed_at=now)
+    elif event.action == 'observe_start':
+        expected = observe_start(*args, a.started_at, now)
     elif event.action == 'retry_schedule':
         expected = retry_schedule(r, now, a.next_retry_at)
     elif event.action == 'reserve_retry':

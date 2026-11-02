@@ -7,7 +7,7 @@ from scripts.validation.build_reliability import classify, gh, latest_jobs, targ
 from .model import BuildState, PolicyState, ReservationState, advance
 from .retry import Failure
 from .store import parse_time
-from .transitions import (finish, hold, limits, provenance, renew, retry_schedule)
+from .transitions import (finish, hold, limits, observe_start, provenance, renew, retry_schedule)
 
 COMPILE_STEPS = {'Official-compatible compile, package and independent gates',
                  'Build and verify selected variant'}
@@ -80,7 +80,9 @@ class ActionsEvidence:
 def build_start(jobs):
     starts = [parse_time(s['started_at']) for j in jobs if target_job(j)
               for s in (j.get('steps') or []) if s.get('name') in COMPILE_STEPS
-              and s.get('status') in ('in_progress', 'completed') and s.get('started_at')]
+              and (s.get('status') == 'in_progress' or (s.get('status') == 'completed'
+                   and s.get('conclusion') in ('success', 'failure', 'cancelled', 'timed_out')))
+              and s.get('conclusion') not in ('skipped', 'neutral') and s.get('started_at')]
     return min(starts) if starts else None
 
 
@@ -107,7 +109,7 @@ class Reconciler:
             if r.state in (BuildState.SUCCEEDED, BuildState.FAILED):
                 return self.journal.append(hold(r, now, 'Terminal journal conflicts with active Actions run'), snapshot)
             if r.state == BuildState.QUEUED and started is not None:
-                snapshot = self.journal.append(advance(r, r.reservation_id, r.fence, BuildState.RUNNING, started), snapshot)
+                snapshot = self.journal.append(observe_start(r, r.reservation_id, r.fence, started, now), snapshot)
                 r = snapshot.record
             if r.lease_expires_at <= now:
                 snapshot = self.journal.append(renew(r, r.reservation_id, r.fence, now, now + timedelta(hours=6)), snapshot)
@@ -129,7 +131,7 @@ class Reconciler:
                 return self.journal.append(hold(r, now, 'Success lacks actual build/aggregate evidence'), snapshot)
             category, stage, reason = self.evidence.failure(run, jobs) if not successful else ('', '', '')
             event = finish(r, r.reservation_id, r.fence, started, completed, successful,
-                           category.value if isinstance(category, Failure) else category, stage, reason)
+                           category.value if isinstance(category, Failure) else category, stage, reason, observed_at=now)
             snapshot = self.journal.append(event, snapshot)
             r = snapshot.record
         if r.state == BuildState.FAILED and 'retry_decided' not in provenance(r):
