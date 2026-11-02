@@ -18,6 +18,7 @@ AUDIT = ROOT/'docs/audits/coordinator-preactivation-20261102/migration-plan.json
 AUDIT_SHA256 = '9cb18b82b52c6f4aa12c80dc6fe9b3053c090099708048787b94c65d59209b65'
 CATALOG = ROOT/'metadata/release/coordinator-legacy'
 ROW_INDEX_SHA256 = 'fb79b9318bd089ed2a6780ee7ac31d64dee7afbbe705e836bb111b426b5aeedd'
+SOURCE_SCOPES_SHA256 = '677b30c306703ec5c078562b37a0e1cf3b6a681629537f5e823c94955acbf425'
 WORKFLOWS = {'stable': '.github/workflows/tag.yml', 'nightly': '.github/workflows/nightly.yml'}
 RUN_FIELDS = ('id', 'run_attempt', 'head_sha', 'head_branch', 'event', 'path',
               'status', 'conclusion', 'display_title')
@@ -184,7 +185,7 @@ def validate_observation(row, observation):
 
 
 class Catalog:
-    def __init__(self, records=()):
+    def __init__(self, records=(), *, source_scopes=()):
         records = copy.deepcopy(list(records))
         self._records = {}
         approved = approved_row_digests() if records else {}
@@ -197,6 +198,39 @@ class Catalog:
             require(key not in self._records, 'Duplicate historical run')
             self._records[key] = record
 
+        self._source_scopes = {}
+        for scope in copy.deepcopy(list(source_scopes)):
+            require(set(scope) == {'channel','run_id','record_sha256','disposition','source_identity','discovery'},
+                    'Unknown source scope schema')
+            key = (scope['channel'], scope['run_id'])
+            record = self._records.get(key)
+            require(scope['channel'] == 'nightly' and record is not None
+                    and scope['record_sha256'] == digest(record)
+                    and identity(record['audit_row']) is None
+                    and not source_hint(record['audit_row'])
+                    and scope['disposition'] == 'SOURCE_CONFIRMED_REVIEW_REQUIRED',
+                    'Source scope does not bind an unresolved reviewed record')
+            source = SourceIdentity(**scope['source_identity'])
+            artifact = scope['discovery'];run = artifact['workflow_run']
+            require(artifact['name'] == f"channel-discovery-{scope['run_id']}"
+                    and run['id'] == scope['run_id'] and run['head_branch'] == 'main'
+                    and run['head_sha'] == record['audit_row']['custom_repository_sha']
+                    and artifact['github_digest'] == 'sha256:'+artifact['zip_sha256'],
+                    'Source scope artifact provenance mismatch')
+            hex_value(artifact['zip_sha256'],64)
+            require(len(artifact['documents']) == 1, 'Ambiguous source scope document')
+            doc = artifact['documents'][0];raw = doc['archived_json_utf8'].encode('utf-8')
+            require(doc['path'] == 'channel.json' and len(raw) == doc['size']
+                    and hashlib.sha256(raw).hexdigest() == doc['sha256'], 'Source scope JSON mismatch')
+            data = json.loads(raw)
+            require(data.get('channel') == 'nightly' and data.get('upstream_sha') == source.upstream_sha
+                    and source.upstream_repository == 'rustdesk/rustdesk', 'Source scope identity mismatch')
+            require(key not in self._source_scopes, 'Duplicate source scope')
+            self._source_scopes[key] = source.upstream_sha
+
+    def source_scope(self, row):
+        return self._source_scopes.get((row['channel'],row['run_id']), source_hint(row))
+
     @property
     def records(self):
         return copy.deepcopy(self._records)
@@ -205,7 +239,7 @@ class Catalog:
         matching = [v['audit_row'] for (c, _),v in self._records.items() if c == build.channel]
         if any(identity(r) == build or (identity(r) is not None and identity(r).key == build.key) for r in matching):
             return 'SUCCESS_HOLD'
-        if any(identity(r) is None and source_hint(r) in ('', build.source.upstream_sha) for r in matching):
+        if any(identity(r) is None and self.source_scope(r) in ('', build.source.upstream_sha) for r in matching):
             return 'REVIEW_HOLD'
         return 'NO_OP'  # Never permission to reserve, retry, sign or publish.
 
@@ -216,7 +250,7 @@ class Catalog:
             return sorted(r['run_id'] for r in rows if identity(r) is not None and identity(r).key == build.key)
         if decision == 'REVIEW_HOLD':
             return sorted(r['run_id'] for r in rows if identity(r) is None
-                          and source_hint(r) in ('',build.source.upstream_sha))
+                          and self.source_scope(r) in ('',build.source.upstream_sha))
         return []
 
     def archived(self, run, channel):
@@ -240,7 +274,7 @@ class Catalog:
         if record is None:
             return False
         require(fingerprint(run) == record['observation']['run'], 'Archived run provenance/attempt drift')
-        archived_sha = source_hint(record['audit_row'])
+        archived_sha = self.source_scope(record['audit_row'])
         return bool(archived_sha and archived_sha != upstream_sha)
 
     def annotate_nightly(self, run):
@@ -249,7 +283,7 @@ class Catalog:
             return False
         require(fingerprint(run) == record['observation']['run'], 'Archived run provenance/attempt drift')
         row = record['audit_row'];build = identity(row)
-        run['_upstream_sha'] = source_hint(row)
+        run['_upstream_sha'] = self.source_scope(row)
         if build is None:
             run['_nightly_identity_unresolved'] = True
         else:
@@ -295,5 +329,25 @@ def load(directory=CATALOG, *, pending_head=None):
     return Catalog(objects[head['catalog_sha256']]['records'])
 
 
+def resolved_catalog(directory=CATALOG):
+    """Add reviewed source-only restrictions; original records remain immutable.
+
+    This index is functional metadata pinned in trusted code. Runtime never reads
+    docs or downloads artifacts. Missing/tampered scope evidence fails closed.
+    It cannot manufacture a BuildIdentity or a successful producer alias.
+    """
+    catalog = load(directory)
+    path = Path(directory)/'source-scopes.json'
+    require(path.is_file() and not path.is_symlink(), 'Missing/nonregular source scope index')
+    raw = path.read_bytes()
+    require(hashlib.sha256(raw).hexdigest() == SOURCE_SCOPES_SHA256, 'Reviewed source scope index changed')
+    value = json.loads(raw)
+    require(canonical(value) == raw and set(value) == {'schema_version','kind','source_audit_sha256','resolutions'}
+            and type(value['schema_version']) is int and value['schema_version'] == 1
+            and value['kind'] == 'legacy-source-scope-resolutions', 'Unknown source scope index')
+    hex_value(value['source_audit_sha256'],64)
+    return Catalog(catalog.records.values(), source_scopes=value['resolutions'])
+
+
 def for_repository(repository):
-    return load() if repository == REPOSITORY else Catalog()
+    return resolved_catalog() if repository == REPOSITORY else Catalog()

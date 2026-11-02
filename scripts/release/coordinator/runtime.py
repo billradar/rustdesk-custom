@@ -267,6 +267,10 @@ def nightly_history(api, repo, identity, current=''):
         rows = nightly.prior_history(rows, current)
     catalog = for_repository(repo)
     nightly.annotate_history([row for row in rows if not catalog.annotate_nightly(row)], identity.source.upstream_sha)
+    # Old scheduled titles have no modern mode/options suffix. Their reviewed
+    # source-only holds still apply independently of that legacy title filter.
+    if catalog.decision(identity) == 'REVIEW_HOLD':
+        return 'REVIEW'
     state = nightly.route_state(rows, identity.historical_digest, identity.release_mode,
                                 str(identity.wayland_included).lower(), current,
                                 str(identity.android_signing_enabled).lower(), identity.source.upstream_sha)

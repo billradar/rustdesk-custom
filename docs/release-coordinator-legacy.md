@@ -155,3 +155,11 @@ SHAs for the three originally unscoped Nightly rows. The frozen v1 catalog still
 contains its original unscoped holds; this audit does not install a resolution or
 promote old artifact-only builds to modern production success. A reviewed
 append-only source-scope resolution can use the independently archived evidence.
+
+### Source-scope resolution at final integration
+
+`source-scopes.json` is a separately reviewed, code-pinned functional metadata overlay. It binds each of the three recovered Nightly runs to the digest of its unchanged catalog record, archived old `channel-discovery` JSON, artifact digest and original custom SHA. Runtime uses no documentation file or live artifact download. Missing, modified or symlinked metadata fails closed. The source recovery audit remains historical evidence; installing this overlay does not change its original “not installed” observation.
+
+Production `for_repository` applies the overlay after validating the entire original append-only catalog. Offline `load` and import validation retain the original rows verbatim; future imports must retain the overlay and revalidate its bound record digests. These resolutions do not supply release mode, Wayland/signing policy or official-run provenance. They cannot create a BuildIdentity, success alias, attempt, reservation or retry authorization. Matching upstream SHAs remain `REVIEW_HOLD`; unrelated SHAs return `NO_OP` to the original history, reservation, signing and publication gates. Stable decisions are unchanged.
+
+Regression contracts cover all three scopes, unchanged original records, same-SHA review, different-SHA original-gate execution, archived-run drift, expired artifacts, missing/tampered/symlinked metadata and attempts to turn a resolution into success. Rollback must restore the whole reviewed code/metadata commit together while admissions are quiescent; never edit the original catalog or delete state refs.

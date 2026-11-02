@@ -43,6 +43,80 @@ class LegacyContract(unittest.TestCase):
         self.assertFalse(result['production_state_written']);self.assertFalse(result['automatic_retry_authorized'])
         self.assertEqual(hashlib.sha256(AUDIT.read_bytes()).hexdigest(),AUDIT_SHA256)
 
+    def test_source_resolutions_narrow_only_review_scope_preserving_original_rows(self):
+        from .legacy import resolved_catalog
+        catalog = resolved_catalog()
+        self.assertEqual(catalog.records,self.catalog.records)
+        expected={36872771101:'fada664df7a294d1d1a9ca3e7cd3637069122f17',
+                  37185958897:'e5bc204fe4dacc4db9c3cdb1f1338813986c89e7',
+                  37279734509:'e5bc204fe4dacc4db9c3cdb1f1338813986c89e7'}
+        template=identity(self.success['audit_row'])
+        for run_id,sha in expected.items():
+            record=catalog.records['nightly',run_id];row=record['audit_row']
+            self.assertEqual(source_hint(row),'');self.assertIsNone(identity(row))
+            self.assertEqual(catalog.source_scope(row),sha)
+            same=replace(template,source=replace(template.source,upstream_sha=sha))
+            self.assertEqual(catalog.decision(same),'REVIEW_HOLD')
+            self.assertIn(run_id,catalog.blockers(same))
+            run=api_run(record);self.assertTrue(catalog.annotate_nightly(run))
+            self.assertEqual(run['_upstream_sha'],sha)
+            self.assertTrue(run['_nightly_identity_unresolved'])
+            self.assertNotIn('_nightly_identity',run)
+            with self.assertRaisesRegex(ValueError,'requires review'):
+                catalog.historical_identity(api_run(record),'nightly')
+            drift=api_run(record);drift['run_attempt']=2
+            with self.assertRaisesRegex(ValueError,'drift'):catalog.annotate_nightly(drift)
+        fresh=replace(template,source=replace(template.source,upstream_sha='1'*40))
+        self.assertEqual(catalog.decision(fresh),'NO_OP')
+        self.assertEqual(catalog.blockers(fresh),[])
+        api=RuntimeAPI();c=Coordinator(api,REPOSITORY,fresh,legacy_catalog=catalog)
+        with self.assertRaisesRegex(ValueError,'sentinel original gate'):
+            c.claim(NOW,'123',lambda:(_ for _ in ()).throw(ValueError('sentinel original gate')))
+        self.assertEqual(api.refs,{});self.assertEqual(api.dispatches,[])
+        self.assertEqual(catalog.decision(template),'SUCCESS_HOLD')
+        stable=identity(self.stable['audit_row'])
+        self.assertEqual(catalog.decision(stable),'SUCCESS_HOLD')
+
+    def test_source_scope_expiry_and_channel_history_remain_fail_closed(self):
+        from .legacy import resolved_catalog
+        catalog=resolved_catalog();record=catalog.records['nightly',36872771101]
+        template=identity(self.success['audit_row'])
+        same=replace(template,source=replace(template.source,upstream_sha=catalog.source_scope(record['audit_row'])))
+        fresh=replace(template,source=replace(template.source,upstream_sha='1'*40))
+        with patch('scripts.release.coordinator.runtime.history',side_effect=lambda *args:[api_run(record)]), \
+             patch('scripts.release.coordinator.legacy.for_repository',return_value=catalog), \
+             patch('scripts.release.nightly.discovery_from_run',side_effect=AssertionError('Expired artifact')):
+            self.assertEqual(nightly_history(RuntimeAPI(),REPOSITORY,same),'REVIEW')
+            self.assertEqual(nightly_history(RuntimeAPI(),REPOSITORY,fresh),'EMPTY')
+        api=RuntimeAPI();c=Coordinator(api,REPOSITORY,same,legacy_catalog=catalog)
+        with self.assertRaisesRegex(ValueError,'requires review'):c.claim(NOW,'123',lambda:'EMPTY')
+        self.assertEqual(api.refs,{});self.assertEqual(api.dispatches,[])
+
+    def test_source_scope_missing_tampered_or_symlinked_fails_closed(self):
+        import shutil
+        from .legacy import resolved_catalog
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp)/'catalog';shutil.copytree(CATALOG,directory)
+            path=directory/'source-scopes.json';raw=path.read_bytes()
+            path.unlink()
+            with self.assertRaisesRegex(ValueError,'source scope'):resolved_catalog(directory)
+            path.write_bytes(raw+b' ')
+            with self.assertRaisesRegex(ValueError,'changed'):resolved_catalog(directory)
+            path.unlink();path.symlink_to(CATALOG/'source-scopes.json')
+            with self.assertRaisesRegex(ValueError,'nonregular'):resolved_catalog(directory)
+
+    def test_source_scope_cannot_bind_another_record_or_change_success_alias(self):
+        value=json.loads((CATALOG/'source-scopes.json').read_bytes())
+        original=value['resolutions'][0]
+        for field,replacement in [('record_sha256','0'*64),('channel','stable'),
+                                  ('disposition','SUCCESS'),('run_id',self.success['audit_row']['run_id'])]:
+            scope=copy.deepcopy(original);scope[field]=replacement
+            with self.assertRaises(ValueError):Catalog(self.records,source_scopes=[scope])
+        scope=copy.deepcopy(original)
+        scope['discovery']['documents'][0]['archived_json_utf8']='{}'
+        with self.assertRaisesRegex(ValueError,'JSON mismatch'):Catalog(self.records,source_scopes=[scope])
+        with self.assertRaisesRegex(ValueError,'Duplicate'):Catalog(self.records,source_scopes=[original,original])
+
     def test_parallel_duplicate_routers_skip_success_without_api_or_artifacts(self):
         for record in (self.success,self.stable):
             api=RuntimeAPI();build=identity(record['audit_row'])
