@@ -1,0 +1,19 @@
+name: Content v2 activation evidence verification
+'on':
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.repository == 'billradar/rustdesk-custom'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify evidence against authenticated GitHub API
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m scripts.release.verify_activation_evidence metadata/release/attestations/content-v2-api-evidence-snapshot.json
