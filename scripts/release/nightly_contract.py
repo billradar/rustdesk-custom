@@ -65,8 +65,8 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(state([row],nightly.nightly_identity(changed_patch)),'RETRY')
         self.assertEqual(nightly.nightly_identity(data),nightly.nightly_identity(dict(data,custom_repository_sha='f'*40)))
         # Mode/Wayland/signing do not change the two-input Lite identity.
-        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'SUCCESS')
-        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'SUCCESS')
+        self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'SUCCESS')
+        self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'SUCCESS')
         self.assertEqual(nightly.nightly_identity(data, 'draft', 'true', 'false'),
                          nightly.nightly_identity(data, 'release', 'false', 'true'))
         self.assertEqual(nightly.route_state([dict(row,id=99)],identity,current_run_id='99'),'RETRY')
