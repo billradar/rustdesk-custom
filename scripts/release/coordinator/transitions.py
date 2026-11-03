@@ -147,6 +147,42 @@ def grant_retry(record, actor, reason, now):
                  next_retry_at=now, source_provenance=updated(record, manual_grant=grant, retry_decided=timestamp(now))))
 
 
+def recover_missing(record, actor, reason, run_id, token, creator, now, lease):
+    """Operator attests stopped + actual build entry, never a fabricated result.
+
+    The authenticated caller must check missing run and absence of active builds.
+    A pinned journal SHA and CAS protect the reviewed reservation from races.
+    """
+    if (record.state not in (BuildState.QUEUED, BuildState.RUNNING)
+            or record.reservation_state != ReservationState.BOUND
+            or record.policy_state != PolicyState.REVIEW_REQUIRED
+            or record.failure_class != Failure.IDENTITY.value
+            or record.workflow_run_id != run_id
+            or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', actor)
+            or not isinstance(reason,str) or not reason.strip() or len(reason)>500
+            or any(ord(c)<32 for c in reason)
+            or str(UUID(token)) != token or token == record.reservation_id
+            or not re.fullmatch('[1-9][0-9]*',creator) or utc(lease)<=utc(now)):
+        raise ValueError('Missing-run recovery requires a reviewed bound active-state reservation')
+    attempts=record.attempt + (1 if record.state==BuildState.QUEUED else 0)
+    if attempts >= limits(record).max_attempts:
+        raise ValueError('Missing-run recovery exceeds real build attempt budget')
+    data=provenance(record)
+    history=data.get('missing_run_recoveries',[])
+    history=history+[dict(actor=actor,reason=reason,at=timestamp(now),run_id=run_id,
+        reservation_id=record.reservation_id,fence=record.fence,
+        attestation='STOPPED_AND_BUILD_STARTED',accounted_attempts=attempts)]
+    for key in ('worker','manual_grant','retry_decided','dispatch_request_id'):
+        data.pop(key,None)
+    data.update(missing_run_recoveries=history,creator=creator,reservation_created_at=timestamp(now))
+    after=replace(record,state=BuildState.DISCOVERED,reservation_state=ReservationState.RESERVED,
+        policy_state=PolicyState.READY,reservation_id=token,fence=record.fence+1,
+        workflow_run_id='',attempt=attempts,started_at=None,completed_at=None,
+        lease_expires_at=lease,next_retry_at=None,failure_class='',failure_stage='',failure_reason='',
+        source_provenance=canonical(data).decode())
+    return Event(utc(now),'recover_missing',record,after)
+
+
 def validate_additional(event):
     r, a, now = event.before, event.after, event.at
     args = (r, r.reservation_id, r.fence)
@@ -177,6 +213,10 @@ def validate_additional(event):
     elif event.action == 'grant_retry':
         grant = provenance(a)['manual_grant']
         expected = grant_retry(r, grant['actor'], grant['reason'], now)
+    elif event.action == 'recover_missing':
+        grant=provenance(a)['missing_run_recoveries'][-1]
+        expected=recover_missing(r,grant['actor'],grant['reason'],grant['run_id'],
+                                 a.reservation_id,provenance(a)['creator'],now,a.lease_expires_at)
     else:
         raise ValueError('Unsupported state event')
     if expected != event:

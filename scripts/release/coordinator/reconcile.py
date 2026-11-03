@@ -6,7 +6,7 @@ import re
 from scripts.validation.build_reliability import classify, gh, latest_jobs, target_job
 from .model import BuildState, PolicyState, ReservationState, advance
 from .retry import Failure
-from .store import parse_time
+from .store import APIError, parse_time
 from .transitions import (finish, hold, limits, observe_start, provenance, renew, retry_schedule)
 
 COMPILE_STEPS = {'Official-compatible compile, package and independent gates',
@@ -14,6 +14,7 @@ COMPILE_STEPS = {'Official-compatible compile, package and independent gates',
 WORKFLOWS = {'stable': '.github/workflows/tag.yml', 'nightly': '.github/workflows/nightly.yml'}
 SIGNING_JOBS = {'android-sign', '05 · Sign Stable Android production artifacts (YubiKey PIV 9C)',
                 'Sign Nightly Android production artifacts (YubiKey PIV 9C)'}
+MISSING_REASON = 'Actions evidence unavailable (404); stopped-run operator review required'
 
 
 def same_run(first, second):
@@ -115,6 +116,13 @@ class Reconciler:
             fresh = self.evidence.run(r)
         except ValueError:
             return self.journal.append(hold(r, now, 'Run provenance or attempt changed; operator review required'), snapshot)
+        except APIError as error:
+            if error.status != 404:
+                raise
+            reason = MISSING_REASON
+            if r.policy_state == PolicyState.REVIEW_REQUIRED and r.failure_reason == reason:
+                return snapshot
+            return self.journal.append(hold(r, now, reason), snapshot)
         if not same_run(run, fresh):
             log_decision(r, 'DEFER_CHANGED_RUN')
             return snapshot
@@ -150,6 +158,10 @@ class Reconciler:
                 final_run = self.evidence.run(r)
             except ValueError:
                 return self.journal.append(hold(r, now, 'Run attempt changed while classifying completion'), snapshot)
+            except APIError as error:
+                if error.status != 404:
+                    raise
+                return self.journal.append(hold(r, now, MISSING_REASON), snapshot)
             if not same_run(run, final_run):
                 log_decision(r, 'DEFER_CHANGED_RUN')
                 return snapshot

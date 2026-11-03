@@ -5,6 +5,20 @@ name: Release Coordinator state maintenance
     types: [completed]
   workflow_dispatch:
     inputs:
+      operation:
+        type: choice
+        options: [grant, recover-missing]
+        default: grant
+        description: Normal retry grant or explicit missing-run reservation recovery
+      recovery_snapshot:
+        type: string
+        description: Exact reviewed journal commit SHA (recover-missing only)
+      recovery_run:
+        type: string
+        description: Exact old missing workflow run ID (recover-missing only)
+      recovery_confirmation:
+        type: string
+        description: Type STOPPED_AND_BUILD_STARTED only after confirming old workers stopped and actual build entry
       channel:
         type: choice
         options: [nightly, stable]
@@ -36,6 +50,10 @@ jobs:
       RETRY_CHANNEL: ${{ inputs.channel }}
       RETRY_IDENTITY: ${{ inputs.build_identity }}
       RETRY_REASON: ${{ inputs.reason }}
+      RECOVERY_MODE: ${{ inputs.operation || 'grant' }}
+      RECOVERY_SNAPSHOT: ${{ inputs.recovery_snapshot }}
+      RECOVERY_RUN: ${{ inputs.recovery_run }}
+      RECOVERY_CONFIRMATION: ${{ inputs.recovery_confirmation }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
