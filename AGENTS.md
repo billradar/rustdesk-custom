@@ -413,3 +413,5 @@ Never claim that CI passed, a PR merged, branches synchronized, a release publis
 - Do not perform destructive Git operations or merge/publish/sign without the required explicit authorization.
 - Keep changes scoped. Report broader audit findings separately instead of bundling unrelated refactors.
 - When documentation and implementation disagree, establish the actual behavior first, fix the scoped issue, and update the documentation so future agents do not repeat the mistake.
+
+Patchset content metadata is prepared under `patchset.json.versioning` (schema `patchset-content-v1`), with authoritative `revision`, append-only reviewed history and generated CHANGELOG.md. Bootstrap v1.1/v2.7 reserves baseline numbers but does not activate production cutover. Use `python3 -m scripts.upstream.patchset_version bump --patchset v2 --base origin/main`; review the generated pending semantic template, then `render` and `verify --base origin/main --check`. Never auto-infer semantic notes from diffs. Read `docs/patchset-content-version.md`.
