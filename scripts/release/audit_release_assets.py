@@ -88,6 +88,7 @@ def verify_signer_identity(digests, expected):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--verify-apks", action="store_true")
+    parser.add_argument("--verify-all-bytes", action="store_true", help="Download and hash every release asset, not only APKs and SHA256SUMS")
     args = parser.parse_args()
     trusted_signer = os.environ.get("RELEASE_AUDIT_TRUSTED_SIGNER_SHA256", "").strip()
     if args.verify_apks and not trusted_signer:
@@ -123,6 +124,7 @@ def main():
             apk_names = [a for a in assets if a["name"].endswith("-signed.apk")]
             if len(apk_names) != 3:
                 raise ValueError("Expected three Android APKs")
+            byte_verified = 1  # SHA256SUMS itself was downloaded and hashed.
             verified = []
             if args.verify_apks:
                 for asset in apk_names:
@@ -138,8 +140,24 @@ def main():
                     verify_signer_identity(digests, trusted_signer)
                     verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": digests})
                     path.unlink()
-            result.append({"release_id": release_id, "release_name": release["name"], "asset_count": len(assets), "sums_verified": True, "apk_signatures_verified": verified})
-    print(json.dumps({"status": "PASS", "scope": "GitHub metadata and SHA256SUMS; optional APK v2/v3 validation", "releases": result}, indent=2))
+                    byte_verified += 1
+            if args.verify_all_bytes:
+                # A successful result requires a fresh byte-level digest for every
+                # asset. Never infer byte verification from GitHub metadata alone.
+                already_checked = {a["name"] for a in apk_names} if args.verify_apks else set()
+                for asset in assets:
+                    if asset["name"] == "SHA256SUMS" or asset["name"] in already_checked:
+                        continue
+                    path = folder / ("payload-" + str(release_id))
+                    actual = download(asset, path)
+                    if checksums[asset["name"]] != actual:
+                        raise ValueError("Downloaded asset differs from SHA256SUMS: " + asset["name"])
+                    path.unlink()
+                    byte_verified += 1
+                if byte_verified != len(assets):
+                    raise ValueError("Incomplete byte-level verification")
+            result.append({"release_id": release_id, "release_name": release["name"], "asset_count": len(assets), "sums_verified": True, "byte_verified_count": byte_verified, "full_byte_verification": bool(args.verify_all_bytes), "apk_signatures_verified": verified})
+    print(json.dumps({"status": "PASS", "scope": "GitHub metadata and SHA256SUMS; optional full asset byte hashing and APK v2/v3 validation", "releases": result}, indent=2))
 
 if __name__ == "__main__":
     main()

@@ -27,7 +27,7 @@ jobs:
       github.workflow_ref == format('{0}/.github/workflows/release-asset-verification.yml@refs/heads/main', github.repository)
     environment: release-audit
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -52,4 +52,4 @@ jobs:
         env:
           RELEASE_AUDIT_TOKEN: ${{ steps.audit-token.outputs.token }}
           RELEASE_AUDIT_TRUSTED_SIGNER_SHA256: ${{ vars.RELEASE_AUDIT_TRUSTED_SIGNER_SHA256 }}
-        run: python3 -m scripts.release.audit_release_assets --verify-apks
+        run: python3 -m scripts.release.audit_release_assets --verify-apks --verify-all-bytes
