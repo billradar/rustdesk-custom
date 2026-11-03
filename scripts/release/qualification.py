@@ -385,7 +385,11 @@ def _release(root, publish, channel='stable', experimental=False):
         i.get('signed_status')=='PRODUCTION SIGNED / IDENTITY VERIFIED'
         and i.get('signing_identity_verified') is True
         and {2,3}.issubset(set(i.get('signing_schemes',[]))) for i in android_infos)
-    tag=f'v{version}-custom.{standard["patch_revision"]}'
+    from scripts.release.channel import next_patch_revision
+    expected_content_revision=next_patch_revision(version, standard['patchset'])
+    if standard['patch_revision'] != expected_content_revision:
+        raise ValueError('Artifact Patchset content revision differs from metadata')
+    tag=f'v{version}-custom.{expected_content_revision}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
     if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
@@ -406,6 +410,8 @@ def _release(root, publish, channel='stable', experimental=False):
         f'upstream_tag={standard["upstream_tag"]}',
         f'upstream_sha={standard["upstream_sha"]}',
         f'patchset={standard["patchset"]}',
+        f'patchset_version={expected_content_revision}',
+        'version_semantics=patchset-content-v1',
         f'common_patch_hash={standard["common_patch_hash"]}',
         f'sos_patch_hash={sos["sos_patch_hash"]}',
         f'custom_repository_sha={standard["custom_repository_sha"]}',

@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.upstream.resolve import api, choose_stable, resolve_ref
 from scripts.release.github import collect, request, gh
 from scripts.upstream.patchsets import verify, patch_hash
+from scripts.upstream.patchset_version import current, SCHEMA as VERSION_SEMANTICS
 from scripts.release.production import assets, REPOSITORY
 from scripts.release.naming import windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
@@ -120,12 +121,16 @@ def require_release_tag(row, version):
     return tag
 
 def next_patch_revision(version, patchset):
-    match=PATCHSET_RE.fullmatch(patchset)
-    if not match: raise ValueError('Invalid patchset revision')
-    patch_number=match.group(1)
-    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\.v'+re.escape(patch_number)+r'\.([1-9][0-9]{0,5})$')
-    nums=[int(m.group(1)) for row in release_rows(version) if (tag:=release_tag_name(row,version)) and (m:=pattern.fullmatch(tag))]
-    return f'v{patch_number}.{max(nums or [0])+1}'
+    """Current Patchset content revision; never allocate from GitHub Releases."""
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+        raise ValueError('Invalid Stable upstream version')
+    if not PATCHSET_RE.fullmatch(patchset):
+        raise ValueError('Invalid Patchset version namespace')
+    data = current(patchset)
+    if data.get('id') != patchset or type(data.get('revision')) is not int:
+        raise ValueError('Patchset content revision mismatch')
+    return f'{patchset}.{data["revision"]}'
+
 
 def parse_patch_revision(tag, version):
     match=CUSTOM_REVISION_RE.fullmatch(tag)
@@ -213,21 +218,15 @@ def release_preflight(data):
     current_identity=build_identity(data['upstream_sha'],data['patchset'],common_hash,
                                     sos_hash,None,wayland_included,wayland_policy_sha256,
                                     signing_enabled)
-    same=same_identity_release(data['version'],current_identity)
-    accepted_build_identity=current_identity
-    if not same:
-        same,legacy_identity=same_legacy_identity_release(data,common_hash,sos_hash,wayland_included,
-                                                          wayland_policy_sha256,signing_enabled)
-        if same:
-            accepted_build_identity=legacy_identity
-    if same:
-        data['release_tag']=require_release_tag(same,data['version'])
-        data['patch_revision']=parse_patch_revision(data['release_tag'],data['version'])
-        data['revision']=data['patch_revision']
-    else:
-        data['patch_revision']=next_patch_revision(data['version'],data['patchset'])
-        data['revision']=data['patch_revision']
-        data['release_tag']=f'v{data["version"]}-custom.{data["patch_revision"]}'
+    # Immutable tag is the reviewed Patchset content revision, not an
+    # incrementing Release count. Historical tags retain original semantics.
+    revision = next_patch_revision(data['version'], data['patchset'])
+    if 'patch_revision' in data and data['patch_revision'] != revision:
+        raise ValueError('Locked Patchset content revision drift')
+    data['patch_revision'] = data['revision'] = data['patchset_version'] = revision
+    data['version_semantics'] = VERSION_SEMANTICS
+    data['release_tag'] = f'v{data["version"]}-custom.{revision}'
+    accepted_build_identity = current_identity
     existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
     if not existing:
         drafts=matching_drafts(data['release_tag'])
@@ -235,9 +234,15 @@ def release_preflight(data):
         existing=drafts[0] if drafts else None
     if not existing:
         if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True): raise ValueError('Existing tag without completed release; review revision')
-        data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
+        data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_CONTENT_VERSION_TARGET'
         return data
     body=existing.get('body') or ''
+    if (f'version_semantics={VERSION_SEMANTICS}' not in body.splitlines()
+            and f'Version Semantics: {VERSION_SEMANTICS}' not in body.splitlines()):
+        raise ValueError('Legacy release semantics cannot be reinterpreted as Patchset content revision')
+    recorded_identity = release_metadata(body).get('Build Identity', '')
+    if recorded_identity != current_identity:
+        raise ValueError('IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION: current content tag has a different Build Identity')
     recorded_custom_sha=release_metadata(body).get('Custom Repository SHA', '')
     if re.fullmatch(r'[0-9a-f]{40}', recorded_custom_sha):
         # Reused artifacts retain their original commit as provenance. This SHA
@@ -354,7 +359,11 @@ def draft(root):
     infos,folders=collect(root);validate_prepared(infos,folders)
     if any(i['channel']!='stable' for i in infos.values()):raise ValueError('Only stable creates drafts')
     _,directory=assets(root)
-    info=infos['standard'];tag=f'v{info["upstream_tag"].lstrip("v")}-custom.{info["patch_revision"]}'
+    info=infos['standard']
+    expected_version=next_patch_revision(info['upstream_version'], info['patchset'])
+    if info['patch_revision'] != expected_version:
+        raise ValueError('Artifact Patchset content revision changed before draft')
+    tag=f'v{info["upstream_tag"].lstrip("v")}-custom.{expected_version}'
     if api(f'repos/{REPOSITORY}/releases/tags/{tag}',missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     if any(r.get('draft') and r.get('name')==tag for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])):
         raise ValueError('Existing unpublished revision draft; never replace it')
@@ -376,6 +385,8 @@ def draft(root):
         f'Wayland Included: {str(wayland_included).lower()}',
         *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
         f'Patch Revision: {info["patch_revision"]}',
+        f'Version Semantics: {VERSION_SEMANTICS}',
+        f'Patchset Version: {expected_version}',
         f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],None,wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true")}',
         f'Asset Inventory: {inventory}',
         'automation_state=complete',
