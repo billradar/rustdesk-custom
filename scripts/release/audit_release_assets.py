@@ -15,7 +15,7 @@ HEX = re.compile(r"^[0-9a-f]{64}$")
 MAX_BYTES = 150 * 1024 * 1024
 
 def request(url, accept="application/vnd.github+json"):
-    token = os.environ.get("GH_TOKEN", "")
+    token = os.environ.get("RELEASE_AUDIT_TOKEN", "")\n    if not token:\n        raise RuntimeError("RELEASE_AUDIT_TOKEN is required for private draft releases")
     headers = {"Accept": accept, "User-Agent": "rustdesk-release-asset-audit", "X-GitHub-Api-Version": "2022-11-28"}
     if token:
         headers["Authorization"] = "Bearer " + token
