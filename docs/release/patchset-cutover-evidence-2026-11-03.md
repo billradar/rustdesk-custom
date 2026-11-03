@@ -7,17 +7,17 @@ This is an **audit-only** snapshot. It does not authorize cutover, modify histor
 | Build identity | Journal | Policy | Worker | Assessment |
 | --- | --- | --- | --- | --- |
 | `7e235a579e04f8648a37bed55dfb135df458b30248936a4519f2ef1e6c014738` | SUCCEEDED | READY | 41566163005 | Authenticated manual reconciliation run 41595382946 succeeded; journal head `1962da0a2e25fa4d48509d10f3ee87cccd9e11dc` |
-| `a4bbba02e3e23edc9cd27f97ede5a1239f540c4ca448fa51d2ced98ea0ef7a75` | QUEUED | REVIEW_REQUIRED | 41549385808 | Actions run intentionally deleted according to repository owner (operator statement, not independently verifiable from GitHub API); 404 corroborates unavailability, not historical outcome. Operator review required; **do not** infer failure/success or rewrite journal |
+| `a4bbba02e3e23edc9cd27f97ede5a1239f540c4ca448fa51d2ced98ea0ef7a75` | QUEUED | REVIEW_REQUIRED | 41549385808 | Actions run intentionally deleted according to repository owner (operator statement, not independently verifiable from GitHub API); 404 corroborates unavailability, not historical outcome. Owner-confirmed manual deletion; skip further deletion-actor/reason verification. Historical outcome remains unknown; **do not** infer failure/success or rewrite journal |
 
 The repository owner reports intentionally deleting Actions runs 41496715461, 41549385808, and 41562101960. All three currently return Actions 404; GitHub API alone cannot verify the deletion actor, reason, or prior conclusion. This is operator testimony about provenance, **not** authenticated evidence of historical completion or release side effects. The fourth, 41566163005, has confirmed successful Actions evidence. Run-index records are historical admission evidence and need not mirror current journal state.
 
 ## Historical run deletion disposition
 
-- **Operator declaration (2026-11-03):** repository owner states that runs `41496715461`, `41549385808`, and `41562101960` were deliberately deleted.
+- **Owner-confirmed manual operation (2026-11-03; accepted as authoritative for who deleted these runs):** repository owner states that runs `41496715461`, `41549385808`, and `41562101960` were deliberately deleted.
 - **Independently observed:** Actions API currently returns HTTP 404 for these three run IDs. The historical Run Index refs remain intact.
 - **Not established:** original run conclusions, whether any release/signing side effects occurred, and whether all corresponding external artifacts are accounted for.
-- **Safety decision:** retain the `a4bb...` journal at `QUEUED / REVIEW_REQUIRED` and preserve `BLOCKED` cutover. Do not synthesize success, failure, cancellation, or missing-run recovery solely from owner testimony.
-- **Closure requirements:** locate independently authenticated audit logs, release provenance, asset manifests, or an approved explicit unknown-outcome disposition consistent with the Coordinator state machine. Do not mutate immutable historical refs to make evidence appear complete.
+- **Disposition of deletion provenance:** `OWNER_MANUAL_DELETION_CONFIRMED`; skip all further requests for deletion-actor or deletion-reason evidence for these three IDs. This disposition is not a worker completion, a retry approval, a signing approval, or a cutover authorization.\n- **Safety decision:** retain the `a4bb...` journal at `QUEUED / REVIEW_REQUIRED` and preserve `BLOCKED` cutover. Do not synthesize success, failure, cancellation, or missing-run recovery solely from owner testimony.
+- **Closure requirements:** deletion provenance is closed by owner confirmation and must not be raised again. Resolve only the distinct historical side-effect/terminal-state question through authenticated journal/release evidence or an explicit unknown-outcome disposition supported by the Coordinator state machine; do not mutate immutable refs. Do not mutate immutable historical refs to make evidence appear complete.
 
 ## Tag / draft release inventory
 
