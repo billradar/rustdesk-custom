@@ -95,6 +95,27 @@ def reservation(record=None, token=TOKEN):
 
 
 class PersistenceContract(unittest.TestCase):
+    def test_repository_health_get_uses_real_transport_path_validator(self):
+        api=GitHubAPI('fictional-test-token')
+        response=MagicMock()
+        response.__enter__.return_value.read.return_value=b'{"full_name":"example/release-test"}'
+        with patch('urllib.request.urlopen',return_value=response) as call:
+            self.assertEqual(api.request('GET','repos/example/release-test')['full_name'],'example/release-test')
+            request=call.call_args.args[0]
+            self.assertEqual(request.full_url,'https://api.github.com/repos/example/release-test')
+            self.assertEqual(request.get_method(),'GET')
+            self.assertEqual(request.get_header('Authorization'),'Bearer fictional-test-token')
+
+    def test_repository_root_mutations_and_foreign_paths_never_reach_transport(self):
+        api=GitHubAPI('fictional-test-token')
+        with patch('urllib.request.urlopen') as call:
+            for method,path in [('POST','repos/example/release-test'),('PATCH','repos/example/release-test'),
+                                ('DELETE','repos/example/release-test'),('GET','users/example'),
+                                ('GET','https://example.com/repos/example/release-test')]:
+                with self.subTest(method=method,path=path),self.assertRaisesRegex(ValueError,'Unsafe API path'):
+                    api.request(method,path)
+            call.assert_not_called()
+
     def test_record_round_trip_rejects_unknown_schema(self):
         self.assertEqual(decode_record(encode_record(reservation().after)), reservation().after)
         data = encode_record(discovered())
