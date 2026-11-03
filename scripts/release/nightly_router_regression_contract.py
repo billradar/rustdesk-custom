@@ -44,6 +44,21 @@ class NightlyRouterRegression(unittest.TestCase):
         with self.assertRaises(ValueError):
             nightly.skip_duplicate_dispatch('UNKNOWN', 'release')
 
+    def test_nightly_router_checkbox_and_build_gate(self):
+        import yaml
+        root = Path(__file__).resolve().parents[2]
+        for path in ('upstream-nightly.yml', 'nightly.yml'):
+            w = yaml.safe_load((root/'.github/workflows'/path).read_text())
+            option = w['on']['workflow_dispatch']['inputs']['force_retry']
+            self.assertEqual(option['type'], 'boolean')
+            self.assertIs(option['default'], False)
+        router = yaml.safe_load((root/'.github/workflows/upstream-nightly.yml').read_text())
+        build = yaml.safe_load((root/'.github/workflows/nightly.yml').read_text())
+        route_step = next(s for s in router['jobs']['route']['steps'] if 'route' in s.get('run',''))
+        dedup_step = next(s for s in build['jobs']['resolve']['steps'] if s.get('id') == 'dedup')
+        self.assertIn('inputs.force_retry', route_step['env']['FORCE_RETRY'])
+        self.assertIn('inputs.force_retry', dedup_step['env']['FORCE_RETRY'])
+
     def test_main_dry_run_never_queries_lite_history(self):
         import tempfile
         from pathlib import Path
@@ -85,6 +100,20 @@ class NightlyRouterRegression(unittest.TestCase):
                  patch.object(nightly, 'discovery_from_run', return_value=fixture):
                 nightly.dedup()
             self.assertIn('skip=false',output.read_text())
+
+    def test_nightly_force_router_propagates_to_build(self):
+        env = dict(GITHUB_REPOSITORY='example/repo', GITHUB_REF='refs/heads/main',
+                   GITHUB_EVENT_NAME='workflow_dispatch', FORCE_RETRY='true',
+                   ANDROID_PRODUCTION_SIGNING_ENABLED='false')
+        data = dict(upstream_sha='a'*40, patchset='v2',
+                    common_patch_hash='b'*64, sos_patch_hash='c'*64)
+        with patch.dict(os.environ, env), \
+             patch.object(nightly,'api',return_value={'workflow_runs':[]}), \
+             patch.object(nightly,'decide',return_value='RETRY') as decision, \
+             patch.object(nightly.subprocess,'run') as dispatch:
+            nightly.route(data)
+        self.assertTrue(decision.call_args.kwargs['force_retry'])
+        self.assertIn('force_retry=true', dispatch.call_args.args[0])
 
     def test_retry_policy_does_not_count_cancelled_as_retryable(self):
         from scripts.release.router_retry_policy import decide

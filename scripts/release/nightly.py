@@ -16,7 +16,7 @@ try:
     import tomllib
 except ImportError:
     import tomli as tomllib
-from scripts.release.router_retry_policy import decide
+from scripts.release.router_retry_policy import decide, requested_force_retry
 from scripts.release.coordinator_lite import from_hashes as lite_identity
 from scripts.upstream.resolve import api
 from scripts.upstream.patchsets import patchset_for_version, patch_hash
@@ -204,6 +204,7 @@ def route(data):
     if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')):
         raise ValueError('Nightly router requires trusted main context')
+    force_retry = requested_force_retry()
     rows = []
     for page in range(1, 11):
         batch = api(f'repos/{repo}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
@@ -228,14 +229,15 @@ def route(data):
                 and r.get('_nightly_identity') == identity
                 and r.get('event') == 'workflow_dispatch'
                 and r.get('head_branch') == 'main']
-    state = decide(matching)
-    print('Nightly route: ' + state)
+    state = decide(matching, force_retry=force_retry)
+    print('Nightly route: ' + state + (' (manual force_retry)' if force_retry else ''))
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review (cancelled, unknown, or exhausted)')
     if state == 'RETRY':
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
-                        '-f', 'include_wayland=true'], check=True)
+                        '-f', 'include_wayland=true',
+                        '-f', f'force_retry={str(force_retry).lower()}'], check=True)
 
 
 def skip_duplicate_dispatch(state, mode):
@@ -266,6 +268,9 @@ def dedup():
     signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
     if mode not in ('dry-run', 'draft', 'release') or wayland not in ('true', 'false') or signing not in ('true', 'false'):
         raise ValueError('Invalid Nightly dedup configuration')
+    force_retry = requested_force_retry()
+    if force_retry and mode == 'dry-run':
+        raise ValueError('force_retry is not valid for dry-run')
     if os.environ['GITHUB_REF'] == 'refs/heads/development' and mode != 'dry-run':
         raise ValueError('Development Nightly runs are dry-run only')
     if mode == 'dry-run':
@@ -301,7 +306,7 @@ def dedup():
                     and r.get('_nightly_identity') == identity
                     and r.get('event') == 'workflow_dispatch'
                     and r.get('head_branch') == 'main']
-        state = decide(matching)
+        state = decide(matching, force_retry=force_retry)
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review')
     skip = skip_duplicate_dispatch(state, mode)

@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 
-from scripts.release.router_retry_policy import decide
+from scripts.release.router_retry_policy import decide, requested_force_retry
 from scripts.release.coordinator_lite import from_hashes as lite_identity
 from scripts.release.channel import build_identity, release_preflight, wayland_identity
 from scripts.upstream.patchsets import patch_hash, patchset_for_version
@@ -139,7 +139,7 @@ def run_state(rows):
     return 'EXHAUSTED' if len(rows) >= MAX_ATTEMPTS else 'RETRY'
 
 
-def dispatch(tag):
+def dispatch(tag, force_retry=False):
     subprocess.run([
         'gh', 'workflow', 'run', WORKFLOW,
         '--repo', REPOSITORY,
@@ -147,6 +147,7 @@ def dispatch(tag):
         '-f', f'upstream_ref={tag}',
         '-f', 'release_mode=draft',
         '-f', 'include_wayland=true',
+        '-f', f'force_retry={str(force_retry).lower()}',
     ], check=True)
 
 
@@ -159,6 +160,9 @@ def dedup():
     mode = os.environ.get('RELEASE_MODE', 'draft')
     if mode not in ('draft', 'dry-run', 'release'):
         raise ValueError('Invalid Stable release mode')
+    force_retry = requested_force_retry()
+    if force_retry and mode == 'dry-run':
+        raise ValueError('force_retry is not valid for dry-run')
     if mode == 'dry-run':
         # Dry runs are isolated from both historical and active Lite admission.
         # Continue to the normal source/patch/lock and build validation.
@@ -181,7 +185,7 @@ def dedup():
     identity = lite_identity(locked['upstream_sha'], locked['common_patch_hash'],
                              locked['sos_patch_hash'])
     rows = workflow_runs(locked['upstream_tag'], identity, prior_run_number=number)
-    state = decide(rows)
+    state = decide(rows, force_retry=force_retry)
     if state == 'REVIEW':
         raise ValueError('Stable Lite uncertain historical run requires manual review')
     # Release can publish a verified prior draft; it must not rebuild an active one.
@@ -198,6 +202,7 @@ def dedup():
 
 def route():
     verify_context()
+    force_retry = requested_force_retry()
     data = discovery()
     # Rebuild eligibility is determined by upstream+patchset, not release
     # version alone: a changed patchset on the same upstream is a new build.
@@ -205,7 +210,7 @@ def route():
                              patch_hash('common', data['patchset']),
                              patch_hash('sos', data['patchset']))
     matches = workflow_runs(data['upstream_tag'], identity)
-    state = decide(matches)
+    state = decide(matches, force_retry=force_retry)
     if state in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
         print(f"Stable matching build state={state}; skip.")
         return
@@ -215,8 +220,9 @@ def route():
         print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
         return
 
-    dispatch(data['upstream_tag'])
-    print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
+    dispatch(data['upstream_tag'], force_retry=force_retry)
+    print(f"Dispatched Stable Draft build for {data['upstream_tag']}."
+          + (' (manual force_retry)' if force_retry else ''))
 
 
 if __name__ == '__main__':

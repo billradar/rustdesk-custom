@@ -2,7 +2,12 @@ name: Upstream Stable Router
 'on':
   schedule:
     - cron: '11 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_retry:
+        type: boolean
+        default: false
+        description: Bypass 6-hour cooldown for a manual retry only; all other gates remain
 permissions:
   contents: read
   actions: read
@@ -20,6 +25,7 @@ jobs:
     env:
       PYTHONPATH: .
       GH_TOKEN: ${{ github.token }}
+      FORCE_RETRY: ${{ github.event_name == 'workflow_dispatch' && inputs.force_retry && 'true' || 'false' }}
       ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09

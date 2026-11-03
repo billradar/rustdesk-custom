@@ -177,6 +177,7 @@ class NightlyTests(unittest.TestCase):
             args=dispatch.call_args.args[0]
             self.assertFalse(any(x.startswith(('official_run_id=', 'expected_sha=')) for x in args))
             self.assertIn('release_mode=draft',args)
+            self.assertIn('force_retry=false',args)
             self.assertEqual(args[args.index('--repo')+1],clone)
             self.assertEqual(args[args.index('--ref')+1],'main')
 
@@ -230,7 +231,11 @@ class NightlyTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['resolve']['if'])
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
         self.assertTrue(w['run-name'].startswith('Nightly latest /'))
-        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland'})
+        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland', 'force_retry'})
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
+        self.assertIs(w['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
+        dedup_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'dedup')
+        self.assertIn('inputs.force_retry', dedup_step['env']['FORCE_RETRY'])
         resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')

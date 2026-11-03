@@ -1,7 +1,9 @@
 """Offline retry-state contracts for Stable and Nightly routers."""
 import unittest
+import os
+from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
-from scripts.release.router_retry_policy import decide
+from scripts.release.router_retry_policy import decide, requested_force_retry
 
 NOW = datetime(2026, 11, 2, tzinfo=timezone.utc)
 
@@ -31,6 +33,25 @@ class RouterRetryPolicyContract(unittest.TestCase):
         for outcome in ('cancelled', 'skipped', 'action_required', None):
             with self.subTest(outcome=outcome):
                 self.assertEqual(decide([row(outcome, 20)], NOW), 'REVIEW')
+
+    def test_force_bypasses_only_cooldown(self):
+        self.assertEqual(decide([row(hours=1)], NOW, force_retry=True), 'RETRY')
+        self.assertEqual(decide([row(status='queued')], NOW, force_retry=True), 'ACTIVE')
+        self.assertEqual(decide([row('success', 1)], NOW, force_retry=True), 'SUCCESS')
+        self.assertEqual(decide([row(hours=1)] * 3, NOW, force_retry=True), 'REVIEW')
+        self.assertEqual(decide([row('cancelled', 1)], NOW, force_retry=True), 'REVIEW')
+        self.assertEqual(decide([row(None, 1)], NOW, force_retry=True), 'REVIEW')
+
+    def test_force_requires_manual_main_and_valid_boolean(self):
+        valid = {'FORCE_RETRY': 'true', 'GITHUB_EVENT_NAME': 'workflow_dispatch',
+                 'GITHUB_REF': 'refs/heads/main'}
+        self.assertTrue(requested_force_retry(valid))
+        self.assertFalse(requested_force_retry(dict(valid, FORCE_RETRY='false')))
+        for changed in (dict(valid, GITHUB_EVENT_NAME='schedule'),
+                        dict(valid, GITHUB_REF='refs/heads/development'),
+                        dict(valid, FORCE_RETRY='yes')):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                requested_force_retry(changed)
 
     def test_missing_timestamp_fails_closed(self):
         with self.assertRaises(ValueError):
