@@ -19,6 +19,58 @@ class RealPatchsetRevisionContract(unittest.TestCase):
             channel.next_patch_revision('1.5.1','v999999')
 
 
+class StablePatchsetNotesContract(unittest.TestCase):
+    def test_stable_draft_contains_reviewed_notes_without_cutover(self):
+        from scripts.release.content import notes as patchset_notes
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            destination=Path(directory)
+            asset=destination/'client.apk'
+            asset.write_bytes(b'validated test asset')
+            info=dict(channel='stable',upstream_tag='v1.5.1',
+                      upstream_version='1.5.1',upstream_sha='a'*40,
+                      patchset='v2',patch_revision='v2.8',
+                      common_patch_hash=channel.patch_hash('common','v2'),
+                      custom_repository_sha='b'*40,
+                      upstream_changelog='# Official upstream notes')
+            sos=dict(info,variant='sos',sos_patch_hash=channel.patch_hash('sos','v2'))
+            captured=[]
+            def fake_api(path,missing=False):
+                if '/releases/tags/' in path or '/git/ref/tags/' in path:
+                    return None
+                if path.endswith('releases?per_page=100'):
+                    return []
+                if path.endswith('/releases/7/assets'):
+                    return [dict(name=asset.name,size=asset.stat().st_size,state='uploaded')]
+                raise AssertionError(path)
+            def fake_request(method,path,payload):
+                captured.append((method,payload))
+                return {'id':7,'draft':True}
+            with patch.dict(os.environ, {'GITHUB_REPOSITORY':channel.REPOSITORY,
+                                         'REQUIRE_ANDROID_PRODUCTION_SIGNING':'false'}), \\
+                 patch.object(channel,'collect',return_value=({'standard':info,'sos':sos},{})), \\
+                 patch.object(channel,'validate_prepared'), \\
+                 patch.object(channel,'assets',return_value=(None,destination)), \\
+                 patch.object(channel,'wayland_identity',return_value=(False,'')), \\
+                 patch.object(channel,'api',side_effect=fake_api), \\
+                 patch.object(channel,'request',side_effect=fake_request), \\
+                 patch.object(channel,'gh'), \\
+                 patch('scripts.release.stable_tag.ensure'), \\
+                 patch('scripts.release.content.require_cutover',side_effect=AssertionError('Old cutover must stay disabled')), \\
+                 patch('scripts.release.content.policy_digest',side_effect=AssertionError('Policy hash must not allocate notes')):
+                channel.draft(destination)
+            body=captured[0][1]['body']
+            self.assertTrue(body.startswith('# Official upstream notes'))
+            self.assertIn('## Patchset v2.8',body)
+            self.assertIn('Current included customizations',body)
+            self.assertIn('Recorded Patchset revision delta',body)
+            self.assertIn('Known limitations:',body)
+            self.assertIn('Patchset Version: v2.8',body)
+            self.assertIn(patchset_notes('v2'),body)
+            self.assertLess(body.index('## Patchset v2.8'),body.index('<!-- rustdesk-custom-release-metadata'))
+            self.assertEqual(body,captured[-1][1]['body'])
+
+
 class BuildInterfaceTests(unittest.TestCase):
     def test_unreviewed_build_definition_blocks(self):
         unknown={'signature':'0'*64}

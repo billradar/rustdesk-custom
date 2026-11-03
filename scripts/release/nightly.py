@@ -517,7 +517,19 @@ def draft(root, discovery):
         checksum_actual[match.group(2)] = match.group(1)
     if checksum_actual != checksum_expected:
         raise ValueError('Nightly SHA256SUMS does not match public assets')
+    # Release note content is reviewed alongside the Common/SOS patch hashes;
+    # it is never a Coordinator Lite deduplication input.
+    from scripts.upstream.patchset_version import current as current_patchset, SCHEMA as VERSION_SEMANTICS
+    from scripts.release.content import notes as patchset_notes
+    reviewed_patchset = current_patchset(data['patchset'])
+    content_version = f'{data["patchset"]}.{reviewed_patchset["revision"]}'
+    if reviewed_patchset['hashes'] != {
+            'common': identity_data['common_patch_hash'],
+            'sos': identity_data['sos_patch_hash']}:
+        raise ValueError('Nightly Patchset notes differ from compiled patch content')
     metadata = [f'channel=nightly', 'nightly_identity=' + identity,
+                'patchset_version=' + content_version,
+                'version_semantics=' + VERSION_SEMANTICS,
                 'upstream_repository=' + OFFICIAL, 'upstream_sha=' + data['upstream_sha'],
                 'official_run_id=' + run_id, 'official_run_url=' + data['official_run_url'],
                 'custom_repository_sha=' + os.environ['GITHUB_SHA'], 'build_run=' + os.environ['GITHUB_RUN_ID'],
@@ -533,7 +545,8 @@ def draft(root, discovery):
     if identity_data['wayland_policy_sha256']:
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy_sha256'])
     notes = (upstream_notes + '\n\n'
-             '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n')
+             '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n'
+             + '\n' + patchset_notes(data['patchset'], nightly=True))
 
     # The tag remains moving. Refresh private Drafts with a new Release identity;
     # published prereleases retain the explicitly authorized release-mode path.
@@ -568,6 +581,8 @@ def draft(root, discovery):
             'upstream_sha=' + data['upstream_sha'],
             'custom_repository_sha=' + os.environ['GITHUB_SHA'],
             'patchset=' + data['patchset'],
+            'patchset_version=' + content_version,
+            'version_semantics=' + VERSION_SEMANTICS,
             'common_patch_hash=' + identity_data['common_patch_hash'],
             'sos_patch_hash=' + identity_data['sos_patch_hash'],
             'wayland_included=' + str(identity_data['wayland_included']).lower(),
