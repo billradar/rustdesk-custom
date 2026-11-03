@@ -1,0 +1,45 @@
+name: Read-only release asset verification
+'on':
+  pull_request:
+    paths:
+      - 'scripts/release/audit_release_assets.py'
+      - '.github/workflows/release-asset-verification.yml'
+      - 'scripts/release/audit_release_assets_contract.py'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    name: Validate release audit code without private assets
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Run offline verifier contracts
+        run: python3 -m scripts.release.audit_release_assets_contract
+  release-assets:
+    name: Verify private draft assets (protected main only)
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/release-asset-verification.yml@refs/heads/main', github.repository)
+    environment: release-audit
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install Android APK signature verifier
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}"
+          TOOL="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          test -n "$TOOL"
+          echo "$(dirname "$TOOL")" >> "$GITHUB_PATH"
+      - name: Verify private release checksums and APK signatures
+        env:
+          RELEASE_AUDIT_TOKEN: ${{ secrets.RELEASE_AUDIT_TOKEN }}
+        run: python3 -m scripts.release.audit_release_assets --verify-apks
