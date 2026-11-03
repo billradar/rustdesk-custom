@@ -42,7 +42,7 @@ def github_get(path, token):
         fail('GitHub API read failed: ' + str(error))
 
 
-def verify(evidence, get):
+def verify(evidence, get, *, own_run_id=None):
     if not isinstance(evidence, dict) or set(evidence) != {
             'main_sha', 'successful_run_ids', 'journal_heads', 'release_ids'}:
         fail('unexpected or missing evidence fields')
@@ -110,8 +110,12 @@ def verify(evidence, get):
                 or len(item['assets']) != 32):
             fail('release draft or assets changed: ' + str(release_id))
     for status in ('in_progress', 'queued', 'waiting'):
-        queue = get('actions/runs?status=' + status + '&per_page=1')
-        if type(queue.get('total_count')) is not int or queue['total_count'] != 0:
+        queue = get('actions/runs?status=' + status + '&per_page=100')
+        rows = queue.get('workflow_runs')
+        if (type(queue.get('total_count')) is not int or not isinstance(rows, list)
+                or queue['total_count'] >= 100 or len(rows) != queue['total_count']):
+            fail('incomplete GitHub Actions queue inventory: ' + status)
+        if any(run.get('id') != own_run_id for run in rows):
             fail('GitHub Actions is not quiescent: ' + status)
     return {'decision': 'EVIDENCE_VERIFIED_NOT_ACTIVATED', 'repository': REPOSITORY,
             'main_sha': sha, 'run_ids': runs, 'journal_heads': heads,
@@ -124,7 +128,8 @@ def main():
     args = parser.parse_args()
     with open(args.evidence, encoding='utf-8') as stream:
         evidence = json.load(stream)
-    result = verify(evidence, lambda path: github_get(path, os.environ.get('GITHUB_TOKEN')))
+    result = verify(evidence, lambda path: github_get(path, os.environ.get('GITHUB_TOKEN')),
+                    own_run_id=int(os.environ['GITHUB_RUN_ID']) if os.environ.get('GITHUB_RUN_ID') else None)
     print(json.dumps(result, sort_keys=True))
 
 
