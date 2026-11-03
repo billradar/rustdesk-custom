@@ -7,7 +7,7 @@ Baseline main: `2b871ad992a62fcac2d39b83e6ad045f3083b916`. The four review stage
 | 1 | [#192](https://github.com/billradar/rustdesk-custom/pull/192) | Historical audit and explicit read-only legacy mapping, unknown spelling rejection, blocked migration diagnostic |
 | 2 | [#193](https://github.com/billradar/rustdesk-custom/pull/193) | Base-anchored bump/verify/render, reviewed structured history, generated Changelog and read-only PR gate |
 | 3 | [#194](https://github.com/billradar/rustdesk-custom/pull/194) | Manifest readers, shared Coordinator identity policy v2, Stable/Nightly Notes, immutable target collision and blocked production cutover |
-| 4 | Current branch `patchset/04-client-regression-20261103` | Explicit client semantics, legacy tag/source/hash mapping, independent Nightly content metadata and regression evidence |
+| 4 | [#195](https://github.com/billradar/rustdesk-custom/pull/195) | Explicit client semantics, legacy tag/source/hash mapping, independent Nightly content metadata and regression evidence |
 
 ## Actual version lineage
 

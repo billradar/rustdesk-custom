@@ -43,7 +43,7 @@ Reason: Separate content-version provenance from Stable update eligibility and r
 
 - Preserve old installed-build parsing and the two audited legacy Stable release identities; retain upstream numeric version priority and exact Standard/SOS/Wayland asset checks.
 
-References: https://github.com/billradar/rustdesk-custom/pull/194
+References: https://github.com/billradar/rustdesk-custom/pull/195, https://github.com/billradar/rustdesk-custom/pull/194
 
 Upstream compatibility: The upstream selection boundary and numeric upstream-first update ordering are unchanged. Known legacy releases are recognized only by audited tag/source/hash mappings; unmarked unknown tags fail closed.
 

@@ -135,6 +135,7 @@
         },
         "reason": "Separate content-version provenance from Stable update eligibility and reject ambiguous legacy release semantics during migration.",
         "references": [
+          "https://github.com/billradar/rustdesk-custom/pull/195",
           "https://github.com/billradar/rustdesk-custom/pull/194"
         ],
         "compatibility": "The upstream selection boundary and numeric upstream-first update ordering are unchanged. Known legacy releases are recognized only by audited tag/source/hash mappings; unmarked unknown tags fail closed.",
