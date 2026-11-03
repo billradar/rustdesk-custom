@@ -64,17 +64,17 @@ def download(asset, dest):
 def sums_parse(data):
     result = {}
     for line in data.splitlines():
-        match = re.fullmatch(r"([0-9a-fA-F]{64})  \*?([^\r\n]+)", line)
+        match = re.fullmatch(r"([0-9a-fA-F]{64}) ([ *])([^\\\\\r\n]+)", line)
         if not match:
             raise ValueError("Malformed SHA256SUMS entry")
-        name = match.group(2)
+        name = match.group(3)
         if "/" in name or "\\" in name or name in result:
             raise ValueError("Unsafe or duplicate checksum filename")
         result[name] = match.group(1).lower()
     return result
 
 def signer_digests(output):
-    digests = re.findall(r"Signer #\\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", output)
+    digests = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", output)
     if not digests:
         raise ValueError("APK signer certificate SHA-256 digest missing")
     return [digest.lower() for digest in digests]
