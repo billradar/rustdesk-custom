@@ -83,7 +83,19 @@ def build(data, channel, mode):
                            wayland, policy, signing, mode, **content)
     if channel == 'stable':
         result.verify_historical(data['build_identity'])
+    require_v2_admission(result)
     return result
+
+
+def require_v2_admission(identity):
+    """New production admissions require frozen content-v2 identity inputs.
+
+    Historical v1 journals remain readable by reconciliation and recovery; this
+    guard applies only to new router/admission discovery, not archived records.
+    """
+    if (identity.policy_version != 2 or not identity.patchset_version
+            or not identity.build_policy_sha256):
+        raise ValueError('LEGACY_IDENTITY_V1_RETIRED: new builds require Content Identity v2')
 
 
 def index_record(api, repo, run_id):
