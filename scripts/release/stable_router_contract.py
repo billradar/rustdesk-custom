@@ -11,6 +11,22 @@ from scripts.release import stable_router as router
 
 
 class StableRouterContract(unittest.TestCase):
+    def test_non_main_stable_dry_run_remains_available(self):
+        import yaml
+        root=Path(__file__).resolve().parents[2]
+        jobs=yaml.safe_load((root/'.github/workflows/tag.yml').read_text())['jobs']
+        steps=jobs['resolve']['steps']
+        boundary=next(step for step in steps
+                      if step.get('name')=='Validate Stable branch and mode boundary')
+        self.assertIn('refs/heads/main',boundary['run'])
+        self.assertIn('dry-run',boundary['run'])
+        self.assertIn('exit 1',boundary['run'])
+        gate=next(step for step in steps if step.get('id')=='dedup')
+        self.assertEqual(gate['if'],"github.ref == 'refs/heads/main'")
+        self.assertEqual(jobs['draft-preflight']['if'],
+                         "needs.resolve.outputs.dedup_skip != 'true'")
+        self.assertIn("github.ref == 'refs/heads/main'",jobs['draft']['if'])
+
     def test_trusted_context_is_required(self):
         base = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
                     GITHUB_EVENT_NAME='schedule', GITHUB_SHA='a' * 40)

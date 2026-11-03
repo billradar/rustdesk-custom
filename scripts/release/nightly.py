@@ -227,6 +227,20 @@ def route(data):
                         '-f', 'include_wayland=true'], check=True)
 
 
+def skip_duplicate_dispatch(state, mode):
+    """Build reuse must not prevent an explicitly authorized publication.
+
+    A manual release may run complete signing/package and remote-asset gates
+    after a prior successful draft. An active run or cooldown still blocks it.
+    This does not authorize publication, which remains downstream-only.
+    """
+    if mode not in ('dry-run', 'draft', 'release'):
+        raise ValueError('Invalid Nightly release mode for deduplication')
+    if state not in ('ACTIVE', 'SUCCESS', 'COOLDOWN', 'RETRY'):
+        raise ValueError('Unreviewed Nightly dedup state')
+    return state in ('ACTIVE', 'COOLDOWN') or (state == 'SUCCESS' and mode != 'release')
+
+
 def dedup():
     """Skip duplicate manual dispatches before preparation/build/signing begins."""
     repository()
@@ -274,7 +288,9 @@ def dedup():
         state = decide(matching)
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review')
-    skip = state in ('ACTIVE', 'SUCCESS', 'COOLDOWN')
+    skip = skip_duplicate_dispatch(state, mode)
+    if state == 'SUCCESS' and mode == 'release':
+        print('Nightly manual release: prior build succeeded; proceed through full release gates')
     if skip:
         # This dispatch did not build. Preserve provenance but never count it
         # as an attempted build or as a successful completed build.
