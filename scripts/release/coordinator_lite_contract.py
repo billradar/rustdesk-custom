@@ -77,5 +77,24 @@ class CoordinatorLiteContract(unittest.TestCase):
                 self.assertIn('Verify immutable prepared input before native dependencies', content)
 
 
+    def test_no_live_workflow_uses_retired_coordinator(self):
+        root = Path(__file__).resolve().parents[2]
+        workflows = sorted((root / '.github/workflows').glob('*.yml'))
+        self.assertGreaterEqual(len(workflows), 20)
+        retired = (
+            'scripts.release.coordinator.runtime',
+            'scripts.release.coordinator.manual_reconcile',
+            'scripts.release.coordinator.recovery',
+            'release-coordinator.yml',
+            'release-coordinator-manual-reconcile.yml',
+        )
+        for workflow in workflows:
+            with self.subTest(workflow=workflow.name):
+                source = workflow.read_text()
+                for forbidden in retired:
+                    self.assertNotIn(forbidden, source)
+
+
+
 if __name__ == '__main__':
     unittest.main()
