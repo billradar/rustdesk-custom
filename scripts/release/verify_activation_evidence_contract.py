@@ -30,7 +30,7 @@ def fixture():
         api['releases/' + str(i)] = dict(id=i, draft=True, published_at=None,
                                         assets=[{'id': j} for j in range(32)])
     for status in ('in_progress', 'queued', 'waiting'):
-        api['actions/runs?status=' + status + '&per_page=1'] = {'total_count': 0}
+        api['actions/runs?status=' + status + '&per_page=100'] = {'total_count': 0, 'workflow_runs': []}
     return evidence, api
 
 
@@ -48,13 +48,22 @@ class EvidenceContract(unittest.TestCase):
             ('actions/runs/41639117979', lambda x: x.update(repository={'full_name': 'other/repo'})),
             ('git/matching-refs/heads/release-coordinator/v1/', lambda x: x.pop()),
             ('releases/432254527', lambda x: x.update(draft=False)),
-            ('actions/runs?status=queued&per_page=1', lambda x: x.update(total_count=1)),
+            ('actions/runs?status=queued&per_page=100', lambda x: x.update(total_count=1, workflow_runs=[{'id': 999}])),
         ):
             with self.subTest(path=path):
                 evidence, api = fixture()
                 mutate(api[path])
                 with self.assertRaisesRegex(ValueError, 'ACTIVATION_EVIDENCE_INVALID'):
                     verify(evidence, lambda p: api[p])
+
+    def test_excludes_only_own_evidence_workflow(self):
+        evidence, api = fixture()
+        api['actions/runs?status=in_progress&per_page=100'] = {
+            'total_count': 1, 'workflow_runs': [{'id': 123}]}
+        self.assertEqual(verify(evidence, lambda p: api[p], own_run_id=123)['decision'],
+                         'EVIDENCE_VERIFIED_NOT_ACTIVATED')
+        with self.assertRaisesRegex(ValueError, 'not quiescent'):
+            verify(evidence, lambda p: api[p], own_run_id=124)
 
     def test_missing_remote_evidence_fails_closed(self):
         evidence, api = fixture()
