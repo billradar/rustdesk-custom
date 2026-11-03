@@ -55,8 +55,11 @@ class MatrixTests(unittest.TestCase):
         arm_setup=(ROOT/'scripts/build/prepare_windows_arm64_flutter.ps1').read_text()
         self.assertIn('ENGINE_LIBRARY_SHA256',arm_setup)
         self.assertIn('Get-FileHash $engine -Algorithm SHA256',arm_setup)
-        self.assertEqual(set(platforms['jobs']),{'plan','platforms'})
-        self.assertEqual(platforms['jobs']['platforms']['needs'],'plan')
+        self.assertEqual(set(platforms['jobs']),{'plan','macos-arm64-bridge','platforms'})
+        self.assertEqual(platforms['jobs']['platforms']['needs'],['plan','macos-arm64-bridge'])
+        self.assertEqual(platforms['jobs']['macos-arm64-bridge']['runs-on'],'ubuntu-22.04')
+        self.assertIn('needs.macos-arm64-bridge.outputs.artifact',
+                      platforms['jobs']['platforms']['with']['macos_bridge_artifact'])
         self.assertNotIn('if',platforms['jobs']['platforms'])
         self.assertEqual(set(android['jobs']),{'plan','android-platforms'})
         self.assertEqual(android['jobs']['android-platforms']['needs'],'plan')
