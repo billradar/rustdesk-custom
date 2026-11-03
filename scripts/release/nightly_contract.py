@@ -188,6 +188,9 @@ class NightlyTests(unittest.TestCase):
                  ANDROID_PRODUCTION_SIGNING_ENABLED='true')
         discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
+        from scripts.release.content import inputs
+        content = inputs('v2')
+        discovery.update(content)
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
             root=Path(td);(root/'.work/qualification-aggregate').mkdir(parents=True)
             (root/'discovery.json').write_text(json.dumps(discovery))
@@ -195,7 +198,7 @@ class NightlyTests(unittest.TestCase):
                 folder=root/arch;folder.mkdir()
                 (folder/'build-info.json').write_text(json.dumps(dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
                     custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='',platform='android',
-                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3])))
+                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3], **content)))
             with patch.object(nightly,'ROOT',root),patch.object(qualification,'aggregate',return_value=dict(result='PASS')):
                 report=nightly.aggregate(root,root/'discovery.json')
             self.assertTrue(report['android_production_signing'])

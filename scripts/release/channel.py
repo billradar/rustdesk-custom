@@ -391,6 +391,7 @@ def draft(root):
         *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
         f'Patch Revision: {info["patch_revision"]}',
         'Version Semantics: '+content['version_semantics'],
+        'Patchset Version: '+content['patchset_version'],
         'Build Policy SHA256: '+content['build_policy_sha256'],
         f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],None,wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true",patchset_version=content["patchset_version"],build_policy_sha256=content["build_policy_sha256"])}',
         f'Asset Inventory: {inventory}',

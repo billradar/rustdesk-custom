@@ -96,3 +96,7 @@ python3 -m scripts.upstream.patchset_migration_contract
 Review 和 CI 状态记录在 PR 中，不能从本文件推断未来 head 已通过。后续阶段必须重新检查最新 main 与 open PR，不能把本次库存当作永久事实。
 
 本阶段本地验证：repository contract PASS；23 个相关 domain modules、365 个测试，3 个因所需外部工具/平台而跳过，其余通过。跳过不等于设备/安装/签名验证通过。`patchset_migration --check` 按设计返回 1（BLOCKED）。
+
+## 后续实施状态（本审计之后）
+
+PR2/PR3 和 PR4 已按后续用户指示实施，不等待 Review/CI 才继续。上述章节保留审计当时的事实；当前实现、版本 v1.2/v2.8、验证和仍未激活的生产切换请读 [交付记录](patchset-version-delivery.md)。历史库存 JSON 不随当前代码或线上运行变化改写。

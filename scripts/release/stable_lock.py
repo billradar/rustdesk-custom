@@ -104,7 +104,9 @@ def require(infos=None):
             for key, value in dict(upstream_sha=lock['upstream_sha'], upstream_version=lock['version'],
                                    patchset=lock['patchset'], common_patch_hash=lock['common_patch_hash'],
                                    custom_repository_sha=lock['custom_repository_sha'],
-                                   build_run=lock['workflow_run'], patch_revision=lock['patchset_version']).items():
+                                   build_run=lock['workflow_run'], patch_revision=lock['patchset_version'],
+                                   patchset_version=lock['patchset_version'],version_semantics=lock['version_semantics'],
+                                   build_policy_sha256=lock['build_policy_sha256']).items():
                 if str(info.get(key)) != str(value):
                     raise ValueError('Built artifact differs from locked Stable input: ' + key)
             expected = lock['sos_patch_hash'] if info['variant'] == 'sos' else None

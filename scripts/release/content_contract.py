@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 from scripts.release import content, channel, nightly
@@ -28,6 +29,24 @@ class ContentContract(unittest.TestCase):
                 digest = nightly.nightly_identity(data, 'draft', 'false', 'false')
             self.assertEqual(digest, modern.historical_digest)
 
+    def test_nightly_reads_same_revision_without_mutating_metadata(self):
+        import base64
+        before = (content.ROOT / 'patchsets/v2/patchset.json').read_bytes()
+        run = dict(id=17, status='completed', conclusion='success', head_branch='master',
+                   event='schedule', path='.github/workflows/flutter-nightly.yml', head_sha='a'*40,
+                   head_repository={'full_name':nightly.OFFICIAL}, html_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
+        def api(path):
+            if path == 'repos/'+nightly.OFFICIAL:
+                return {'default_branch':'master'}
+            if '/contents/' in path:
+                return {'content':base64.b64encode(b'[package]\nversion="1.5.1"\n').decode()}
+            return {'workflow_runs':[run]}
+        with patch.object(nightly,'api',side_effect=api):
+            for _ in range(3):
+                data=nightly.discover()
+                self.assertEqual(data['patchset_version'],content.inputs('v2')['patchset_version'])
+        self.assertEqual(before,(content.ROOT / 'patchsets/v2/patchset.json').read_bytes())
+
     def test_upstream_version_does_not_allocate_revision(self):
         self.assertEqual(channel.next_patch_revision('1.5.0','v2'), channel.next_patch_revision('1.5.1','v2'))
 
@@ -36,7 +55,7 @@ class ContentContract(unittest.TestCase):
         self.assertEqual(stable, content.notes('v2'))
         self.assertIn('Current included customizations', stable)
         self.assertIn('Recorded Patchset revision delta', stable)
-        self.assertIn('migration-baseline', stable)
+        self.assertIn('Kind: content-change', stable)
         self.assertIn('not claims of new changes', content.notes('v2', nightly=True))
 
     def test_cutover_has_no_environment_boolean_bypass(self):
@@ -55,6 +74,50 @@ class ContentContract(unittest.TestCase):
             self.assertEqual(first, content.policy_digest(root))
             sdk.write_text('SDK=2')
             self.assertNotEqual(first, content.policy_digest(root))
+
+    def test_policy_matches_lf_and_crlf_git_checkouts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            source = base / 'source'
+            source.mkdir()
+            def git(*args, cwd=source):
+                return subprocess.check_output(['git', *args], cwd=cwd, stderr=subprocess.PIPE)
+            git('init', '-q')
+            git('config', 'user.name', 'Contract')
+            git('config', 'user.email', 'contract@example.invalid')
+            git('config', 'core.autocrlf', 'false')
+            (source / '.gitattributes').write_bytes(b'* text=auto\n')
+            files = {
+                'requirements.txt': b'dependency==1\n',
+                'scripts/build/SDK.sh': b'SDK=1\necho ready\n',
+                'scripts/build/sdk-helper.py': b'print("ready")\n',
+                'metadata/build/profile.json': b'{"sdk": 1}\n',
+                '.github/actions/example/action.yml': b'name: example\n',
+                '.github/workflows/build.yml': b'name: build\n',
+                '.github/actions/example/payload.bin': b'\x00binary\r\n\xff',
+            }
+            for name, raw in files.items():
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+            git('add', '.')
+            git('commit', '-qm', 'canonical inputs')
+            expected = git('rev-parse', 'HEAD')
+            checkouts = []
+            for name, setting in [('lf', 'false'), ('crlf', 'true')]:
+                destination = base / name
+                git('clone', '-q', '--no-hardlinks', '--config', 'core.autocrlf='+setting,
+                    str(source), str(destination), cwd=base)
+                self.assertEqual(git('rev-parse', 'HEAD', cwd=destination), expected)
+                checkouts.append(destination)
+            lf, crlf = checkouts
+            self.assertEqual((lf/'scripts/build/SDK.sh').read_bytes(), files['scripts/build/SDK.sh'])
+            self.assertEqual((crlf/'scripts/build/SDK.sh').read_bytes(), files['scripts/build/SDK.sh'].replace(b'\n', b'\r\n'))
+            self.assertEqual(content.policy_digest(lf), content.policy_digest(crlf))
+            # Binary bytes still bind identity, even when CRLF is the only change.
+            payload = crlf / '.github/actions/example/payload.bin'
+            payload.write_bytes(payload.read_bytes().replace(b'\r\n', b'\n'))
+            self.assertNotEqual(content.policy_digest(lf), content.policy_digest(crlf))
 
     def fixture(self):
         inputs=content.inputs('v2')

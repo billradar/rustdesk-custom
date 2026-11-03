@@ -141,6 +141,8 @@ jobs:
         python3 -m scripts.upstream.patchset_migration_contract
         python3 -m scripts.upstream.patchset_version_contract
         python3 -m scripts.release.content_contract
+        python3 -m scripts.validation.client_update_contract
+        python3 -m scripts.validation.branding_contract
         python3 -m scripts.release.coordinator.contract
         python3 -m scripts.release.coordinator.store_contract
         python3 -m scripts.release.coordinator.reconcile_contract

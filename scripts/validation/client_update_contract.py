@@ -77,8 +77,8 @@ class ClientUpdateTests(unittest.TestCase):
             about.parent.mkdir(parents=True)
             about.write_text("", encoding='utf-8')
             args = dict(repository="fork-owner/custom-client", version="1.5.1", sha="a" * 40, variant="standard", run="123",
-                        channel="stable", revision="v2.6")
-            self.assertEqual(write_identity(tree, **args)["revision"], "v2.6")
+                        channel="stable", revision="v2.8")
+            self.assertEqual(write_identity(tree, **args)["revision"], "v2.8")
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["variant"], "standard")
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["repository"], "fork-owner/custom-client")
             for invalid in ("", "https://github.com/owner/repo", "owner/repo/extra", "owner/repo?x", "owner/.."):
@@ -86,7 +86,7 @@ class ClientUpdateTests(unittest.TestCase):
                     write_identity(tree, **(args | {"repository": invalid}))
             args.update(variant="sos")
             self.assertEqual(write_identity(tree, **args)["variant"], "sos")
-            for invalid in ("", "v2.0", "v2.6/evil"):
+            for invalid in ("", "v2.0", "v2.6/evil", "v2.7", "v1.2"):
                 with self.subTest(revision=invalid), self.assertRaises(ValueError):
                     write_identity(tree, **(args | {"revision": invalid}))
             args.update(channel="nightly", revision="")
@@ -102,8 +102,8 @@ class ClientUpdateTests(unittest.TestCase):
             about=tree/ABOUT_PATH;about.parent.mkdir(parents=True)
             native.write_text('{}');about.write_text('')
             for variant,label in [('standard','Standard'),('sos','SOS')]:
-                for channel,revision,version in [('stable','v2.1','1.5.0-custom.v2.1'),
-                                                  ('nightly','','1.5.0-custom'),('ci','','1.5.0-custom')]:
+                for channel,revision,version in [('stable','v2.8','1.5.0-custom.v2.8'),
+                                                  ('nightly','','1.5.0-custom.v2.8-nightly'),('ci','','1.5.0-custom.v2.8-ci')]:
                     with self.subTest(variant=variant,channel=channel):
                         data=write_identity(tree,repository='owner/repo',version='1.5.0',sha='a'*40,
                                             variant=variant,run='123',channel=channel,revision=revision)

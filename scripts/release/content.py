@@ -20,11 +20,22 @@ def policy_digest(root=ROOT):
         if path.name in ('tag.yml','nightly.yml','prepare-source.yml','wayland.yml') or path.name.startswith('build'):
             paths.add(path)
     paths.add(root / 'requirements.txt')
-    digest = hashlib.sha256(b'custom-build-policy-v1\0')
-    for path in sorted(paths):
+    digest = hashlib.sha256(b'custom-build-policy-v2\0')
+    # Explicit relative POSIX ordering must also agree on case-insensitive hosts.
+    for path in sorted(paths, key=lambda p: p.relative_to(root).as_posix().encode('utf-8')):
         if path.is_symlink():
             raise ValueError('Nonregular build policy input')
-        digest.update(path.relative_to(root).as_posix().encode() + b'\0' + path.read_bytes())
+        raw = path.read_bytes()
+        # Git's Windows checkout conversion changes UTF-8 text CRLF/LF only.
+        # Preserve binary inputs, BOMs, lone CRs and all other content exactly.
+        try:
+            raw.decode('utf-8')
+        except UnicodeDecodeError:
+            pass
+        else:
+            if b'\0' not in raw:
+                raw = raw.replace(b'\r\n', b'\n')
+        digest.update(path.relative_to(root).as_posix().encode('utf-8') + b'\0' + raw)
     return digest.hexdigest()
 
 
