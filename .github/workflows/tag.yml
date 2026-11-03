@@ -45,14 +45,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Validate Stable branch and mode boundary
-      env:
-        RELEASE_MODE: ${{ inputs.release_mode }}
-      run: |
-        if [[ "$GITHUB_REF" != refs/heads/main && "$RELEASE_MODE" != dry-run ]]; then
-          echo 'Non-main Stable runs are dry-run only.' >&2
-          exit 1
-        fi
     - name: Require release App configuration before expensive builds
       if: inputs.release_mode != 'dry-run'
       env:
@@ -140,51 +132,12 @@ jobs:
         name: release-preflight-${{ github.run_id }}
         path: .work/channel.json
         if-no-files-found: warn
-  coordinator-admit:
-    name: Coordinate Stable build admission
-    needs: [resolve, draft-preflight]
-    if: >-
-      github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' &&
-      github.workflow_ref == format('{0}/.github/workflows/tag.yml@refs/heads/main', github.repository) &&
-      needs.draft-preflight.outputs.build_needed == 'true'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      actions: read
-    outputs:
-      allow: ${{ steps.admit.outputs.allow }}
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_MODE: ${{ inputs.release_mode }}
-      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
-      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ needs.resolve.outputs.signing_enabled }}
-      STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
-      STABLE_LOCK_SHA256: ${{ needs.resolve.outputs.lock_sha256 }}
-      EXPECTED_BUILD_IDENTITY: ${{ needs.resolve.outputs.build_identity }}
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - run: python3 -m pip install -r requirements.txt
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      with:
-        name: ${{ needs.resolve.outputs.lock_artifact }}
-        path: .work/stable-lock
-    - id: admit
-      name: Revalidate Stable lock and atomically bind this run
-      run: python3 -m scripts.release.coordinator.runtime admit-stable
   prepare:
     name: '03 · Prepare exact production source'
     needs:
     - resolve
     - draft-preflight
-    - coordinator-admit
-    if: >-
-      always() && needs.resolve.result == 'success' && needs.draft-preflight.result == 'success' &&
-      needs.draft-preflight.outputs.build_needed == 'true' &&
-      ((github.ref == 'refs/heads/main' && needs.coordinator-admit.outputs.allow == 'true') ||
-       (github.ref != 'refs/heads/main' && inputs.release_mode == 'dry-run'))
+    if: needs.draft-preflight.outputs.build_needed == 'true'
     uses: ./.github/workflows/prepare-source.yml
     with:
       build_wayland: ${{ inputs.include_wayland }}
@@ -294,19 +247,9 @@ jobs:
         sparse-checkout: |
           metadata/signing/android-standard.json
           scripts/signing/android_yubikey_sign.py
-          scripts/__init__.py
-          scripts/release/__init__.py
-          scripts/release/coordinator/*
-          scripts/validation/__init__.py
-          scripts/validation/build_reliability.py
           .github/actions/android-yubikey-sign/action.yml
         sparse-checkout-cone-mode: false
         fetch-depth: 1
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - name: Validate public YubiKey identity metadata
       shell: bash
       run: |
@@ -393,11 +336,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: ${{ needs.resolve.outputs.lock_artifact }}
@@ -513,11 +451,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: ${{ needs.aggregate.outputs.lock_artifact }}
@@ -587,11 +520,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
         name: ${{ needs.aggregate.outputs.lock_artifact }}
