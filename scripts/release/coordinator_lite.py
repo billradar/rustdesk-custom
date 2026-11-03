@@ -37,3 +37,34 @@ def matching_state(rows):
     if any(row.get('conclusion') == 'success' for row in rows):
         return 'SUCCESS'
     return 'RETRY'
+
+def verify_worker_context():
+    """Check the trusted caller without the retired Coordinator journal.
+
+    This is a stateless workflow-origin check, not build admission or a
+    deduplication key. Prepared-source, package and signing gates remain
+    responsible for verifying their own immutable inputs.
+    """
+    import os
+
+    workflows = {'nightly': 'nightly.yml', 'stable': 'tag.yml'}
+    channel = os.environ.get('BUILD_CHANNEL')
+    workflow = workflows.get(channel)
+    repo = os.environ.get('GITHUB_REPOSITORY', '')
+    if not workflow or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
+        raise ValueError('Untrusted Coordinator Lite worker channel or repository')
+    expected = f'{repo}/.github/workflows/{workflow}@refs/heads/main'
+    if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
+            or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+            or os.environ.get('GITHUB_WORKFLOW_REF') != expected):
+        raise ValueError('Untrusted Coordinator Lite worker caller')
+    _hex(os.environ.get('GITHUB_SHA'), 40)
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('mode', choices=('verify-worker',))
+    parser.parse_args()
+    verify_worker_context()
