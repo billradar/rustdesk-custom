@@ -19,14 +19,20 @@ Repository: `billradar/rustdesk-custom`. Evidence was retrieved read-only from G
 | JOURNAL-02 | HISTORICAL REVIEW HOLD | `refs/heads/release-coordinator/v1/nightly/a4bbba02e3e23edc9cd27f97ede5a1239f540c4ca448fa51d2ced98ea0ef7a75`: historical `QUEUED`/`REVIEW_REQUIRED`, run `41549385808` | Owner-deleted run: **no retry, no replay, no positive v1→v2 alias** |
 | JOURNAL-03 | PASS READ-ONLY INVENTORY | Four `refs/heads/release-coordinator-runs/v1/*` entries observed; three owner-deleted IDs `41496715461`, `41549385808`, `41562101960` are retained as immutable provenance | Do not infer worker activity from historical branch presence |
 
+## Additional verification of private release audit output
+
+- Read the complete successful job log for [Verify private draft assets #125836714215](https://github.com/billradar/rustdesk-custom/actions/runs/41611975833/job/125836714215). The audit's structured JSON returned `status=PASS`, all three exact release IDs `432254527`, `431170313`, `430489827`, each with `asset_count=32` and `sums_verified=true`, plus 3 APK signer records per release.
+- Compared the nine recorded signed-APK SHA-256 digests with the current GitHub release API asset metadata: **9/9 match**, zero mismatches; the three release IDs and 32-asset counts also match. This independently validates the consistency of the historic audit output with today's API inventory, **not** a new download or cryptographic re-verification of all 96 files.
+- GitHub Actions API checks for `in_progress`, `queued`, and `waiting` each returned `total_count=0`. `release-coordinator/v2/*` matching refs returned no entries. Access to the repository self-hosted runners inventory through the available read-only GitHub fetch action was denied by endpoint allowlisting; therefore no runner-busy/lease conclusion is claimed.
+
 ## Evidence that must still be independently produced
 
 | Gate | Required evidence | Status |
 | --- | --- | --- |
 | WORKER-QUIESCENCE | Authenticated snapshot from self-hosted runner/worker controller and any external queues, with observation timestamp, active jobs/processes, leases, and pending dispatches; compare with GitHub queue | **NOT VERIFIED** |
 | JOURNAL-RECONCILIATION | Operator-reviewed snapshot of current v2 reservations/leases and explicit disposition for uncertain historical outcomes without rewriting v1 history; validate no active v1 admission | **NOT VERIFIED** |
-| ASSET-BYTES | Independently download the 96 release assets; compute SHA-256, compare against GitHub asset `digest` and the matching draft's `SHA256SUMS`; preserve output manifest and tool versions | **NOT VERIFIED** |
-| APK-SIGNATURES | Run `apksigner verify --verbose --print-certs` on all nine signed APKs; validate expected PIV 9C certificate fingerprint and v2/v3 signatures against independently approved signing policy; never expose PIN/private key | **NOT VERIFIED** |
+| ASSET-BYTES | Protected-main [Release Audit #41611975833](https://github.com/billradar/rustdesk-custom/actions/runs/41611975833) returned `PASS` and `sums_verified=true` for all 3 releases / 96 assets. Full current 96-asset byte-for-byte re-download was not independently repeated after the audit. | **HISTORICAL PASS; CURRENT RE-RUN NOT VERIFIED** |
+| APK-SIGNATURES | The same protected-main audit verified 9 APK signatures (3 per draft) against trusted public certificate SHA-256 `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`. All nine APK digests in its JSON output were independently cross-checked against the current GitHub release asset `digest` metadata: **9/9 identical**. A new on-demand private-asset verifier run is still advisable immediately before activation. | **HISTORICAL PASS + CURRENT DIGEST MATCH; FRESH BYTE AUDIT NOT RUN** |
 | PRODUCTION-ADMISSION | Verify v2-only identity admission and rejection of v1/missing digests under production-equivalent isolated API/ref permissions, without dispatching production builds | **NOT VERIFIED** |
 | FINAL-FREEZE | Immediately before any activation, repeat live queue/ref/tag/release inventory and pin exact `main` SHA; obtain separate reviewed approval | **NOT VERIFIED** |
 
