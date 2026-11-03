@@ -87,6 +87,9 @@ class StableRouterContract(unittest.TestCase):
             self.assertEqual(router.recorded_identity(row),
                              router.lite_identity(data['upstream_sha'],
                                                   data['common_patch_hash'], data['sos_patch_hash']))
+            data['dedup_state'] = 'ACTIVE'
+            self.assertIsNone(router.recorded_identity(row))
+            data.pop('dedup_state')
             with self.assertRaisesRegex(ValueError, 'provenance'):
                 router.recorded_identity(dict(row, head_sha='e'*40))
         with patch.object(router.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
@@ -143,6 +146,7 @@ class StableRouterContract(unittest.TestCase):
                      return_value=[{'status':'queued', 'conclusion':None}]) as history:
                     router.dedup()
                 self.assertIn('skip=true', Path(td, 'out').read_text())
+                self.assertEqual(json.loads(Path('.work/stable-lock.json').read_text())['dedup_state'], 'ACTIVE')
                 self.assertEqual(history.call_args.kwargs['prior_run_number'], 20)
             finally:
                 os.chdir(old_dir)

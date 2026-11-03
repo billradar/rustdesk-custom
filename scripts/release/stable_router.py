@@ -86,6 +86,12 @@ def recorded_identity(row):
                               android_signing_enabled=data['android_signing_enabled'])
     if data.get('build_identity') != identity:
         raise ValueError('Invalid historical Stable build identity')
+    # A duplicate that skipped compilation has a successful workflow conclusion
+    # but is not a successful build; do not let it poison future dedup.
+    if data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+        return None
+    if 'dedup_state' in data:
+        raise ValueError('Unrecognized historical Stable skip marker')
     return lite_identity(data['upstream_sha'], data['common_patch_hash'], data['sos_patch_hash'])
 
 
@@ -171,6 +177,11 @@ def dedup():
         raise ValueError('Invalid Stable release mode')
     # Release can publish a verified prior draft; it must not rebuild an active one.
     skip = state in ('ACTIVE', 'COOLDOWN') or (state == 'SUCCESS' and mode != 'release')
+    if skip:
+        # The frozen hash is not consumed on skipped workflows: flag the
+        # uploaded lock so a skipped workflow success is never reused as output.
+        locked['dedup_state'] = state
+        Path('.work/stable-lock.json').write_text(json.dumps(locked, indent=2, sort_keys=True) + '\n')
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('skip=' + str(skip).lower() + '\n')
