@@ -53,7 +53,7 @@ class NightlyTests(unittest.TestCase):
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                  _upstream_sha='b'*40, _nightly_identity=identity, head_sha='a'*40, event='workflow_dispatch',
                  head_branch='main', status='completed', conclusion='failure', id=21)
-        state=lambda rows, build_id=identity:nightly.route_state(rows,build_id)
+        state=lambda rows, build_id=identity:nightly.route_state(rows,build_id,upstream_sha=data['upstream_sha'])
         self.assertEqual(state([]),'RETRY')
         self.assertEqual(state([row]*3),'EXHAUSTED')
         self.assertEqual(state([dict(row,conclusion='success')]),'SUCCESS')
@@ -64,8 +64,13 @@ class NightlyTests(unittest.TestCase):
         changed_patch=dict(data,common_patch_hash='f'*64)
         self.assertEqual(state([row],nightly.nightly_identity(changed_patch)),'RETRY')
         self.assertEqual(nightly.nightly_identity(data),nightly.nightly_identity(dict(data,custom_repository_sha='f'*40)))
-        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
-        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'RETRY')
+        # Mode/Wayland/signing do not change the two-input Lite identity.
+        self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
+        self.assertEqual(state([dict(row, status='queued', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
+        self.assertEqual(state([dict(row, conclusion='failure', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]*3),'RETRY')
+        self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'SUCCESS')
+        self.assertEqual(nightly.nightly_identity(data, 'draft', 'true', 'false'),
+                         nightly.nightly_identity(data, 'release', 'false', 'true'))
         self.assertEqual(nightly.route_state([dict(row,id=99)],identity,current_run_id='99'),'RETRY')
 
     def test_matching_run_without_discovery_fails_closed(self):
@@ -78,6 +83,21 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(nightly.route_state([active], 'f'*64, upstream_sha='b'*40), 'ACTIVE')
         other_source=dict(unknown,_upstream_sha='c'*40)
         self.assertEqual(nightly.route_state([other_source], 'f'*64, upstream_sha='b'*40), 'RETRY')
+
+    def test_dry_run_history_does_not_read_discovery_or_count_as_unknown(self):
+        rows=[dict(display_title='Nightly latest / '+'a'*40+
+                   ' / dry-run / wayland=true / android-signing=false',
+                   head_branch='main',event='workflow_dispatch',status=status,
+                   conclusion=outcome,id=20+i)
+              for i,(status,outcome) in enumerate([
+                  ('queued',None),('in_progress',None),
+                  ('completed','failure'),('completed','success')])]
+        with patch.object(nightly,'source_sha_from_run',side_effect=AssertionError('Dry-run SHA read')) as source, \
+             patch.object(nightly,'discovery_from_run',side_effect=AssertionError('Dry-run discovery read')) as discovery:
+            nightly.annotate_history(rows,'b'*40)
+        source.assert_not_called()
+        discovery.assert_not_called()
+        self.assertEqual(nightly.route_state(rows,'c'*64,upstream_sha='b'*40),'RETRY')
 
     def test_legacy_run_titles_recover_source_sha(self):
         old=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')
@@ -188,9 +208,6 @@ class NightlyTests(unittest.TestCase):
                  ANDROID_PRODUCTION_SIGNING_ENABLED='true')
         discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
-        from scripts.release.content import inputs
-        content = inputs('v2')
-        discovery.update(content)
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
             root=Path(td);(root/'.work/qualification-aggregate').mkdir(parents=True)
             (root/'discovery.json').write_text(json.dumps(discovery))
@@ -198,7 +215,7 @@ class NightlyTests(unittest.TestCase):
                 folder=root/arch;folder.mkdir()
                 (folder/'build-info.json').write_text(json.dumps(dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
                     custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='',platform='android',
-                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3], **content)))
+                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3])))
             with patch.object(nightly,'ROOT',root),patch.object(qualification,'aggregate',return_value=dict(result='PASS')):
                 report=nightly.aggregate(root,root/'discovery.json')
             self.assertTrue(report['android_production_signing'])
@@ -231,7 +248,7 @@ class NightlyTests(unittest.TestCase):
             self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
         for name,j in w['jobs'].items():
             if name!='android-sign':self.assertNotIn('environment',j)
-            if name not in ('draft','coordinator-admit'):self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name!='draft':self.assertNotIn('write',json.dumps(j.get('permissions',{})))
             if name!='android-sign':self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(j))
         signer=w['jobs']['android-sign'];tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']['android-sign']
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
@@ -269,9 +286,9 @@ class NightlyTests(unittest.TestCase):
 
     def test_polling_and_unique_plan_artifacts(self):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
-        self.assertEqual(w['on']['schedule'],[{'cron':'23 2 * * *'}, {'cron':'41 8 * * *'}])
+        self.assertEqual(w['on']['schedule'],[{'cron':'41 * * * *'}, {'cron':'17 7,19 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
-        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'write','actions':'write'})
+        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
         names=[]
         for family in ['platforms','android']:
@@ -282,7 +299,6 @@ class NightlyTests(unittest.TestCase):
 
 class NightlyDraftTests(unittest.TestCase):
     def setUp(self):
-        gate=patch('scripts.release.content.require_cutover');gate.start();self.addCleanup(gate.stop)
         self.repo='example/rustdesk-custom'
         self.env={'GITHUB_REPOSITORY':self.repo,'GITHUB_REF':'refs/heads/main',
                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':self.repo+'/.github/workflows/nightly.yml@refs/heads/main',
@@ -335,6 +351,15 @@ class NightlyDraftTests(unittest.TestCase):
                     self.assertTrue(write.call_args.args[2]['body'].startswith(self.upstream_notes+'\n\n<!-- rustdesk-custom-release-metadata'))
                     self.assertEqual(write.call_args.args[2]['name'],'nightly')
                     self.assertIn('asset_inventory=',write.call_args.args[2]['body'])
+                    body=write.call_args.args[2]['body']
+                    self.assertIn('patchset_version=v2.8',body)
+                    self.assertIn('version_semantics=patchset-content-v1',body)
+                    self.assertIn('## Patchset v2.8',body)
+                    self.assertIn('Current included customizations',body)
+                    self.assertIn('Recorded Patchset revision delta',body)
+                    self.assertIn('these are not claims of new changes in this build',body)
+                    self.assertIn('Known limitations:',body)
+                    self.assertLess(body.index('<!-- rustdesk-custom-release-metadata'),body.index('## Patchset v2.8'))
                     self.assertRegex(write.call_args.args[2]['body'],r'Latest packages verified \(UTC\): `[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z`')
                     self.assertIn(f'https://github.com/{self.repo}/actions/runs/9',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)

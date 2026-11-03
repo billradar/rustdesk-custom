@@ -369,8 +369,6 @@ def build_release_body(official_body, metadata, patchset=None):
 def _release(root, publish, channel='stable', experimental=False):
     if channel != 'stable':
         raise ValueError('Only Stable supports public release publication; Nightly uses its separate draft path')
-    from scripts.release.content import require_cutover
-    require_cutover()
     from scripts.upstream.resolve import api
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
@@ -387,7 +385,11 @@ def _release(root, publish, channel='stable', experimental=False):
         i.get('signed_status')=='PRODUCTION SIGNED / IDENTITY VERIFIED'
         and i.get('signing_identity_verified') is True
         and {2,3}.issubset(set(i.get('signing_schemes',[]))) for i in android_infos)
-    tag=f'v{version}-custom.{standard["patch_revision"]}'
+    from scripts.release.channel import next_patch_revision
+    expected_content_revision=next_patch_revision(version, standard['patchset'])
+    if standard['patch_revision'] != expected_content_revision:
+        raise ValueError('Artifact Patchset content revision differs from metadata')
+    tag=f'v{version}-custom.{expected_content_revision}'
     if api(f'repos/{repo}/releases/tags/{tag}',missing=True) or api(f'repos/{repo}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     existing=[r for r in (api(f'repos/{repo}/releases?per_page=100') or []) if r.get('name')==tag]
     if any(r.get('draft') for r in existing):raise ValueError('Existing revision draft')
@@ -398,24 +400,18 @@ def _release(root, publish, channel='stable', experimental=False):
     directory=ROOT/'.work/qualification-aggregate/assets'
     official_notes=release_notes_body(standard['upstream_tag'] or standard['upstream_version'])
     from scripts.release.channel import build_identity
-    from scripts.release.content import inputs
-    content = inputs(standard['patchset'])
-    if standard['patch_revision'] != content['patchset_version']:
-        raise ValueError('Artifact content revision differs from metadata')
     wayland_included=os.environ.get('INCLUDE_WAYLAND') == 'true'
     wayland_policy=report.get('wayland',{}).get('policy_sha256','')
     identity=build_identity(standard['upstream_sha'],standard['patchset'],standard['common_patch_hash'],
                             sos['sos_patch_hash'],standard['custom_repository_sha'],wayland_included,wayland_policy,
-                            os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING','false').lower()=='true',
-                            patchset_version=content['patchset_version'],build_policy_sha256=content['build_policy_sha256'])
+                            os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING','false').lower()=='true')
     metadata=[
         'upstream_repository=rustdesk/rustdesk',
         f'upstream_tag={standard["upstream_tag"]}',
         f'upstream_sha={standard["upstream_sha"]}',
         f'patchset={standard["patchset"]}',
-        'patchset_version='+content['patchset_version'],
-        'version_semantics='+content['version_semantics'],
-        'build_policy_sha256='+content['build_policy_sha256'],
+        f'patchset_version={expected_content_revision}',
+        'version_semantics=patchset-content-v1',
         f'common_patch_hash={standard["common_patch_hash"]}',
         f'sos_patch_hash={sos["sos_patch_hash"]}',
         f'custom_repository_sha={standard["custom_repository_sha"]}',
@@ -470,8 +466,6 @@ def _release(root, publish, channel='stable', experimental=False):
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
 def publish_existing_draft(channel='stable'):
-    from scripts.release.content import require_cutover
-    require_cutover()
     from scripts.release.stable_lock import require
     require()
     if channel != 'stable':

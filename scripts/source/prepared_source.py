@@ -38,10 +38,6 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
            [('repository','custom_repository'),('version','upstream_version'),('upstream_sha','upstream_sha'),
             ('variant','variant'),('build_run','prepare_workflow_run')]):
         raise ValueError('Client update identity differs from build provenance')
-    from scripts.release.content import inputs as content_inputs
-    content = content_inputs(patchset)
-    if any(manifest.get(k) != v or update_identity.get(k) != v for k,v in content.items()):
-        raise ValueError('Prepared content revision/build policy mismatch')
     from scripts.source.branding import load as load_branding
     branding_path=tree/'branding.json'
     if not branding_path.is_file() or hashlib.sha256(branding_path.read_bytes()).hexdigest()!=manifest.get('branding_sha256'):
@@ -114,8 +110,7 @@ def prepare(base,output,ref,sha,name,bridge):
         scan_prepared_source(tree)
         if profile['source_sbom_requested']:
             run('syft','dir:'+str(tree),'-o','cyclonedx-json='+str(tree/'custom-source.sbom.json'))
-        from scripts.release.content import inputs as content_inputs
-        manifest={**content_inputs(name), 'upstream_repository':'rustdesk/rustdesk','upstream_ref':ref,'upstream_sha':sha,
+        manifest={'upstream_repository':'rustdesk/rustdesk','upstream_ref':ref,'upstream_sha':sha,
                   'upstream_version':profile['upstream_version'],'patchset':name,
                   'common_patch_hash':patch_hash('common',name),
                   'sos_patch_hash':patch_hash('sos',name) if variant=='sos' else None,

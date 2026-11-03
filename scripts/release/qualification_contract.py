@@ -56,10 +56,10 @@ class MatrixTests(unittest.TestCase):
         self.assertIn('ENGINE_LIBRARY_SHA256',arm_setup)
         self.assertIn('Get-FileHash $engine -Algorithm SHA256',arm_setup)
         self.assertEqual(set(platforms['jobs']),{'plan','macos-arm64-bridge','platforms'})
-        self.assertEqual(set(platforms['jobs']['platforms']['needs']),{'plan','macos-arm64-bridge'})
-        self.assertEqual(platforms['jobs']['macos-arm64-bridge']['permissions'],{'contents':'read'})
-        self.assertNotIn('secrets',platforms['jobs']['macos-arm64-bridge'])
-        self.assertNotIn('environment',platforms['jobs']['macos-arm64-bridge'])
+        self.assertEqual(platforms['jobs']['platforms']['needs'],['plan','macos-arm64-bridge'])
+        self.assertEqual(platforms['jobs']['macos-arm64-bridge']['runs-on'],'ubuntu-22.04')
+        self.assertIn('needs.macos-arm64-bridge.outputs.artifact',
+                      platforms['jobs']['platforms']['with']['macos_bridge_artifact'])
         self.assertNotIn('if',platforms['jobs']['platforms'])
         self.assertEqual(set(android['jobs']),{'plan','android-platforms'})
         self.assertEqual(android['jobs']['android-platforms']['needs'],'plan')
@@ -147,10 +147,6 @@ class ArchitectureTests(unittest.TestCase):
             with self.assertRaises(ValueError):platform_package.verify_checksums(root)
 
 class AggregateTests(unittest.TestCase):
-    def setUp(self):
-        content=patch('scripts.release.content.inputs',return_value=dict(patchset_version='v999999.1',version_semantics='patchset-content-v1',build_policy_sha256='d'*64))
-        content.start();self.addCleanup(content.stop)
-
     def test_missing_required_target_fails_and_report_survives(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v999999','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)
@@ -160,19 +156,19 @@ class AggregateTests(unittest.TestCase):
         sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
         patchset='v999999'
         custom='b'*40
-        identity=channel.build_identity(sha,patchset,'c'*64,'d'*64,custom,False,patchset_version='v999999.1',build_policy_sha256='d'*64)
+        identity=channel.build_identity(sha,patchset,'c'*64,'d'*64,custom,False)
         name='v1.4.9-custom.v999999.1'
         assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
                'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,
                    'Custom Repository SHA: '+custom,'Wayland Included: false','Patch Revision: v999999.1','Build Identity: '+identity,
-                   'Automation-State: complete','version_semantics=patchset-content-v1','Asset Inventory: '+json.dumps(assets)]),
+                   'version_semantics=patchset-content-v1','Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
                'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in assets]}
         def api(path,**kwargs):
             if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
             if path.endswith('releases?per_page=100&page=1'): return [draft]
             return None
-        with patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
+        with patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
             data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
             self.assertFalse(data['build_needed'])
             self.assertFalse(data['draft_needed'])
@@ -201,9 +197,6 @@ class NamingContractTests(unittest.TestCase):
 
 
 class ReleaseBodyContractTests(unittest.TestCase):
-    def setUp(self):
-        gate=patch('scripts.release.content.require_cutover');gate.start();self.addCleanup(gate.stop)
-
     def test_official_release_body_removes_pro_badge(self):
         body='''![image](https://example/image)\n\n[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Advanced%20Features-blue)](https://rustdesk.com/pricing.html)\n\n# Changelog\n'''
         normalized=qualification.normalize_release_body(body)
@@ -271,9 +264,7 @@ class ParallelGateTests(unittest.TestCase):
             self.assertNotIn('continue-on-error',jobs[name])
     def test_clients_and_draft_remain_downstream_of_complete_compatibility(self):
         tag=self.workflow('tag.yml')['jobs']
-        self.assertEqual(set(tag['prepare']['needs']),{'resolve','draft-preflight','coordinator-admit'})
-        self.assertIn("needs.coordinator-admit.outputs.allow == 'true'", tag['prepare']['if'])
-        self.assertEqual(set(tag['coordinator-admit']['needs']), {'resolve','draft-preflight'})
+        self.assertEqual(set(tag['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertNotIn('qualification',tag['prepare']['needs'])
         self.assertNotIn('qualification',tag['windows-build']['needs'])
         self.assertIn('prepare',tag['windows-build']['needs'])

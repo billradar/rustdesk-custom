@@ -11,6 +11,22 @@ from scripts.release import stable_router as router
 
 
 class StableRouterContract(unittest.TestCase):
+    def test_non_main_stable_dry_run_remains_available(self):
+        import yaml
+        root=Path(__file__).resolve().parents[2]
+        jobs=yaml.safe_load((root/'.github/workflows/tag.yml').read_text())['jobs']
+        steps=jobs['resolve']['steps']
+        boundary=next(step for step in steps
+                      if step.get('name')=='Validate Stable branch and mode boundary')
+        self.assertIn('refs/heads/main',boundary['run'])
+        self.assertIn('dry-run',boundary['run'])
+        self.assertIn('exit 1',boundary['run'])
+        gate=next(step for step in steps if step.get('id')=='dedup')
+        self.assertEqual(gate['if'],"github.ref == 'refs/heads/main'")
+        self.assertEqual(jobs['draft-preflight']['if'],
+                         "needs.resolve.outputs.dedup_skip != 'true'")
+        self.assertIn("github.ref == 'refs/heads/main'",jobs['draft']['if'])
+
     def test_trusted_context_is_required(self):
         base = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
                     GITHUB_EVENT_NAME='schedule', GITHUB_SHA='a' * 40)
@@ -29,32 +45,54 @@ class StableRouterContract(unittest.TestCase):
         self.assertEqual(router.run_state([success] * 3), 'EXHAUSTED')
         self.assertEqual(router.run_state([{'status': 'queued'}]), 'ACTIVE')
 
-    def test_run_lookup_matches_only_target_stable_variant(self):
+    def test_run_lookup_skips_any_active_same_source_configuration(self):
         identity = 'e' * 64
         rows = [
-            {'display_title': f'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity={identity}', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
-            {'display_title': 'Stable v1.5.1 / release / wayland=true', 'head_branch': 'main', 'event': 'workflow_dispatch'},
-            {'display_title': 'Stable v1.5.1 / draft / wayland=false', 'head_branch': 'main', 'event': 'workflow_dispatch'},
-            {'display_title': 'Stable v1.5.1 / draft', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'c' * 40},
-            {'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'feature', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
+            {'display_title': 'Stable v1.5.1 / dry-run / wayland=false / android-signing=false',
+             'head_branch': 'main', 'event': 'workflow_dispatch', 'status': 'queued'},
+            {'display_title': 'Stable latest / release / wayland=true / android-signing=true',
+             'head_branch': 'main', 'event': 'workflow_dispatch', 'status': 'in_progress'},
+            {'display_title': 'Stable v1.5.0 / draft / wayland=true / android-signing=false',
+             'head_branch': 'main', 'event': 'workflow_dispatch', 'status': 'in_progress'},
+            {'display_title': 'Stable v1.5.1 / draft / wayland=true / android-signing=false',
+             'head_branch': 'feature', 'event': 'workflow_dispatch', 'status': 'queued'},
         ]
-        rows.append({'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main',
-                     'event': 'workflow_dispatch', 'head_sha': 'b' * 40})
-        rows.append({'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main',
-                     'event': 'workflow_dispatch', 'head_sha': 'd' * 40})
         with patch.object(router, 'api', return_value={'workflow_runs': rows}):
             selected = router.workflow_runs('v1.5.1', identity)
-            other_identity = router.workflow_runs('v1.5.1', 'f' * 64)
-        self.assertEqual(len(selected), 1)
-        self.assertEqual(other_identity, [])
+        self.assertEqual(selected, [rows[1]])
 
-    def test_matching_manual_stable_run_is_included_only_while_active(self):
+    def test_dry_run_history_never_blocks_or_downloads_a_stable_lock(self):
+        rows = [dict(display_title='Stable v1.5.1 / dry-run / wayland=true / android-signing=false',
+                     head_branch='main', event='workflow_dispatch', id=i,
+                     status=status, conclusion=conclusion)
+                for i,(status,conclusion) in enumerate([
+                    ('queued', None), ('in_progress', None),
+                    ('completed', 'success'), ('completed', 'failure')], 20)]
+        with patch.object(router, 'api', return_value={'workflow_runs': rows}), \
+             patch.object(router, 'recorded_identity', side_effect=AssertionError('Dry-run lock downloaded')) as download:
+            self.assertEqual(router.workflow_runs('v1.5.1','e'*64), [])
+        download.assert_not_called()
+
+    def test_stable_dry_run_bypasses_lite_before_lock_or_history(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            output=Path(temp)/'out'
+            env=dict(GITHUB_REPOSITORY=router.REPOSITORY,GITHUB_REF='refs/heads/main',
+                     GITHUB_EVENT_NAME='workflow_dispatch',RELEASE_MODE='dry-run',
+                     GITHUB_OUTPUT=str(output))
+            with patch.dict(os.environ, env), patch.object(router,'workflow_runs') as history:
+                router.dedup()  # No .work/stable-lock.json exists.
+            history.assert_not_called()
+            self.assertIn('skip=false', output.read_text())
+
+    def test_manual_stable_runs_are_deduplicated_by_actual_lock_when_completed(self):
         active={'display_title':'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity=manual',
                 'head_branch':'main','event':'workflow_dispatch','status':'in_progress'}
-        completed=dict(active,status='completed')
-        with patch.object(router,'api',return_value={'workflow_runs':[active,completed]}):
+        completed=dict(active,status='completed',id=123)
+        with patch.object(router, 'api', return_value={'workflow_runs':[active,completed]}), \
+             patch.object(router, 'recorded_identity', return_value='e'*64):
             selected=router.workflow_runs('v1.5.1','e'*64)
-        self.assertEqual(selected,[active])
+        self.assertEqual(selected,[active,completed])
 
     def test_automatic_run_dedup_uses_recorded_identity_and_blocks_unknown_active(self):
         base = dict(display_title='Stable latest / draft / wayland=true / android-signing=false',
@@ -86,7 +124,12 @@ class StableRouterContract(unittest.TestCase):
             return SimpleNamespace(returncode=0)
         row = dict(id=123, head_sha='a'*40)
         with patch.object(router.subprocess, 'run', side_effect=download):
-            self.assertEqual(router.recorded_identity(row), data['build_identity'])
+            self.assertEqual(router.recorded_identity(row),
+                             router.lite_identity(data['upstream_sha'],
+                                                  data['common_patch_hash'], data['sos_patch_hash']))
+            data['dedup_state'] = 'ACTIVE'
+            self.assertIsNone(router.recorded_identity(row))
+            data.pop('dedup_state')
             with self.assertRaisesRegex(ValueError, 'provenance'):
                 router.recorded_identity(dict(row, head_sha='e'*40))
         with patch.object(router.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
@@ -100,49 +143,16 @@ class StableRouterContract(unittest.TestCase):
         with patch.object(router, 'release_preflight', return_value={'build_needed': True}):
             self.assertFalse(router.existing_build(data))
 
-    def test_latest_completed_version_ignores_incomplete_and_unrelated_releases(self):
-        rows = [
-            {'tag_name': 'v1.5.0-custom.v2.1', 'prerelease': False,
-             'body': 'automation_state=complete',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-            {'tag_name': 'v1.6.0-custom.v2.1', 'prerelease': False,
-             'body': 'automation_state=uploading',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-            {'tag_name': 'v9.0.0-custom.v2.1', 'prerelease': True,
-             'body': 'automation_state=complete',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-            {'tag_name': 'not-a-stable-tag', 'prerelease': False,
-             'body': 'automation_state=complete',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-        ]
-        with patch.object(router, 'api', return_value=rows):
-            self.assertEqual(router.latest_completed_version(), '1.5.0')
-        self.assertLess(router.version_tuple('1.9.0'), router.version_tuple('1.10.0'))
-
-    def test_router_skips_when_official_version_has_not_advanced(self):
+    def test_same_version_changed_patchset_is_checked(self):
         with patch.object(router, 'verify_context'), \
-             patch.object(router, 'discovery', return_value={'version': '1.5.0', 'upstream_tag': '1.5.0'}), \
-             patch.object(router, 'latest_completed_version', return_value='1.5.0'), \
-             patch.object(router, 'existing_build') as existing, \
-             patch.object(router, 'dispatch') as dispatch:
-            router.route()
-        existing.assert_not_called()
-        dispatch.assert_not_called()
-
-    def test_manual_router_can_check_same_version_when_explicitly_enabled(self):
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'ALLOW_SAME_VERSION': 'true'}), \
-             patch.object(router, 'verify_context'), \
-             patch.object(router, 'discovery', return_value={'version': '1.5.0', 'upstream_tag': '1.5.0',
-                                                              'upstream_sha': 'a' * 40, 'patchset': 'v2'}), \
-             patch.object(router, 'latest_completed_version', return_value='1.5.0'), \
-             patch.object(router, 'existing_build', return_value=False) as existing, \
+             patch.object(router, 'discovery', return_value={'version':'1.5.0','upstream_tag':'v1.5.0',
+                                                             'upstream_sha':'a'*40, 'patchset':'v2'}), \
+             patch.object(router, 'existing_build', return_value=False), \
+             patch.object(router, 'patch_hash', side_effect=['b'*64, 'c'*64]), \
              patch.object(router, 'workflow_runs', return_value=[]), \
              patch.object(router, 'dispatch') as dispatch:
             router.route()
-        existing.assert_called_once()
-        dispatch.assert_called_once()
-        self.assertEqual(dispatch.call_args.args[0], '1.5.0')
-        self.assertEqual(dispatch.call_args.args, ('1.5.0',))
+        dispatch.assert_called_once_with('v1.5.0')
 
     def test_dispatch_pins_official_tag_and_private_draft_mode(self):
         with patch.object(router.subprocess, 'run') as run:
@@ -156,6 +166,52 @@ class StableRouterContract(unittest.TestCase):
         self.assertIn('include_wayland=true', args)
         self.assertFalse(any(x.startswith('expected_build_identity=') for x in args))
         self.assertTrue(run.call_args.kwargs['check'])
+
+    def test_stable_direct_dispatch_skips_older_active_batch(self):
+        lock = dict(channel='stable', workflow_run='20',
+                    custom_repository_sha='a'*40, upstream_tag='v1.5.1',
+                    upstream_sha='b'*40, common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            old_dir = os.getcwd()
+            try:
+                os.chdir(td)
+                Path('.work').mkdir()
+                Path('.work/stable-lock.json').write_text(json.dumps(lock))
+                env = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
+                           GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_NUMBER='20',
+                           GITHUB_RUN_ID='20', GITHUB_SHA='a'*40, RELEASE_MODE='draft',
+                           GITHUB_OUTPUT=str(Path(td)/'out'))
+                with patch.dict(os.environ, env), patch.object(router, 'workflow_runs',
+                     return_value=[{'status':'queued', 'conclusion':None}]) as history:
+                    router.dedup()
+                self.assertIn('skip=true', Path(td, 'out').read_text())
+                self.assertEqual(json.loads(Path('.work/stable-lock.json').read_text())['dedup_state'], 'ACTIVE')
+                self.assertEqual(history.call_args.kwargs['prior_run_number'], 20)
+            finally:
+                os.chdir(old_dir)
+
+    def test_stable_direct_release_can_publish_existing_success(self):
+        lock = dict(channel='stable', workflow_run='21',
+                    custom_repository_sha='a'*40, upstream_tag='v1.5.1',
+                    upstream_sha='b'*40, common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            old_dir = os.getcwd()
+            try:
+                os.chdir(td)
+                Path('.work').mkdir()
+                Path('.work/stable-lock.json').write_text(json.dumps(lock))
+                env = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
+                           GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_NUMBER='21',
+                           GITHUB_RUN_ID='21', GITHUB_SHA='a'*40, RELEASE_MODE='release',
+                           GITHUB_OUTPUT=str(Path(td)/'out'))
+                with patch.dict(os.environ, env), patch.object(router, 'workflow_runs',
+                     return_value=[{'status':'completed', 'conclusion':'success'}]):
+                    router.dedup()
+                self.assertIn('skip=false', Path(td, 'out').read_text())
+            finally:
+                os.chdir(old_dir)
 
 
 if __name__ == '__main__':

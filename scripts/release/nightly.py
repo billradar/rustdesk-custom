@@ -17,6 +17,7 @@ try:
 except ImportError:
     import tomli as tomllib
 from scripts.release.router_retry_policy import decide
+from scripts.release.coordinator_lite import from_hashes as lite_identity
 from scripts.upstream.resolve import api
 from scripts.upstream.patchsets import patchset_for_version, patch_hash
 
@@ -56,49 +57,44 @@ def discover(run_id=''):
     cargo = api(f'repos/{OFFICIAL}/contents/Cargo.toml?ref={sha}')
     version = tomllib.loads(base64.b64decode(cargo['content']).decode())['package']['version']
     patchset = patchset_for_version(version)
-    from scripts.release.content import inputs
-    content = inputs(patchset)
-    return dict(**content, channel='nightly', upstream_repository=OFFICIAL, upstream_sha=sha,
+    return dict(channel='nightly', upstream_repository=OFFICIAL, upstream_sha=sha,
                 upstream_ref=sha, upstream_tag='', upstream_version=version, patchset=patchset,
                 official_run_id=str(run['id']), official_run_url=run['html_url'],
                 common_patch_hash=patch_hash('common', patchset), sos_patch_hash=patch_hash('sos', patchset))
 
 
 def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
-    identity = dict(upstream_sha=data['upstream_sha'], patchset=data['patchset'],
-                    common_patch_hash=data['common_patch_hash'], sos_patch_hash=data['sos_patch_hash'],
-                    wayland=wayland, signing=signing,
-                    wayland_policy_sha256=data.get('wayland_policy_sha256', '') if wayland == 'true' else '')
-    if data.get('patchset_version'):
-        identity.update(schema='nightly-build-identity-v2', patchset_version=data['patchset_version'],
-                        build_policy_sha256=data['build_policy_sha256'])
-    if release_mode is not None:
-        identity['release_mode'] = release_mode
-    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    """Dedup across build modes and options using source+both patch families."""
+    return lite_identity(data['upstream_sha'], data['common_patch_hash'], data['sos_patch_hash'])
+
+
+def is_dry_run(row):
+    """Exclude historical test-only Nightly batches, including active ones."""
+    parts = row.get('display_title', '').split(' / ')
+    return (len(parts) >= 4 and parts[0].startswith('Nightly ')
+            and parts[2] == 'dry-run' and parts[3] in ('wayland=true', 'wayland=false'))
 
 
 def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false', upstream_sha=''):
-    title_suffix = f' / {release_mode} / wayland={wayland} / android-signing={signing}'
-    unresolved = [r for r in rows if r.get('_nightly_identity_unresolved')
+    """An active same-source production batch blocks duplicates; dry-run does not."""
+    relevant = [r for r in rows if not is_dry_run(r)
+                and r.get('event') == 'workflow_dispatch'
+                and r.get('head_branch') == 'main'
+                and str(r.get('id')) != str(current_run_id)]
+    unresolved = [r for r in relevant if r.get('_nightly_identity_unresolved')
                   and (r.get('_upstream_sha') == upstream_sha
-                       or (not r.get('_upstream_sha') and r.get('display_title', '').startswith('Nightly latest /')))
-                  and r.get('display_title', '').endswith(title_suffix)
-                  and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
-                  and str(r['id']) != str(current_run_id)]
+                       or not r.get('_upstream_sha'))]
     if any(r.get('status') != 'completed' for r in unresolved):
         return 'ACTIVE'
     if unresolved:
         return 'UNKNOWN'
-    matched = [r for r in rows if r.get('_nightly_identity') == identity
-               and r['display_title'].endswith(title_suffix)
-               and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
-               and str(r['id']) != str(current_run_id)]
-    if any(r['status'] != 'completed' for r in matched):
+    matched = [r for r in relevant if r.get('_nightly_identity') == identity
+               and (not upstream_sha or r.get('_upstream_sha') in ('', upstream_sha))]
+    if any(r.get('status') != 'completed' for r in matched):
         return 'ACTIVE'
-    if any(r['conclusion'] == 'success' for r in matched):
+    if any(r.get('conclusion') == 'success' for r in matched):
         return 'SUCCESS'
     return 'EXHAUSTED' if len(matched) >= 3 else 'RETRY'
-
 
 def prior_history(rows, current_run_id=''):
     """Return only runs older than this run, excluding later queued dispatches."""
@@ -181,6 +177,9 @@ def discovery_from_run(row):
 
 def annotate_history(rows, upstream_sha=None):
     for row in rows:
+        if is_dry_run(row):
+            # No discovery download, uncertainty marker or retry accounting.
+            continue
         row['_upstream_sha'] = source_sha_from_run(row)
         title = row.get('display_title', '')
         if upstream_sha and row['_upstream_sha'] != upstream_sha and not title.startswith('Nightly latest /'):
@@ -205,9 +204,6 @@ def route(data):
     if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')):
         raise ValueError('Nightly router requires trusted main context')
-    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
-        from scripts.release.coordinator.runtime import route_nightly
-        return route_nightly(data)
     rows = []
     for page in range(1, 11):
         batch = api(f'repos/{repo}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
@@ -228,11 +224,10 @@ def route(data):
         return
     if state == 'UNKNOWN':
         raise ValueError('Unresolved Nightly build identity; manual review required')
-    matching = [r for r in rows if r.get('_nightly_identity') == identity
+    matching = [r for r in rows if not is_dry_run(r)
+                and r.get('_nightly_identity') == identity
                 and r.get('event') == 'workflow_dispatch'
-                and r.get('head_branch') == 'main'
-                and r.get('display_title', '').endswith(
-                    f' / draft / wayland=true / android-signing={signing}')]
+                and r.get('head_branch') == 'main']
     state = decide(matching)
     print('Nightly route: ' + state)
     if state == 'REVIEW':
@@ -241,6 +236,22 @@ def route(data):
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true'], check=True)
+
+
+def skip_duplicate_dispatch(state, mode):
+    """Build reuse must not prevent an explicitly authorized publication.
+
+    A manual release may run complete signing/package and remote-asset gates
+    after a prior successful draft. An active run or cooldown still blocks it.
+    This does not authorize publication, which remains downstream-only.
+    """
+    if mode not in ('dry-run', 'draft', 'release'):
+        raise ValueError('Invalid Nightly release mode for deduplication')
+    if mode == 'dry-run':
+        return False  # Dry runs never enter Lite admission.
+    if state not in ('ACTIVE', 'SUCCESS', 'COOLDOWN', 'RETRY'):
+        raise ValueError('Unreviewed Nightly dedup state')
+    return state in ('ACTIVE', 'COOLDOWN') or (state == 'SUCCESS' and mode != 'release')
 
 
 def dedup():
@@ -255,17 +266,15 @@ def dedup():
     signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
     if mode not in ('dry-run', 'draft', 'release') or wayland not in ('true', 'false') or signing not in ('true', 'false'):
         raise ValueError('Invalid Nightly dedup configuration')
-    if os.environ['GITHUB_REF'] == 'refs/heads/development':
-        if mode != 'dry-run':
-            raise ValueError('Development Nightly runs are dry-run only')
+    if os.environ['GITHUB_REF'] == 'refs/heads/development' and mode != 'dry-run':
+        raise ValueError('Development Nightly runs are dry-run only')
+    if mode == 'dry-run':
+        # No build-history query on any branch. A successful dry-run also has
+        # no effect on later Draft/Release scheduling or their retry budget.
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                 output.write('skip=false\nstate=RETRY\n')
-        print('Nightly dedup: development dry-run is isolated from production history')
-        return
-    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
-        from scripts.release.coordinator.runtime import outputs
-        outputs(skip=False, state='COORDINATOR_ADMISSION_REQUIRED')
+        print('Nightly dry-run: no Lite history lookup or duplicate suppression')
         return
     rows = []
     for page in range(1, 11):
@@ -288,15 +297,16 @@ def dedup():
     if state == 'UNKNOWN':
         raise ValueError('A matching Nightly run has no discovery artifact; inspect it before retrying')
     if state != 'ACTIVE':
-        title_suffix = f' / {mode} / wayland={wayland} / android-signing={signing}'
-        matching = [r for r in rows if r.get('_nightly_identity') == identity
-                    and r.get('display_title', '').endswith(title_suffix)
+        matching = [r for r in rows if not is_dry_run(r)
+                    and r.get('_nightly_identity') == identity
                     and r.get('event') == 'workflow_dispatch'
                     and r.get('head_branch') == 'main']
         state = decide(matching)
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review')
-    skip = state in ('ACTIVE', 'SUCCESS', 'COOLDOWN')
+    skip = skip_duplicate_dispatch(state, mode)
+    if state == 'SUCCESS' and mode == 'release':
+        print('Nightly manual release: prior build succeeded; proceed through full release gates')
     if skip:
         # This dispatch did not build. Preserve provenance but never count it
         # as an attempted build or as a successful completed build.
@@ -364,10 +374,6 @@ def aggregate(root, discovery):
                     upstream_repository=OFFICIAL)
     if any(data.get(k) != v for k, v in required.items()):
         raise ValueError('Nightly discovery identity mismatch')
-    from scripts.release.content import inputs as content_inputs
-    content = content_inputs(data['patchset'])
-    if any(data.get(k) != v for k,v in content.items()):
-        raise ValueError('Nightly discovery content/build policy mismatch')
     mode = os.environ.get('RELEASE_MODE', 'dry-run')
     if mode not in ('dry-run', 'draft', 'release'):
         raise ValueError('Unsupported Nightly release mode')
@@ -380,7 +386,6 @@ def aggregate(root, discovery):
         expected = dict(required, custom_repository_sha=os.environ['GITHUB_SHA'],
                         common_patch_hash=patch_hash('common', data['patchset']))
         expected.pop('upstream_repository')
-        expected.update(content)
         for k, v in expected.items():
             if info.get(k) != v:
                 raise ValueError('Nightly artifact identity mismatch: ' + k)
@@ -465,8 +470,6 @@ def delete_refresh_draft(existing):
 
 
 def draft(root, discovery):
-    from scripts.release.content import require_cutover
-    require_cutover()
     from scripts.release.github import request, gh
     from scripts.release.production import scan_job_log
     require_draft_context()
@@ -489,9 +492,7 @@ def draft(root, discovery):
                          wayland_policy_sha256=report.get('wayland', {}).get('policy_sha256', ''),
                          release_mode=release_mode,
                          signing='true' if signing_required else 'false')
-    from scripts.release.content import inputs as content_inputs, notes as content_notes
-    content = content_inputs(data['patchset'])
-    identity_source = dict(**content, upstream_sha=identity_data['upstream_sha'],
+    identity_source = dict(upstream_sha=identity_data['upstream_sha'],
                            patchset=identity_data['patchset'],
                            common_patch_hash=identity_data['common_patch_hash'],
                            sos_patch_hash=identity_data['sos_patch_hash'],
@@ -532,10 +533,19 @@ def draft(root, discovery):
         checksum_actual[match.group(2)] = match.group(1)
     if checksum_actual != checksum_expected:
         raise ValueError('Nightly SHA256SUMS does not match public assets')
+    # Release note content is reviewed alongside the Common/SOS patch hashes;
+    # it is never a Coordinator Lite deduplication input.
+    from scripts.upstream.patchset_version import current as current_patchset, SCHEMA as VERSION_SEMANTICS
+    from scripts.release.content import notes as patchset_notes
+    reviewed_patchset = current_patchset(data['patchset'])
+    content_version = f'{data["patchset"]}.{reviewed_patchset["revision"]}'
+    if reviewed_patchset['hashes'] != {
+            'common': identity_data['common_patch_hash'],
+            'sos': identity_data['sos_patch_hash']}:
+        raise ValueError('Nightly Patchset notes differ from compiled patch content')
     metadata = [f'channel=nightly', 'nightly_identity=' + identity,
-                'patchset_version=' + content['patchset_version'],
-                'version_semantics=' + content['version_semantics'],
-                'build_policy_sha256=' + content['build_policy_sha256'],
+                'patchset_version=' + content_version,
+                'version_semantics=' + VERSION_SEMANTICS,
                 'upstream_repository=' + OFFICIAL, 'upstream_sha=' + data['upstream_sha'],
                 'official_run_id=' + run_id, 'official_run_url=' + data['official_run_url'],
                 'custom_repository_sha=' + os.environ['GITHUB_SHA'], 'build_run=' + os.environ['GITHUB_RUN_ID'],
@@ -552,7 +562,7 @@ def draft(root, discovery):
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy_sha256'])
     notes = (upstream_notes + '\n\n'
              '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n'
-             + '\n' + content_notes(data['patchset'], nightly=True))
+             + '\n' + patchset_notes(data['patchset'], nightly=True))
 
     # The tag remains moving. Refresh private Drafts with a new Release identity;
     # published prereleases retain the explicitly authorized release-mode path.
@@ -587,6 +597,8 @@ def draft(root, discovery):
             'upstream_sha=' + data['upstream_sha'],
             'custom_repository_sha=' + os.environ['GITHUB_SHA'],
             'patchset=' + data['patchset'],
+            'patchset_version=' + content_version,
+            'version_semantics=' + VERSION_SEMANTICS,
             'common_patch_hash=' + identity_data['common_patch_hash'],
             'sos_patch_hash=' + identity_data['sos_patch_hash'],
             'wayland_included=' + str(identity_data['wayland_included']).lower(),
