@@ -59,7 +59,31 @@ class StableRouterContract(unittest.TestCase):
         ]
         with patch.object(router, 'api', return_value={'workflow_runs': rows}):
             selected = router.workflow_runs('v1.5.1', identity)
-        self.assertEqual(selected, rows[:2])
+        self.assertEqual(selected, [rows[1]])
+
+    def test_dry_run_history_never_blocks_or_downloads_a_stable_lock(self):
+        rows = [dict(display_title='Stable v1.5.1 / dry-run / wayland=true / android-signing=false',
+                     head_branch='main', event='workflow_dispatch', id=i,
+                     status=status, conclusion=conclusion)
+                for i,(status,conclusion) in enumerate([
+                    ('queued', None), ('in_progress', None),
+                    ('completed', 'success'), ('completed', 'failure')], 20)]
+        with patch.object(router, 'api', return_value={'workflow_runs': rows}), \
+             patch.object(router, 'recorded_identity', side_effect=AssertionError('Dry-run lock downloaded')) as download:
+            self.assertEqual(router.workflow_runs('v1.5.1','e'*64), [])
+        download.assert_not_called()
+
+    def test_stable_dry_run_bypasses_lite_before_lock_or_history(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            output=Path(temp)/'out'
+            env=dict(GITHUB_REPOSITORY=router.REPOSITORY,GITHUB_REF='refs/heads/main',
+                     GITHUB_EVENT_NAME='workflow_dispatch',RELEASE_MODE='dry-run',
+                     GITHUB_OUTPUT=str(output))
+            with patch.dict(os.environ, env), patch.object(router,'workflow_runs') as history:
+                router.dedup()  # No .work/stable-lock.json exists.
+            history.assert_not_called()
+            self.assertIn('skip=false', output.read_text())
 
     def test_manual_stable_runs_are_deduplicated_by_actual_lock_when_completed(self):
         active={'display_title':'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity=manual',

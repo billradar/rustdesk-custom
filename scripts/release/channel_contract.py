@@ -165,6 +165,21 @@ class ChannelPolicyTests(unittest.TestCase):
         releases.assert_not_called()
 
 
+    def test_dry_run_preflight_never_queries_releases_or_claims_a_draft(self):
+        data=self.discovery('v1')
+        with patch.object(channel,'api',side_effect=AssertionError('Release queried')) as lookup, \
+             patch.object(channel,'matching_drafts',side_effect=AssertionError('Draft queried')) as drafts:
+            result=channel.release_preflight(data, dry_run=True)
+        lookup.assert_not_called()
+        drafts.assert_not_called()
+        self.assertTrue(result['build_needed'])
+        self.assertFalse(result['draft_needed'])
+        self.assertFalse(result['publish_existing'])
+        self.assertEqual(result['patch_revision'],'v1.2')
+        self.assertEqual(result['rebuild_reason'],'DRY_RUN_VALIDATION_ONLY')
+        with self.assertRaisesRegex(ValueError,'Locked Patchset content revision drift'):
+            channel.release_preflight(dict(self.discovery('v1'),patch_revision='v1.1'),dry_run=True)
+
     def test_same_build_identity_reuses_existing_patch_revision(self):
         existing=self.draft_fixture('v1','2')
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):

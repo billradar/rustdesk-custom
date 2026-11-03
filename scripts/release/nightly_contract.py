@@ -65,7 +65,9 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(state([row],nightly.nightly_identity(changed_patch)),'RETRY')
         self.assertEqual(nightly.nightly_identity(data),nightly.nightly_identity(dict(data,custom_repository_sha='f'*40)))
         # Mode/Wayland/signing do not change the two-input Lite identity.
-        self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'SUCCESS')
+        self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
+        self.assertEqual(state([dict(row, status='queued', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
+        self.assertEqual(state([dict(row, conclusion='failure', display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]*3),'RETRY')
         self.assertEqual(state([dict(row, conclusion='success', display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'SUCCESS')
         self.assertEqual(nightly.nightly_identity(data, 'draft', 'true', 'false'),
                          nightly.nightly_identity(data, 'release', 'false', 'true'))
@@ -81,6 +83,21 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(nightly.route_state([active], 'f'*64, upstream_sha='b'*40), 'ACTIVE')
         other_source=dict(unknown,_upstream_sha='c'*40)
         self.assertEqual(nightly.route_state([other_source], 'f'*64, upstream_sha='b'*40), 'RETRY')
+
+    def test_dry_run_history_does_not_read_discovery_or_count_as_unknown(self):
+        rows=[dict(display_title='Nightly latest / '+'a'*40+
+                   ' / dry-run / wayland=true / android-signing=false',
+                   head_branch='main',event='workflow_dispatch',status=status,
+                   conclusion=outcome,id=20+i)
+              for i,(status,outcome) in enumerate([
+                  ('queued',None),('in_progress',None),
+                  ('completed','failure'),('completed','success')])]
+        with patch.object(nightly,'source_sha_from_run',side_effect=AssertionError('Dry-run SHA read')) as source, \
+             patch.object(nightly,'discovery_from_run',side_effect=AssertionError('Dry-run discovery read')) as discovery:
+            nightly.annotate_history(rows,'b'*40)
+        source.assert_not_called()
+        discovery.assert_not_called()
+        self.assertEqual(nightly.route_state(rows,'c'*64,upstream_sha='b'*40),'RETRY')
 
     def test_legacy_run_titles_recover_source_sha(self):
         old=dict(display_title='Nightly 17 / '+'a'*40+' / draft / wayland=true')

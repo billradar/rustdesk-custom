@@ -57,6 +57,18 @@ class LockTests(unittest.TestCase):
         with patch.object(lock.channel, 'release_preflight', return_value=result):
             self.assertEqual(lock.preflight(), result)
 
+    def test_dry_run_always_builds_after_validating_lock_and_content_version(self):
+        self.create()
+        with patch.dict(os.environ,RELEASE_MODE='dry-run'), \
+             patch.object(lock.channel,'api',side_effect=AssertionError('Release lookup forbidden')) as lookup:
+            result=lock.preflight()
+        lookup.assert_not_called()
+        self.assertTrue(result['build_needed'])
+        self.assertFalse(result['draft_needed'])
+        self.assertFalse(result['publish_existing'])
+        self.assertEqual(result['patch_revision'],'v2.8')
+        self.assertEqual(result['rebuild_reason'],'DRY_RUN_VALIDATION_ONLY')
+
     def test_artifact_source_and_both_variants_required(self):
         result = self.create()
         infos = [dict(variant=v, upstream_sha=result['upstream_sha'], upstream_version=result['version'],
@@ -92,6 +104,8 @@ class LockTests(unittest.TestCase):
                     self.assertIn('needs.', job['env'][field])
                 self.assertTrue(any('lock_artifact' in s.get('with', {}).get('name', '') for s in job['steps']))
                 self.assertIn('outputs.signing_enabled', job['env']['ANDROID_PRODUCTION_SIGNING_ENABLED'])
+        gate=next(s for s in jobs['draft-preflight']['steps'] if s.get('id')=='gate')
+        self.assertEqual(gate['env']['RELEASE_MODE'], '${{ inputs.release_mode }}')
         signer = jobs['android-production-sign'] if 'android-production-sign' in jobs else next(j for j in jobs.values() if 'vars.ANDROID_PRODUCTION_SIGNING_ENABLED' in j.get('if', '') and 'signing_enabled' in j.get('if', ''))
         self.assertIn("needs.resolve.outputs.signing_enabled == 'true'", signer['if'])
         self.assertIn('vars.ANDROID_PRODUCTION_SIGNING_ENABLED', signer['if'])

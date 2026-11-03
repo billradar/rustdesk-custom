@@ -34,13 +34,30 @@ class NightlyRouterRegression(unittest.TestCase):
                          nightly.nightly_identity(dict(upstream_sha='a'*40,
                          common_patch_hash='b'*64,sos_patch_hash='c'*64), 'release'))
         self.assertTrue(nightly.skip_duplicate_dispatch('SUCCESS', 'draft'))
-        self.assertTrue(nightly.skip_duplicate_dispatch('SUCCESS', 'dry-run'))
+        self.assertFalse(nightly.skip_duplicate_dispatch('SUCCESS', 'dry-run'))
+        self.assertFalse(nightly.skip_duplicate_dispatch('ACTIVE', 'dry-run'))
+        self.assertFalse(nightly.skip_duplicate_dispatch('COOLDOWN', 'dry-run'))
         self.assertFalse(nightly.skip_duplicate_dispatch('SUCCESS', 'release'))
         self.assertTrue(nightly.skip_duplicate_dispatch('ACTIVE', 'release'))
         self.assertTrue(nightly.skip_duplicate_dispatch('COOLDOWN', 'release'))
         self.assertFalse(nightly.skip_duplicate_dispatch('RETRY', 'release'))
         with self.assertRaises(ValueError):
             nightly.skip_duplicate_dispatch('UNKNOWN', 'release')
+
+    def test_main_dry_run_never_queries_lite_history(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            output=Path(folder)/'result'
+            env=dict(GITHUB_REPOSITORY='example/repo',GITHUB_REF='refs/heads/main',
+                     GITHUB_EVENT_NAME='workflow_dispatch',RELEASE_MODE='dry-run',
+                     INCLUDE_WAYLAND='true',ANDROID_PRODUCTION_SIGNING_ENABLED='false',
+                     GITHUB_OUTPUT=str(output))
+            with patch.dict(os.environ,env), \
+                 patch.object(nightly,'api',side_effect=AssertionError('Dry-run history queried')) as history:
+                nightly.dedup()
+            history.assert_not_called()
+            self.assertIn('skip=false',output.read_text())
 
     def test_release_dedup_invokes_existing_validation_path(self):
         import tempfile
