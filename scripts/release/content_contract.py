@@ -1,0 +1,95 @@
+"""Independent content versions and shared-identity release integration."""
+from dataclasses import replace
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+from scripts.release import content, channel, nightly
+from scripts.release.coordinator.identity import BuildIdentity, SourceIdentity
+
+
+class ContentContract(unittest.TestCase):
+    def test_revision_and_policy_are_shared_build_identity_inputs(self):
+        source = SourceIdentity('a'*40, 'v2', 'b'*64, 'c'*64)
+        for name in ('stable','nightly'):
+            old = BuildIdentity(name, source, False, '', False)
+            modern = replace(old, policy_version=2, patchset_version='v2.7', build_policy_sha256='d'*64)
+            self.assertNotEqual(old.key, modern.key)
+            self.assertNotEqual(modern.key, replace(modern, patchset_version='v2.9').key)
+            self.assertNotEqual(modern.key, replace(modern, build_policy_sha256='e'*64).key)
+            data = dict(upstream_sha=source.upstream_sha, patchset='v2', common_patch_hash='b'*64,
+                        sos_patch_hash='c'*64, patchset_version='v2.7', build_policy_sha256='d'*64)
+            if name == 'stable':
+                digest = channel.build_identity(source.upstream_sha,'v2','b'*64,'c'*64,
+                    wayland_included=False, patchset_version='v2.7',build_policy_sha256='d'*64)
+            else:
+                digest = nightly.nightly_identity(data, 'draft', 'false', 'false')
+            self.assertEqual(digest, modern.historical_digest)
+
+    def test_upstream_version_does_not_allocate_revision(self):
+        self.assertEqual(channel.next_patch_revision('1.5.0','v2'), channel.next_patch_revision('1.5.1','v2'))
+
+    def test_notes_are_deterministic_and_separate_inventory_from_delta(self):
+        stable = content.notes('v2')
+        self.assertEqual(stable, content.notes('v2'))
+        self.assertIn('Current included customizations', stable)
+        self.assertIn('Recorded Patchset revision delta', stable)
+        self.assertIn('migration-baseline', stable)
+        self.assertIn('not claims of new changes', content.notes('v2', nightly=True))
+
+    def test_cutover_has_no_environment_boolean_bypass(self):
+        with patch.dict(os.environ, PATCHSET_CUTOVER_ENABLED='true'):
+            with self.assertRaisesRegex(ValueError, 'CUTOVER_REVIEW_REQUIRED'):
+                content.require_cutover()
+
+    def test_policy_hash_changes_for_toolchain_but_not_docs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'requirements.txt').write_text('dependencies')
+            (root/'scripts/build').mkdir(parents=True)
+            sdk=root/'scripts/build/sdk.sh';sdk.write_text('SDK=1')
+            first=content.policy_digest(root)
+            (root/'README.md').write_text('documentation')
+            self.assertEqual(first, content.policy_digest(root))
+            sdk.write_text('SDK=2')
+            self.assertNotEqual(first, content.policy_digest(root))
+
+    def fixture(self):
+        inputs=content.inputs('v2')
+        common=channel.patch_hash('common','v2');sos=channel.patch_hash('sos','v2')
+        identity=channel.build_identity('a'*40,'v2',common,sos,wayland_included=False,
+            patchset_version=inputs['patchset_version'],build_policy_sha256=inputs['build_policy_sha256'])
+        tag='v1.5.1-custom.'+inputs['patchset_version']
+        names=['SHA256SUMS','rustdesk-1.5.1-standard-windows-x86_64.zip','rustdesk-1.5.1-sos-windows-x86_64.zip']
+        body='\n'.join(['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: v2',
+            'Common Patch Hash: '+common,'SOS Patch Hash: '+sos,'Patch Revision: '+inputs['patchset_version'],
+            'Build Identity: '+identity,'Wayland Included: false','version_semantics=patchset-content-v1',
+            'Asset Inventory: '+json.dumps(names)])
+        return dict(tag_name=tag,name=tag,draft=True,prerelease=False,body=body,
+                    assets=[dict(name=n,state='uploaded',size=1,digest='sha256:'+'b'*64) for n in names])
+
+    def test_same_tag_identity_reuses_existing_asset_gates(self):
+        existing=self.fixture()
+        data=dict(channel='stable',version='1.5.1',upstream_tag='1.5.1',upstream_ref='1.5.1',
+                  upstream_sha='a'*40,patchset='v2')
+        with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'),\
+             patch.object(channel,'api',return_value=existing),\
+             patch.object(channel,'verify_release_asset_checksums') as checks:
+            result=channel.release_preflight(data)
+            self.assertFalse(result['build_needed'])
+            self.assertTrue(result['publish_existing'])
+            checks.assert_called_once()
+
+    def test_same_tag_different_identity_rejects_without_bump(self):
+        existing=self.fixture();existing['body']=existing['body'].replace('Build Identity: ', 'Build Identity: '+'e'*64+'\nold=')
+        data=dict(channel='stable',version='1.5.1',upstream_tag='1.5.1',upstream_ref='1.5.1',
+                  upstream_sha='a'*40,patchset='v2')
+        with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false'),patch.object(channel,'api',return_value=existing):
+            with self.assertRaisesRegex(ValueError,'IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION'):
+                channel.release_preflight(data)
+
+
+if __name__ == '__main__':
+    unittest.main()

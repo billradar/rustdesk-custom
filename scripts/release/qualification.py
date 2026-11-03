@@ -357,15 +357,20 @@ def release_notes_body(upstream_tag):
     release=api(f'repos/rustdesk/rustdesk/releases/tags/{tag}',missing=True)
     return normalize_release_body(release.get('body') if release else '')
 
-def build_release_body(official_body, metadata):
+def build_release_body(official_body, metadata, patchset=None):
     body=normalize_release_body(official_body)
     if not body:
         raise ValueError('Official release body is unavailable')
+    if patchset:
+        from scripts.release.content import notes
+        body += '\n\n' + notes(patchset)
     return body+'\n\n## Custom release metadata\n\n'+'\n'.join(metadata)+'\n'
 
 def _release(root, publish, channel='stable', experimental=False):
     if channel != 'stable':
         raise ValueError('Only Stable supports public release publication; Nightly uses its separate draft path')
+    from scripts.release.content import require_cutover
+    require_cutover()
     from scripts.upstream.resolve import api
     from scripts.release.github import request,gh
     repo='billradar/rustdesk-custom'
@@ -393,16 +398,24 @@ def _release(root, publish, channel='stable', experimental=False):
     directory=ROOT/'.work/qualification-aggregate/assets'
     official_notes=release_notes_body(standard['upstream_tag'] or standard['upstream_version'])
     from scripts.release.channel import build_identity
+    from scripts.release.content import inputs
+    content = inputs(standard['patchset'])
+    if standard['patch_revision'] != content['patchset_version']:
+        raise ValueError('Artifact content revision differs from metadata')
     wayland_included=os.environ.get('INCLUDE_WAYLAND') == 'true'
     wayland_policy=report.get('wayland',{}).get('policy_sha256','')
     identity=build_identity(standard['upstream_sha'],standard['patchset'],standard['common_patch_hash'],
                             sos['sos_patch_hash'],standard['custom_repository_sha'],wayland_included,wayland_policy,
-                            os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING','false').lower()=='true')
+                            os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING','false').lower()=='true',
+                            patchset_version=content['patchset_version'],build_policy_sha256=content['build_policy_sha256'])
     metadata=[
         'upstream_repository=rustdesk/rustdesk',
         f'upstream_tag={standard["upstream_tag"]}',
         f'upstream_sha={standard["upstream_sha"]}',
         f'patchset={standard["patchset"]}',
+        'patchset_version='+content['patchset_version'],
+        'version_semantics='+content['version_semantics'],
+        'build_policy_sha256='+content['build_policy_sha256'],
         f'common_patch_hash={standard["common_patch_hash"]}',
         f'sos_patch_hash={sos["sos_patch_hash"]}',
         f'custom_repository_sha={standard["custom_repository_sha"]}',
@@ -425,7 +438,7 @@ def _release(root, publish, channel='stable', experimental=False):
     if 'wayland' in report:
         metadata += ['wayland_policy_sha256=' + report['wayland']['policy_sha256'],
                      'wayland_scope=EXPERIMENTAL BUILD AND PACKAGE ONLY; RUNTIME NOT TESTED']
-    notes=build_release_body(official_notes, metadata)
+    notes=build_release_body(official_notes, metadata, standard['patchset'])
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
@@ -457,6 +470,8 @@ def _release(root, publish, channel='stable', experimental=False):
     if final['draft']!= (not publish): raise ValueError('Release state transition failed')
 
 def publish_existing_draft(channel='stable'):
+    from scripts.release.content import require_cutover
+    require_cutover()
     from scripts.release.stable_lock import require
     require()
     if channel != 'stable':

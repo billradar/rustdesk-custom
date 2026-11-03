@@ -106,7 +106,7 @@ def recorded_identity(row):
             raise ValueError('Stable build lock unavailable; manual review required')
         data = json.loads(max(candidates)[1].read_text())
     from scripts.release.stable_lock import SCHEMA
-    if (data.get('schema') != SCHEMA or data.get('channel') != 'stable'
+    if (data.get('schema') not in (SCHEMA, 'stable-build-lock-v1') or data.get('channel') != 'stable'
             or data.get('workflow_run') != run_id
             or data.get('custom_repository_sha') != row.get('head_sha')
             or type(data.get('wayland_included')) is not bool
@@ -120,7 +120,9 @@ def recorded_identity(row):
     identity = build_identity(data['upstream_sha'], data['patchset'], data['common_patch_hash'],
                               data['sos_patch_hash'], wayland_included=data['wayland_included'],
                               wayland_policy_sha256=data.get('wayland_policy_sha256', ''),
-                              android_signing_enabled=data['android_signing_enabled'])
+                              android_signing_enabled=data['android_signing_enabled'],
+                              patchset_version=data.get('patchset_version',''),
+                              build_policy_sha256=data.get('build_policy_sha256',''))
     if data.get('build_identity') != identity:
         raise ValueError('Invalid historical Stable build identity')
     return identity

@@ -1,0 +1,11 @@
+{
+  "schema": "patchset-cutover-v1",
+  "status": "BLOCKED",
+  "blockers": [
+    "QUIESCENT_WORKER_AND_JOURNAL_RECONCILIATION_REQUIRED",
+    "LEGACY_V1_TO_CONTENT_IDENTITY_ALIAS_REVIEW_REQUIRED",
+    "CURRENT_TAG_DRAFT_RELEASE_INVENTORY_RECHECK_REQUIRED",
+    "REQUIRED_UP_TO_DATE_PATCHSET_VERSION_GATE_NOT_VERIFIED"
+  ],
+  "policy": "No environment variable, boolean or PR workflow may activate cutover. A separately reviewed main-branch migration must verify evidence and implement activation. Historical journals, releases, tags and signatures remain immutable."
+}

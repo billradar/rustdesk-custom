@@ -21,7 +21,8 @@ def outputs(data):
     print(json.dumps(data,indent=2))
 
 def build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha=None,
-                   wayland_included=None, wayland_policy_sha256='', android_signing_enabled=False):
+                   wayland_included=None, wayland_policy_sha256='', android_signing_enabled=False,
+                   patchset_version='', build_policy_sha256=''):
     if not isinstance(wayland_included, bool):
         raise ValueError('Stable identity requires an explicit Wayland selection')
     if wayland_included and not re.fullmatch(r'[0-9a-f]{64}', wayland_policy_sha256):
@@ -33,6 +34,12 @@ def build_identity(upstream_sha, patchset, common_hash, sos_hash, custom_sha=Non
                     wayland_included=wayland_included,
                     wayland_policy_sha256=wayland_policy_sha256,
                     android_signing_enabled=bool(android_signing_enabled))
+    if patchset_version or build_policy_sha256:
+        from scripts.release.coordinator.identity import BuildIdentity, SourceIdentity
+        return BuildIdentity('stable', SourceIdentity(upstream_sha, patchset, common_hash, sos_hash),
+                             wayland_included, wayland_policy_sha256, bool(android_signing_enabled),
+                             policy_version=2, patchset_version=patchset_version,
+                             build_policy_sha256=build_policy_sha256).historical_digest
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -120,12 +127,8 @@ def require_release_tag(row, version):
     return tag
 
 def next_patch_revision(version, patchset):
-    match=PATCHSET_RE.fullmatch(patchset)
-    if not match: raise ValueError('Invalid patchset revision')
-    patch_number=match.group(1)
-    pattern=re.compile(r'^v'+re.escape(version)+r'-custom\.v'+re.escape(patch_number)+r'\.([1-9][0-9]{0,5})$')
-    nums=[int(m.group(1)) for row in release_rows(version) if (tag:=release_tag_name(row,version)) and (m:=pattern.fullmatch(tag))]
-    return f'v{patch_number}.{max(nums or [0])+1}'
+    from scripts.release.content import inputs
+    return inputs(patchset)['patchset_version']
 
 def parse_patch_revision(tag, version):
     match=CUSTOM_REVISION_RE.fullmatch(tag)
@@ -213,21 +216,20 @@ def release_preflight(data):
     current_identity=build_identity(data['upstream_sha'],data['patchset'],common_hash,
                                     sos_hash,None,wayland_included,wayland_policy_sha256,
                                     signing_enabled)
-    same=same_identity_release(data['version'],current_identity)
+    from scripts.release.content import inputs
+    content = inputs(data['patchset'])
+    for key, value in content.items():
+        if key in data and data[key] != value:
+            raise ValueError('Locked content identity changed: ' + key)
+    data.update(content)
+    current_identity=build_identity(data['upstream_sha'],data['patchset'],common_hash,sos_hash,
+                                    wayland_included=wayland_included,wayland_policy_sha256=wayland_policy_sha256,
+                                    android_signing_enabled=signing_enabled,
+                                    patchset_version=content['patchset_version'],build_policy_sha256=content['build_policy_sha256'])
     accepted_build_identity=current_identity
-    if not same:
-        same,legacy_identity=same_legacy_identity_release(data,common_hash,sos_hash,wayland_included,
-                                                          wayland_policy_sha256,signing_enabled)
-        if same:
-            accepted_build_identity=legacy_identity
-    if same:
-        data['release_tag']=require_release_tag(same,data['version'])
-        data['patch_revision']=parse_patch_revision(data['release_tag'],data['version'])
-        data['revision']=data['patch_revision']
-    else:
-        data['patch_revision']=next_patch_revision(data['version'],data['patchset'])
-        data['revision']=data['patch_revision']
-        data['release_tag']=f'v{data["version"]}-custom.{data["patch_revision"]}'
+    data['patch_revision']=content['patchset_version']
+    data['revision']=data['patch_revision']
+    data['release_tag']=f'v{data["version"]}-custom.{data["patch_revision"]}'
     existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
     if not existing:
         drafts=matching_drafts(data['release_tag'])
@@ -235,9 +237,15 @@ def release_preflight(data):
         existing=drafts[0] if drafts else None
     if not existing:
         if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True): raise ValueError('Existing tag without completed release; review revision')
-        data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_PATCH_REVISION'
+        data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_CONTENT_VERSION_TARGET'
         return data
     body=existing.get('body') or ''
+    recorded_identity=release_metadata(body).get('Build Identity', '')
+    if recorded_identity != current_identity:
+        raise ValueError('IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION: same Tag has a different Build Identity; manual review required; never bump Patchset for build-policy changes')
+    if ('version_semantics=patchset-content-v1' not in body.splitlines()
+            and 'Version Semantics: patchset-content-v1' not in body.splitlines()):
+        raise ValueError('Legacy release semantics cannot be reinterpreted as content revision')
     recorded_custom_sha=release_metadata(body).get('Custom Repository SHA', '')
     if re.fullmatch(r'[0-9a-f]{40}', recorded_custom_sha):
         # Reused artifacts retain their original commit as provenance. This SHA
@@ -349,11 +357,17 @@ def validate(root,channel):
     Path('.work/channel-validation.json').write_text(json.dumps(report,indent=2)+'\n')
 
 def draft(root):
+    from scripts.release.content import require_cutover
+    require_cutover()
     if os.environ.get('GITHUB_REPOSITORY')!=REPOSITORY:raise ValueError('Wrong release repository')
     # Revalidate the downloaded pair in the write-permission job before any write.
     infos,folders=collect(root);validate_prepared(infos,folders)
     if any(i['channel']!='stable' for i in infos.values()):raise ValueError('Only stable creates drafts')
     _,directory=assets(root)
+    from scripts.release.content import inputs, notes as content_notes
+    content = inputs(infos['standard']['patchset'])
+    if infos['standard']['patch_revision'] != content['patchset_version']:
+        raise ValueError('Artifact content revision differs from metadata')
     info=infos['standard'];tag=f'v{info["upstream_tag"].lstrip("v")}-custom.{info["patch_revision"]}'
     if api(f'repos/{REPOSITORY}/releases/tags/{tag}',missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     if any(r.get('draft') and r.get('name')==tag for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])):
@@ -376,12 +390,14 @@ def draft(root):
         f'Wayland Included: {str(wayland_included).lower()}',
         *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
         f'Patch Revision: {info["patch_revision"]}',
-        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],None,wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true")}',
+        'Version Semantics: '+content['version_semantics'],
+        'Build Policy SHA256: '+content['build_policy_sha256'],
+        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],None,wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true",patchset_version=content["patchset_version"],build_policy_sha256=content["build_policy_sha256"])}',
         f'Asset Inventory: {inventory}',
         'automation_state=complete',
         '-->'
     ])
-    notes=changelog+'\n\n'+metadata+'\n'
+    notes=changelog+'\n\n'+content_notes(info['patchset'])+'\n'+metadata+'\n'
     result=request('POST',f'repos/{REPOSITORY}/releases',{'tag_name':tag,'target_commitish':info['custom_repository_sha'],
                     'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,release_files),'--repo',REPOSITORY)
