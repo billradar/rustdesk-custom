@@ -79,10 +79,19 @@ def signer_digests(output):
         raise ValueError("APK signer certificate SHA-256 digest missing")
     return [digest.lower() for digest in digests]
 
+def verify_signer_identity(digests, expected):
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected):
+        raise ValueError("Trusted APK signer SHA-256 fingerprint must be 64 hex characters")
+    if len(digests) != 1 or digests[0].lower() != expected.lower():
+        raise ValueError("APK signing certificate differs from trusted production identity")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--verify-apks", action="store_true")
     args = parser.parse_args()
+    trusted_signer = os.environ.get("RELEASE_AUDIT_TRUSTED_SIGNER_SHA256", "").strip()
+    if args.verify_apks and not trusted_signer:
+        raise RuntimeError("RELEASE_AUDIT_TRUSTED_SIGNER_SHA256 must be independently verified and configured")
     result = []
     baseline = api("")
     print("GitHub App repository access: OK (" + baseline["full_name"] + ")", flush=True)
@@ -125,7 +134,9 @@ def main():
                         raise ValueError("APK signature verification failed: " + asset["name"] + "\n" + proc.stderr[-1000:])
                     if "Verified using v2 scheme (APK Signature Scheme v2): true" not in proc.stdout or "Verified using v3 scheme (APK Signature Scheme v3): true" not in proc.stdout:
                         raise ValueError("APK v2/v3 signature missing: " + asset["name"])
-                    verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": signer_digests(proc.stdout)})
+                    digests = signer_digests(proc.stdout)
+                    verify_signer_identity(digests, trusted_signer)
+                    verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": digests})
                     path.unlink()
             result.append({"release_id": release_id, "release_name": release["name"], "asset_count": len(assets), "sums_verified": True, "apk_signatures_verified": verified})
     print(json.dumps({"status": "PASS", "scope": "GitHub metadata and SHA256SUMS; optional APK v2/v3 validation", "releases": result}, indent=2))
