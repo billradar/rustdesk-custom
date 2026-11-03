@@ -27,6 +27,38 @@ class StableRouterContract(unittest.TestCase):
                          "needs.resolve.outputs.dedup_skip != 'true'")
         self.assertIn("github.ref == 'refs/heads/main'",jobs['draft']['if'])
 
+    def test_force_checkbox_is_wired_from_router_to_build(self):
+        import yaml
+        root = Path(__file__).resolve().parents[2]
+        router_yaml = yaml.safe_load((root/'.github/workflows/upstream-stable.yml').read_text())
+        build_yaml = yaml.safe_load((root/'.github/workflows/tag.yml').read_text())
+        for workflow in (router_yaml, build_yaml):
+            option = workflow['on']['workflow_dispatch']['inputs']['force_retry']
+            self.assertEqual(option['type'], 'boolean')
+            self.assertIs(option['default'], False)
+        self.assertIn('inputs.force_retry', router_yaml['jobs']['route']['env']['FORCE_RETRY'])
+        gate = next(step for step in build_yaml['jobs']['resolve']['steps'] if step.get('id') == 'dedup')
+        self.assertIn('inputs.force_retry', gate['env']['FORCE_RETRY'])
+        with patch.object(router.subprocess, 'run') as run:
+            router.dispatch('v1.5.1', force_retry=True)
+        self.assertIn('force_retry=true', run.call_args.args[0])
+
+    def test_force_router_passes_authorization_to_both_gates(self):
+        source = dict(upstream_tag='v1.5.1', upstream_sha='a'*40, patchset='v2')
+        with patch.dict(os.environ, {'GITHUB_REF':'refs/heads/main',
+                                     'GITHUB_EVENT_NAME':'workflow_dispatch',
+                                     'FORCE_RETRY':'true'}), \
+             patch.object(router,'verify_context'), \
+             patch.object(router,'discovery', return_value=source), \
+             patch.object(router,'patch_hash',side_effect=['b'*64,'c'*64]), \
+             patch.object(router,'workflow_runs',return_value=[]), \
+             patch.object(router,'existing_build',return_value=False), \
+             patch.object(router,'decide',return_value='RETRY') as decision, \
+             patch.object(router,'dispatch') as dispatch:
+            router.route()
+        self.assertTrue(decision.call_args.kwargs['force_retry'])
+        dispatch.assert_called_once_with('v1.5.1', force_retry=True)
+
     def test_trusted_context_is_required(self):
         base = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
                     GITHUB_EVENT_NAME='schedule', GITHUB_SHA='a' * 40)
@@ -152,7 +184,7 @@ class StableRouterContract(unittest.TestCase):
              patch.object(router, 'workflow_runs', return_value=[]), \
              patch.object(router, 'dispatch') as dispatch:
             router.route()
-        dispatch.assert_called_once_with('v1.5.0')
+        dispatch.assert_called_once_with('v1.5.0', force_retry=False)
 
     def test_dispatch_pins_official_tag_and_private_draft_mode(self):
         with patch.object(router.subprocess, 'run') as run:
@@ -164,6 +196,7 @@ class StableRouterContract(unittest.TestCase):
         self.assertIn('upstream_ref=v1.5.1', args)
         self.assertIn('release_mode=draft', args)
         self.assertIn('include_wayland=true', args)
+        self.assertIn('force_retry=false', args)
         self.assertFalse(any(x.startswith('expected_build_identity=') for x in args))
         self.assertTrue(run.call_args.kwargs['check'])
 

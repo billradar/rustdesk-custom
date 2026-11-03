@@ -9,6 +9,10 @@ env:
         type: boolean
         default: true
         description: Build all four experimental Wayland DEBs and include validated packages
+      force_retry:
+        type: boolean
+        default: false
+        description: Bypass cooldown only on manual main runs; active/success/review still block
       upstream_ref:
         type: string
         description: Official stable tag; empty = latest stable
@@ -98,6 +102,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         RELEASE_MODE: ${{ inputs.release_mode }}
+        FORCE_RETRY: ${{ inputs.force_retry && 'true' || 'false' }}
       run: python3 -m scripts.release.stable_router dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
