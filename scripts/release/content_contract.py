@@ -89,8 +89,7 @@ class ContentContract(unittest.TestCase):
     def fixture(self):
         inputs=content.inputs('v2')
         common=channel.patch_hash('common','v2');sos=channel.patch_hash('sos','v2')
-        identity=channel.build_identity('a'*40,'v2',common,sos,wayland_included=False,
-            patchset_version=inputs['patchset_version'],build_policy_sha256=inputs['build_policy_sha256'])
+        identity=channel.build_identity('a'*40,'v2',common,sos,wayland_included=False)
         tag='v1.5.1-custom.'+inputs['patchset_version']
         names=['SHA256SUMS','rustdesk-1.5.1-standard-windows-x86_64.zip','rustdesk-1.5.1-sos-windows-x86_64.zip']
         body='\n'.join(['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: v2',
