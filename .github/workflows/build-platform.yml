@@ -47,8 +47,6 @@ jobs:
       with: {persist-credentials: false}
     - name: Verify Coordinator Lite worker context
       if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (github.workflow == 'Nightly Build Pipeline' || github.workflow == 'Stable Release Pipeline')
-      env:
-        GH_TOKEN: ${{ github.token }}
       run: python3 -m scripts.release.coordinator_lite worker-guard
     - name: Isolated reviewed parser environment
       run: |
