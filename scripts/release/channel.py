@@ -126,7 +126,10 @@ def next_patch_revision(version, patchset):
         raise ValueError('Invalid Stable upstream version')
     if not PATCHSET_RE.fullmatch(patchset):
         raise ValueError('Invalid Patchset version namespace')
-    data = current(patchset)
+    try:
+        data = current(patchset)
+    except OSError as error:
+        raise ValueError('Reviewed Patchset content manifest unavailable') from error
     if data.get('id') != patchset or type(data.get('revision')) is not int:
         raise ValueError('Patchset content revision mismatch')
     return f'{patchset}.{data["revision"]}'
