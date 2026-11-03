@@ -74,7 +74,7 @@ def sums_parse(data):
     return result
 
 def signer_digests(output):
-    digests = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", output)
+    digests = re.findall(r"^\s*(?:(?:V[123](?:\.\d+)? )?Signer(?: #\d+)?): certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$", output, flags=re.MULTILINE | re.IGNORECASE)
     if not digests:
         raise ValueError("APK signer certificate SHA-256 digest missing")
     return [digest.lower() for digest in digests]
