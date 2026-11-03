@@ -10,6 +10,15 @@ from scripts.release.naming import native_package_name, windows_installer_name
 ROOT = Path(__file__).resolve().parents[2]
 import yaml
 
+class RealPatchsetRevisionContract(unittest.TestCase):
+    def test_reviewed_manifest_controls_current_custom_revision(self):
+        self.assertEqual(channel.next_patch_revision('1.5.1','v2'),'v2.8')
+        self.assertEqual(channel.next_patch_revision('1.5.2','v2'),'v2.8')
+        self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.2')
+        with self.assertRaises(ValueError):
+            channel.next_patch_revision('1.5.1','v999999')
+
+
 class BuildInterfaceTests(unittest.TestCase):
     def test_unreviewed_build_definition_blocks(self):
         unknown={'signature':'0'*64}
@@ -360,8 +369,9 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn("'include_wayland=true'",router)
         self.assertIn('release_preflight(data)',router)
         self.assertNotIn("row.get('head_sha') == custom_sha",router)
-        self.assertIn('latest_completed_version()',router)
-        self.assertIn("version_tuple(data['version']) <= version_tuple(completed_version)",router)
+        self.assertNotIn('latest_completed_version()',router)
+        self.assertNotIn("version_tuple(data['version']) <= version_tuple(completed_version)",router)
+        self.assertIn("lite_identity(data['upstream_sha']",router)
         self.assertIn('wayland=${{ inputs.include_wayland',tag)
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)
