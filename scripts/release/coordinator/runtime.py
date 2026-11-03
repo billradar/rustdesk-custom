@@ -476,6 +476,14 @@ def main():
         channel, key = os.environ['RETRY_CHANNEL'], os.environ['RETRY_IDENTITY']
         api, now = GitHubAPI(), clock()
         journal = GitRefStore(api, repo, channel, key)
+        if os.environ.get('RECOVERY_MODE','grant') == 'recover-missing':
+            from .recovery import recover
+            recover(api,repo,journal,os.environ.get('RECOVERY_SNAPSHOT',''),
+                    os.environ.get('RECOVERY_RUN',''),os.environ.get('RECOVERY_CONFIRMATION',''),
+                    os.environ['GITHUB_ACTOR'],os.environ['RETRY_REASON'],os.environ['GITHUB_RUN_ID'],now)
+            return
+        if os.environ.get('RECOVERY_MODE','grant') != 'grant':
+            raise ValueError('Unknown recovery operation')
         snapshot = journal.load()
         if snapshot is None:
             raise ValueError('Cannot grant an unknown historical identity')

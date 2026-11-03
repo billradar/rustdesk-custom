@@ -141,6 +141,7 @@ jobs:
         python3 -m scripts.release.coordinator.contract
         python3 -m scripts.release.coordinator.store_contract
         python3 -m scripts.release.coordinator.reconcile_contract
+        python3 -m scripts.release.coordinator.recovery_contract
         python3 -m scripts.release.coordinator.runtime_contract
         python3 -m scripts.release.coordinator.stable_runtime_contract
         python3 -m scripts.release.coordinator.integration_contract
