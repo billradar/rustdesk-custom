@@ -41,6 +41,7 @@ jobs:
       lock_sha256: ${{ steps.lock.outputs.lock_sha256 }}
       lock_artifact: ${{ steps.lock.outputs.lock_artifact }}
       signing_enabled: ${{ steps.lock.outputs.signing_enabled }}
+      dedup_skip: ${{ steps.dedup.outputs.skip }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -83,6 +84,12 @@ jobs:
         ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
         SELECTED_PATCHSET: ${{ steps.patchset.outputs.patchset }}
       run: python3 -m scripts.release.stable_lock create --discovery .work/channel.json --patchset "$SELECTED_PATCHSET"
+    - id: dedup
+      name: Skip earlier active or successful identical Stable builds
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_MODE: ${{ inputs.release_mode }}
+      run: python3 -m scripts.release.stable_router dedup
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ steps.lock.outputs.lock_artifact }}
@@ -91,6 +98,7 @@ jobs:
   draft-preflight:
     name: '02 · Release preflight / existing-draft decision'
     needs: resolve
+    if: needs.resolve.outputs.dedup_skip != 'true'
     runs-on: ubuntu-22.04
     # GitHub requires Contents write permission to view unpublished drafts.
     # This release-lifecycle job only performs GETs and has no production inputs.

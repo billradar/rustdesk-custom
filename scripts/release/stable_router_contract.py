@@ -143,6 +143,51 @@ class StableRouterContract(unittest.TestCase):
         self.assertFalse(any(x.startswith('expected_build_identity=') for x in args))
         self.assertTrue(run.call_args.kwargs['check'])
 
+    def test_stable_direct_dispatch_skips_older_active_batch(self):
+        lock = dict(channel='stable', workflow_run='20',
+                    custom_repository_sha='a'*40, upstream_tag='v1.5.1',
+                    upstream_sha='b'*40, common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            old_dir = os.getcwd()
+            try:
+                os.chdir(td)
+                Path('.work').mkdir()
+                Path('.work/stable-lock.json').write_text(json.dumps(lock))
+                env = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
+                           GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_NUMBER='20',
+                           GITHUB_RUN_ID='20', GITHUB_SHA='a'*40, RELEASE_MODE='draft',
+                           GITHUB_OUTPUT=str(Path(td)/'out'))
+                with patch.dict(os.environ, env), patch.object(router, 'workflow_runs',
+                     return_value=[{'status':'queued', 'conclusion':None}]) as history:
+                    router.dedup()
+                self.assertIn('skip=true', Path(td, 'out').read_text())
+                self.assertEqual(history.call_args.kwargs['prior_run_number'], 20)
+            finally:
+                os.chdir(old_dir)
+
+    def test_stable_direct_release_can_publish_existing_success(self):
+        lock = dict(channel='stable', workflow_run='21',
+                    custom_repository_sha='a'*40, upstream_tag='v1.5.1',
+                    upstream_sha='b'*40, common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            old_dir = os.getcwd()
+            try:
+                os.chdir(td)
+                Path('.work').mkdir()
+                Path('.work/stable-lock.json').write_text(json.dumps(lock))
+                env = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
+                           GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_NUMBER='21',
+                           GITHUB_RUN_ID='21', GITHUB_SHA='a'*40, RELEASE_MODE='release',
+                           GITHUB_OUTPUT=str(Path(td)/'out'))
+                with patch.dict(os.environ, env), patch.object(router, 'workflow_runs',
+                     return_value=[{'status':'completed', 'conclusion':'success'}]):
+                    router.dedup()
+                self.assertIn('skip=false', Path(td, 'out').read_text())
+            finally:
+                os.chdir(old_dir)
+
 
 if __name__ == '__main__':
     unittest.main()

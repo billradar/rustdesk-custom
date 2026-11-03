@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import re
 import subprocess
+import sys
 
 from scripts.release.router_retry_policy import decide
 from scripts.release.coordinator_lite import from_hashes as lite_identity
@@ -127,7 +128,7 @@ def recorded_identity(row):
     return lite_identity(data['upstream_sha'], data['common_patch_hash'], data['sos_patch_hash'])
 
 
-def workflow_runs(tag, identity, signing_enabled=False):
+def workflow_runs(tag, identity, signing_enabled=False, prior_run_number=None):
     """Find matching locked batches; unknown active dispatches block duplicate work."""
     runs = []
     for page in range(1, 11):
@@ -144,6 +145,13 @@ def workflow_runs(tag, identity, signing_enabled=False):
     for row in runs:
         if row.get('head_branch') != 'main' or row.get('event') != 'workflow_dispatch':
             continue
+        if prior_run_number is not None:
+            try:
+                number = int(row['run_number'])
+            except (KeyError, ValueError, TypeError) as error:
+                raise ValueError('Historical Stable run number unavailable') from error
+            if number >= prior_run_number:
+                continue
         parts = row.get('display_title', '').split(' / ')
         if (len(parts) < 4 or not parts[0].startswith('Stable ')
                 or parts[0][len('Stable '):] not in candidates
@@ -174,15 +182,44 @@ def dispatch(tag):
     ], check=True)
 
 
+def dedup():
+    """Admit only the oldest matching Stable workflow dispatch before any build."""
+    if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
+            or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+            or os.environ.get('GITHUB_REPOSITORY') != REPOSITORY):
+        raise ValueError('Stable Lite admission requires main workflow_dispatch')
+    try:
+        number = int(os.environ['GITHUB_RUN_NUMBER'])
+    except (KeyError, ValueError) as error:
+        raise ValueError('Stable run number unavailable') from error
+    if number < 1:
+        raise ValueError('Invalid Stable run number')
+    locked = json.loads(Path('.work/stable-lock.json').read_text())
+    if (str(locked.get('workflow_run')) != os.environ.get('GITHUB_RUN_ID')
+            or locked.get('custom_repository_sha') != os.environ.get('GITHUB_SHA')
+            or locked.get('channel') != 'stable'):
+        raise ValueError('Stable Lite lock provenance mismatch')
+    identity = lite_identity(locked['upstream_sha'], locked['common_patch_hash'],
+                             locked['sos_patch_hash'])
+    rows = workflow_runs(locked['upstream_tag'], identity, prior_run_number=number)
+    state = decide(rows)
+    if state == 'REVIEW':
+        raise ValueError('Stable Lite uncertain historical run requires manual review')
+    mode = os.environ.get('RELEASE_MODE', 'draft')
+    if mode not in ('draft', 'dry-run', 'release'):
+        raise ValueError('Invalid Stable release mode')
+    # Release can publish a verified prior draft; it must not rebuild an active one.
+    skip = state in ('ACTIVE', 'COOLDOWN') or (state == 'SUCCESS' and mode != 'release')
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('skip=' + str(skip).lower() + '\n')
+    print('Stable Lite admission: ' + state + (' / skip' if skip else ' / continue'))
+
 def route():
     verify_context()
     data = discovery()
     # Rebuild eligibility is determined by upstream+patchset, not release
     # version alone: a changed patchset on the same upstream is a new build.
-    if existing_build(data):
-        print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
-        return
-
     identity = lite_identity(data['upstream_sha'],
                              patch_hash('common', data['patchset']),
                              patch_hash('sos', data['patchset']))
@@ -193,10 +230,18 @@ def route():
         return
     if state == 'REVIEW':
         raise ValueError('Stable retry requires manual review (cancelled, unknown, or exhausted)')
+    if existing_build(data):
+        print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
+        return
 
     dispatch(data['upstream_tag'])
     print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
 
 
 if __name__ == '__main__':
-    route()
+    if sys.argv[1:] == ['dedup']:
+        dedup()
+    elif not sys.argv[1:]:
+        route()
+    else:
+        raise SystemExit('Usage: stable_router.py [dedup]')
