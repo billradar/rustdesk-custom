@@ -68,10 +68,16 @@ def sums_parse(data):
         if not match:
             raise ValueError("Malformed SHA256SUMS entry")
         name = match.group(2)
-        if "/" in name or name in result:
+        if "/" in name or "\\" in name or name in result:
             raise ValueError("Unsafe or duplicate checksum filename")
         result[name] = match.group(1).lower()
     return result
+
+def signer_digests(output):
+    digests = re.findall(r"Signer #\\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", output)
+    if not digests:
+        raise ValueError("APK signer certificate SHA-256 digest missing")
+    return [digest.lower() for digest in digests]
 
 def main():
     parser = argparse.ArgumentParser()
@@ -119,7 +125,7 @@ def main():
                         raise ValueError("APK signature verification failed: " + asset["name"] + "\n" + proc.stderr[-1000:])
                     if "Verified using v2 scheme (APK Signature Scheme v2): true" not in proc.stdout or "Verified using v3 scheme (APK Signature Scheme v3): true" not in proc.stdout:
                         raise ValueError("APK v2/v3 signature missing: " + asset["name"])
-                    verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)", proc.stdout)})
+                    verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": signer_digests(proc.stdout)})
                     path.unlink()
             result.append({"release_id": release_id, "release_name": release["name"], "asset_count": len(assets), "sums_verified": True, "apk_signatures_verified": verified})
     print(json.dumps({"status": "PASS", "scope": "GitHub metadata and SHA256SUMS; optional APK v2/v3 validation", "releases": result}, indent=2))
