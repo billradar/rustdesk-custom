@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 REPO = "billradar/rustdesk-custom"
 RELEASE_IDS = (432254527, 431170313, 430489827)
@@ -21,7 +22,17 @@ def request(url, accept="application/vnd.github+json"):
     headers = {"Accept": accept, "User-Agent": "rustdesk-release-asset-audit", "X-GitHub-Api-Version": "2022-11-28"}
     if token:
         headers["Authorization"] = "Bearer " + token
-    return urlopen(Request(url, headers=headers), timeout=90)
+    try:
+        return urlopen(Request(url, headers=headers), timeout=90)
+    except HTTPError as error:
+        # Never log credentials, request headers, or response bodies.
+        accepted = error.headers.get("X-Accepted-GitHub-Permissions", "not supplied")
+        request_id = error.headers.get("X-GitHub-Request-Id", "not supplied")
+        endpoint = url.split("api.github.com/repos/" + REPO, 1)[-1]
+        raise RuntimeError(
+            f"GitHub API denied {endpoint}: HTTP {error.code}; "
+            f"accepted_permissions={accepted}; request_id={request_id}"
+        ) from None
 
 def api(path):
     with request("https://api.github.com/repos/" + REPO + path) as r:
@@ -67,6 +78,8 @@ def main():
     parser.add_argument("--verify-apks", action="store_true")
     args = parser.parse_args()
     result = []
+    baseline = api("")
+    print("GitHub App repository access: OK (" + baseline["full_name"] + ")", flush=True)
     with tempfile.TemporaryDirectory() as temp:
         folder = Path(temp)
         for release_id in RELEASE_IDS:
