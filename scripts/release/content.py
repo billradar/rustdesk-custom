@@ -68,8 +68,12 @@ def require_cutover():
                 or not isinstance(expected, str) or len(expected) != 64
                 or any(c not in '0123456789abcdef' for c in expected)):
             raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: invalid evidence reference')
+        # Reject symlinked parent directories as well as the final file: an
+        # attestation must be a regular file contained in the reviewed tree.
         path = ROOT / relative
-        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+        if (any(part.is_symlink() for part in (path, *path.parents) if part != ROOT)
+                or not path.is_file()
+                or hashlib.sha256(path.read_bytes()).hexdigest() != expected):
             raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: evidence digest mismatch')
         evidence = json.loads(path.read_text())
         required = {'schema', 'decision', 'v2_only', 'journal_reconciled',
