@@ -29,32 +29,30 @@ class StableRouterContract(unittest.TestCase):
         self.assertEqual(router.run_state([success] * 3), 'EXHAUSTED')
         self.assertEqual(router.run_state([{'status': 'queued'}]), 'ACTIVE')
 
-    def test_run_lookup_matches_only_target_stable_variant(self):
+    def test_run_lookup_skips_any_active_same_source_configuration(self):
         identity = 'e' * 64
         rows = [
-            {'display_title': f'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity={identity}', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
-            {'display_title': 'Stable v1.5.1 / release / wayland=true', 'head_branch': 'main', 'event': 'workflow_dispatch'},
-            {'display_title': 'Stable v1.5.1 / draft / wayland=false', 'head_branch': 'main', 'event': 'workflow_dispatch'},
-            {'display_title': 'Stable v1.5.1 / draft', 'head_branch': 'main', 'event': 'workflow_dispatch', 'head_sha': 'c' * 40},
-            {'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'feature', 'event': 'workflow_dispatch', 'head_sha': 'a' * 40},
+            {'display_title': 'Stable v1.5.1 / dry-run / wayland=false / android-signing=false',
+             'head_branch': 'main', 'event': 'workflow_dispatch', 'status': 'queued'},
+            {'display_title': 'Stable latest / release / wayland=true / android-signing=true',
+             'head_branch': 'main', 'event': 'workflow_dispatch', 'status': 'in_progress'},
+            {'display_title': 'Stable v1.5.0 / draft / wayland=true / android-signing=false',
+             'head_branch': 'main', 'event': 'workflow_dispatch', 'status': 'in_progress'},
+            {'display_title': 'Stable v1.5.1 / draft / wayland=true / android-signing=false',
+             'head_branch': 'feature', 'event': 'workflow_dispatch', 'status': 'queued'},
         ]
-        rows.append({'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main',
-                     'event': 'workflow_dispatch', 'head_sha': 'b' * 40})
-        rows.append({'display_title': 'Stable v1.5.1 / draft / wayland=true', 'head_branch': 'main',
-                     'event': 'workflow_dispatch', 'head_sha': 'd' * 40})
         with patch.object(router, 'api', return_value={'workflow_runs': rows}):
             selected = router.workflow_runs('v1.5.1', identity)
-            other_identity = router.workflow_runs('v1.5.1', 'f' * 64)
-        self.assertEqual(len(selected), 1)
-        self.assertEqual(other_identity, [])
+        self.assertEqual(selected, rows[:2])
 
-    def test_matching_manual_stable_run_is_included_only_while_active(self):
+    def test_manual_stable_runs_are_deduplicated_by_actual_lock_when_completed(self):
         active={'display_title':'Stable v1.5.1 / draft / wayland=true / android-signing=false / identity=manual',
                 'head_branch':'main','event':'workflow_dispatch','status':'in_progress'}
-        completed=dict(active,status='completed')
-        with patch.object(router,'api',return_value={'workflow_runs':[active,completed]}):
+        completed=dict(active,status='completed',id=123)
+        with patch.object(router, 'api', return_value={'workflow_runs':[active,completed]}), \
+             patch.object(router, 'recorded_identity', return_value='e'*64):
             selected=router.workflow_runs('v1.5.1','e'*64)
-        self.assertEqual(selected,[active])
+        self.assertEqual(selected,[active,completed])
 
     def test_automatic_run_dedup_uses_recorded_identity_and_blocks_unknown_active(self):
         base = dict(display_title='Stable latest / draft / wayland=true / android-signing=false',
@@ -86,7 +84,9 @@ class StableRouterContract(unittest.TestCase):
             return SimpleNamespace(returncode=0)
         row = dict(id=123, head_sha='a'*40)
         with patch.object(router.subprocess, 'run', side_effect=download):
-            self.assertEqual(router.recorded_identity(row), data['build_identity'])
+            self.assertEqual(router.recorded_identity(row),
+                             router.lite_identity(data['upstream_sha'],
+                                                  data['common_patch_hash'], data['sos_patch_hash']))
             with self.assertRaisesRegex(ValueError, 'provenance'):
                 router.recorded_identity(dict(row, head_sha='e'*40))
         with patch.object(router.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
@@ -119,30 +119,16 @@ class StableRouterContract(unittest.TestCase):
             self.assertEqual(router.latest_completed_version(), '1.5.0')
         self.assertLess(router.version_tuple('1.9.0'), router.version_tuple('1.10.0'))
 
-    def test_router_skips_when_official_version_has_not_advanced(self):
+    def test_same_version_changed_patchset_is_checked(self):
         with patch.object(router, 'verify_context'), \
-             patch.object(router, 'discovery', return_value={'version': '1.5.0', 'upstream_tag': '1.5.0'}), \
-             patch.object(router, 'latest_completed_version', return_value='1.5.0'), \
-             patch.object(router, 'existing_build') as existing, \
-             patch.object(router, 'dispatch') as dispatch:
-            router.route()
-        existing.assert_not_called()
-        dispatch.assert_not_called()
-
-    def test_manual_router_can_check_same_version_when_explicitly_enabled(self):
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'ALLOW_SAME_VERSION': 'true'}), \
-             patch.object(router, 'verify_context'), \
-             patch.object(router, 'discovery', return_value={'version': '1.5.0', 'upstream_tag': '1.5.0',
-                                                              'upstream_sha': 'a' * 40, 'patchset': 'v2'}), \
-             patch.object(router, 'latest_completed_version', return_value='1.5.0'), \
-             patch.object(router, 'existing_build', return_value=False) as existing, \
+             patch.object(router, 'discovery', return_value={'version':'1.5.0','upstream_tag':'v1.5.0',
+                                                             'upstream_sha':'a'*40, 'patchset':'v2'}), \
+             patch.object(router, 'existing_build', return_value=False), \
+             patch.object(router, 'patch_hash', side_effect=['b'*64, 'c'*64]), \
              patch.object(router, 'workflow_runs', return_value=[]), \
              patch.object(router, 'dispatch') as dispatch:
             router.route()
-        existing.assert_called_once()
-        dispatch.assert_called_once()
-        self.assertEqual(dispatch.call_args.args[0], '1.5.0')
-        self.assertEqual(dispatch.call_args.args, ('1.5.0',))
+        dispatch.assert_called_once_with('v1.5.0')
 
     def test_dispatch_pins_official_tag_and_private_draft_mode(self):
         with patch.object(router.subprocess, 'run') as run:

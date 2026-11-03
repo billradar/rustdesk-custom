@@ -8,6 +8,7 @@ import re
 import subprocess
 
 from scripts.release.router_retry_policy import decide
+from scripts.release.coordinator_lite import from_hashes as lite_identity
 from scripts.release.channel import build_identity, release_preflight, wayland_identity
 from scripts.upstream.patchsets import patch_hash, patchset_for_version
 from scripts.upstream.resolve import api, choose_stable
@@ -123,7 +124,7 @@ def recorded_identity(row):
                               android_signing_enabled=data['android_signing_enabled'])
     if data.get('build_identity') != identity:
         raise ValueError('Invalid historical Stable build identity')
-    return identity
+    return lite_identity(data['upstream_sha'], data['common_patch_hash'], data['sos_patch_hash'])
 
 
 def workflow_runs(tag, identity, signing_enabled=False):
@@ -136,23 +137,68 @@ def workflow_runs(tag, identity, signing_enabled=False):
             break
     else:
         raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
-    suffix = f' / draft / wayland=true / android-signing={str(signing_enabled).lower()}'
-    legacy_title = f'Stable {tag}' + suffix + f' / identity={identity}'
+    # Active matches have no completed lock yet. Match by requested source
+    # (or conservative 'latest') regardless of mode/Wayland/signing.
+    pattern = re.compile(r'^Stable (latest|v?[0-9]+\\.[0-9]+\\.[0-9]+) / (dry-run|draft|release)'
+                         r' / wayland=(true|false) / android-signing=(true|false)'
+                         r'(?: / identity=(?:auto|manual|[0-9a-f]{64}))?
+
+
+def run_state(rows):
+    if any(row.get('status') != 'completed' for row in rows):
+        return 'ACTIVE'
+    return 'EXHAUSTED' if len(rows) >= MAX_ATTEMPTS else 'RETRY'
+
+
+def dispatch(tag):
+    subprocess.run([
+        'gh', 'workflow', 'run', WORKFLOW,
+        '--repo', REPOSITORY,
+        '--ref', 'main',
+        '-f', f'upstream_ref={tag}',
+        '-f', 'release_mode=draft',
+        '-f', 'include_wayland=true',
+    ], check=True)
+
+
+def route():
+    verify_context()
+    data = discovery()
+    # Rebuild eligibility is determined by upstream+patchset, not release
+    # version alone: a changed patchset on the same upstream is a new build.
+    if existing_build(data):
+        print(f"Complete Stable build already exists for {data['upstream_tag']}; skip.")
+        return
+
+    identity = lite_identity(data['upstream_sha'],
+                             patch_hash('common', data['patchset']),
+                             patch_hash('sos', data['patchset']))
+    matches = workflow_runs(data['upstream_tag'], identity)
+    state = decide(matches)
+    if state in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+        print(f"Stable matching build state={state}; skip.")
+        return
+    if state == 'REVIEW':
+        raise ValueError('Stable retry requires manual review (cancelled, unknown, or exhausted)')
+
+    dispatch(data['upstream_tag'])
+    print(f"Dispatched Stable Draft build for {data['upstream_tag']}.")
+
+
+if __name__ == '__main__':
+    route()
+)
     selected = []
+    candidates = {tag, tag.lstrip('v'), 'v' + tag.lstrip('v'), 'latest'}
     for row in runs:
         if row.get('head_branch') != 'main' or row.get('event') != 'workflow_dispatch':
             continue
-        title = row.get('display_title', '')
-        if title == legacy_title:
-            selected.append(row)
+        match = pattern.fullmatch(row.get('display_title', ''))
+        if not match or match.group(1) not in candidates:
             continue
-        auto_titles = {f'Stable {source}' + suffix + ending
-                       for source in (tag, 'latest') for ending in ('', ' / identity=auto')}
-        manual_titles = {f'Stable {source}' + suffix + ' / identity=manual' for source in (tag, 'latest')}
-        if title in auto_titles:
-            if row.get('status') != 'completed' or recorded_identity(row) == identity:
-                selected.append(row)
-        elif title in manual_titles and row.get('status') != 'completed':
+        if row.get('status') != 'completed':
+            selected.append(row)
+        elif recorded_identity(row) == identity:
             selected.append(row)
     return selected
 

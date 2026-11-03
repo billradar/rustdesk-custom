@@ -1,7 +1,7 @@
 name: Upstream Stable Router
 'on':
   schedule:
-    - cron: '19 * * * *'
+    - cron: '11 * * * *'
   workflow_dispatch:
     inputs:
       allow_same_version:

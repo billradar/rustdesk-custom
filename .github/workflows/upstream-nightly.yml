@@ -1,10 +1,10 @@
 name: Upstream Nightly Router
 'on':
   schedule:
-    # Official Nightly starts at 00:00 UTC; check off the hour at 02:23 UTC.
-    - cron: '23 2 * * *'
-    # Backup check in case the primary scheduled event is delayed or dropped.
-    - cron: '41 8 * * *'
+    # Stagger from Stable's hourly 11-minute check; GitHub schedules may lag.
+    - cron: '41 * * * *'
+    # Two offset recovery probes in case an hourly tick is dropped.
+    - cron: '17 7,19 * * *'
   workflow_dispatch: {}
 permissions:
   contents: read

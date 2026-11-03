@@ -64,8 +64,11 @@ class NightlyTests(unittest.TestCase):
         changed_patch=dict(data,common_patch_hash='f'*64)
         self.assertEqual(state([row],nightly.nightly_identity(changed_patch)),'RETRY')
         self.assertEqual(nightly.nightly_identity(data),nightly.nightly_identity(dict(data,custom_repository_sha='f'*40)))
-        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'RETRY')
-        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'RETRY')
+        # Mode/Wayland/signing do not change the two-input Lite identity.
+        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('/ draft /','/ dry-run /'))]),'SUCCESS')
+        self.assertEqual(state([dict(row,display_title=row['display_title'].replace('wayland=true','wayland=false'))]),'SUCCESS')
+        self.assertEqual(nightly.nightly_identity(data, 'draft', 'true', 'false'),
+                         nightly.nightly_identity(data, 'release', 'false', 'true'))
         self.assertEqual(nightly.route_state([dict(row,id=99)],identity,current_run_id='99'),'RETRY')
 
     def test_matching_run_without_discovery_fails_closed(self):
@@ -266,7 +269,7 @@ class NightlyTests(unittest.TestCase):
 
     def test_polling_and_unique_plan_artifacts(self):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
-        self.assertEqual(w['on']['schedule'],[{'cron':'23 2 * * *'}, {'cron':'41 8 * * *'}])
+        self.assertEqual(w['on']['schedule'],[{'cron':'41 * * * *'}, {'cron':'17 7,19 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
         self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)

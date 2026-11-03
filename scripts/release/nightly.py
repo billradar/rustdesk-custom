@@ -17,6 +17,7 @@ try:
 except ImportError:
     import tomli as tomllib
 from scripts.release.router_retry_policy import decide
+from scripts.release.coordinator_lite import from_hashes as lite_identity
 from scripts.upstream.resolve import api
 from scripts.upstream.patchsets import patchset_for_version, patch_hash
 
@@ -63,34 +64,27 @@ def discover(run_id=''):
 
 
 def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
-    identity = dict(upstream_sha=data['upstream_sha'], patchset=data['patchset'],
-                    common_patch_hash=data['common_patch_hash'], sos_patch_hash=data['sos_patch_hash'],
-                    wayland=wayland, signing=signing,
-                    wayland_policy_sha256=data.get('wayland_policy_sha256', '') if wayland == 'true' else '')
-    if release_mode is not None:
-        identity['release_mode'] = release_mode
-    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    """Dedup across build modes and options using source+both patch families."""
+    return lite_identity(data['upstream_sha'], data['common_patch_hash'], data['sos_patch_hash'])
 
 
 def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false', upstream_sha=''):
-    title_suffix = f' / {release_mode} / wayland={wayland} / android-signing={signing}'
-    unresolved = [r for r in rows if r.get('_nightly_identity_unresolved')
+    """An active same-source run blocks all configurations and modes."""
+    relevant = [r for r in rows if r.get('event') == 'workflow_dispatch'
+                and r.get('head_branch') == 'main'
+                and str(r.get('id')) != str(current_run_id)]
+    unresolved = [r for r in relevant if r.get('_nightly_identity_unresolved')
                   and (r.get('_upstream_sha') == upstream_sha
-                       or (not r.get('_upstream_sha') and r.get('display_title', '').startswith('Nightly latest /')))
-                  and r.get('display_title', '').endswith(title_suffix)
-                  and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
-                  and str(r['id']) != str(current_run_id)]
+                       or not r.get('_upstream_sha'))]
     if any(r.get('status') != 'completed' for r in unresolved):
         return 'ACTIVE'
     if unresolved:
         return 'UNKNOWN'
-    matched = [r for r in rows if r.get('_nightly_identity') == identity
-               and r['display_title'].endswith(title_suffix)
-               and r['event'] == 'workflow_dispatch' and r['head_branch'] == 'main'
-               and str(r['id']) != str(current_run_id)]
-    if any(r['status'] != 'completed' for r in matched):
+    matched = [r for r in relevant if r.get('_nightly_identity') == identity
+               and (not upstream_sha or r.get('_upstream_sha') in ('', upstream_sha))]
+    if any(r.get('status') != 'completed' for r in matched):
         return 'ACTIVE'
-    if any(r['conclusion'] == 'success' for r in matched):
+    if any(r.get('conclusion') == 'success' for r in matched):
         return 'SUCCESS'
     return 'EXHAUSTED' if len(matched) >= 3 else 'RETRY'
 
@@ -222,9 +216,7 @@ def route(data):
         raise ValueError('Unresolved Nightly build identity; manual review required')
     matching = [r for r in rows if r.get('_nightly_identity') == identity
                 and r.get('event') == 'workflow_dispatch'
-                and r.get('head_branch') == 'main'
-                and r.get('display_title', '').endswith(
-                    f' / draft / wayland=true / android-signing={signing}')]
+                and r.get('head_branch') == 'main']
     state = decide(matching)
     print('Nightly route: ' + state)
     if state == 'REVIEW':
@@ -276,9 +268,7 @@ def dedup():
     if state == 'UNKNOWN':
         raise ValueError('A matching Nightly run has no discovery artifact; inspect it before retrying')
     if state != 'ACTIVE':
-        title_suffix = f' / {mode} / wayland={wayland} / android-signing={signing}'
         matching = [r for r in rows if r.get('_nightly_identity') == identity
-                    and r.get('display_title', '').endswith(title_suffix)
                     and r.get('event') == 'workflow_dispatch'
                     and r.get('head_branch') == 'main']
         state = decide(matching)
