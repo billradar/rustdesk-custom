@@ -39,7 +39,16 @@ jobs:
           TOOL="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
           test -n "$TOOL"
           echo "$(dirname "$TOOL")" >> "$GITHUB_PATH"
+      - name: Mint short-lived GitHub App installation token
+        id: audit-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.RELEASE_AUDIT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_AUDIT_APP_PRIVATE_KEY }}
+          owner: billradar
+          repositories: rustdesk-custom
+          permission-contents: read
       - name: Verify private release checksums and APK signatures
         env:
-          RELEASE_AUDIT_TOKEN: ${{ secrets.RELEASE_AUDIT_TOKEN }}
+          RELEASE_AUDIT_TOKEN: ${{ steps.audit-token.outputs.token }}
         run: python3 -m scripts.release.audit_release_assets --verify-apks
