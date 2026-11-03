@@ -18,7 +18,7 @@
     }
   },
   "hashes": {
-    "common": "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a",
+    "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "runtime_ui": {
@@ -27,7 +27,7 @@
   "real_remote_session": {
     "status": "not_tested"
   },
-  "revision": 7,
+  "revision": 8,
   "derived_from": {
     "patchset": "v1"
   },
@@ -138,6 +138,43 @@
         ],
         "compatibility": "Generation selection remains upstream <1.5.0 for v1 and >=1.5.0 for v2. Existing compatibility snapshots retain their original evidence scope.",
         "limitations": "Migration activation remains blocked until shared Coordinator identity and legacy reconciliation are reviewed. Runtime UI and remote sessions are not tested; independent update signatures are deferred.",
+        "review_status": "reviewed"
+      },
+      {
+        "revision": 8,
+        "kind": "content-change",
+        "base_sha": "472ee22a3c4e0fea598a2ebe7de46b423eb78847",
+        "before": {
+          "common": "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "after": {
+          "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "scopes": [
+          "common"
+        ],
+        "categories": {
+          "Added": [],
+          "Changed": [
+            "Record explicit content semantics and Patchset Version independently of the Stable revision; display Nightly/CI channel labels without granting Stable identity."
+          ],
+          "Fixed": [
+            "Reject unknown same-format legacy tags; require explicit modern content-version metadata to match the target Tag before offering an update."
+          ],
+          "Removed": [],
+          "Security": [],
+          "Compatibility": [
+            "Preserve old installed-build parsing and the two audited legacy Stable release identities; retain upstream numeric version priority and exact Standard/SOS/Wayland asset checks."
+          ]
+        },
+        "reason": "Separate content-version provenance from Stable update eligibility and reject ambiguous legacy release semantics during migration.",
+        "references": [
+          "https://github.com/billradar/rustdesk-custom/pull/194"
+        ],
+        "compatibility": "The upstream selection boundary and numeric upstream-first update ordering are unchanged. Known legacy releases are recognized only by audited tag/source/hash mappings; unmarked unknown tags fail closed.",
+        "limitations": "Production cutover remains blocked. No device installation or runtime remote-session test was performed; independent update signatures remain deferred.",
         "review_status": "reviewed"
       }
     ],

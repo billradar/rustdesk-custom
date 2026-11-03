@@ -28,6 +28,24 @@ class ContentContract(unittest.TestCase):
                 digest = nightly.nightly_identity(data, 'draft', 'false', 'false')
             self.assertEqual(digest, modern.historical_digest)
 
+    def test_nightly_reads_same_revision_without_mutating_metadata(self):
+        import base64
+        before = (content.ROOT / 'patchsets/v2/patchset.json').read_bytes()
+        run = dict(id=17, status='completed', conclusion='success', head_branch='master',
+                   event='schedule', path='.github/workflows/flutter-nightly.yml', head_sha='a'*40,
+                   head_repository={'full_name':nightly.OFFICIAL}, html_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
+        def api(path):
+            if path == 'repos/'+nightly.OFFICIAL:
+                return {'default_branch':'master'}
+            if '/contents/' in path:
+                return {'content':base64.b64encode(b'[package]\nversion="1.5.1"\n').decode()}
+            return {'workflow_runs':[run]}
+        with patch.object(nightly,'api',side_effect=api):
+            for _ in range(3):
+                data=nightly.discover()
+                self.assertEqual(data['patchset_version'],content.inputs('v2')['patchset_version'])
+        self.assertEqual(before,(content.ROOT / 'patchsets/v2/patchset.json').read_bytes())
+
     def test_upstream_version_does_not_allocate_revision(self):
         self.assertEqual(channel.next_patch_revision('1.5.0','v2'), channel.next_patch_revision('1.5.1','v2'))
 
@@ -36,7 +54,7 @@ class ContentContract(unittest.TestCase):
         self.assertEqual(stable, content.notes('v2'))
         self.assertIn('Current included customizations', stable)
         self.assertIn('Recorded Patchset revision delta', stable)
-        self.assertIn('migration-baseline', stable)
+        self.assertIn('Kind: content-change', stable)
         self.assertIn('not claims of new changes', content.notes('v2', nightly=True))
 
     def test_cutover_has_no_environment_boolean_bypass(self):

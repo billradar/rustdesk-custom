@@ -364,6 +364,10 @@ def aggregate(root, discovery):
                     upstream_repository=OFFICIAL)
     if any(data.get(k) != v for k, v in required.items()):
         raise ValueError('Nightly discovery identity mismatch')
+    from scripts.release.content import inputs as content_inputs
+    content = content_inputs(data['patchset'])
+    if any(data.get(k) != v for k,v in content.items()):
+        raise ValueError('Nightly discovery content/build policy mismatch')
     mode = os.environ.get('RELEASE_MODE', 'dry-run')
     if mode not in ('dry-run', 'draft', 'release'):
         raise ValueError('Unsupported Nightly release mode')
@@ -376,6 +380,7 @@ def aggregate(root, discovery):
         expected = dict(required, custom_repository_sha=os.environ['GITHUB_SHA'],
                         common_patch_hash=patch_hash('common', data['patchset']))
         expected.pop('upstream_repository')
+        expected.update(content)
         for k, v in expected.items():
             if info.get(k) != v:
                 raise ValueError('Nightly artifact identity mismatch: ' + k)

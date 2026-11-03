@@ -212,6 +212,7 @@ elif command == 'package':
     }
     if (tree / 'source-manifest.json').exists():
         manifest = json.loads((tree / 'source-manifest.json').read_text())
+        info.update({k:manifest[k] for k in ('patchset_version','version_semantics','build_policy_sha256')})
         info.update(prepare_run=manifest['prepare_workflow_run'], build_run=os.environ.get('GITHUB_RUN_ID'),
                     prepared_source_manifest_hash=hashlib.sha256((tree / 'source-manifest.json').read_bytes()).hexdigest(),
                     build_adapter_signature=manifest['build_adapter_signature'])

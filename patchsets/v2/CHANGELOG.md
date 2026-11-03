@@ -16,6 +16,44 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 
 ## Revision history
 
+### v2.8 — content-change
+
+Scope: common
+
+Reason: Separate content-version provenance from Stable update eligibility and reject ambiguous legacy release semantics during migration.
+
+#### Added
+
+
+#### Changed
+
+- Record explicit content semantics and Patchset Version independently of the Stable revision; display Nightly/CI channel labels without granting Stable identity.
+
+#### Fixed
+
+- Reject unknown same-format legacy tags; require explicit modern content-version metadata to match the target Tag before offering an update.
+
+#### Removed
+
+
+#### Security
+
+
+#### Compatibility
+
+- Preserve old installed-build parsing and the two audited legacy Stable release identities; retain upstream numeric version priority and exact Standard/SOS/Wayland asset checks.
+
+References: https://github.com/billradar/rustdesk-custom/pull/194
+
+Upstream compatibility: The upstream selection boundary and numeric upstream-first update ordering are unchanged. Known legacy releases are recognized only by audited tag/source/hash mappings; unmarked unknown tags fail closed.
+
+Known limitations: Production cutover remains blocked. No device installation or runtime remote-session test was performed; independent update signatures remain deferred.
+
+Allocation base: `472ee22a3c4e0fea598a2ebe7de46b423eb78847`
+
+- common: `ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a` → `a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
+
 ### v2.7 — migration-baseline
 
 Scope: common, sos

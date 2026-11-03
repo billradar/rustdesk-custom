@@ -330,7 +330,7 @@ new file mode 100644
 index 0000000..4d221a8
 --- /dev/null
 +++ b/src/custom_update/mod.rs
-@@ -0,0 +1,594 @@
+@@ -0,0 +1,606 @@
 +//! Custom Release updates: GitHub HTTPS/API integrity only.
 +//! Independent update signatures are explicitly deferred; APK signatures remain unchanged.
 +use hbb_common::{anyhow::anyhow, bail, ResultType};
@@ -356,6 +356,12 @@ index 0000000..4d221a8
 +    upstream_sha: String,
 +    variant: String,
 +    build_run: String,
++    #[serde(default)]
++    version_semantics: Option<String>,
++    #[serde(default)]
++    patchset_version: Option<String>,
++    #[serde(default)]
++    channel: Option<String>,
 +}
 +#[derive(Clone, Debug, Deserialize, PartialEq)]
 +struct Asset {
@@ -393,7 +399,8 @@ index 0000000..4d221a8
 +}
 +fn build() -> ResultType<Build> {
 +    let b: Build = serde_json::from_str(include_str!("build.json"))?;
-+    if !policy::repository(&b.repository)
++    if !policy::build_semantics(b.version_semantics.as_deref(), b.patchset_version.as_deref(), b.revision.as_deref(), b.channel.as_deref())
++        || !policy::repository(&b.repository)
 +        || policy::numeric::<3>(&b.version).is_none()
 +        || !policy::hex(&b.upstream_sha, 40)
 +        || !matches!(b.variant.as_str(), "standard" | "sos")
@@ -410,7 +417,10 @@ index 0000000..4d221a8
 +    match build() {
 +        Ok(b) => match b.revision {
 +            Some(r) => format!("{}-custom.{}", b.version, r),
-+            None => format!("{}-custom.build{}", b.version, b.build_run),
++            None => match b.patchset_version {
++                Some(v) => format!("{}-custom.{}-{}", b.version, v, b.channel.as_deref().unwrap_or("ci")),
++                None => format!("{}-custom.build{}", b.version, b.build_run),
++            },
 +        },
 +        Err(_) => crate::VERSION.to_owned(),
 +    }
@@ -470,6 +480,7 @@ index 0000000..4d221a8
 +    if r.draft
 +        || r.prerelease
 +        || policy::stable_tag(&r.tag_name).is_none()
++        || !policy::known_release_semantics(&r.tag_name, r.body.as_deref().unwrap_or(""))
 +        || r.html_url
 +            != format!(
 +                "https://github.com/{repository}/releases/tag/{}",
@@ -810,10 +821,10 @@ index 0000000..4d221a8
 +    use super::*;
 +    const REPOSITORY: &str = "example/source";
 +    fn release() -> Release {
-+        let tag = "v1.5.1-custom.v2.6";
++        let tag = "v1.5.1-custom.v2.8";
 +        Release { id:1,tag_name:tag.into(),draft:false,prerelease:false,
 +            html_url:format!("https://github.com/{REPOSITORY}/releases/tag/{tag}"),
-+            body:Some(format!("<!-- rustdesk-custom-release-metadata\nUpstream SHA: {}\nautomation_state=complete\n-->\n","a".repeat(40))),
++            body:Some(format!("<!-- rustdesk-custom-release-metadata\nUpstream SHA: {}\nautomation_state=complete\nVersion Semantics: patchset-content-v1\nPatchset Version: v2.8\nCommon Patch Hash: {}\nSOS Patch Hash: {}\nBuild Identity: {}\n-->\n","a".repeat(40),"b".repeat(64),"c".repeat(64),"d".repeat(64))),
 +            assets:vec![Asset { id:2,name:"rustdesk-1.5.1-linux-x86_64.deb".into(),size:4,
 +                digest:Some(format!("sha256:{:x}",Sha256::digest(b"test"))),state:"uploaded".into(),
 +                browser_download_url:format!("https://github.com/{REPOSITORY}/releases/download/{tag}/rustdesk-1.5.1-linux-x86_64.deb") }] }
@@ -826,6 +837,7 @@ index 0000000..4d221a8
 +            upstream_sha: "a".repeat(40),
 +            variant: "standard".into(),
 +            build_run: "1".into(),
++            version_semantics: None, patchset_version: None, channel: None,
 +        }
 +    }
 +    #[test]
@@ -930,7 +942,7 @@ new file mode 100644
 index 0000000..50e49fc
 --- /dev/null
 +++ b/src/custom_update/policy.rs
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,340 @@
 +//! Release policy shared by both supported patch generations.
 +pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
 +    let parts: Vec<_> = value.split('.').collect();
@@ -954,6 +966,56 @@ index 0000000..50e49fc
 +    }
 +    Some((numeric(version)?, revision))
 +}
++pub fn build_semantics(schema: Option<&str>, content: Option<&str>, revision: Option<&str>, channel: Option<&str>) -> bool {
++    match schema {
++        None => content.is_none() && channel.is_none(), // historical installed build
++        Some("patchset-content-v1") => {
++            let Some(version) = content else { return false; };
++            let Some(numbers) = version.strip_prefix('v').and_then(numeric::<2>) else { return false; };
++            if numbers.contains(&0) { return false; }
++            match channel {
++                Some("stable") => revision == Some(version),
++                Some("nightly" | "ci") => revision.is_none(),
++                _ => false,
++            }
++        }
++        _ => false,
++    }
++}
++
++pub fn known_release_semantics(tag: &str, body: &str) -> bool {
++    if stable_tag(tag).is_none() || metadata_source(body).is_none() { return false; }
++    let block = if let Some((_, rest)) = body.split_once("\n\n## Custom release metadata\n\n") {
++        rest
++    } else if let Some((_, rest)) = body.split_once("<!-- rustdesk-custom-release-metadata\n") {
++        let Some((block, _)) = rest.split_once("-->") else { return false; };
++        block
++    } else { return false; };
++    let field = |key: &str, human: &str| -> Option<&str> {
++        let mut values = block.lines().filter_map(|line| line.strip_prefix(key).or_else(|| line.strip_prefix(human)));
++        let value = values.next()?;
++        if values.next().is_some() { return None; }
++        Some(value)
++    };
++    let has_marker = block.lines().any(|line| line.starts_with("version_semantics=") || line.starts_with("Version Semantics: "));
++    let common = field("common_patch_hash=", "Common Patch Hash: ");
++    let sos = field("sos_patch_hash=", "SOS Patch Hash: ");
++    if has_marker {
++        return field("version_semantics=", "Version Semantics: ") == Some("patchset-content-v1")
++            && field("patchset_version=", "Patchset Version: ") == tag.split_once("-custom.").map(|(_, v)| v)
++            && common.is_some_and(|h| hex(h, 64)) && sos.is_some_and(|h| hex(h, 64))
++            && field("build_identity=", "Build Identity: ").is_some_and(|h| hex(h, 64));
++    }
++    // Explicit audited legacy records, never a regex-based semantic migration.
++    let (source, hash) = match tag {
++        "v1.5.0-custom.v2.6" => ("fada664df7a294d1d1a9ca3e7cd3637069122f17", "c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6"),
++        "v1.5.1-custom.v2.1" => ("23e5bb471a040d62f0a6ad52591fb30784265b73", "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a"),
++        _ => return false,
++    };
++    metadata_source(body) == Some(source) && common == Some(hash)
++        && sos == Some("076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813")
++}
++
 +pub fn newer(
 +    current: [u64; 3],
 +    revision: Option<[u64; 2]>,
@@ -1141,6 +1203,30 @@ index 0000000..50e49fc
 +            include_str!("stable_release_fixture.txt")
 +        ))
 +        .is_none());
++    }
++    #[test]
++    fn explicit_content_semantics_and_legacy_boundary() {
++        let body = format!("Official\n\n## Custom release metadata\n\nupstream_sha={}\nautomation_state=complete\nversion_semantics=patchset-content-v1\npatchset_version=v2.8\ncommon_patch_hash={}\nsos_patch_hash={}\nbuild_identity={}\n", "a".repeat(40), "b".repeat(64), "c".repeat(64), "d".repeat(64));
++        assert!(known_release_semantics("v1.5.1-custom.v2.8", &body));
++        assert!(!known_release_semantics("v1.5.1-custom.v2.9", &body));
++        assert!(!known_release_semantics("v1.5.1-custom.v2.8", &body.replace("patchset-content-v1", "future-v9")));
++        assert!(!known_release_semantics("v1.5.1-custom.v2.8", &body.replace("version_semantics=patchset-content-v1\n", "")));
++        assert!(!known_release_semantics("v1.5.1-custom.v2.8", &(body.clone()+"version_semantics=patchset-content-v1\n")));
++        let legacy = "Official\n\n## Custom release metadata\n\nupstream_sha=23e5bb471a040d62f0a6ad52591fb30784265b73\nautomation_state=complete\ncommon_patch_hash=ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a\nsos_patch_hash=076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\n";
++        assert!(known_release_semantics("v1.5.1-custom.v2.1", legacy));
++        assert!(!known_release_semantics("v1.5.1-custom.v2.2", legacy));
++        assert!(newer([1,5,0], Some([2,6]), "a", [1,5,1], [2,1], "b"));
++        assert!(newer([1,5,1], Some([2,1]), "a", [1,5,1], [2,8], "b"));
++        assert!(!newer([1,5,1], Some([2,8]), "a", [1,5,0], [2,99], "b"));
++    }
++    #[test]
++    fn nightly_content_version_does_not_claim_stable_revision() {
++        assert!(build_semantics(None, None, Some("v2.1"), None));
++        assert!(build_semantics(Some("patchset-content-v1"), Some("v2.8"), None, Some("nightly")));
++        assert!(build_semantics(Some("patchset-content-v1"), Some("v2.8"), Some("v2.8"), Some("stable")));
++        assert!(!build_semantics(Some("patchset-content-v1"), Some("v2.8"), Some("v2.7"), Some("stable")));
++        assert!(!build_semantics(Some("patchset-content-v1"), Some("v2.8"), Some("v2.8"), Some("nightly")));
++        assert!(!build_semantics(Some("future-v9"), Some("v2.8"), None, Some("ci")));
 +    }
 +    #[test]
 +    fn numeric_revisions() {
