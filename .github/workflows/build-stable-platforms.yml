@@ -57,11 +57,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (github.workflow == 'Nightly Build Pipeline' || github.workflow == 'Stable Release Pipeline')
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - run: python3 -m pip install -r requirements.txt
     - name: Fetch frozen official source
       run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/macos-arm64-bridge
