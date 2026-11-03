@@ -47,9 +47,15 @@ def inputs(patchset):
 
 def require_cutover():
     value = json.loads(CUTOVER.read_text())
-    # This staged patch deliberately has no boolean/Environment bypass. A later
-    # reviewed migration must implement and verify a quiescent reconciliation.
-    raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: ' + ', '.join(value['blockers']))
+    # A metadata-only change must never activate production admission.
+    # A separately reviewed migration must establish and verify the complete
+    # evidence-bound activation protocol before replacing this fail-closed guard.
+    if value.get('schema') != 'patchset-cutover-v1':
+        raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: invalid cutover schema')
+    blockers = value.get('blockers')
+    if not isinstance(blockers, list) or not all(isinstance(item, str) for item in blockers):
+        raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: invalid blocker inventory')
+    raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: ' + ', '.join(blockers))
 
 
 def notes(patchset, *, nightly=False):
