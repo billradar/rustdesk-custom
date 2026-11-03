@@ -52,7 +52,15 @@ No production mutation was performed as part of this audit.
 
 - PR #215 merged as `ac6156126816d6b485ab8ed30566fe5217e64753`: the three owner-deleted run IDs are excluded from automatic and explicit missing-run recovery; original journal remains unchanged.
 - PR #216 merged as `d7490b62cf6793ae90c6a161c55518d1cfc9174b`: content-v2 versus legacy-success deduplication regression test added. Its final head `253c070ea1406e6ad60a59382e756eb5459445b7` passed Coordinator cutover offline contracts (Actions 41614183552) and Patchset content version contract (Actions 41614183550). Isolated API/ref checks were skipped by workflow conditions; not a positive production proof.
-- The full CI - Patch and Build compatibility workflow (Actions 41614183600) was still running when checked. Its eventual outcome must be inspected before migration approval.
+- The full CI - Patch and Build compatibility workflow (Actions 41614183600) subsequently completed successfully; this is verified on the PR #216 final head, not a substitute for fresh main-branch migration and release inventory checks.
 - The prior release-asset audit (Actions 41611975833, job 125836714215) passed 96 assets across three draft releases and nine Android APK signatures against trusted signer SHA-256 `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`. This closes the historical asset/signer gate for that snapshot, not an inventory freshness gate for future cutover.
 - Owner deletion provenance is closed. Unknown historical worker outcome is explicitly retained as a safety hold; no retry, journal mutation or invented terminal event is authorized.
 - **Current decision: BLOCKED.** A fresh quiescent production-worker/journal check, fresh tag/draft inventory, production alias collision review, and an independent reviewed migration remain required. This document is not an activation switch.
+
+## Operator completion claim and independent evidence boundary
+
+The repository owner reports that PR #217 merge and production worker/journal reconciliation are complete. The updated evidence document is present on `main`, corroborating the PR content integration. The claim of a quiescent worker and reconciled journals is recorded as an operator statement only: no independently captured production journal snapshot or worker queue proof is attached here. Do not turn this claim into a fabricated terminal journal event or a cutover authorization.
+
+The seven verified historical producer identities remain read-only deduplication restrictions. PR #216's regression test validates REVIEW_HOLD and no new reservations/dispatches under policy-v2 identities. It does not establish positive aliases, which would require reviewed content revision and build-policy digests tied to exact historical producers. Unknown identities and no-build reuse are not eligible positive aliases.
+
+**Gate result:** offline Coordinator, Patchset Version and full compatibility CI passed on PR #216 final head; historical asset/signature snapshot passed. Fresh production quiescence proof, current Git tag/draft release inventory and reviewed alias migration remain separate gates. Preserve `BLOCKED`.
