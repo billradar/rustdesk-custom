@@ -1,0 +1,46 @@
+name: Manual historical Worker reconciliation
+'on':
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Exact historical Worker Actions run ID
+        type: string
+        required: true
+      expected_journal_sha:
+        description: Exact 40-character current journal commit SHA
+        type: string
+        required: true
+      expected_identity:
+        description: Exact 64-character Build Identity
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  reconcile:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.workflow_ref == format('{0}/.github/workflows/release-coordinator-manual-reconcile.yml@refs/heads/main', github.repository)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: manual-reconcile-${{ inputs.expected_identity }}
+      cancel-in-progress: false
+    env:
+      PYTHONPATH: .
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Reconcile indexed historical Worker only
+        run: >-
+          python3 -m scripts.release.coordinator.manual_reconcile
+          --run-id "${{ inputs.run_id }}"
+          --expected-journal-sha "${{ inputs.expected_journal_sha }}"
+          --expected-identity "${{ inputs.expected_identity }}"
