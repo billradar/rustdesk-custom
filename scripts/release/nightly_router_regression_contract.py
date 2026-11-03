@@ -1,5 +1,6 @@
 """Regression checks for Nightly source pinning and retry safety."""
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 from scripts.release import nightly
