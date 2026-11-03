@@ -3,9 +3,9 @@
   "status": "BLOCKED",
   "blockers": [
     "QUIESCENT_WORKER_AND_JOURNAL_RECONCILIATION_REQUIRED",
-    "LEGACY_V1_TO_CONTENT_IDENTITY_ALIAS_REVIEW_REQUIRED",
+    "LEGACY_V1_RETIREMENT_AND_V2_ONLY_ADMISSION_VERIFICATION_REQUIRED",
     "CURRENT_TAG_DRAFT_RELEASE_INVENTORY_RECHECK_REQUIRED",
     "REQUIRED_UP_TO_DATE_PATCHSET_VERSION_GATE_NOT_VERIFIED"
   ],
-  "policy": "No environment variable, boolean or PR workflow may activate cutover. A separately reviewed main-branch migration must verify evidence and implement activation. Historical journals, releases, tags and signatures remain immutable."
+  "policy": "No environment variable, boolean or PR workflow may activate cutover. A separately reviewed main-branch migration must verify evidence and implement activation. Historical journals, releases, tags and signatures remain immutable. Legacy coordinator identity v1 is retired for future builds; no positive v1-to-v2 alias migration is required. Historical v1 journals/releases remain immutable and must not be replayed. This does not retire patchsets/v1 source patches used for older upstream compatibility."
 }
