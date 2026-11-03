@@ -139,10 +139,23 @@ def workflow_runs(tag, identity, signing_enabled=False):
         raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
     # Active matches have no completed lock yet. Match by requested source
     # (or conservative 'latest') regardless of mode/Wayland/signing.
-    pattern = re.compile(r'^Stable (latest|v?[0-9]+\\.[0-9]+\\.[0-9]+) / (dry-run|draft|release)'
-                         r' / wayland=(true|false) / android-signing=(true|false)'
-                         r'(?: / identity=(?:auto|manual|[0-9a-f]{64}))?
-
+    selected = []
+    candidates = {tag, tag.lstrip('v'), 'v' + tag.lstrip('v'), 'latest'}
+    for row in runs:
+        if row.get('head_branch') != 'main' or row.get('event') != 'workflow_dispatch':
+            continue
+        parts = row.get('display_title', '').split(' / ')
+        if (len(parts) < 4 or not parts[0].startswith('Stable ')
+                or parts[0][len('Stable '):] not in candidates
+                or parts[1] not in ('dry-run', 'draft', 'release')
+                or parts[2] not in ('wayland=true', 'wayland=false')
+                or parts[3] not in ('android-signing=true', 'android-signing=false')):
+            continue
+        if row.get('status') != 'completed':
+            selected.append(row)
+        elif recorded_identity(row) == identity:
+            selected.append(row)
+    return selected
 
 def run_state(rows):
     if any(row.get('status') != 'completed' for row in rows):
