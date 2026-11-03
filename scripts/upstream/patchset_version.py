@@ -151,15 +151,7 @@ def verify(name, base='origin/main', root=ROOT):
     data = current(name, root)
     before, after = hashes(name, root, base_sha), hashes(name, root)
     if 'versioning' not in old:
-        from scripts.upstream.patchset_migration import validate as audit_validate
-        audit = audit_validate(json.loads((root / 'metadata/release/patchset-migration-audit.json').read_text()))
-        anchor = audit['baseline_main']
-        subprocess.run(['git', 'merge-base', '--is-ancestor', anchor, base_sha], cwd=root, check=True)
-        if (before != hashes(name, root, anchor) or before != after or len(data['versioning']['history']) != 1
-                or data['revision'] != audit['candidate_initial_revisions'][name]
-                or data['versioning']['migration_base'] != anchor
-                or data['versioning']['history'][0]['base_sha'] != anchor):
-            raise ValueError('Bootstrap differs from audited migration baseline; re-audit required')
+        raise ValueError('Unversioned Patchset base is retired; rebase onto a reviewed versioned main')
     else:
         validate(old, before)
         for key in ('schema', 'initial_revision', 'migration_base'):

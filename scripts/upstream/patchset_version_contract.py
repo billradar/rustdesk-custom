@@ -141,6 +141,18 @@ class VersionContract(unittest.TestCase):
         p.write_bytes(p.read_bytes().replace(b'\n', b'\r\n'))
         self.assertEqual(first, version.hashes('v2', self.root))
 
+    def test_retired_unversioned_base_never_reactivates_cutover(self):
+        data = version.manifest('v2', self.root)
+        del data['versioning']
+        (self.root / 'patchsets/v2/patchset.json').write_text(json.dumps(data))
+        self.save_commit()
+        old_sha = version.commit('HEAD', self.root)
+        shutil.rmtree(self.root / 'patchsets/v2')
+        shutil.copytree(version.ROOT / 'patchsets/v2', self.root / 'patchsets/v2')
+        with self.assertRaisesRegex(ValueError, 'Unversioned Patchset base is retired'):
+            version.verify('v2', old_sha, self.root)
+
+
 
 if __name__ == '__main__':
     unittest.main()
