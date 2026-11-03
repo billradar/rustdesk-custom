@@ -97,12 +97,14 @@ class RuntimeContract(unittest.TestCase):
         base = identity('nightly')
         with self.assertRaisesRegex(ValueError, 'LEGACY_IDENTITY_V1_RETIRED'):
             require_v2_admission(base)
-        for changes in (
-            dict(policy_version=2, patchset_version='', build_policy_sha256='a'*64),
-            dict(policy_version=2, patchset_version='v2.8', build_policy_sha256=''),
+        for changes, message in (
+            (dict(policy_version=2, patchset_version='', build_policy_sha256='a'*64),
+             'Missing content revision identity'),
+            (dict(policy_version=2, patchset_version='v2.8', build_policy_sha256=''),
+             'Invalid identity digest'),
         ):
             with self.subTest(changes=changes):
-                with self.assertRaisesRegex(ValueError, 'Missing content revision identity'):
+                with self.assertRaisesRegex(ValueError, message):
                     replace(base, **changes)
         api = RuntimeAPI()
         modern = replace(base, policy_version=2, patchset_version='v2.8',
