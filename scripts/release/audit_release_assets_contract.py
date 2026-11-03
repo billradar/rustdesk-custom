@@ -38,6 +38,13 @@ class AuditContracts(unittest.TestCase):
                 )
         with self.assertRaises(ValueError):
             audit.signer_digests("V3 Signer: certificate SHA-256 digest: not-a-digest")
+    def test_trusted_signer_identity_gate(self):
+        fingerprint = "a" * 64
+        audit.verify_signer_identity([fingerprint], fingerprint.upper())
+        for actual, expected in [([], fingerprint), (["b" * 64], fingerprint), ([fingerprint, fingerprint], fingerprint), ([fingerprint], "invalid")]:
+            with self.subTest(actual=actual, expected=expected):
+                with self.assertRaises(ValueError):
+                    audit.verify_signer_identity(actual, expected)
     def test_sums_rejects_duplicate(self):
         line = "a" * 64 + "  test.apk\n"
         with self.assertRaises(ValueError):
