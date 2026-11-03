@@ -19,6 +19,13 @@ TRANSFORMS = bridge_recipe.TRANSFORMS
 INPUTS = TRANSFORMS + BRIDGE_FILES
 POLICY_KEYS = ('signature','runner','target','triplet','rust','flutter','vcpkg',
                'bridge_signature','bridge_flutter','bridge_rust','cargo_expand','frb','patch_sha256','source_workflow_sha256')
+# Exact substitutions in the already reviewed official Mac ARM build step.
+# These are checked only after compilation; all remaining bytes must still
+# hash to the immutable prepared inventory. Never ignore whole recipe files.
+DEPLOYMENT_EDITS = {
+    'build.py': (b'MACOSX_DEPLOYMENT_TARGET=10.14', b'MACOSX_DEPLOYMENT_TARGET=12.3'),
+    'Cargo.toml': (b'osx_minimum_system_version = "10.14"', b'osx_minimum_system_version = "12.3"'),
+}
 
 
 def require(value, message):
@@ -164,7 +171,16 @@ def receipt_checks(receipt, manifest, manifest_sha):
     return p
 
 
-def verified(tree):
+def protected_digest(tree, name, *, post_build=False):
+    path=Path(tree)/name;digest=sha(path)
+    if post_build and name in DEPLOYMENT_EDITS:
+        before,after=DEPLOYMENT_EDITS[name];raw=path.read_bytes()
+        require(raw.count(after)==1, 'Mac protected recipe deployment target drift: '+name)
+        digest=hashlib.sha256(raw.replace(after,before)).hexdigest()
+    return digest
+
+
+def verified(tree, *, post_build=False):
     tree=Path(tree);receipt=read(tree/RECEIPT);manifest=read(tree/'source-manifest.json')
     p=receipt_checks(receipt,manifest,sha(tree/'source-manifest.json'))
     require(manifest['upstream_sha']==os.environ['UPSTREAM_EXPECTED_SHA']
@@ -176,7 +192,8 @@ def verified(tree):
     require(all(receipt['after'][n]==sha(tree/n) for n in INPUTS), 'Mac transformed source drift')
     from scripts.platform.platform_adapter import FILES
     for name in set(FILES+['.github/workflows/flutter-build.yml',bridge_recipe.PATCH])-set(INPUTS):
-        require(sha(tree/name)==manifest['files'].get(name), 'Mac protected recipe input drift: '+name)
+        digest=protected_digest(tree,name,post_build=post_build)
+        require(digest==manifest['files'].get(name), 'Mac protected recipe input drift: '+name)
     verify_sdk(p)
     return p,job
 

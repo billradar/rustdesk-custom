@@ -172,7 +172,7 @@ def create(tree,platform,arch,variant):
  if platform=='macos' and arch=='aarch64':
   from scripts.build.macos_arm64 import requires_receipt,verified
   mac_receipt_required=requires_receipt(profile,m)
-  if mac_receipt_required:verified(tree)
+  if mac_receipt_required:verified(tree,post_build=True)
  if platform in ('linux','macos'):
   library=tree/('target/release/liblibrustdesk.so' if platform=='linux' else 'target/release/liblibrustdesk.dylib')
  else:

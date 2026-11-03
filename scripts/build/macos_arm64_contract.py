@@ -26,6 +26,8 @@ class MacArmContract(unittest.TestCase):
         protected=set(adapter.FILES+['.github/workflows/flutter-build.yml',mac.bridge_recipe.PATCH]+mac.INPUTS)
         for name in protected:
             path=self.tree/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('original '+name)
+        (self.tree/'build.py').write_text("command = 'MACOSX_DEPLOYMENT_TARGET=10.14 cargo build --locked'\n")
+        (self.tree/'Cargo.toml').write_text('[package.metadata.bundle]\nosx_minimum_system_version = "10.14"\n# variant features stay intact\n')
         self.p['patch_sha256']=mac.sha(self.tree/mac.bridge_recipe.PATCH)
         self.p['source_workflow_sha256']=mac.sha(self.tree/'.github/workflows/flutter-build.yml')
         policy=self.root/'policy.json';policy.write_text(json.dumps({'schema_version':1,'profiles':[
@@ -55,9 +57,54 @@ class MacArmContract(unittest.TestCase):
              patch.object(mac.bridge_recipe,'apply',side_effect=self.apply):
             mac.transform(self.tree,self.bridge)
 
-    def verify(self):
+    def verify(self, **kwargs):
         with patch.object(mac,'verify_sdk'),patch.object(mac,'original',return_value=(self.p,{})):
-            return mac.verified(self.tree)
+            return mac.verified(self.tree, **kwargs)
+
+    def deployment_edit(self):
+        for name, old, new in (
+                ('build.py', b'MACOSX_DEPLOYMENT_TARGET=10.14', b'MACOSX_DEPLOYMENT_TARGET=12.3'),
+                ('Cargo.toml', b'osx_minimum_system_version = "10.14"', b'osx_minimum_system_version = "12.3"')):
+            path=self.tree/name;path.write_bytes(path.read_bytes().replace(old,new))
+
+    def test_post_build_accepts_only_exact_reviewed_deployment_edits(self):
+        original=(self.tree/'source-manifest.json').read_bytes();self.transform()
+        self.deployment_edit()
+        with self.assertRaisesRegex(ValueError,'protected recipe'):self.verify()
+        self.assertEqual(self.verify(post_build=True)[0],self.p)
+        self.assertEqual((self.tree/'source-manifest.json').read_bytes(),original)
+        path=self.tree/'Cargo.toml';valid=path.read_bytes()
+        for invalid in (valid.replace(b'12.3',b'13.0'), valid+b'\n[features]\nsos = []\n'):
+            path.write_bytes(invalid)
+            with self.assertRaisesRegex(ValueError,'protected recipe'):self.verify(post_build=True)
+        path.write_bytes(valid)
+        (self.tree/'build.py').write_bytes((self.tree/'build.py').read_bytes()+b'\n# unexpected edit\n')
+        with self.assertRaisesRegex(ValueError,'protected recipe'):self.verify(post_build=True)
+
+    def test_post_build_requires_deployment_edit_and_keeps_other_recipe_guards(self):
+        self.transform()
+        with self.assertRaisesRegex(ValueError,'protected recipe'):self.verify(post_build=True)
+        self.deployment_edit();self.verify(post_build=True)
+        path=self.tree/'build.rs';path.write_text('unreviewed Rust build script')
+        with self.assertRaisesRegex(ValueError,'protected recipe'):self.verify(post_build=True)
+
+    def test_post_build_does_not_ignore_sos_variant_or_bridge_drift(self):
+        self.manifest['variant']='sos'
+        (self.tree/'source-manifest.json').write_text(json.dumps(self.manifest))
+        self.transform();self.deployment_edit();self.verify(post_build=True)
+        path=self.tree/mac.BRIDGE_FILES[0];path.write_text('stale bridge')
+        with self.assertRaisesRegex(ValueError,'source drift'):self.verify(post_build=True)
+
+    def test_packaging_selects_post_build_verification_before_native_payload_checks(self):
+        from scripts.platform import platform_package as package
+        profile=self.root/'platform-profile.json';profile.write_text(json.dumps(self.p))
+        def local_path(value):
+            return profile if str(value)=='.work/platform-profile.json' else Path(value)
+        with patch.object(package,'configured',return_value={}),patch.object(package,'Path',side_effect=local_path), \
+             patch('scripts.source.update_identity.verify_about_identity'),patch.object(mac,'verified') as verified:
+            with self.assertRaisesRegex(ValueError,'native library not found'):
+                package.create(self.tree,'macos','aarch64','standard')
+            verified.assert_called_once_with(self.tree,post_build=True)
 
     def test_transform_preserves_manifest_and_detects_transformed_or_recipe_drift(self):
         original=(self.tree/'source-manifest.json').read_bytes();self.transform()
