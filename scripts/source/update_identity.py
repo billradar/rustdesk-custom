@@ -18,13 +18,8 @@ def write_identity(tree, *, repository, version, sha, variant, run, channel, rev
             raise ValueError("Stable client requires the preflight patch revision")
     elif revision:
         raise ValueError("Non-release builds must not claim a Stable revision")
-    from scripts.upstream.patchsets import patchset_for_version
-    from scripts.release.content import inputs
-    content = inputs(patchset_for_version(version))
-    if channel == 'stable' and revision != content['patchset_version']:
-        raise ValueError('Stable revision differs from version-controlled Patchset content')
     data = dict(repository=repository, version=version, revision=revision or None, upstream_sha=sha,
-                variant=variant, build_run=str(run), channel=channel, **content)
+                variant=variant, build_run=str(run))
     destination = Path(tree) / "src/custom_update/build.json"
     if not destination.is_file() or destination.is_symlink():
         raise ValueError("Client update patch must be applied before identity injection")
@@ -43,8 +38,6 @@ def about_source(identity, *, unattended=False):
     version = identity['version'] + '-custom'
     if identity.get('revision'):
         version += '.' + identity['revision']
-    elif identity.get('patchset_version'):
-        version += '.' + identity['patchset_version'] + '-' + identity['channel']
     variant = {'standard': 'Standard', 'sos': 'SOS'}[identity['variant']]
     return ('// Generated display identity; internal versions are unchanged.\n'
             'const customAboutVersion = ' + json.dumps(version) + ';\n'

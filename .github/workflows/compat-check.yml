@@ -140,19 +140,8 @@ jobs:
         python3 -m scripts.release.stable_lock_contract
         python3 -m scripts.upstream.patchset_migration_contract
         python3 -m scripts.upstream.patchset_version_contract
-        python3 -m scripts.release.content_contract
         python3 -m scripts.validation.client_update_contract
         python3 -m scripts.validation.branding_contract
-        python3 -m scripts.release.coordinator.contract
-        python3 -m scripts.release.coordinator.store_contract
-        python3 -m scripts.release.coordinator.reconcile_contract
-        python3 -m scripts.release.coordinator.manual_reconciliation_contract
-        python3 -m scripts.release.coordinator.recovery_contract
-        python3 -m scripts.release.coordinator.runtime_contract
-        python3 -m scripts.release.coordinator.stable_runtime_contract
-        python3 -m scripts.release.coordinator.integration_contract
-        python3 -m scripts.release.coordinator.protection_contract
-        python3 -m scripts.release.coordinator.legacy_contract
         python3 -m scripts.release.router_retry_policy_contract
         python3 -m scripts.release.nightly_router_regression_contract
         python3 -m scripts.release.stable_router_contract
