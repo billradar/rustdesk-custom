@@ -1,0 +1,44 @@
+name: Coordinator cutover offline contracts
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/coordinator-cutover-contracts.yml'
+      - 'scripts/release/coordinator/**'
+      - 'metadata/release/coordinator-legacy/**'
+      - 'scripts/upstream/patchset_version*'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/coordinator-cutover-contracts.yml'
+      - 'scripts/release/coordinator/**'
+      - 'metadata/release/coordinator-legacy/**'
+      - 'scripts/upstream/patchset_version*'
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    name: Verify legacy deduplication and coordinator state contracts
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify patchset version allocation
+        run: python3 -m scripts.upstream.patchset_version_contract
+      - name: Verify legacy aliases and no-build exclusions
+        run: python3 -m scripts.release.coordinator.legacy_contract
+      - name: Verify coordinator transitions
+        run: python3 -m scripts.release.coordinator.contract
+      - name: Verify reconciliation and recovery
+        run: |
+          python3 -m scripts.release.coordinator.reconcile_contract
+          python3 -m scripts.release.coordinator.recovery_contract
+      - name: Verify runtime and storage CAS
+        run: |
+          python3 -m scripts.release.coordinator.runtime_contract
+          python3 -m scripts.release.coordinator.store_contract
+      - name: Verify protected state and offline integration contracts
+        run: |
+          python3 -m scripts.release.coordinator.protection_contract
+          python3 -m scripts.release.coordinator.integration_contract
