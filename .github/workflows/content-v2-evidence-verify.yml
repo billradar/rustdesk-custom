@@ -13,7 +13,16 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
-      - name: Verify evidence against authenticated GitHub API
+      - name: Capture and verify current-main evidence against authenticated GitHub API
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 -m scripts.release.verify_activation_evidence metadata/release/attestations/content-v2-api-evidence-snapshot.json
+        run: |
+          python3 -m scripts.release.capture_activation_evidence
+          python3 -m scripts.release.verify_activation_evidence content-v2-live-evidence.json
+      - name: Retain verified evidence artifact
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: content-v2-live-evidence
+          path: content-v2-live-evidence.json
+          retention-days: 90
