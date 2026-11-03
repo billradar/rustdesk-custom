@@ -53,6 +53,7 @@ jobs:
     - name: Validate CI channel identity
       env:
         PYTHONPATH: .
+        GH_TOKEN: ${{ github.token }}
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
       run: |
         set -euo pipefail

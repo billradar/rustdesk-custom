@@ -59,6 +59,8 @@ python3 scripts/signing/android_signing_contract.py
 
 ## 5. 如何理解“通过”
 
+`upstream-main-compatibility.yml` 的官方分支解析和 CI 身份校验步骤均在各自步骤中使用现有只读 `github.token` 访问 GitHub API，避免后者退回匿名请求而触发共享 Runner 出口的限流。令牌只传入 API 调用步骤，不增加权限、不改变官方选源，也不绕过未知接口门禁。认证请求仍可能被限流；此改动不声称消除所有 403。
+
 - 单个 Job 通过，不等于整个 Workflow 通过。
 - 构建通过，不等于聚合和资格验证通过。
 - CI Qualification 通过，不等于已创建 Draft 或正式发布。
