@@ -110,7 +110,13 @@ def require(infos=None):
 
 def preflight():
     lock = current()
-    result = channel.release_preflight(dict(lock))
+    mode = os.environ.get('RELEASE_MODE', 'draft')
+    if mode not in ('dry-run', 'draft', 'release'):
+        raise ValueError('Invalid Stable preflight mode')
+    if mode == 'dry-run':
+        result = channel.release_preflight(dict(lock), dry_run=True)
+    else:
+        result = channel.release_preflight(dict(lock))
     if result.get('build_identity') != lock['build_identity']:
         raise ValueError('Stable preflight identity differs from resolved lock')
     return result

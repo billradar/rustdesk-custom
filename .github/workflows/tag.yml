@@ -142,6 +142,7 @@ jobs:
         STABLE_LOCK_PATH: .work/stable-lock/stable-lock.json
         STABLE_LOCK_SHA256: ${{ needs.resolve.outputs.lock_sha256 }}
         EXPECTED_BUILD_IDENTITY: ${{ needs.resolve.outputs.build_identity }}
+        RELEASE_MODE: ${{ inputs.release_mode }}
       run: python3 -m scripts.release.stable_lock preflight
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()

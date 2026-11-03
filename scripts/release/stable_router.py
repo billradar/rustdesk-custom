@@ -105,8 +105,9 @@ def workflow_runs(tag, identity, signing_enabled=False, prior_run_number=None):
             break
     else:
         raise ValueError('Stable workflow run history exceeds lookup limit; manual review required')
-    # Active matches have no completed lock yet. Match by requested source
-    # (or conservative 'latest') regardless of mode/Wayland/signing.
+    # Only draft/release runs participate. Even an active or failed dry-run
+    # must never block publication builds or consume their retry allowance.
+    # Match requested source (or 'latest') regardless of Wayland/signing.
     selected = []
     candidates = {tag, tag.lstrip('v'), 'v' + tag.lstrip('v'), 'latest'}
     for row in runs:
@@ -122,7 +123,7 @@ def workflow_runs(tag, identity, signing_enabled=False, prior_run_number=None):
         parts = row.get('display_title', '').split(' / ')
         if (len(parts) < 4 or not parts[0].startswith('Stable ')
                 or parts[0][len('Stable '):] not in candidates
-                or parts[1] not in ('dry-run', 'draft', 'release')
+                or parts[1] not in ('draft', 'release')
                 or parts[2] not in ('wayland=true', 'wayland=false')
                 or parts[3] not in ('android-signing=true', 'android-signing=false')):
             continue
@@ -155,6 +156,17 @@ def dedup():
             or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
             or os.environ.get('GITHUB_REPOSITORY') != REPOSITORY):
         raise ValueError('Stable Lite admission requires main workflow_dispatch')
+    mode = os.environ.get('RELEASE_MODE', 'draft')
+    if mode not in ('draft', 'dry-run', 'release'):
+        raise ValueError('Invalid Stable release mode')
+    if mode == 'dry-run':
+        # Dry runs are isolated from both historical and active Lite admission.
+        # Continue to the normal source/patch/lock and build validation.
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                output.write('skip=false\n')
+        print('Stable dry-run: no Lite history lookup or duplicate suppression')
+        return
     try:
         number = int(os.environ['GITHUB_RUN_NUMBER'])
     except (KeyError, ValueError) as error:
@@ -172,9 +184,6 @@ def dedup():
     state = decide(rows)
     if state == 'REVIEW':
         raise ValueError('Stable Lite uncertain historical run requires manual review')
-    mode = os.environ.get('RELEASE_MODE', 'draft')
-    if mode not in ('draft', 'dry-run', 'release'):
-        raise ValueError('Invalid Stable release mode')
     # Release can publish a verified prior draft; it must not rebuild an active one.
     skip = state in ('ACTIVE', 'COOLDOWN') or (state == 'SUCCESS' and mode != 'release')
     if skip:

@@ -203,7 +203,9 @@ def matching_drafts(tag):
         if len(rows)<100:return drafts
     raise ValueError('Release pagination exhausted; manual review required')
 
-def release_preflight(data):
+def release_preflight(data, *, dry_run=False):
+    if type(dry_run) is not bool:
+        raise ValueError('Invalid Stable dry-run preflight override')
     if data.get("channel")!="stable": raise ValueError("Release preflight requires stable discovery")
     if not re.fullmatch(r"[0-9a-f]{40}",data.get("upstream_sha","")): raise ValueError("Invalid locked upstream SHA")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",data.get("version","")): raise ValueError("Invalid stable version")
@@ -230,6 +232,12 @@ def release_preflight(data):
     data['version_semantics'] = VERSION_SEMANTICS
     data['release_tag'] = f'v{data["version"]}-custom.{revision}'
     accepted_build_identity = current_identity
+    if dry_run:
+        # Keep all locked input and Patchset checks, but never inspect/reuse a
+        # Release or suppress a validation build merely because a Draft exists.
+        data.update(build_needed=True, draft_needed=False, publish_existing=False,
+                    build_identity=current_identity, rebuild_reason='DRY_RUN_VALIDATION_ONLY')
+        return data
     existing=api(f'repos/{REPOSITORY}/releases/tags/{data["release_tag"]}',missing=True)
     if not existing:
         drafts=matching_drafts(data['release_tag'])
