@@ -95,7 +95,9 @@ class LockTests(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / '.github/workflows/tag.yml').read_text())
         jobs = workflow['jobs']
         self.assertNotIn('identity=', workflow['run-name'])
-        self.assertEqual(set(workflow['on']['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland'})
+        self.assertEqual(set(workflow['on']['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland', 'force_retry'})
+        self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
+        self.assertIs(workflow['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
         for name in ('aggregate', 'publish-existing', 'release', 'draft'):
             with self.subTest(job=name):
                 job = jobs[name]
