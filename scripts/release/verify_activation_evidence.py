@@ -10,8 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 REPOSITORY = 'billradar/rustdesk-custom'
-SHA40 = re.compile(r'[0-9a-f]{40}\\Z')
-SHA64 = re.compile(r'[0-9a-f]{64}\\Z')
+SHA40 = re.compile(r'[0-9a-f]{40}\Z')
+SHA64 = re.compile(r'[0-9a-f]{64}\Z')
 JOURNAL_PREFIX = 'refs/heads/release-coordinator/v1/'
 REQUIRED_RUNS = {
     'Patchset content version contract',
