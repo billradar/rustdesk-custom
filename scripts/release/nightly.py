@@ -69,8 +69,16 @@ def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
 
 
 def is_dry_run(row):
-    """Exclude historical test-only batches before reading their artifacts."""
-    return bool(re.search(r' / dry-run / wayland=(?:true|false)(?: / android-signing=(?:true|false))?
+    """Exclude historical test-only Nightly batches, including active ones."""
+    parts = row.get('display_title', '').split(' / ')
+    return (len(parts) >= 4 and parts[0].startswith('Nightly ')
+            and parts[2] == 'dry-run' and parts[3] in ('wayland=true', 'wayland=false'))
+
+
+def route_state(rows, identity, release_mode='draft', wayland='true', current_run_id='', signing='false', upstream_sha=''):
+    """An active same-source production batch blocks duplicates; dry-run does not."""
+    relevant = [r for r in rows if not is_dry_run(r)
+                and r.get('event') == 'workflow_dispatch'
                 and r.get('head_branch') == 'main'
                 and str(r.get('id')) != str(current_run_id)]
     unresolved = [r for r in relevant if r.get('_nightly_identity_unresolved')
@@ -87,7 +95,6 @@ def is_dry_run(row):
     if any(r.get('conclusion') == 'success' for r in matched):
         return 'SUCCESS'
     return 'EXHAUSTED' if len(matched) >= 3 else 'RETRY'
-
 
 def prior_history(rows, current_run_id=''):
     """Return only runs older than this run, excluding later queued dispatches."""
