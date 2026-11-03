@@ -243,6 +243,7 @@ class MacWorkflowContract(unittest.TestCase):
         self.assertIn('macos-arm64-bridge',core['jobs']['platforms']['needs'])
         build=yaml.safe_load((ROOT/'.github/workflows/build-platform.yml').read_text())
         self.assertEqual(build['permissions'],{'contents':'read'})
+        self.assertTrue(any('scripts.release.coordinator_lite verify-worker' in s.get('run','') for s in build['jobs']['platform-build']['steps']))
         step=next(s for s in build['jobs']['platform-build']['steps'] if s.get('name')=='Apply verified Mac ARM source and bridge transformation')
         self.assertIn("inputs.arch == 'aarch64'",step['if'])
         ownership=next(i for i,s in enumerate(build['jobs']['platform-build']['steps']) if s.get('name')=='Verify Mac ARM bridge artifact ownership')

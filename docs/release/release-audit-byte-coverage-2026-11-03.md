@@ -13,11 +13,6 @@ The protected-main audit log recorded `PASS`, `sums_verified=true` for 3 × 32 a
 
 It is **not** evidence of a full independent byte-level SHA-256 download of all 96 release assets. The 84 non-APK payload files have not been independently re-downloaded and hashed by this audit. Counts: 3 manifests + 9 APKs = **12 independently downloaded/hash-checked assets**; 84 other release assets were metadata-checked against manifests only.
 
-## Remaining NO-GO evidence
+## Remaining assurance boundary
 
-1. Obtain and preserve an independent 84-file byte-level audit, or formally approve a narrower asset assurance policy in a separate review.
-2. Authenticate self-hosted runner status and external queue/lease quiescence; the available GitHub connector could not read runner inventory.
-3. Reconcile live coordinator reservations and explicitly verify v2-only production admission under isolated least-privilege credentials.
-4. Repeat live GitHub queue/ref/tag/release checks immediately before a separate reviewed production activation.
-
-Do not change `metadata/release/patchset-cutover.json` from `BLOCKED`, replay historical Identity v1 records, recover owner-deleted runs, or alter signatures/releases/tags.
+The 84 non-APK payloads in this historical audit were validated against GitHub-provided asset digests, not independently downloaded. A separate full-byte verification is required before claiming end-to-end independent digest coverage. This limitation does not authorize a release, alter a signed package or activate the retired Coordinator v1/v2 mechanisms.

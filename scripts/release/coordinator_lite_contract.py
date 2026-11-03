@@ -74,5 +74,45 @@ class CoordinatorLiteContract(unittest.TestCase):
 
 
 
+    def test_no_live_workflow_uses_retired_coordinator(self):
+        root = Path(__file__).resolve().parents[2]
+        workflows = sorted((root / '.github/workflows').glob('*.yml'))
+        self.assertGreaterEqual(len(workflows), 20)
+        retired = (
+            'scripts.release.coordinator.runtime',
+            'scripts.release.coordinator.manual_reconcile',
+            'scripts.release.coordinator.recovery',
+            'release-coordinator.yml',
+            'release-coordinator-manual-reconcile.yml',
+        )
+        for workflow in workflows:
+            with self.subTest(workflow=workflow.name):
+                source = workflow.read_text()
+                for forbidden in retired:
+                    self.assertNotIn(forbidden, source)
+
+
+    def test_retired_coordinator_paths_and_imports_do_not_return(self):
+        root = Path(__file__).resolve().parents[2]
+        retired = (
+            'scripts/release/coordinator',
+            'scripts/upstream/patchset_migration.py',
+            'scripts/release/verify_activation_evidence.py',
+            'metadata/release/coordinator-legacy',
+            'metadata/release/patchset-cutover.json',
+            'metadata/release/patchset-migration-audit.json',
+            'metadata/release/attestations/content-v2-api-evidence-snapshot.json',
+            'docs/release-coordinator.md',
+        )
+        for name in retired:
+            with self.subTest(path=name):
+                self.assertFalse((root / name).exists(), name)
+        for script in (root / 'scripts').rglob('*.py'):
+            if script == Path(__file__).resolve():
+                continue
+            with self.subTest(script=script.relative_to(root).as_posix()):
+                self.assertNotIn('scripts.release.coordinator.', script.read_text())
+                self.assertNotIn('scripts.upstream.patchset_migration', script.read_text())
+
 if __name__ == '__main__':
     unittest.main()

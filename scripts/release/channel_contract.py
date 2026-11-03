@@ -20,7 +20,7 @@ class RealPatchsetRevisionContract(unittest.TestCase):
 
 
 class StablePatchsetNotesContract(unittest.TestCase):
-    def test_stable_draft_contains_reviewed_notes_without_cutover(self):
+    def test_stable_draft_contains_reviewed_notes(self):
         from scripts.release.content import notes as patchset_notes
         import hashlib
         with tempfile.TemporaryDirectory() as directory:
@@ -56,7 +56,6 @@ class StablePatchsetNotesContract(unittest.TestCase):
                  patch.object(channel,'request',side_effect=fake_request), \
                  patch.object(channel,'gh'), \
                  patch('scripts.release.stable_tag.ensure'), \
-                 patch('scripts.release.content.require_cutover',side_effect=AssertionError('Old cutover must stay disabled')), \
                  patch('scripts.release.content.policy_digest',side_effect=AssertionError('Policy hash must not allocate notes')):
                 channel.draft(destination)
             body=captured[0][1]['body']

@@ -404,7 +404,7 @@ def draft(root):
         '-->'
     ])
     # Keep the upstream changelog distinct from the reviewed Patchset delta.
-    # Importing notes does not activate legacy Content-v2 cutover or policy identity.
+    # Patchset notes are informational; creating a draft never allocates a new revision.
     from scripts.release.content import notes as patchset_notes
     notes=changelog+'\n\n'+patchset_notes(info['patchset'])+'\n'+metadata+'\n'
     result=request('POST',f'repos/{REPOSITORY}/releases',{'tag_name':tag,'target_commitish':info['custom_repository_sha'],
