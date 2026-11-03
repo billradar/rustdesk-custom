@@ -184,6 +184,16 @@ class ReviewContract(unittest.TestCase):
             self.assertEqual(p['checks']['patches'],{})
             self.assertEqual(p['approval'],'REQUIRED / NOT APPROVED')
 
+    def test_upstream_resolution_api_steps_receive_scoped_read_only_token(self):
+        w=yaml.safe_load((review.ROOT/'.github/workflows/upstream-main-compatibility.yml').read_text())
+        job=w['jobs']['resolve']
+        for name in ('Resolve default branch and exact HEAD', 'Validate CI channel identity'):
+            with self.subTest(step=name):
+                step=next(s for s in job['steps'] if s.get('name')==name)
+                self.assertEqual(step.get('env',{}).get('GH_TOKEN'),'${{ github.token }}')
+        self.assertEqual(job.get('permissions',w['permissions']),{'contents':'read','actions':'read'})
+        self.assertNotIn('environment',job)
+
     def test_workflow_separates_read_only_inspection_and_writer(self):
         w=yaml.safe_load((review.ROOT/'.github/workflows/upstream-main-compatibility.yml').read_text())
         self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
