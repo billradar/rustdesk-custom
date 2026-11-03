@@ -77,6 +77,37 @@ class ContentContract(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'PATCHSET_CUTOVER_REVIEW_REQUIRED'):
                         content.require_cutover()
 
+    def test_active_cutover_requires_digest_pinned_complete_attestation(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / 'metadata/release/attestations'
+            folder.mkdir(parents=True)
+            evidence_path = folder / 'content-v2.json'
+            evidence = dict(schema='content-v2-activation-attestation-v1', decision='GO',
+                            v2_only=True, journal_reconciled=True, workers_quiescent=True,
+                            releases_inventoried=True, version_gate_passed=True)
+            raw = json.dumps(evidence).encode()
+            evidence_path.write_bytes(raw)
+            gate = root / 'patchset-cutover.json'
+            value = dict(schema='patchset-cutover-v1', status='ACTIVE', blockers=[],
+                         activation_evidence=dict(path='metadata/release/attestations/content-v2.json',
+                                                  sha256=hashlib.sha256(raw).hexdigest()))
+            gate.write_text(json.dumps(value))
+            with patch.object(content, 'ROOT', root), patch.object(content, 'CUTOVER', gate):
+                content.require_cutover()
+                evidence['workers_quiescent'] = False
+                changed = json.dumps(evidence).encode()
+                evidence_path.write_bytes(changed)
+                value['activation_evidence']['sha256'] = hashlib.sha256(changed).hexdigest()
+                gate.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError, 'incomplete activation evidence'):
+                    content.require_cutover()
+                value['activation_evidence']['sha256'] = '0' * 64
+                gate.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError, 'evidence digest mismatch'):
+                    content.require_cutover()
+
     def test_policy_hash_changes_for_toolchain_but_not_docs(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
