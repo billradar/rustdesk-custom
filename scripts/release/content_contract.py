@@ -86,7 +86,10 @@ class ContentContract(unittest.TestCase):
             evidence_path = folder / 'content-v2.json'
             evidence = dict(schema='content-v2-activation-attestation-v1', decision='GO',
                             v2_only=True, journal_reconciled=True, workers_quiescent=True,
-                            releases_inventoried=True, version_gate_passed=True)
+                            releases_inventoried=True, version_gate_passed=True,
+                            provenance=dict(main_sha='a'*40, successful_run_ids=[41631431938,41631431735],
+                                            journal_heads={'a'*64:'b'*40, 'c'*64:'d'*40},
+                                            release_ids=[432254527,431170313,430489827]))
             raw = json.dumps(evidence).encode()
             evidence_path.write_bytes(raw)
             gate = root / 'patchset-cutover.json'
@@ -96,6 +99,14 @@ class ContentContract(unittest.TestCase):
             gate.write_text(json.dumps(value))
             with patch.object(content, 'ROOT', root), patch.object(content, 'CUTOVER', gate):
                 content.require_cutover()
+                evidence['provenance']['main_sha'] = 'not-a-sha'
+                invalid = json.dumps(evidence).encode()
+                evidence_path.write_bytes(invalid)
+                value['activation_evidence']['sha256'] = hashlib.sha256(invalid).hexdigest()
+                gate.write_text(json.dumps(value))
+                with self.assertRaisesRegex(ValueError, 'unbound activation provenance'):
+                    content.require_cutover()
+                evidence['provenance']['main_sha'] = 'a'*40
                 evidence['workers_quiescent'] = False
                 changed = json.dumps(evidence).encode()
                 evidence_path.write_bytes(changed)
@@ -116,7 +127,10 @@ class ContentContract(unittest.TestCase):
             actual.mkdir()
             evidence = dict(schema='content-v2-activation-attestation-v1', decision='GO',
                             v2_only=True, journal_reconciled=True, workers_quiescent=True,
-                            releases_inventoried=True, version_gate_passed=True)
+                            releases_inventoried=True, version_gate_passed=True,
+                            provenance=dict(main_sha='a'*40, successful_run_ids=[41631431938,41631431735],
+                                            journal_heads={'a'*64:'b'*40, 'c'*64:'d'*40},
+                                            release_ids=[432254527,431170313,430489827]))
             raw = json.dumps(evidence).encode()
             (actual / 'proof.json').write_bytes(raw)
             parent = root / 'metadata/release'
