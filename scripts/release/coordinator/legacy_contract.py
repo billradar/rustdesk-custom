@@ -41,7 +41,7 @@ class LegacyContract(unittest.TestCase):
             old=identity(record['audit_row'])
             if old is None:
                 continue
-            modern=replace(old,policy_version=2)
+            modern=replace(old,policy_version=2,patchset_version=old.source.patchset+'.8',build_policy_sha256='a'*64)
             self.assertNotEqual(modern.key,old.key)
             self.assertEqual(catalog.decision(old),'SUCCESS_HOLD')
             self.assertEqual(catalog.decision(modern),'REVIEW_HOLD')
