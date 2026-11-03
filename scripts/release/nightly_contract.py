@@ -53,7 +53,7 @@ class NightlyTests(unittest.TestCase):
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                  _upstream_sha='b'*40, _nightly_identity=identity, head_sha='a'*40, event='workflow_dispatch',
                  head_branch='main', status='completed', conclusion='failure', id=21)
-        state=lambda rows, build_id=identity:nightly.route_state(rows,build_id)
+        state=lambda rows, build_id=identity:nightly.route_state(rows,build_id,upstream_sha=data['upstream_sha'])
         self.assertEqual(state([]),'RETRY')
         self.assertEqual(state([row]*3),'EXHAUSTED')
         self.assertEqual(state([dict(row,conclusion='success')]),'SUCCESS')
