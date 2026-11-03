@@ -34,6 +34,26 @@ class LegacyContract(unittest.TestCase):
         cls.success = next(r for r in cls.records if r['audit_row']['run_id'] == 41422335564)
         cls.stable = next(r for r in cls.records if r['audit_row']['run_id'] == 41398573672)
 
+    def test_v2_legacy_successes_remain_review_holds(self):
+        from .legacy import resolved_catalog
+        catalog=resolved_catalog()
+        for record in self.records:
+            old=identity(record['audit_row'])
+            if old is None:
+                continue
+            modern=replace(old,policy_version=2,patchset_version=old.source.patchset+'.8',build_policy_sha256='a'*64)
+            self.assertNotEqual(modern.key,old.key)
+            self.assertEqual(catalog.decision(old),'SUCCESS_HOLD')
+            self.assertEqual(catalog.decision(modern),'REVIEW_HOLD')
+            self.assertIn(record['audit_row']['run_id'],catalog.blockers(modern))
+            api=RuntimeAPI()
+            with patch('scripts.release.content.require_cutover',return_value=None):
+                with self.assertRaisesRegex(ValueError,'requires review'):
+                    Coordinator(api,REPOSITORY,modern,legacy_catalog=catalog).claim(
+                        NOW,'123',lambda:self.fail('No legacy history lookup'))
+            self.assertEqual(api.refs,{})
+            self.assertEqual(api.dispatches,[])
+
     def test_actual_archived_inventory_and_zero_build_accounting(self):
         result = summary(self.records)
         self.assertEqual((result['records'],result['success_holds'],result['review_holds']), (25,7,18))
