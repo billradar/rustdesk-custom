@@ -64,7 +64,7 @@ def download(asset, dest):
 def sums_parse(data):
     result = {}
     for line in data.splitlines():
-        match = re.fullmatch(r"([0-9a-fA-F]{64}) ([ *])([^\\\\\r\n]+)", line)
+        match = re.fullmatch(r"([0-9a-fA-F]{64}) ([ *])(.+)", line)
         if not match:
             raise ValueError("Malformed SHA256SUMS entry")
         name = match.group(3)
