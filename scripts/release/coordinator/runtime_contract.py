@@ -95,17 +95,16 @@ class RuntimeContract(unittest.TestCase):
         from dataclasses import replace
         from .runtime import require_v2_admission
         base = identity('nightly')
-        # The identity constructor rejects malformed v2 inputs even earlier
-        # than the runtime admission guard; exercise both rejection layers.
         with self.assertRaisesRegex(ValueError, 'LEGACY_IDENTITY_V1_RETIRED'):
             require_v2_admission(base)
-        for changes in (
-            dict(policy_version=2, patchset_version='', build_policy_sha256='a'*64),
-            dict(policy_version=2, patchset_version='v2.8', build_policy_sha256=''),
+        # Invalid v2 identities must fail even earlier: at construction.
+        for missing in (
+            dict(patchset_version='', build_policy_sha256='a'*64),
+            dict(patchset_version='v2.8', build_policy_sha256=''),
         ):
-            with self.subTest(changes=changes):
+            with self.subTest(missing=missing):
                 with self.assertRaisesRegex(ValueError, 'Missing content revision identity'):
-                    replace(base, **changes)
+                    replace(base, policy_version=2, **missing)
         api = RuntimeAPI()
         modern = replace(base, policy_version=2, patchset_version='v2.8',
                          build_policy_sha256='a'*64)
