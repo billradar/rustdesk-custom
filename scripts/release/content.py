@@ -71,13 +71,36 @@ def require_cutover():
         # Reject symlinked parent directories as well as the final file: an
         # attestation must be a regular file contained in the reviewed tree.
         path = ROOT / relative
-        if (any(part.is_symlink() for part in (path, *path.parents) if part != ROOT)
+        if (any(part.is_symlink() for part in (path, *path.parents)
+                if part == ROOT or ROOT in part.parents)
                 or not path.is_file()
                 or hashlib.sha256(path.read_bytes()).hexdigest() != expected):
             raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: evidence digest mismatch')
         evidence = json.loads(path.read_text())
         required = {'schema', 'decision', 'v2_only', 'journal_reconciled',
                     'workers_quiescent', 'releases_inventoried', 'version_gate_passed'}
+        # A certificate without pinned provenance is merely a self-asserted
+        # collection of booleans and must not authorize production admission.
+        provenance = evidence.get('provenance')
+        sha = provenance.get('main_sha') if isinstance(provenance, dict) else None
+        runs = provenance.get('successful_run_ids') if isinstance(provenance, dict) else None
+        heads = provenance.get('journal_heads') if isinstance(provenance, dict) else None
+        releases = provenance.get('release_ids') if isinstance(provenance, dict) else None
+        if (not isinstance(sha, str) or len(sha) != 40
+                or any(c not in '0123456789abcdef' for c in sha)
+                or not isinstance(runs, list) or len(runs) < 2
+                or any(type(x) is not int or x <= 0 for x in runs)
+                or len(set(runs)) != len(runs)
+                or not isinstance(heads, dict) or len(heads) < 2
+                or any(not isinstance(k, str) or len(k) != 64
+                       or any(c not in '0123456789abcdef' for c in k)
+                       or not isinstance(v, str) or len(v) != 40
+                       or any(c not in '0123456789abcdef' for c in v)
+                       for k, v in heads.items())
+                or not isinstance(releases, list) or len(releases) < 3
+                or any(type(x) is not int or x <= 0 for x in releases)
+                or len(set(releases)) != len(releases)):
+            raise ValueError('PATCHSET_CUTOVER_REVIEW_REQUIRED: unbound activation provenance')
         if (not isinstance(evidence, dict) or not required.issubset(evidence)
                 or evidence['schema'] != 'content-v2-activation-attestation-v1'
                 or evidence['decision'] != 'GO'
