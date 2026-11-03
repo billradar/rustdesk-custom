@@ -34,8 +34,6 @@ jobs:
       upstream_ref: ${{ steps.resolve.outputs.upstream_ref }}
       upstream_version: ${{ steps.resolve.outputs.upstream_version }}
       patchset: ${{ steps.resolve.outputs.patchset }}
-      discovery_sha256: ${{ steps.freeze.outputs.discovery_sha256 }}
-      signing_enabled: ${{ steps.freeze.outputs.signing_enabled }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -65,7 +63,6 @@ jobs:
     - id: dedup
       name: Skip an active or completed identical Nightly batch
       env:
-        RELEASE_COORDINATOR_ENABLED: 'true'
         GH_TOKEN: ${{ github.token }}
         RELEASE_MODE: ${{ inputs.release_mode }}
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
@@ -73,21 +70,6 @@ jobs:
         UPSTREAM_EXPECTED_SHA: ${{ steps.resolve.outputs.upstream_sha }}
         PATCHSET: ${{ steps.resolve.outputs.patchset }}
       run: python3 scripts/release/nightly.py dedup
-    - id: freeze
-      name: Freeze discovery digest and signing selection
-      env:
-        FROZEN_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
-      run: |
-        python3 - <<'PYCODE'
-        import hashlib, os
-        from pathlib import Path
-        value = os.environ['FROZEN_SIGNING_ENABLED']
-        if value not in ('true', 'false'):
-            raise SystemExit('Invalid signing selection')
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-            out.write('discovery_sha256=' + hashlib.sha256(Path('.work/nightly-discovery.json').read_bytes()).hexdigest() + '\n')
-            out.write('signing_enabled=' + value + '\n')
-        PYCODE
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       # Keep discovery evidence even when this run intentionally skips a build.
       # On early failures there may be no file; warn so the router can fail closed.
@@ -96,43 +78,9 @@ jobs:
         name: nightly-discovery-${{ github.run_id }}
         path: .work/nightly-discovery.json
         if-no-files-found: warn
-  coordinator-admit:
-    name: Coordinate Nightly build admission
-    needs: resolve
-    if: >-
-      github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' &&
-      github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository)
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      actions: read
-    outputs:
-      allow: ${{ steps.admit.outputs.allow }}
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_MODE: ${{ inputs.release_mode }}
-      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
-      ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ needs.resolve.outputs.signing_enabled }}
-      DISCOVERY_SHA256: ${{ needs.resolve.outputs.discovery_sha256 }}
-    steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        persist-credentials: false
-    - run: python3 -m pip install -r requirements.txt
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      with:
-        name: nightly-discovery-${{ github.run_id }}
-        path: .work/coordinator-discovery
-    - id: admit
-      name: Verify frozen discovery and atomically bind this run
-      run: python3 -m scripts.release.coordinator.runtime admit-nightly --discovery .work/coordinator-discovery/nightly-discovery.json --digest "$DISCOVERY_SHA256"
   prepare:
-    needs: [resolve, coordinator-admit]
-    if: >-
-      always() && needs.resolve.result == 'success' && needs.resolve.outputs.dedup_skip != 'true' &&
-      ((github.ref == 'refs/heads/main' && needs.coordinator-admit.outputs.allow == 'true') ||
-       (github.ref == 'refs/heads/development' && inputs.release_mode == 'dry-run'))
+    needs: resolve
+    if: needs.resolve.outputs.dedup_skip != 'true'
     uses: ./.github/workflows/prepare-source.yml
     with:
       build_wayland: ${{ inputs.include_wayland }}
@@ -210,7 +158,6 @@ jobs:
       needs.resolve.outputs.dedup_skip != 'true' &&
       (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
       vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' &&
-      needs.resolve.outputs.signing_enabled == 'true' &&
       needs.android-build.result == 'success'
     runs-on:
       - self-hosted
@@ -233,18 +180,9 @@ jobs:
         sparse-checkout: |
           metadata/signing/android-standard.json
           scripts/signing/android_yubikey_sign.py
-          scripts/__init__.py
-          scripts/release/__init__.py
-          scripts/release/coordinator/*
-          scripts/validation/__init__.py
-          scripts/validation/build_reliability.py
           .github/actions/android-yubikey-sign/action.yml
         sparse-checkout-cone-mode: false
         fetch-depth: 1
-    - name: Verify current coordinator worker admission
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - name: Validate public YubiKey identity metadata
       shell: bash
       run: |
@@ -307,11 +245,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.workflow == 'Nightly Build Pipeline'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
@@ -377,11 +310,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Verify current coordinator worker admission
-      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.workflow == 'Nightly Build Pipeline'
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -m scripts.release.coordinator.runtime guard
     - run: python3 -m pip install -r requirements.txt
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
