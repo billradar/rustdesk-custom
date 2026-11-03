@@ -279,6 +279,7 @@ class NightlyTests(unittest.TestCase):
 
 class NightlyDraftTests(unittest.TestCase):
     def setUp(self):
+        gate=patch('scripts.release.content.require_cutover');gate.start();self.addCleanup(gate.stop)
         self.repo='example/rustdesk-custom'
         self.env={'GITHUB_REPOSITORY':self.repo,'GITHUB_REF':'refs/heads/main',
                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':self.repo+'/.github/workflows/nightly.yml@refs/heads/main',

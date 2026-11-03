@@ -67,15 +67,24 @@ class BuildIdentity:
     android_signing_enabled: bool
     release_mode: str = 'draft'
     policy_version: int = 1
+    patchset_version: str = ''
+    build_policy_sha256: str = ''
 
     def __post_init__(self):
         if (self.channel not in ('stable', 'nightly')
                 or not isinstance(self.source, SourceIdentity)
                 or type(self.wayland_included) is not bool
                 or type(self.android_signing_enabled) is not bool
-                or type(self.policy_version) is not int or self.policy_version != 1
+                or type(self.policy_version) is not int or self.policy_version not in (1, 2)
                 or self.release_mode not in ('dry-run', 'draft', 'release')):
             raise ValueError("Unsupported build identity policy")
+        if self.policy_version == 1:
+            if self.patchset_version or self.build_policy_sha256:
+                raise ValueError('Legacy identity cannot acquire content inputs')
+        else:
+            if not re.fullmatch(re.escape(self.source.patchset) + r'\.[1-9][0-9]{0,5}', self.patchset_version):
+                raise ValueError('Missing content revision identity')
+            hex_value(self.build_policy_sha256, 64)
         if self.wayland_included:
             hex_value(self.wayland_policy_sha256, 64)
         elif self.wayland_policy_sha256 != '':
@@ -87,7 +96,9 @@ class BuildIdentity:
         data = asdict(self)
         if self.channel == 'stable':
             del data['release_mode']
-        return digest(dict(schema_version=1, kind='build', **data))
+        if self.policy_version == 1:
+            del data['patchset_version']; del data['build_policy_sha256']
+        return digest(dict(schema_version=self.policy_version, kind='build', **data))
 
     @property
     def historical_digest(self):
@@ -104,6 +115,9 @@ class BuildIdentity:
                         signing=str(self.android_signing_enabled).lower(),
                         wayland_policy_sha256=self.wayland_policy_sha256,
                         release_mode=self.release_mode)
+        if self.policy_version == 2:
+            data.update(schema=('stable-build-identity-v5' if self.channel == 'stable' else 'nightly-build-identity-v2'),
+                        patchset_version=self.patchset_version, build_policy_sha256=self.build_policy_sha256)
         return digest(data)
 
     def verify_historical(self, value):

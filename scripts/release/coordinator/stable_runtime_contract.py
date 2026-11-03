@@ -33,6 +33,9 @@ def env(included=True):
 
 
 class StableRuntimeContract(unittest.TestCase):
+    def setUp(self):
+        gate=patch('scripts.release.content.require_cutover');gate.start();self.addCleanup(gate.stop)
+
     def successful_dry_run(self):
         api=RuntimeAPI();c=Coordinator(api,REPO,identity('stable',release_mode='dry-run'))
         s=c.claim(NOW,'123',lambda:'EMPTY');self.assertTrue(c.admit(s,stable_run(),NOW))

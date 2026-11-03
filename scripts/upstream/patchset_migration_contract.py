@@ -73,7 +73,8 @@ class MigrationContract(unittest.TestCase):
             keys = [BuildIdentity(channel, source, False, '', False).key for source in sources]
             self.assertEqual(keys[0], keys[2])
         self.assertFalse(migration.identity_gaps()['source_binds_revision'])
-        self.assertFalse(migration.identity_gaps()['build_binds_policy_digest'])
+        self.assertTrue(migration.identity_gaps()['build_binds_policy_digest'])
+        self.assertTrue(migration.identity_gaps()['build_binds_revision'])
 
     def test_cli_is_machine_readable_and_check_fails_closed(self):
         for args, code in [([], 0), (['--check'], 1)]:

@@ -99,6 +99,7 @@ def identity_gaps():
     build_fields = set(BuildIdentity.__dataclass_fields__)
     return dict(
         source_binds_revision='patchset_revision' in fields,
+        build_binds_revision='patchset_version' in build_fields,
         build_binds_policy_digest='build_policy_sha256' in build_fields,
         example_source_key=source.key,
         example_stable_key=BuildIdentity('stable', source, False, '', False).key,

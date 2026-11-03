@@ -10,7 +10,7 @@ import re
 from scripts.release import channel
 from scripts.upstream.patchsets import patchset_for_version, verify, patch_hash
 
-SCHEMA = 'stable-build-lock-v1'
+SCHEMA = 'stable-build-lock-v2'
 
 
 def boolean(name):
@@ -37,19 +37,24 @@ def plan(data, patchset):
     included = boolean('INCLUDE_WAYLAND')
     signing = boolean('ANDROID_PRODUCTION_SIGNING_ENABLED')
     _, policy = channel.wayland_identity()
+    from scripts.release.content import inputs
+    content = inputs(patchset)
     common, sos = patch_hash('common', patchset), patch_hash('sos', patchset)
     identity = channel.build_identity(sha, patchset, common, sos,
                                      wayland_included=included, wayland_policy_sha256=policy,
-                                     android_signing_enabled=signing)
+                                     android_signing_enabled=signing, patchset_version=content['patchset_version'],
+                                     build_policy_sha256=content['build_policy_sha256'])
     return dict(schema=SCHEMA, channel='stable', version=version, upstream_sha=sha,
                 upstream_ref=tag, upstream_tag=tag, patchset=patchset,
                 custom_repository_sha=custom, workflow_run=run,
                 common_patch_hash=common, sos_patch_hash=sos,
                 wayland_included=included, wayland_policy_sha256=policy,
-                android_signing_enabled=signing, build_identity=identity)
+                android_signing_enabled=signing, build_identity=identity, **content)
 
 
 def create(data, patchset, output):
+    from scripts.release.content import require_cutover
+    require_cutover()
     lock = plan(data, patchset)
     raw = (json.dumps(lock, indent=2, sort_keys=True) + '\n').encode()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +104,7 @@ def require(infos=None):
             for key, value in dict(upstream_sha=lock['upstream_sha'], upstream_version=lock['version'],
                                    patchset=lock['patchset'], common_patch_hash=lock['common_patch_hash'],
                                    custom_repository_sha=lock['custom_repository_sha'],
-                                   build_run=lock['workflow_run']).items():
+                                   build_run=lock['workflow_run'], patch_revision=lock['patchset_version']).items():
                 if str(info.get(key)) != str(value):
                     raise ValueError('Built artifact differs from locked Stable input: ' + key)
             expected = lock['sos_patch_hash'] if info['variant'] == 'sos' else None

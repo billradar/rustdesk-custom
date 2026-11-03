@@ -239,6 +239,8 @@ class Catalog:
         matching = [v['audit_row'] for (c, _),v in self._records.items() if c == build.channel]
         if any(identity(r) == build or (identity(r) is not None and identity(r).key == build.key) for r in matching):
             return 'SUCCESS_HOLD'
+        if build.policy_version == 2 and any(identity(r) is not None and identity(r).source == build.source for r in matching):
+            return 'REVIEW_HOLD'  # New schema never turns old success into an empty ledger.
         if any(identity(r) is None and self.source_scope(r) in ('', build.source.upstream_sha) for r in matching):
             return 'REVIEW_HOLD'
         return 'NO_OP'  # Never permission to reserve, retry, sign or publish.
@@ -250,7 +252,8 @@ class Catalog:
             return sorted(r['run_id'] for r in rows if identity(r) is not None and identity(r).key == build.key)
         if decision == 'REVIEW_HOLD':
             return sorted(r['run_id'] for r in rows if identity(r) is None
-                          and self.source_scope(r) in ('',build.source.upstream_sha))
+                          and self.source_scope(r) in ('',build.source.upstream_sha)
+                          or (build.policy_version == 2 and identity(r) is not None and identity(r).source == build.source))
         return []
 
     def archived(self, run, channel):

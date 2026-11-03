@@ -71,8 +71,16 @@ def build(data, channel, mode):
     policy = hashlib.sha256(POLICY.read_bytes()).hexdigest() if wayland else ''
     if data.get('wayland_policy_sha256', '') != policy:
         raise ValueError('Frozen Wayland policy mismatch')
+    content = {}
+    if data.get('patchset_version'):
+        from scripts.release.content import inputs
+        expected = inputs(patchset)
+        if any(data.get(k) != v for k, v in expected.items()):
+            raise ValueError('Frozen content/build policy mismatch')
+        content = dict(policy_version=2, patchset_version=expected['patchset_version'],
+                       build_policy_sha256=expected['build_policy_sha256'])
     result = BuildIdentity(channel, SourceIdentity(data['upstream_sha'], patchset, common, sos),
-                           wayland, policy, signing, mode)
+                           wayland, policy, signing, mode, **content)
     if channel == 'stable':
         result.verify_historical(data['build_identity'])
     return result
@@ -141,6 +149,9 @@ class Coordinator:
 
     def claim(self, now, creator, legacy_check):
         """Read/qualify/reserve, with CAS retries only after a fresh decision."""
+        if self.identity.policy_version == 2:
+            from scripts.release.content import require_cutover
+            require_cutover()
         archived = self.legacy.decision(self.identity)
         if archived != 'NO_OP':
             print(json.dumps(dict(schema_version=1, channel=self.identity.channel,
