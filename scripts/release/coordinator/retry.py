@@ -4,6 +4,7 @@ from datetime import timedelta
 from enum import Enum
 import math
 import random
+import json
 
 from .model import BuildState, utc
 
@@ -28,6 +29,17 @@ class Failure(str, Enum):
 AUTOMATIC = {Failure.NETWORK, Failure.API_5XX, Failure.RUNNER, Failure.SHUTDOWN, Failure.SDK}
 
 
+def uncertain_attempts(record):
+    value=json.loads(record.source_provenance).get('missing_run_uncertain_attempts',0)
+    if type(value) is not int or value<0:
+        raise ValueError('Invalid missing-run uncertainty budget')
+    return value
+
+
+def budget_attempts(record):
+    return record.attempt+uncertain_attempts(record)
+
+
 @dataclass(frozen=True)
 class RetryPolicy:
     max_attempts: int = 3
@@ -44,7 +56,7 @@ class RetryPolicy:
 
     def eligible(self, record):
         return (record.state == BuildState.FAILED and record.failure_class in AUTOMATIC
-                and record.attempt < self.max_attempts and record.fence < self.max_reservations)
+                and budget_attempts(record) < self.max_attempts and record.fence < self.max_reservations)
 
     def delay(self, record):
         # Failed reservations have their own finite budget, not fake build attempts.

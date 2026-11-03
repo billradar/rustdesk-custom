@@ -8,6 +8,49 @@ from .store import APIError
 from .transitions import recover_missing
 
 
+def automatic(api, repo, journal, snapshot, creator, now):
+    """One policy-authorized recovery of an authenticated missing bound run."""
+    from .transitions import auto_recover_missing
+    from .runtime import index_record
+    try:
+        event=auto_recover_missing(snapshot.record,str(uuid4()),str(creator),now,now+timedelta(hours=6))
+    except ValueError:
+        return None  # Exhausted/terminal/unknown histories remain held.
+    if api.request('GET',f'repos/{repo}').get('full_name') != repo:
+        raise ValueError('Cannot establish repository access')
+    try:
+        missing(api,repo,snapshot.record.workflow_run_id)
+    except ValueError:
+        return None
+    for page in range(1,101):
+        result=api.request('GET',f'repos/{repo}/actions/runs?branch=main&per_page=100&page={page}')
+        count=result.get('total_count')
+        # GitHub caps filtered run searches at 1,000; never mistake that cap
+        # for complete evidence that an older active task does not exist.
+        if type(count) is not int or not 0<=count<1000:
+            raise ValueError('Filtered Actions inventory may be incomplete')
+        rows=result['workflow_runs']
+        if not isinstance(rows,list):raise ValueError('Invalid Actions run inventory')
+        for run in rows:
+            if str(run.get('id'))==snapshot.record.workflow_run_id:
+                return None  # List and point lookup disagree; no inference.
+            if run.get('path','').split('@')[0] != WORKFLOWS[snapshot.record.channel]:
+                continue
+            if run.get('status') != 'completed':
+                indexed=index_record(api,repo,str(run['id']))
+                if indexed is None or indexed.build_identity==snapshot.record.build_identity:
+                    return None
+        if len(rows)<100:
+            break
+    else:
+        raise ValueError('Incomplete automatic recovery pagination')
+    try:
+        missing(api,repo,snapshot.record.workflow_run_id)
+    except ValueError:
+        return None
+    return journal.append(event,snapshot)
+
+
 def missing(api, repo, run_id):
     try:
         api.request('GET',f'repos/{repo}/actions/runs/{run_id}')

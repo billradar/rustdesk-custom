@@ -167,6 +167,12 @@ class Coordinator:
                     raise ValueError('Journal source identity drift')
                 snapshot = Reconciler(self.journal, self.evidence).refresh(snapshot, now)
                 r = snapshot.record
+                if r.policy_state == PolicyState.REVIEW_REQUIRED and provenance(r).get('purpose') == self.identity.release_mode:
+                    from .recovery import automatic
+                    recovered=automatic(self.api,self.repo,self.journal,snapshot,creator,now)
+                    if recovered is not None:
+                        log_decision(recovered.record,'MISSING_RUN_RECOVERED_ONCE')
+                        return recovered
                 if (r.channel == 'stable' and r.state == BuildState.SUCCEEDED
                         and provenance(r).get('purpose') == 'dry-run' and self.identity.release_mode != 'dry-run'):
                     if self.evidence.run(r)['status'] != 'completed':

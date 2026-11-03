@@ -28,6 +28,9 @@ class RuntimeAPI(MemoryAPI):
         self.runs = {}
 
     def request(self, method, path, data=None):
+        if path==f'repos/{REPO}':return {'full_name':REPO}
+        if path.startswith(f'repos/{REPO}/actions/runs?'):
+            return {'total_count':len(self.runs),'workflow_runs':list(self.runs.values())}
         if '/git/matching-refs/' in path:
             prefix='refs/'+path.split('/git/matching-refs/',1)[1]
             return [dict(ref=ref,object={'sha':sha,'type':'commit'}) for ref,sha in self.refs.items() if ref.startswith(prefix)]
@@ -184,18 +187,22 @@ class RuntimeContract(unittest.TestCase):
                 self.assertTrue(out.call_args.kwargs['allow'])
                 self.assertEqual(index_record(api,REPO,'123').workflow_run_id,'123')
 
-    def test_unavailable_old_run_blocks_its_key_without_blocking_a_new_identity(self):
+    def test_authenticated_missing_old_run_recovers_without_blocking_a_new_identity(self):
         from dataclasses import replace
         from .runtime import recover_all
         api=RuntimeAPI();old=Coordinator(api,REPO,identity('nightly'))
         snap=old.claim(NOW,'123',lambda:'EMPTY')
         self.assertTrue(old.admit(snap,run(),NOW))
         recover_all(api,REPO,'nightly',NOW+timedelta(hours=1))
-        held=old.claim(NOW+timedelta(hours=1),'999',lambda:'EMPTY')
-        self.assertEqual(held.record.policy_state.value,'REVIEW_REQUIRED')
-        self.assertEqual((held.record.workflow_run_id,held.record.fence,held.record.attempt),('123',1,0))
-        self.assertFalse(old.dispatch(held,{'release_mode':'draft','include_wayland':True},NOW+timedelta(hours=1)))
-        self.assertEqual(api.dispatches,[])
+        recovered=old.claim(NOW+timedelta(hours=1),'999',lambda:'EMPTY')
+        self.assertEqual(recovered.record.policy_state.value,'READY')
+        self.assertEqual((recovered.record.workflow_run_id,recovered.record.fence,recovered.record.attempt),('',2,0))
+        from .transitions import provenance
+        self.assertEqual(provenance(recovered.record)['missing_run_uncertain_attempts'],1)
+        self.assertTrue(old.dispatch(recovered,{'release_mode':'draft','include_wayland':True},NOW+timedelta(hours=1)))
+        again=old.claim(NOW+timedelta(hours=1),'1000',lambda:'EMPTY')
+        self.assertFalse(old.dispatch(again,{'release_mode':'draft','include_wayland':True},NOW+timedelta(hours=1)))
+        self.assertEqual(len(api.dispatches),1)
         changed=replace(identity('nightly'),source=replace(identity('nightly').source,upstream_sha='b'*40))
         fresh=Coordinator(api,REPO,changed).claim(NOW+timedelta(hours=1),'999',lambda:'EMPTY')
         self.assertNotEqual(fresh.record.build_identity,snap.record.build_identity)

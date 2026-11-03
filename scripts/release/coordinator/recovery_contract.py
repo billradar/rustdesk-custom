@@ -8,9 +8,9 @@ from .contract import NOW
 from .model import BuildState, PolicyState, ReservationState
 from .reconcile import Reconciler, WORKFLOWS
 from .reconcile_contract import bound
-from .recovery import recover
+from .recovery import automatic, recover
 from .store import APIError, Conflict
-from .transitions import finish, provenance
+from .transitions import finish, provenance, updated, bind_verified, auto_recover_missing
 
 REPO='example/release-test'
 
@@ -26,7 +26,7 @@ class RecoveryAPI:
         if path==f'repos/{REPO}':return {'full_name':REPO}
         if '/actions/runs?' in path:
             if self.failure:raise self.failure
-            return {'workflow_runs':self.rows}
+            return {'total_count':len(self.rows),'workflow_runs':self.rows}
         if self.status:raise APIError(self.status)
         return {'status':'completed'}
 
@@ -43,6 +43,103 @@ class RecoveryContract(unittest.TestCase):
                   creator='456',now=self.now)
         args.update(kw)
         return recover(self.api,REPO,self.journal,**args)
+
+    def auto(self):
+        return automatic(self.api,REPO,self.journal,self.snap,'456',self.now)
+
+    def test_automatic_missing_run_preserves_actual_count_and_records_unknown_budget(self):
+        fresh=self.auto();r=fresh.record
+        self.assertEqual((r.attempt,r.fence),(0,2))
+        self.assertIsNone(r.started_at);self.assertIsNone(r.completed_at)
+        self.assertEqual(provenance(r)['missing_run_uncertain_attempts'],1)
+        history=provenance(r)['automatic_missing_run_recoveries']
+        self.assertEqual((history[0]['run_id'],history[0]['compilation']),('123','UNKNOWN'))
+        self.assertEqual(sum('/actions/runs/123' in p for p in self.api.calls),2)
+
+    def test_automatic_recovery_is_limited_to_one_per_identity(self):
+        fresh=self.auto();r=fresh.record
+        self.snap=self.journal.append(bind_verified(r,r.reservation_id,r.fence,'124','a'*40,1,self.now),fresh)
+        self.snap=Reconciler(self.journal,MissingEvidence()).refresh(self.snap,self.now)
+        self.assertIsNone(self.auto())
+        self.assertEqual(self.journal.load(),self.snap)
+
+    def test_automatic_recovery_requires_repository_and_actions_access(self):
+        for status in (403,429,500):
+            self.api.status=status
+            with self.subTest(status=status),self.assertRaises(APIError):self.auto()
+        self.api.status=404;self.api.failure=APIError(403)
+        with self.assertRaises(APIError):self.auto()
+        self.assertEqual(self.journal.load(),self.snap)
+
+    def test_automatic_existing_run_or_list_disagreement_is_not_recovered(self):
+        self.api.status=0;self.assertIsNone(self.auto())
+        self.api.status=404;self.api.rows=[{'id':123,'status':'completed'}]
+        self.assertIsNone(self.auto())
+        self.assertEqual(self.journal.load(),self.snap)
+
+    def test_automatic_blocks_active_matching_or_unindexed_runs(self):
+        self.api.rows=[{'id':555,'path':WORKFLOWS[self.snap.record.channel],'status':'in_progress'}]
+        for indexed in (None,self.snap.record):
+            with patch('scripts.release.coordinator.runtime.index_record',return_value=indexed):
+                self.assertIsNone(self.auto())
+        self.assertEqual(self.journal.load(),self.snap)
+        other=replace(self.snap.record,build_identity='f'*64)
+        with patch('scripts.release.coordinator.runtime.index_record',return_value=other):
+            self.assertIsNotNone(self.auto())
+
+    def test_automatic_recovery_checks_pages_beyond_first(self):
+        original=self.api.request
+        def pages(method,path):
+            if '/actions/runs?' in path:
+                if path.endswith('page=1'):return {'total_count':101,'workflow_runs':[{'id':i,'path':'.github/workflows/ci.yml','status':'completed'} for i in range(100)]}
+                return {'total_count':101,'workflow_runs':[{'id':555,'path':WORKFLOWS[self.snap.record.channel],'status':'queued'}]}
+            return original(method,path)
+        with patch.object(self.api,'request',side_effect=pages),patch('scripts.release.coordinator.runtime.index_record',return_value=None):
+            self.assertIsNone(self.auto())
+        self.assertEqual(self.journal.load(),self.snap)
+
+    def test_filtered_inventory_cap_or_unknown_count_cannot_authorize_recovery(self):
+        original=self.api.request
+        for count in (None,True,-1,1000,1001):
+            def capped(method,path):
+                if '/actions/runs?' in path:return {'total_count':count,'workflow_runs':[]}
+                return original(method,path)
+            with self.subTest(count=count),patch.object(self.api,'request',side_effect=capped):
+                with self.assertRaisesRegex(ValueError,'incomplete'):self.auto()
+        self.assertEqual(self.journal.load(),self.snap)
+
+    def test_missing_run_uncertainty_counts_against_later_automatic_retry_budget(self):
+        from .retry import RetryPolicy, Failure
+        record=replace(self.snap.record,source_provenance=updated(self.snap.record,missing_run_uncertain_attempts=2))
+        from .reconcile_contract import TOKEN2
+        with self.assertRaisesRegex(ValueError,'budget'):
+            auto_recover_missing(record,TOKEN2,'456',self.now,self.now+timedelta(hours=6))
+        failed=replace(record,state=BuildState.FAILED,attempt=1,started_at=self.now,
+            completed_at=self.now,failure_class=Failure.NETWORK.value)
+        self.assertFalse(RetryPolicy().eligible(failed))
+
+    def test_known_terminal_failure_is_never_a_404_auto_retry(self):
+        from .retry import Failure
+        from .reconcile_contract import TOKEN2
+        for failure in (Failure.SIGNING,Failure.COMPILE,Failure.CANCELLED,Failure.SECURITY,Failure.UNKNOWN):
+            r=replace(self.snap.record,state=BuildState.FAILED,completed_at=self.now,failure_class=failure.value)
+            with self.subTest(failure=failure),self.assertRaises(ValueError):
+                auto_recover_missing(r,TOKEN2,'456',self.now,self.now+timedelta(hours=6))
+
+    def test_two_automatic_recoveries_only_one_epoch_wins(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        barrier=Barrier(2);append=self.journal.append
+        def contested(event,snapshot):
+            barrier.wait(timeout=10)
+            return append(event,snapshot)
+        def attempt():
+            try:return self.auto()
+            except Conflict:return None
+        with patch.object(self.journal,'append',side_effect=contested),ThreadPoolExecutor(2) as pool:
+            results=list(pool.map(lambda _:attempt(),range(2)))
+        self.assertEqual(sum(r is not None for r in results),1)
+        self.assertEqual(self.journal.load().record.fence,2)
 
     def test_404_holds_without_inventing_result_or_count_and_is_idempotent(self):
         self.assertEqual(self.snap.record.state,BuildState.QUEUED)
