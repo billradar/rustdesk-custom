@@ -48,15 +48,15 @@ class StablePatchsetNotesContract(unittest.TestCase):
                 return {'id':7,'draft':True}
             with patch.dict(os.environ, {'GITHUB_REPOSITORY':channel.REPOSITORY,
                                          'REQUIRE_ANDROID_PRODUCTION_SIGNING':'false'}), \\
-                 patch.object(channel,'collect',return_value=({'standard':info,'sos':sos},{})), \\
-                 patch.object(channel,'validate_prepared'), \\
-                 patch.object(channel,'assets',return_value=(None,destination)), \\
-                 patch.object(channel,'wayland_identity',return_value=(False,'')), \\
-                 patch.object(channel,'api',side_effect=fake_api), \\
-                 patch.object(channel,'request',side_effect=fake_request), \\
-                 patch.object(channel,'gh'), \\
-                 patch('scripts.release.stable_tag.ensure'), \\
-                 patch('scripts.release.content.require_cutover',side_effect=AssertionError('Old cutover must stay disabled')), \\
+                 patch.object(channel,'collect',return_value=({'standard':info,'sos':sos},{})), \
+                 patch.object(channel,'validate_prepared'), \
+                 patch.object(channel,'assets',return_value=(None,destination)), \
+                 patch.object(channel,'wayland_identity',return_value=(False,'')), \
+                 patch.object(channel,'api',side_effect=fake_api), \
+                 patch.object(channel,'request',side_effect=fake_request), \
+                 patch.object(channel,'gh'), \
+                 patch('scripts.release.stable_tag.ensure'), \
+                 patch('scripts.release.content.require_cutover',side_effect=AssertionError('Old cutover must stay disabled')), \
                  patch('scripts.release.content.policy_digest',side_effect=AssertionError('Policy hash must not allocate notes')):
                 channel.draft(destination)
             body=captured[0][1]['body']
