@@ -51,4 +51,5 @@ jobs:
       - name: Verify private release checksums and APK signatures
         env:
           RELEASE_AUDIT_TOKEN: ${{ steps.audit-token.outputs.token }}
+          RELEASE_AUDIT_TRUSTED_SIGNER_SHA256: ${{ vars.RELEASE_AUDIT_TRUSTED_SIGNER_SHA256 }}
         run: python3 -m scripts.release.audit_release_assets --verify-apks
