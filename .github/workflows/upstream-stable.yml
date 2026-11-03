@@ -17,7 +17,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   route:
-    name: Coordinate Stable routing
     if: github.repository == 'billradar/rustdesk-custom' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
@@ -26,7 +25,6 @@ jobs:
       actions: write # Required to dispatch tag.yml
     env:
       PYTHONPATH: .
-      INCLUDE_WAYLAND: 'true'
       GH_TOKEN: ${{ github.token }}
       ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
       ALLOW_SAME_VERSION: ${{ inputs.allow_same_version || 'false' }}
@@ -38,6 +36,4 @@ jobs:
     - name: Validate Stable router contracts
       run: python3 -m scripts.release.stable_router_contract
     - name: Follow official Stable release and dispatch qualified private draft
-      env:
-        RELEASE_COORDINATOR_ENABLED: 'true'
       run: python3 -m scripts.release.stable_router
