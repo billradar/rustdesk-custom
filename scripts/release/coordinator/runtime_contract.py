@@ -67,6 +67,30 @@ class RuntimeContract(unittest.TestCase):
         self.assertIsNone(require_v2_admission(modern))
         self.assertNotEqual(old.key, modern.key)
 
+    def test_content_v2_cutover_hold_precedes_reservation_and_reviewed_admission(self):
+        from dataclasses import replace
+        from .runtime import require_v2_admission
+        old = identity('nightly')
+        modern = replace(old, policy_version=2, patchset_version='v2.8',
+                         build_policy_sha256='a'*64)
+        require_v2_admission(modern)
+        class EmptyHistory:
+            def decision(self, build):
+                return 'NO_OP'
+            def blockers(self, build):
+                return []
+        api = RuntimeAPI()
+        coordinator = Coordinator(api, REPO, modern, legacy_catalog=EmptyHistory())
+        with self.assertRaisesRegex(ValueError, 'PATCHSET_CUTOVER_REVIEW_REQUIRED'):
+            coordinator.claim(NOW, '99', lambda: 'EMPTY')
+        self.assertEqual(api.refs, {})
+        self.assertEqual(api.dispatches, [])
+        with patch('scripts.release.content.require_cutover', return_value=None):
+            snapshot = coordinator.claim(NOW, '99', lambda: 'EMPTY')
+        self.assertIsNotNone(snapshot)
+        self.assertEqual(snapshot.record.build_identity, modern.key)
+        self.assertEqual(api.dispatches, [])
+
     def test_concurrent_routers_dispatch_once_even_at_same_second(self):
         api = RuntimeAPI()
         c = Coordinator(api, REPO, identity('nightly'))
