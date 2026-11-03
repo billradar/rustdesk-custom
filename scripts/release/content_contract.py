@@ -63,6 +63,20 @@ class ContentContract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'CUTOVER_REVIEW_REQUIRED'):
                 content.require_cutover()
 
+    def test_cutover_remains_blocked_even_if_metadata_status_is_changed(self):
+        # A metadata-only PR must never be able to activate production v2.
+        with tempfile.TemporaryDirectory() as directory:
+            gate = Path(directory) / 'patchset-cutover.json'
+            for status in ('BLOCKED', 'READY', 'GO', 'ACTIVE'):
+                gate.write_text(json.dumps({
+                    'schema': 'patchset-cutover-v1',
+                    'status': status,
+                    'blockers': [],
+                }))
+                with patch.object(content, 'CUTOVER', gate):
+                    with self.assertRaisesRegex(ValueError, 'PATCHSET_CUTOVER_REVIEW_REQUIRED'):
+                        content.require_cutover()
+
     def test_policy_hash_changes_for_toolchain_but_not_docs(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
