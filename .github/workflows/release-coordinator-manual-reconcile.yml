@@ -33,6 +33,9 @@ jobs:
     env:
       PYTHONPATH: .
       GH_TOKEN: ${{ github.token }}
+      RECONCILE_RUN_ID: ${{ inputs.run_id }}
+      RECONCILE_JOURNAL_SHA: ${{ inputs.expected_journal_sha }}
+      RECONCILE_IDENTITY: ${{ inputs.expected_identity }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -41,6 +44,6 @@ jobs:
       - name: Reconcile indexed historical Worker only
         run: >-
           python3 -m scripts.release.coordinator.manual_reconcile
-          --run-id "${{ inputs.run_id }}"
-          --expected-journal-sha "${{ inputs.expected_journal_sha }}"
-          --expected-identity "${{ inputs.expected_identity }}"
+          --run-id "$RECONCILE_RUN_ID"
+          --expected-journal-sha "$RECONCILE_JOURNAL_SHA"
+          --expected-identity "$RECONCILE_IDENTITY"
