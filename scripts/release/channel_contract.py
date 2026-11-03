@@ -46,6 +46,11 @@ class SourceBoundaryTests(unittest.TestCase):
 
 class ChannelPolicyTests(unittest.TestCase):
     def setUp(self):
+        # Synthetic patchsets in these contracts are stand-ins for the
+        # reviewed content manifest; production uses current() validation.
+        self._content=patch.object(channel, 'current', side_effect=lambda name: {
+            'id':name, 'revision': 2 if name=='v1' else 8 if name=='v2' else 1})
+        self._content.start();self.addCleanup(self._content.stop)
         self._env=patch.dict(os.environ,GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false');self._env.start()
         self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
         self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
@@ -62,7 +67,7 @@ class ChannelPolicyTests(unittest.TestCase):
         if included:
             from scripts.platform.wayland import asset_names
             assets += sorted(asset_names('1.4.9'))
-        lines=['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
+        lines=['version_semantics=patchset-content-v1','Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
                'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'c'*64,'Custom Repository SHA: '+'b'*40,
                'Wayland Included: '+str(included).lower(),'Build Identity: '+identity,'Asset Inventory: '+json.dumps(assets)]
         if policy:lines.append('Wayland Policy SHA256: '+policy)
@@ -72,7 +77,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_existing_release_cannot_gain_wayland_without_new_identity(self):
         existing=self.draft_fixture()
         with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
-            with self.assertRaisesRegex(ValueError,'immutable revision lacks matching Wayland'):
+            with self.assertRaisesRegex(ValueError,'IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION'):
                 channel.release_preflight(self.discovery())
 
     def test_two_old_wayland_assets_cannot_satisfy_four_target_release(self):
@@ -89,16 +94,15 @@ class ChannelPolicyTests(unittest.TestCase):
             channel.resolve('stable',discovery_only=True)
             api.assert_not_called();self.assertNotIn('build_needed',out.call_args.args[0])
 
-    def test_patch_revision_counters_are_independent(self):
-        rows=[
-            {'name':'v1.4.9-custom.v1.1'},
-            {'name':'v1.4.9-custom.v1.2'},
-            {'name':'v1.4.9-custom.v2.1'},
-        ]
-        with patch.object(channel,'release_rows',return_value=rows):
-            self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.3')
-            self.assertEqual(channel.next_patch_revision('1.4.9','v2'),'v2.2')
+    def test_custom_revision_is_manifest_content_version_not_release_count(self):
+        rows=[{'name':'v1.4.9-custom.v1.1'}, {'name':'v1.4.9-custom.v1.2'},
+              {'name':'v1.4.9-custom.v2.1'}]
+        with patch.object(channel,'release_rows',return_value=rows) as releases:
+            self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.2')
+            self.assertEqual(channel.next_patch_revision('1.5.0','v2'),'v2.8')
             self.assertEqual(channel.next_patch_revision('1.4.9','v3'),'v3.1')
+        releases.assert_not_called()
+
 
     def test_same_build_identity_reuses_existing_patch_revision(self):
         existing=self.draft_fixture('v1','2')
@@ -108,6 +112,27 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertFalse(data['draft_needed'])
             self.assertEqual(data['patch_revision'],'v1.2')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v1.2')
+
+    def test_legacy_same_shaped_tag_is_never_reinterpreted(self):
+        old=self.draft_fixture()
+        old['body']=old['body'].replace('version_semantics=patchset-content-v1\n','')
+        with patch.object(channel,'api',return_value=old):
+            with self.assertRaisesRegex(ValueError,'Legacy release semantics'):
+                channel.release_preflight(self.discovery())
+
+    def test_same_tag_different_content_is_immutable_collision(self):
+        old=self.draft_fixture()
+        old['body']=old['body'].replace('Common Patch Hash: '+'c'*64,
+                                        'Common Patch Hash: '+'d'*64)
+        with patch.object(channel,'api',return_value=old):
+            with self.assertRaisesRegex(ValueError,'Existing revision tag has a different Build Identity'):
+                channel.release_preflight(self.discovery())
+
+    def test_preflight_rejects_stale_locked_content_revision(self):
+        data=self.discovery('v2')
+        data['patch_revision']='v2.7'
+        with self.assertRaisesRegex(ValueError,'Locked Patchset content revision drift'):
+            channel.release_preflight(data)
 
     def test_legacy_key_value_metadata_is_normalized(self):
         fields = channel.release_metadata(
@@ -247,8 +272,8 @@ class ChannelPolicyTests(unittest.TestCase):
             data=channel.release_preflight(self.discovery('v2'))
             self.assertTrue(data['build_needed'])
             self.assertTrue(data['draft_needed'])
-            self.assertEqual(data['patch_revision'],'v2.1')
-            self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.1')
+            self.assertEqual(data['patch_revision'],'v2.8')
+            self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.8')
 
     def test_legacy_draft_without_automation_marker_is_rejected(self):
         draft=self.draft_fixture()
@@ -434,7 +459,7 @@ class ChannelPolicyTests(unittest.TestCase):
             'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}',
                 'Custom Repository SHA: '+'b'*40,'Wayland Included: false','Patch Revision: v999999.1',
                 'Build Identity: '+identity,'Asset Inventory: '+json.dumps(['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']),
-                'automation_state=complete']),
+                'version_semantics=patchset-content-v1','automation_state=complete']),
             'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
         }
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
@@ -450,7 +475,7 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertTrue(data['draft_needed'])
             self.assertEqual(data['patch_revision'],'v888888.1')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v888888.1')
-            self.assertEqual(data['rebuild_reason'],'NEW_PATCH_REVISION')
+            self.assertEqual(data['rebuild_reason'],'NEW_CONTENT_VERSION_TARGET')
 
     def test_upstream_main_compatibility_workflow_is_the_single_main_probe(self):
         path=ROOT/'.github/workflows/upstream-main-compatibility.yml'

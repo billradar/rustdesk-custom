@@ -162,13 +162,13 @@ class AggregateTests(unittest.TestCase):
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
                'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,
                    'Custom Repository SHA: '+custom,'Wayland Included: false','Patch Revision: v999999.1','Build Identity: '+identity,
-                   'Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
+                   'version_semantics=patchset-content-v1','Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
                'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in assets]}
         def api(path,**kwargs):
             if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
             if path.endswith('releases?per_page=100&page=1'): return [draft]
             return None
-        with patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
+        with patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
             data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
             self.assertFalse(data['build_needed'])
             self.assertFalse(data['draft_needed'])
