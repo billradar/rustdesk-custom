@@ -67,14 +67,25 @@ def verify_release_asset_checksums(tag, assets):
         if asset.get('state')!='uploaded' or asset.get('size',0)<=0 or not re.fullmatch(r'sha256:[0-9a-f]{64}',digest):
             raise ValueError('Stable release asset is incomplete or lacks a GitHub SHA-256 digest')
         if asset['name']!='SHA256SUMS':expected[asset['name']]=digest.removeprefix('sha256:')
+    checksum_asset=next(a for a in assets if a['name']=='SHA256SUMS')
+    asset_id=checksum_asset.get('id')
+    if type(asset_id) is not int or asset_id<=0:
+        raise ValueError('Stable checksum asset requires a verified GitHub asset ID')
+    if checksum_asset['size']>1024*1024:
+        raise ValueError('Stable release SHA256SUMS exceeds the download limit')
     with tempfile.TemporaryDirectory(prefix='stable-release-assets-') as temp:
-        subprocess.run(['gh','release','download',tag,'--repo',REPOSITORY,'--pattern','SHA256SUMS','--dir',temp],
-                       check=True,capture_output=True,text=True,env=os.environ)
         checksum=Path(temp)/'SHA256SUMS'
+        # Drafts may have an untagged-* tag_name while their reviewed name and
+        # metadata identify the immutable custom revision. Download the exact
+        # asset from that verified inventory, independent of either tag alias.
+        with checksum.open('wb') as stream:
+            subprocess.run(['gh','api',f'repos/{REPOSITORY}/releases/assets/{asset_id}',
+                            '--header','Accept: application/octet-stream'],
+                           check=True,stdout=stream,stderr=subprocess.PIPE,env=os.environ)
         if not checksum.is_file() or checksum.stat().st_size>1024*1024:
             raise ValueError('Stable release SHA256SUMS could not be safely downloaded')
         raw=checksum.read_bytes()
-        if hashlib.sha256(raw).hexdigest()!=next(a['digest'][7:] for a in assets if a['name']=='SHA256SUMS'):
+        if hashlib.sha256(raw).hexdigest()!=checksum_asset['digest'][7:]:
             raise ValueError('Stable remote SHA256SUMS digest does not match the GitHub asset digest')
     actual={}
     for line in raw.decode('utf-8').splitlines():
