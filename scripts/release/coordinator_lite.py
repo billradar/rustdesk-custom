@@ -58,7 +58,8 @@ def verify_worker_context(env=None):
     if channel not in workflows:
         raise ValueError('Unsupported Coordinator Lite build channel')
     repo = values.get('GITHUB_REPOSITORY', '')
-    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
+    if (not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo)
+            or any(part in ('.', '..') for part in repo.split('/'))):
         raise ValueError('Invalid worker repository')
     file, name = workflows[channel]
     if (values.get('GITHUB_REF') != 'refs/heads/main'
