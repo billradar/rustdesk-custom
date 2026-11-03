@@ -41,7 +41,8 @@ class GitHubAPI:
         self.sleep = sleep
 
     def request(self, method, path, data=None):
-        if not re.fullmatch(r'repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_./?=&%-]+', path):
+        repository_read = method == 'GET' and re.fullmatch(r'repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', path)
+        if not repository_read and not re.fullmatch(r'repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_./?=&%-]+', path):
             raise ValueError('Unsafe API path')
         raw = canonical(data) if data is not None else None
         request = urllib.request.Request('https://api.github.com/' + path, data=raw, method=method,

@@ -47,6 +47,22 @@ class RecoveryContract(unittest.TestCase):
     def auto(self):
         return automatic(self.api,REPO,self.journal,self.snap,'456',self.now)
 
+    def test_automatic_recovery_through_real_github_api_transport(self):
+        import io,json,urllib.error
+        from .store import GitHubAPI
+        requests=[]
+        def transport(request,**kwargs):
+            requests.append(request.full_url)
+            if request.full_url.endswith('/actions/runs/123'):
+                raise urllib.error.HTTPError(request.full_url,404,'not found',{},None)
+            payload={'total_count':0,'workflow_runs':[]} if '/actions/runs?' in request.full_url else {'full_name':REPO}
+            return io.BytesIO(json.dumps(payload).encode())
+        with patch('urllib.request.urlopen',side_effect=transport):
+            fresh=automatic(GitHubAPI('fictional-test-token'),REPO,self.journal,self.snap,'456',self.now)
+        self.assertEqual(fresh.record.fence,2)
+        self.assertEqual(sum(url.endswith('/actions/runs/123') for url in requests),2)
+        self.assertEqual(len(requests),4)
+
     def test_automatic_missing_run_preserves_actual_count_and_records_unknown_budget(self):
         fresh=self.auto();r=fresh.record
         self.assertEqual((r.attempt,r.fence),(0,2))
