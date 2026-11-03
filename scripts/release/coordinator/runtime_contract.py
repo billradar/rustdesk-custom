@@ -103,7 +103,9 @@ class RuntimeContract(unittest.TestCase):
             dict(patchset_version='v2.8', build_policy_sha256=''),
         ):
             with self.subTest(missing=missing):
-                with self.assertRaisesRegex(ValueError, 'Missing content revision identity'):
+                expected = ('Missing content revision identity' if not missing['patchset_version']
+                            else 'Invalid identity digest')
+                with self.assertRaisesRegex(ValueError, expected):
                     replace(base, policy_version=2, **missing)
         api = RuntimeAPI()
         modern = replace(base, policy_version=2, patchset_version='v2.8',
