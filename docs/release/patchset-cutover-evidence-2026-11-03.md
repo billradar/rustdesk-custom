@@ -33,7 +33,7 @@ The stable draft API tag names differ from the corresponding existing Git tag na
 ## Required gates before activation
 
 - Resolve or formally disposition the REVIEW_REQUIRED historical journal using independently authenticated evidence; do not manufacture missing Actions records.
-- Establish a reviewed Legacy v1 → Content Identity alias table and verify collision/deduplication behavior.
+- Verify Content Identity v2-only admission, historical immutable journal isolation, and current release/tag deduplication. Legacy Coordinator Identity v1 is retired; no positive v1-to-v2 alias table is required.
 - Verify asset provenance, release/tag mapping, signing records and no duplicate publishing.
 - Run the required up-to-date Patchset Version gate on current main and preserve its logs.
 - Re-evaluate the `metadata/release/patchset-cutover.json` blockers in a **separate reviewed migration**; keep `BLOCKED` until all prerequisites are satisfied.
@@ -55,12 +55,21 @@ No production mutation was performed as part of this audit.
 - The full CI - Patch and Build compatibility workflow (Actions 41614183600) subsequently completed successfully; this is verified on the PR #216 final head, not a substitute for fresh main-branch migration and release inventory checks.
 - The prior release-asset audit (Actions 41611975833, job 125836714215) passed 96 assets across three draft releases and nine Android APK signatures against trusted signer SHA-256 `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`. This closes the historical asset/signer gate for that snapshot, not an inventory freshness gate for future cutover.
 - Owner deletion provenance is closed. Unknown historical worker outcome is explicitly retained as a safety hold; no retry, journal mutation or invented terminal event is authorized.
-- **Current decision: BLOCKED.** A fresh quiescent production-worker/journal check, fresh tag/draft inventory, production alias collision review, and an independent reviewed migration remain required. This document is not an activation switch.
+- **Current decision: BLOCKED.** A fresh independently evidenced quiescent production-worker/journal check, current tag/draft inventory and deduplication review, up-to-date main-branch CI, and a separate reviewed cutover activation remain required. This document is not an activation switch.
 
 ## Operator completion claim and independent evidence boundary
 
 The repository owner reports that PR #217 merge and production worker/journal reconciliation are complete. The updated evidence document is present on `main`, corroborating the PR content integration. The claim of a quiescent worker and reconciled journals is recorded as an operator statement only: no independently captured production journal snapshot or worker queue proof is attached here. Do not turn this claim into a fabricated terminal journal event or a cutover authorization.
 
-The seven verified historical producer identities remain read-only deduplication restrictions. PR #216's regression test validates REVIEW_HOLD and no new reservations/dispatches under policy-v2 identities. It does not establish positive aliases, which would require reviewed content revision and build-policy digests tied to exact historical producers. Unknown identities and no-build reuse are not eligible positive aliases.
+The seven verified historical producer identities remain read-only deduplication restrictions. PR #216's regression test validates REVIEW_HOLD and no new reservations/dispatches under policy-v2 identities. These are historical immutable review holds, not a requirement to create positive aliases. The retired Coordinator Identity v1 namespace must not be used for new admissions or replayed; this is distinct from patchsets/v1 source compatibility.
 
-**Gate result:** offline Coordinator, Patchset Version and full compatibility CI passed on PR #216 final head; historical asset/signature snapshot passed. Fresh production quiescence proof, current Git tag/draft release inventory and reviewed alias migration remain separate gates. Preserve `BLOCKED`.
+**Gate result:** offline Coordinator, Patchset Version and full compatibility CI passed on PR #216 final head; historical asset/signature snapshot passed. Fresh production quiescence proof, current Git tag/draft release inventory and deduplication, up-to-date main CI and separately reviewed v2-only cutover activation remain separate gates. Preserve `BLOCKED`.
+
+## Post-review migration status (PRs #219–#221)
+
+- PR #219 merged as `214937a20fd867a23741e8f3fda1fe25b710fbe0`: explicitly retired legacy Coordinator Identity v1 for future builds and replaced the obsolete positive alias requirement in the cutover metadata. Historical journals and releases remain immutable; patchsets/v1 source patches are unaffected.
+- PR #220 merged as `a54ae4d981d2e56d9a0898d6103ef85cad67a62c`: new Stable/Nightly production build entrypoints require Content Identity v2 and frozen patchset/build-policy inputs. Historical journal observation and recovery are not rewritten.
+- PR #221 merged as `7e922d649bb150ff03d3498f17f5dac1acc51e41`: added a credential-free test proving the v2 cutover hold prevents reservation and dispatch, and test-only mocked gate clearance permits a reservation without dispatch.
+- PR #221 Coordinator cutover offline and Patchset content version checks passed. Its full compatibility workflow was still in progress at the last observation; isolated Git API/ref jobs were conditionally skipped. Do not report these as complete production proofs.
+- The previous v1-to-v2 alias migration language in this historical audit is superseded by these decisions. No historical run or journal should be replayed, and the three owner-deleted Actions runs remain explicitly excluded from recovery.
+- **Current activation decision: BLOCKED.** No fresh independently captured production worker/journal proof, current release/tag inventory or completed up-to-date full compatibility CI is established by this documentation update. Do not interpret a documentation merge as cutover authorization.
