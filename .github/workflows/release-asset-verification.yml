@@ -47,7 +47,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_AUDIT_APP_PRIVATE_KEY }}
           owner: billradar
           repositories: rustdesk-custom
-          permission-contents: read
+          permission-contents: write
       - name: Verify private release checksums and APK signatures
         env:
           RELEASE_AUDIT_TOKEN: ${{ steps.audit-token.outputs.token }}
