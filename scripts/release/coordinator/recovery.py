@@ -11,6 +11,9 @@ from .transitions import recover_missing
 RUNS_PAGE_SIZE = 20
 MAX_RUN_PAGES = 50  # GitHub filtered Actions inventories are capped at 1,000 runs.
 
+# Owner-confirmed manual deletions are held for review, not recovered or replayed.
+OWNER_DELETED_RUNS = frozenset({'41496715461', '41549385808', '41562101960'})
+
 
 def run_pages(api, repo):
     """Enumerate a complete bounded inventory; never treat truncated evidence as safe."""
@@ -32,6 +35,8 @@ def automatic(api, repo, journal, snapshot, creator, now):
     """One policy-authorized recovery of an authenticated missing bound run."""
     from .transitions import auto_recover_missing
     from .runtime import index_record
+    if snapshot.record.workflow_run_id in OWNER_DELETED_RUNS:
+        return None
     try:
         event=auto_recover_missing(snapshot.record,str(uuid4()),str(creator),now,now+timedelta(hours=6))
     except ValueError:
@@ -71,6 +76,8 @@ def missing(api, repo, run_id):
 
 def recover(api, repo, journal, expected_sha, run_id, confirmation, actor, reason, creator, now):
     hex_value(expected_sha,40)
+    if str(run_id) in OWNER_DELETED_RUNS:
+        raise ValueError('Owner-deleted run remains held; recovery is not authorized')
     if confirmation != 'STOPPED_AND_BUILD_STARTED':
         raise ValueError('Explicit stopped-run and actual-build-entry attestation required')
     snapshot=journal.load()

@@ -8,7 +8,7 @@ from .contract import NOW
 from .model import BuildState, PolicyState, ReservationState
 from .reconcile import Reconciler, WORKFLOWS
 from .reconcile_contract import bound
-from .recovery import RUNS_PAGE_SIZE, automatic, recover
+from .recovery import RUNS_PAGE_SIZE, OWNER_DELETED_RUNS, automatic, recover
 from .store import APIError, Conflict
 from .transitions import finish, provenance, updated, bind_verified, auto_recover_missing
 
@@ -51,6 +51,18 @@ class RecoveryContract(unittest.TestCase):
 
     def auto(self):
         return automatic(self.api,REPO,self.journal,self.snap,'456',self.now)
+
+    def test_owner_deleted_runs_never_recover(self):
+        for run_id in sorted(OWNER_DELETED_RUNS):
+            with self.subTest(run_id=run_id):
+                held=replace(self.snap,record=replace(self.snap.record,workflow_run_id=run_id))
+                self.assertIsNone(automatic(self.api,REPO,self.journal,held,'456',self.now))
+                with self.assertRaisesRegex(ValueError,'Owner-deleted run'):
+                    recover(self.api,REPO,self.journal,self.snap.sha,run_id,
+                            'STOPPED_AND_BUILD_STARTED','maintainer','owner deleted',
+                            '456',self.now)
+        self.assertEqual(self.api.calls,[])
+        self.assertEqual(self.journal.load(),self.snap)
 
     def test_automatic_recovery_through_real_github_api_transport(self):
         import io,json,urllib.error
