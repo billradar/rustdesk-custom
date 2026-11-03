@@ -91,6 +91,33 @@ class RuntimeContract(unittest.TestCase):
         self.assertEqual(snapshot.record.build_identity, modern.key)
         self.assertEqual(api.dispatches, [])
 
+    def test_v2_admission_rejects_incomplete_identity_before_any_api_write(self):
+        from dataclasses import replace
+        from .runtime import require_v2_admission
+        base = identity('nightly')
+        for candidate in (
+            base,
+            replace(base, policy_version=2, patchset_version='', build_policy_sha256='a'*64),
+            replace(base, policy_version=2, patchset_version='v2.8', build_policy_sha256=''),
+        ):
+            with self.subTest(policy=candidate.policy_version,
+                              patchset=candidate.patchset_version):
+                with self.assertRaisesRegex(ValueError, 'LEGACY_IDENTITY_V1_RETIRED'):
+                    require_v2_admission(candidate)
+        api = RuntimeAPI()
+        modern = replace(base, policy_version=2, patchset_version='v2.8',
+                         build_policy_sha256='a'*64)
+        class NoLegacy:
+            def decision(self, build):
+                return 'NO_OP'
+            def blockers(self, build):
+                return []
+        coordinator = Coordinator(api, REPO, modern, legacy_catalog=NoLegacy())
+        with self.assertRaisesRegex(ValueError, 'PATCHSET_CUTOVER_REVIEW_REQUIRED'):
+            coordinator.claim(NOW, '99', lambda: 'EMPTY')
+        self.assertEqual(api.refs, {})
+        self.assertEqual(api.dispatches, [])
+
     def test_concurrent_routers_dispatch_once_even_at_same_second(self):
         api = RuntimeAPI()
         c = Coordinator(api, REPO, identity('nightly'))
