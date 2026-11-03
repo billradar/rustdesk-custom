@@ -8,7 +8,7 @@ from .contract import NOW
 from .model import BuildState, PolicyState, ReservationState
 from .reconcile import Reconciler, WORKFLOWS
 from .reconcile_contract import bound
-from .recovery import automatic, recover
+from .recovery import RUNS_PAGE_SIZE, automatic, recover
 from .store import APIError, Conflict
 from .transitions import finish, provenance, updated, bind_verified, auto_recover_missing
 
@@ -26,7 +26,12 @@ class RecoveryAPI:
         if path==f'repos/{REPO}':return {'full_name':REPO}
         if '/actions/runs?' in path:
             if self.failure:raise self.failure
-            return {'total_count':len(self.rows),'workflow_runs':self.rows}
+            from urllib.parse import parse_qs
+            params = parse_qs(path.split('?', 1)[1])
+            page = int(params['page'][0])
+            size = int(params['per_page'][0])
+            return {'total_count':len(self.rows),
+                    'workflow_runs':self.rows[(page-1)*size:page*size]}
         if self.status:raise APIError(self.status)
         return {'status':'completed'}
 
@@ -107,7 +112,7 @@ class RecoveryContract(unittest.TestCase):
         original=self.api.request
         def pages(method,path):
             if '/actions/runs?' in path:
-                if path.endswith('page=1'):return {'total_count':101,'workflow_runs':[{'id':i,'path':'.github/workflows/ci.yml','status':'completed'} for i in range(100)]}
+                if path.endswith('page=1'):return {'total_count':101,'workflow_runs':[{'id':i,'path':'.github/workflows/ci.yml','status':'completed'} for i in range(RUNS_PAGE_SIZE)]}
                 return {'total_count':101,'workflow_runs':[{'id':555,'path':WORKFLOWS[self.snap.record.channel],'status':'queued'}]}
             return original(method,path)
         with patch.object(self.api,'request',side_effect=pages),patch('scripts.release.coordinator.runtime.index_record',return_value=None):
@@ -195,8 +200,14 @@ class RecoveryContract(unittest.TestCase):
         self.api.failure=APIError(503)
         with self.assertRaises(APIError):self.recover()
         self.api.failure=None
-        self.api.rows=[{'path':'.github/workflows/ci.yml','status':'completed'}]*100
-        with self.assertRaisesRegex(ValueError,'pagination'):self.recover()
+        original=self.api.request
+        def full_pages(method,path):
+            if '/actions/runs?' in path:
+                return {'total_count':999,'workflow_runs':[
+                    {'path':'.github/workflows/ci.yml','status':'completed'}]*RUNS_PAGE_SIZE}
+            return original(method,path)
+        with patch.object(self.api,'request',side_effect=full_pages):
+            with self.assertRaisesRegex(ValueError,'pagination'):self.recover()
         self.assertEqual(self.journal.load(),self.snap)
 
     def test_race_after_checks_is_rejected_by_cas(self):
