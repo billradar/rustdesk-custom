@@ -85,3 +85,4 @@ jobs:
           persist-credentials: false
       - run: python3 -m pip install -r requirements.txt
       - run: python3 -m scripts.validation.action_runtime_contract
+      - run: python3 -m scripts.release.coordinator_lite_contract
