@@ -16,7 +16,8 @@ The repository owner reports intentionally deleting Actions runs 41496715461, 41
 - **Owner-confirmed manual operation (2026-11-03; accepted as authoritative for who deleted these runs):** repository owner states that runs `41496715461`, `41549385808`, and `41562101960` were deliberately deleted.
 - **Independently observed:** Actions API currently returns HTTP 404 for these three run IDs. The historical Run Index refs remain intact.
 - **Not established:** original run conclusions, whether any release/signing side effects occurred, and whether all corresponding external artifacts are accounted for.
-- **Disposition of deletion provenance:** `OWNER_MANUAL_DELETION_CONFIRMED`; skip all further requests for deletion-actor or deletion-reason evidence for these three IDs. This disposition is not a worker completion, a retry approval, a signing approval, or a cutover authorization.\n- **Safety decision:** retain the `a4bb...` journal at `QUEUED / REVIEW_REQUIRED` and preserve `BLOCKED` cutover. Do not synthesize success, failure, cancellation, or missing-run recovery solely from owner testimony.
+- **Disposition of deletion provenance:** `OWNER_MANUAL_DELETION_CONFIRMED`; skip all further requests for deletion-actor or deletion-reason evidence for these three IDs. This disposition is not a worker completion, a retry approval, a signing approval, or a cutover authorization.
+- **Safety decision:** retain the `a4bb...` journal at `QUEUED / REVIEW_REQUIRED` and preserve `BLOCKED` cutover. Do not synthesize success, failure, cancellation, or missing-run recovery solely from owner testimony.
 - **Closure requirements:** deletion provenance is closed by owner confirmation and must not be raised again. Resolve only the distinct historical side-effect/terminal-state question through authenticated journal/release evidence or an explicit unknown-outcome disposition supported by the Coordinator state machine; do not mutate immutable refs. Do not mutate immutable historical refs to make evidence appear complete.
 
 ## Tag / draft release inventory
@@ -46,3 +47,12 @@ The stable draft API tag names differ from the corresponding existing Git tag na
 - `metadata/release/patchset-cutover.json`
 
 No production mutation was performed as part of this audit.
+
+## Follow-up verification (2026-11-03; post PR #215 and #216)
+
+- PR #215 merged as `ac6156126816d6b485ab8ed30566fe5217e64753`: the three owner-deleted run IDs are excluded from automatic and explicit missing-run recovery; original journal remains unchanged.
+- PR #216 merged as `d7490b62cf6793ae90c6a161c55518d1cfc9174b`: content-v2 versus legacy-success deduplication regression test added. Its final head `253c070ea1406e6ad60a59382e756eb5459445b7` passed Coordinator cutover offline contracts (Actions 41614183552) and Patchset content version contract (Actions 41614183550). Isolated API/ref checks were skipped by workflow conditions; not a positive production proof.
+- The full CI - Patch and Build compatibility workflow (Actions 41614183600) was still running when checked. Its eventual outcome must be inspected before migration approval.
+- The prior release-asset audit (Actions 41611975833, job 125836714215) passed 96 assets across three draft releases and nine Android APK signatures against trusted signer SHA-256 `559c1ede0fbe3a01f29bcac9d0b34bd9691df3562c83e3019a930506fbc7b6f5`. This closes the historical asset/signer gate for that snapshot, not an inventory freshness gate for future cutover.
+- Owner deletion provenance is closed. Unknown historical worker outcome is explicitly retained as a safety hold; no retry, journal mutation or invented terminal event is authorized.
+- **Current decision: BLOCKED.** A fresh quiescent production-worker/journal check, fresh tag/draft inventory, production alias collision review, and an independent reviewed migration remain required. This document is not an activation switch.
