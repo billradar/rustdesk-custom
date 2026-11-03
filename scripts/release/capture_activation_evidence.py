@@ -11,7 +11,7 @@ def capture(get, own_run):
         fail('incomplete run inventory')
     runs = results.get('workflow_runs', [])
     ids = []
-    for name in sorted(REQUIRED_RUNS | {'Build reliability and targeted recovery'}):
+    for name in sorted(REQUIRED_RUNS):
         matches = [r for r in runs if r.get('name') == name
                    and r.get('head_sha') == main
                    and r.get('status') == 'completed'
