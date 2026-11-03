@@ -64,7 +64,7 @@ def download(asset, dest):
 def sums_parse(data):
     result = {}
     for line in data.splitlines():
-        match = re.fullmatch(r"([0-9a-fA-F]{64})  \*?([^\\\r\\n]+)", line)
+        match = re.fullmatch(r"([0-9a-fA-F]{64})  \*?([^\r\n]+)", line)
         if not match:
             raise ValueError("Malformed SHA256SUMS entry")
         name = match.group(2)
@@ -116,10 +116,10 @@ def main():
                     command = ["apksigner", "verify", "--verbose", "--print-certs", str(path)]
                     proc = subprocess.run(command, capture_output=True, text=True, timeout=120)
                     if proc.returncode:
-                        raise ValueError("APK signature verification failed: " + asset["name"] + "\\n" + proc.stderr[-1000:])
+                        raise ValueError("APK signature verification failed: " + asset["name"] + "\n" + proc.stderr[-1000:])
                     if "Verified using v2 scheme (APK Signature Scheme v2): true" not in proc.stdout or "Verified using v3 scheme (APK Signature Scheme v3): true" not in proc.stdout:
                         raise ValueError("APK v2/v3 signature missing: " + asset["name"])
-                    verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": re.findall(r"Signer #\\d+ certificate SHA-256 digest: ([0-9a-f]+)", proc.stdout)})
+                    verified.append({"name": asset["name"], "sha256": asset["digest"], "signer_sha256": re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)", proc.stdout)})
                     path.unlink()
             result.append({"release_id": release_id, "release_name": release["name"], "asset_count": len(assets), "sums_verified": True, "apk_signatures_verified": verified})
     print(json.dumps({"status": "PASS", "scope": "GitHub metadata and SHA256SUMS; optional APK v2/v3 validation", "releases": result}, indent=2))
