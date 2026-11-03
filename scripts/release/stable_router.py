@@ -44,45 +44,6 @@ def discovery():
     return data
 
 
-def version_tuple(value):
-    match = re.fullmatch(r'v?([0-9]+)\.([0-9]+)\.([0-9]+)', str(value))
-    if not match:
-        raise ValueError('Stable router received an invalid numeric version')
-    return tuple(int(part) for part in match.groups())
-
-
-def latest_completed_version():
-    """Return the newest Stable version with a completed downstream release record."""
-    rows = []
-    for page in range(1, 101):
-        batch = api(f'repos/{REPOSITORY}/releases?per_page=100&page={page}') or []
-        rows.extend(batch)
-        if len(batch) < 100:
-            break
-    else:
-        raise ValueError('Stable release pagination limit reached; refusing version routing')
-
-    completed = []
-    tag_pattern = re.compile(r'^v([0-9]+\.[0-9]+\.[0-9]+)-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}$')
-    for row in rows:
-        if row.get('prerelease'):
-            continue
-        tag = row.get('tag_name') or row.get('name') or ''
-        match = tag_pattern.fullmatch(tag)
-        if not match:
-            continue
-        body = row.get('body') or ''
-        if ('Automation-State: complete' not in body
-                and 'automation_state=complete' not in body
-                and 'automation_state=published' not in body):
-            continue
-        assets = {item.get('name') for item in row.get('assets', [])
-                  if item.get('state') == 'uploaded' and item.get('size', 0) > 0}
-        if 'SHA256SUMS' not in assets:
-            continue
-        completed.append(match.group(1))
-    return max(completed, key=version_tuple) if completed else None
-
 
 def existing_build(data):
     """Use the downstream release gate as the sole authority for reuse."""

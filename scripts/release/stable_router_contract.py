@@ -100,25 +100,6 @@ class StableRouterContract(unittest.TestCase):
         with patch.object(router, 'release_preflight', return_value={'build_needed': True}):
             self.assertFalse(router.existing_build(data))
 
-    def test_latest_completed_version_ignores_incomplete_and_unrelated_releases(self):
-        rows = [
-            {'tag_name': 'v1.5.0-custom.v2.1', 'prerelease': False,
-             'body': 'automation_state=complete',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-            {'tag_name': 'v1.6.0-custom.v2.1', 'prerelease': False,
-             'body': 'automation_state=uploading',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-            {'tag_name': 'v9.0.0-custom.v2.1', 'prerelease': True,
-             'body': 'automation_state=complete',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-            {'tag_name': 'not-a-stable-tag', 'prerelease': False,
-             'body': 'automation_state=complete',
-             'assets': [{'name': 'SHA256SUMS', 'state': 'uploaded', 'size': 10}]},
-        ]
-        with patch.object(router, 'api', return_value=rows):
-            self.assertEqual(router.latest_completed_version(), '1.5.0')
-        self.assertLess(router.version_tuple('1.9.0'), router.version_tuple('1.10.0'))
-
     def test_same_version_changed_patchset_is_checked(self):
         with patch.object(router, 'verify_context'), \
              patch.object(router, 'discovery', return_value={'version':'1.5.0','upstream_tag':'v1.5.0',
