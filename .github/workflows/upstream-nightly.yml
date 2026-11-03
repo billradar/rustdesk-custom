@@ -14,17 +14,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   route:
-    name: Coordinate Nightly routing
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     permissions:
-      contents: write # Coordinator journal only; no signing or publication credentials
+      contents: read
       actions: write
     env:
       PYTHONPATH: .
-      RELEASE_COORDINATOR_ENABLED: 'true'
-      INCLUDE_WAYLAND: 'true'
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
