@@ -12,7 +12,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class LockTests(unittest.TestCase):
     def setUp(self):
-        gate=patch('scripts.release.content.require_cutover');gate.start();self.addCleanup(gate.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / 'lock.json'
@@ -63,13 +62,11 @@ class LockTests(unittest.TestCase):
         infos = [dict(variant=v, upstream_sha=result['upstream_sha'], upstream_version=result['version'],
                       patchset='v2', common_patch_hash=result['common_patch_hash'],
                       sos_patch_hash=result['sos_patch_hash'] if v == 'sos' else None,
-                      custom_repository_sha='a'*40, build_run='123', patch_revision=result['patchset_version'],patchset_version=result['patchset_version'],
-                      version_semantics=result['version_semantics'],build_policy_sha256=result['build_policy_sha256']) for v in ('standard', 'sos')]
+                      custom_repository_sha='a'*40, build_run='123') for v in ('standard', 'sos')]
         lock.require(infos)
         with self.assertRaises(ValueError): lock.require(infos[:1])
         for key in ('upstream_sha', 'upstream_version', 'patchset', 'common_patch_hash',
-                    'sos_patch_hash', 'custom_repository_sha', 'build_run', 'patchset_version',
-                    'version_semantics', 'build_policy_sha256'):
+                    'sos_patch_hash', 'custom_repository_sha', 'build_run'):
             changed = [dict(i) for i in infos]
             changed[1][key] = 'wrong'
             with self.subTest(key=key), self.assertRaises(ValueError): lock.require(changed)

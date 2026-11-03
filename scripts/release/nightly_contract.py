@@ -188,9 +188,6 @@ class NightlyTests(unittest.TestCase):
                  ANDROID_PRODUCTION_SIGNING_ENABLED='true')
         discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
-        from scripts.release.content import inputs
-        content = inputs('v2')
-        discovery.update(content)
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
             root=Path(td);(root/'.work/qualification-aggregate').mkdir(parents=True)
             (root/'discovery.json').write_text(json.dumps(discovery))
@@ -198,7 +195,7 @@ class NightlyTests(unittest.TestCase):
                 folder=root/arch;folder.mkdir()
                 (folder/'build-info.json').write_text(json.dumps(dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
                     custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='',platform='android',
-                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3], **content)))
+                    signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3])))
             with patch.object(nightly,'ROOT',root),patch.object(qualification,'aggregate',return_value=dict(result='PASS')):
                 report=nightly.aggregate(root,root/'discovery.json')
             self.assertTrue(report['android_production_signing'])
@@ -231,7 +228,7 @@ class NightlyTests(unittest.TestCase):
             self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
         for name,j in w['jobs'].items():
             if name!='android-sign':self.assertNotIn('environment',j)
-            if name not in ('draft','coordinator-admit'):self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name!='draft':self.assertNotIn('write',json.dumps(j.get('permissions',{})))
             if name!='android-sign':self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(j))
         signer=w['jobs']['android-sign'];tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']['android-sign']
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
@@ -271,7 +268,7 @@ class NightlyTests(unittest.TestCase):
         w=yaml.safe_load((ROOT/'.github/workflows/upstream-nightly.yml').read_text())
         self.assertEqual(w['on']['schedule'],[{'cron':'23 2 * * *'}, {'cron':'41 8 * * *'}])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
-        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'write','actions':'write'})
+        self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
         names=[]
         for family in ['platforms','android']:
@@ -282,7 +279,6 @@ class NightlyTests(unittest.TestCase):
 
 class NightlyDraftTests(unittest.TestCase):
     def setUp(self):
-        gate=patch('scripts.release.content.require_cutover');gate.start();self.addCleanup(gate.stop)
         self.repo='example/rustdesk-custom'
         self.env={'GITHUB_REPOSITORY':self.repo,'GITHUB_REF':'refs/heads/main',
                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':self.repo+'/.github/workflows/nightly.yml@refs/heads/main',

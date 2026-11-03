@@ -46,10 +46,6 @@ class SourceBoundaryTests(unittest.TestCase):
 
 class ChannelPolicyTests(unittest.TestCase):
     def setUp(self):
-        self._content=patch('scripts.release.content.inputs',side_effect=lambda name: dict(
-            patchset_version=name+('.2' if name=='v1' else '.7' if name=='v2' else '.1'),
-            version_semantics='patchset-content-v1',build_policy_sha256='d'*64))
-        self._content.start();self.addCleanup(self._content.stop)
         self._env=patch.dict(os.environ,GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false');self._env.start()
         self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
         self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
@@ -61,13 +57,12 @@ class ChannelPolicyTests(unittest.TestCase):
     def draft_fixture(self, patchset='v999999', revision='1'):
         tag=f'v1.4.9-custom.{patchset}.{revision}'
         included,policy=channel.wayland_identity()
-        identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,'b'*40,included,policy,
-            patchset_version=patchset+'.'+revision,build_policy_sha256='d'*64)
+        identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,'b'*40,included,policy)
         assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         if included:
             from scripts.platform.wayland import asset_names
             assets += sorted(asset_names('1.4.9'))
-        lines=['version_semantics=patchset-content-v1','Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
+        lines=['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
                'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'c'*64,'Custom Repository SHA: '+'b'*40,
                'Wayland Included: '+str(included).lower(),'Build Identity: '+identity,'Asset Inventory: '+json.dumps(assets)]
         if policy:lines.append('Wayland Policy SHA256: '+policy)
@@ -77,7 +72,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_existing_release_cannot_gain_wayland_without_new_identity(self):
         existing=self.draft_fixture()
         with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
-            with self.assertRaisesRegex(ValueError,'IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION'):
+            with self.assertRaisesRegex(ValueError,'immutable revision lacks matching Wayland'):
                 channel.release_preflight(self.discovery())
 
     def test_two_old_wayland_assets_cannot_satisfy_four_target_release(self):
@@ -101,8 +96,8 @@ class ChannelPolicyTests(unittest.TestCase):
             {'name':'v1.4.9-custom.v2.1'},
         ]
         with patch.object(channel,'release_rows',return_value=rows):
-            self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.2')
-            self.assertEqual(channel.next_patch_revision('1.4.9','v2'),'v2.7')
+            self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.3')
+            self.assertEqual(channel.next_patch_revision('1.4.9','v2'),'v2.2')
             self.assertEqual(channel.next_patch_revision('1.4.9','v3'),'v3.1')
 
     def test_same_build_identity_reuses_existing_patch_revision(self):
@@ -252,8 +247,8 @@ class ChannelPolicyTests(unittest.TestCase):
             data=channel.release_preflight(self.discovery('v2'))
             self.assertTrue(data['build_needed'])
             self.assertTrue(data['draft_needed'])
-            self.assertEqual(data['patch_revision'],'v2.7')
-            self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.7')
+            self.assertEqual(data['patch_revision'],'v2.1')
+            self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.1')
 
     def test_legacy_draft_without_automation_marker_is_rejected(self):
         draft=self.draft_fixture()
@@ -271,7 +266,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertNotIn('queue', jobs['android-sign'].get('concurrency', {}))
-        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing','coordinator-admit'})
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
@@ -279,7 +274,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
         self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
         self.assertIn('inputs.upstream_ref',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
-        self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight','coordinator-admit'})
+        self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
         self.assertEqual(jobs['windows-build']['uses'],'./.github/workflows/build-stable-windows.yml')
         self.assertEqual(jobs['platforms-build']['uses'],'./.github/workflows/build-stable-platforms.yml')
@@ -433,14 +428,13 @@ class ChannelPolicyTests(unittest.TestCase):
 
     def test_new_metadata_automation_state_is_accepted(self):
         sha='a'*40; common='c'*64
-        identity=channel.build_identity(sha,'v999999',common,common,'b'*40,False,
-            patchset_version='v999999.1',build_policy_sha256='d'*64)
+        identity=channel.build_identity(sha,'v999999',common,common,'b'*40,False)
         existing={
             'name':'v1.4.9-custom.v999999.1','tag_name':'v1.4.9-custom.v999999.1','draft':True,'prerelease':False,
             'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}',
                 'Custom Repository SHA: '+'b'*40,'Wayland Included: false','Patch Revision: v999999.1',
                 'Build Identity: '+identity,'Asset Inventory: '+json.dumps(['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']),
-                'automation_state=complete','version_semantics=patchset-content-v1']),
+                'automation_state=complete']),
             'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
         }
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
@@ -456,7 +450,7 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertTrue(data['draft_needed'])
             self.assertEqual(data['patch_revision'],'v888888.1')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v888888.1')
-            self.assertEqual(data['rebuild_reason'],'NEW_CONTENT_VERSION_TARGET')
+            self.assertEqual(data['rebuild_reason'],'NEW_PATCH_REVISION')
 
     def test_upstream_main_compatibility_workflow_is_the_single_main_probe(self):
         path=ROOT/'.github/workflows/upstream-main-compatibility.yml'
