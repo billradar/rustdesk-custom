@@ -49,7 +49,7 @@ Upstream compatibility: The upstream selection boundary and numeric upstream-fir
 
 Known limitations: Production cutover remains blocked. No device installation or runtime remote-session test was performed; independent update signatures remain deferred.
 
-Allocation base: `472ee22a3c4e0fea598a2ebe7de46b423eb78847`
+Allocation base: `c91c406093320e3bfa5751e870d87b98f6e7e3fb`
 
 - common: `9547414fe66d922c274256a2bb6b681b4458f597dbb1d322e99cdc5a38c03790` → `d27727be60dd73c4885bbd713caa89e470c895e46b05a41becd073ec86f6bba7`
 - sos: `d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34` → `d752022800a8008b10aedd1a79412a00af027464b1754b068c35a0b5b439ea34`
