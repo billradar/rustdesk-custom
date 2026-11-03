@@ -23,6 +23,11 @@ class AuditContracts(unittest.TestCase):
     def test_sums_rejects_backslash(self):
         with self.assertRaises(ValueError):
             audit.sums_parse("a" * 64 + "  folder\\\\file.apk\n")
+    def test_signer_digest_required(self):
+        digest = "A" * 64
+        self.assertEqual(audit.signer_digests("Signer #1 certificate SHA-256 digest: " + digest), [digest.lower()])
+        with self.assertRaisesRegex(ValueError, "digest missing"):
+            audit.signer_digests("Verified using v2 scheme (APK Signature Scheme v2): true")
     def test_sums_rejects_duplicate(self):
         line = "a" * 64 + "  test.apk\n"
         with self.assertRaises(ValueError):
