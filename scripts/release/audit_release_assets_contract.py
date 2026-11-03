@@ -14,6 +14,15 @@ class AuditContracts(unittest.TestCase):
     def test_sums_accepts_standard_gnu_format(self):
         digest = "a" * 64
         self.assertEqual(audit.sums_parse(digest + "  test.apk\\n".replace("\\n", "\n")), {"test.apk": digest})
+    def test_sums_accepts_names_with_r_n_and_binary_marker(self):
+        digest = "b" * 64
+        self.assertEqual(
+            audit.sums_parse(digest + "  release-runner-signed.apk\n" + digest + " *nightly-runner.tar.gz\n"),
+            {"release-runner-signed.apk": digest, "nightly-runner.tar.gz": digest},
+        )
+    def test_sums_rejects_backslash(self):
+        with self.assertRaises(ValueError):
+            audit.sums_parse("a" * 64 + "  folder\\\\file.apk\n")
     def test_sums_rejects_duplicate(self):
         line = "a" * 64 + "  test.apk\n"
         with self.assertRaises(ValueError):
