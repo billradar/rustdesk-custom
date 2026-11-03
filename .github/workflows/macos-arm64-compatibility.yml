@@ -53,10 +53,27 @@ jobs:
         export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
         (cd .work/mac-smoke && bash .github/patches/apply_flutter_3.44_source_patches.sh)
         python3 - <<'PY'
-        import subprocess
-        from scripts.build.macos_arm64 import TRANSFORMS,original,verify_sdk
+        import os,shutil,subprocess,tempfile
+        from pathlib import Path
+        from scripts.build.macos_arm64 import DEPLOYMENT_EDITS,TRANSFORMS,original,protected_digest,sha,verify_sdk
+        from scripts.platform.platform_adapter import render
         verify_sdk(original('.work/mac-smoke')[0])
         changed=subprocess.check_output(['git','-C','.work/mac-smoke','diff','--name-only'],text=True).splitlines()
         if set(changed)!=set(TRANSFORMS):raise ValueError('Source helper changed an unexpected file inventory')
+        source=Path('.work/mac-smoke');p,job=original(source)
+        script=render(next(s['run'] for s in job['steps'] if s.get('name')=='Build rustdesk'),p)
+        prefix,separator,_=script.partition('./build.py --flutter')
+        if not separator:raise ValueError('Unknown official build invocation')
+        before={name:sha(source/name) for name in DEPLOYMENT_EDITS}
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for name in (*DEPLOYMENT_EDITS,'flutter/macos/Podfile','flutter/macos/Runner.xcodeproj/project.pbxproj'):
+                dest=root/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source/name,dest)
+            subprocess.run(['bash','-euo','pipefail','-c',prefix],cwd=root,check=True,
+                           env=dict(os.environ,GITHUB_ENV=str(root/'github-env')))
+            for name in DEPLOYMENT_EDITS:
+                if protected_digest(root,name,post_build=True)!=before[name]:
+                    raise ValueError('Unexpected official deployment transformation: '+name)
+        print('Actual official native deployment-target edits: PASS')
         print('Native Mac ARM SDK and reviewed source helper: PASS; application compilation/runtime not tested')
         PY
