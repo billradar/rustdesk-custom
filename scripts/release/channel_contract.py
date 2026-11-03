@@ -47,7 +47,7 @@ class StablePatchsetNotesContract(unittest.TestCase):
                 captured.append((method,payload))
                 return {'id':7,'draft':True}
             with patch.dict(os.environ, {'GITHUB_REPOSITORY':channel.REPOSITORY,
-                                         'REQUIRE_ANDROID_PRODUCTION_SIGNING':'false'}), \\
+                                         'REQUIRE_ANDROID_PRODUCTION_SIGNING':'false'}), \
                  patch.object(channel,'collect',return_value=({'standard':info,'sos':sos},{})), \
                  patch.object(channel,'validate_prepared'), \
                  patch.object(channel,'assets',return_value=(None,destination)), \
