@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 from scripts.release import content, channel, nightly
@@ -73,6 +74,50 @@ class ContentContract(unittest.TestCase):
             self.assertEqual(first, content.policy_digest(root))
             sdk.write_text('SDK=2')
             self.assertNotEqual(first, content.policy_digest(root))
+
+    def test_policy_matches_lf_and_crlf_git_checkouts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            source = base / 'source'
+            source.mkdir()
+            def git(*args, cwd=source):
+                return subprocess.check_output(['git', *args], cwd=cwd, stderr=subprocess.PIPE)
+            git('init', '-q')
+            git('config', 'user.name', 'Contract')
+            git('config', 'user.email', 'contract@example.invalid')
+            git('config', 'core.autocrlf', 'false')
+            (source / '.gitattributes').write_bytes(b'* text=auto\n')
+            files = {
+                'requirements.txt': b'dependency==1\n',
+                'scripts/build/SDK.sh': b'SDK=1\necho ready\n',
+                'scripts/build/sdk-helper.py': b'print("ready")\n',
+                'metadata/build/profile.json': b'{"sdk": 1}\n',
+                '.github/actions/example/action.yml': b'name: example\n',
+                '.github/workflows/build.yml': b'name: build\n',
+                '.github/actions/example/payload.bin': b'\x00binary\r\n\xff',
+            }
+            for name, raw in files.items():
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+            git('add', '.')
+            git('commit', '-qm', 'canonical inputs')
+            expected = git('rev-parse', 'HEAD')
+            checkouts = []
+            for name, setting in [('lf', 'false'), ('crlf', 'true')]:
+                destination = base / name
+                git('clone', '-q', '--no-hardlinks', '--config', 'core.autocrlf='+setting,
+                    str(source), str(destination), cwd=base)
+                self.assertEqual(git('rev-parse', 'HEAD', cwd=destination), expected)
+                checkouts.append(destination)
+            lf, crlf = checkouts
+            self.assertEqual((lf/'scripts/build/SDK.sh').read_bytes(), files['scripts/build/SDK.sh'])
+            self.assertEqual((crlf/'scripts/build/SDK.sh').read_bytes(), files['scripts/build/SDK.sh'].replace(b'\n', b'\r\n'))
+            self.assertEqual(content.policy_digest(lf), content.policy_digest(crlf))
+            # Binary bytes still bind identity, even when CRLF is the only change.
+            payload = crlf / '.github/actions/example/payload.bin'
+            payload.write_bytes(payload.read_bytes().replace(b'\r\n', b'\n'))
+            self.assertNotEqual(content.policy_digest(lf), content.policy_digest(crlf))
 
     def fixture(self):
         inputs=content.inputs('v2')
