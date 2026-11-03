@@ -56,6 +56,17 @@ def run(run_id='123'):
 
 
 class RuntimeContract(unittest.TestCase):
+    def test_production_admission_retires_v1_without_rewriting_history(self):
+        from dataclasses import replace
+        from .runtime import require_v2_admission
+        old = identity('nightly')
+        with self.assertRaisesRegex(ValueError, 'LEGACY_IDENTITY_V1_RETIRED'):
+            require_v2_admission(old)
+        modern = replace(old, policy_version=2, patchset_version='v2.8',
+                         build_policy_sha256='a'*64)
+        self.assertIsNone(require_v2_admission(modern))
+        self.assertNotEqual(old.key, modern.key)
+
     def test_concurrent_routers_dispatch_once_even_at_same_second(self):
         api = RuntimeAPI()
         c = Coordinator(api, REPO, identity('nightly'))
