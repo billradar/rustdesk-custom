@@ -28,6 +28,16 @@ class AuditContracts(unittest.TestCase):
         self.assertEqual(audit.signer_digests("Signer #1 certificate SHA-256 digest: " + digest), [digest.lower()])
         with self.assertRaisesRegex(ValueError, "digest missing"):
             audit.signer_digests("Verified using v2 scheme (APK Signature Scheme v2): true")
+    def test_signer_digest_versioned_apksigner_formats(self):
+        digest = "A" * 64
+        for prefix in ("Signer #1", "Signer", "V2 Signer", "V3 Signer", "V3.0 Signer", "V3.1 Signer"):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(
+                    audit.signer_digests(prefix + ": certificate SHA-256 digest: " + digest),
+                    [digest.lower()],
+                )
+        with self.assertRaises(ValueError):
+            audit.signer_digests("V3 Signer: certificate SHA-256 digest: not-a-digest")
     def test_sums_rejects_duplicate(self):
         line = "a" * 64 + "  test.apk\n"
         with self.assertRaises(ValueError):
