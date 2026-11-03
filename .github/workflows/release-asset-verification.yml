@@ -1,0 +1,29 @@
+name: Read-only release asset verification
+'on':
+  pull_request:
+    paths:
+      - 'scripts/release/audit_release_assets.py'
+      - '.github/workflows/release-asset-verification.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  release-assets:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install Android APK signature verifier
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}"
+          find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f -print
+          TOOL="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          test -n "$TOOL"
+          echo "$(dirname "$TOOL")" >> "$GITHUB_PATH"
+      - name: Verify release checksums and Android v2/v3 signatures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m scripts.release.audit_release_assets --verify-apks
