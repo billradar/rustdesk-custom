@@ -6,6 +6,7 @@ name: Coordinator cutover offline contracts
       - 'scripts/release/coordinator/**'
       - 'metadata/release/coordinator-legacy/**'
       - 'scripts/upstream/patchset_version*'
+      - 'scripts/release/verify_activation_evidence*'
   push:
     branches: [main]
     paths:
@@ -26,6 +27,8 @@ jobs:
           persist-credentials: false
       - name: Verify patchset version allocation
         run: python3 -m scripts.upstream.patchset_version_contract
+      - name: Verify remote evidence verifier contracts (offline)
+        run: python3 -m scripts.release.verify_activation_evidence_contract
       - name: Verify legacy aliases and no-build exclusions
         run: python3 -m scripts.release.coordinator.legacy_contract
       - name: Verify coordinator transitions
