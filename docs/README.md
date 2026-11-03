@@ -42,3 +42,5 @@
 - [Final coordinator integration and controlled cutover](release-coordinator-final-integration.md)
 
 - [Reviewed macOS ARM64 Flutter 3.44 migration](macos-arm64-flutter344.md)
+
+- [Patchset independent version migration audit and blocked cutover contract](patchset-version-migration.md)

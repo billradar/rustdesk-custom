@@ -1,0 +1,785 @@
+{
+  "schema": "patchset-migration-audit-v1",
+  "repository": "billradar/rustdesk-custom",
+  "baseline_main": "2b871ad992a62fcac2d39b83e6ad045f3083b916",
+  "observed_date": "2026-11-03",
+  "status": "BLOCKED",
+  "semantics": "legacy-per-upstream-release-allocation",
+  "tags": [
+    {
+      "name": "nightly",
+      "commit": "95abfaf706766f670dddcecea41530320c0ebb66",
+      "semantics": "moving-nightly"
+    },
+    {
+      "name": "v1.5.0-custom.v2.6",
+      "commit": "bed8113783f8e9da9ae0ae9a4b300f68bc445ddd",
+      "semantics": "legacy-per-upstream-release-allocation"
+    },
+    {
+      "name": "v1.5.1-custom.v2.1",
+      "commit": "82859cd32d4608e6507314de1cdd5cf9ebb2860c",
+      "semantics": "legacy-per-upstream-release-allocation"
+    }
+  ],
+  "releases": [
+    {
+      "id": 431170313,
+      "name": "v1.5.1-custom.v2.1",
+      "tag_name": "untagged-ae5bef8b7a54e85070ed",
+      "draft": true,
+      "prerelease": false,
+      "target_commitish": "82859cd32d4608e6507314de1cdd5cf9ebb2860c",
+      "published_at": null,
+      "immutable": false,
+      "body_sha256": "ddf04d835b4b740b944a82e69e3e58ca2cd1fe0e763a9a5214eea6a330f12ff0",
+      "metadata": {
+        "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73",
+        "common_patch_hash": "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "custom_repository_sha": "82859cd32d4608e6507314de1cdd5cf9ebb2860c",
+        "build_identity": "0d5dd098c5ce4211570ace802496f331fa90fd431969b692b0aa21e9a5b9859e",
+        "custom_release_revision": "v2.1",
+        "automation_state": "complete"
+      },
+      "assets": [
+        {
+          "id": 700893572,
+          "name": "rustdesk-1.5.1-android-aarch64-signed.apk",
+          "size": 31105276,
+          "state": "uploaded",
+          "digest": "sha256:d9b3a285ca5c22ae4c469935fc37f82fa78e68c8d1543272321e770de5f24c1e"
+        },
+        {
+          "id": 700893568,
+          "name": "rustdesk-1.5.1-android-armv7-signed.apk",
+          "size": 29413636,
+          "state": "uploaded",
+          "digest": "sha256:75ba8a5cc889b70127ffbb1d4f648db82fabeb8868c52c5ffed1110548cf84fd"
+        },
+        {
+          "id": 700893567,
+          "name": "rustdesk-1.5.1-android-x86_64-signed.apk",
+          "size": 30642416,
+          "state": "uploaded",
+          "digest": "sha256:a77aac450ce87a22cd9caa5ac7e772589b2050c542637bc69b9534697a2e69c5"
+        },
+        {
+          "id": 700893570,
+          "name": "rustdesk-1.5.1-linux-aarch64-0.aarch64-suse.rpm",
+          "size": 33544606,
+          "state": "uploaded",
+          "digest": "sha256:a6a861bcbd428265c5745fba2366bd96b397cef55e1274a6edbb372f2d11f791"
+        },
+        {
+          "id": 700893593,
+          "name": "rustdesk-1.5.1-linux-aarch64-0.aarch64.rpm",
+          "size": 33544598,
+          "state": "uploaded",
+          "digest": "sha256:5cf5cfee75d2506fe5b1edf9b260538ade0ef938b6fa0f507fbc673729c1fefa"
+        },
+        {
+          "id": 700893675,
+          "name": "rustdesk-1.5.1-linux-aarch64.deb",
+          "size": 23620652,
+          "state": "uploaded",
+          "digest": "sha256:304e9f1c71c657341e68404d17ceede091ef8a7814475ff1e57309ffcca9e655"
+        },
+        {
+          "id": 700893678,
+          "name": "rustdesk-1.5.1-linux-x86_64-0.x86_64-suse.rpm",
+          "size": 34370849,
+          "state": "uploaded",
+          "digest": "sha256:f5969cfbc42db21a6b7c3a06a611cdd1500af641a37d19159958923209a6550c"
+        },
+        {
+          "id": 700893677,
+          "name": "rustdesk-1.5.1-linux-x86_64-0.x86_64.rpm",
+          "size": 34370813,
+          "state": "uploaded",
+          "digest": "sha256:8645924b3e70c8f4097233f4504938ea1ae0e2b029b841e9c242cf509f9df320"
+        },
+        {
+          "id": 700893679,
+          "name": "rustdesk-1.5.1-linux-x86_64.deb",
+          "size": 25350508,
+          "state": "uploaded",
+          "digest": "sha256:59d23543ca9a115de0a05b9f5b8cbd17a290aca68522fe57321a70ac5c1a7551"
+        },
+        {
+          "id": 700893688,
+          "name": "rustdesk-1.5.1-macos-aarch64-unsigned.dmg",
+          "size": 30289755,
+          "state": "uploaded",
+          "digest": "sha256:1ef2f83009ffd2770afe23d1c5238cd003fac65a075ad93d4cb8c369f8a47c4d"
+        },
+        {
+          "id": 700893715,
+          "name": "rustdesk-1.5.1-macos-x86_64-unsigned.dmg",
+          "size": 37266871,
+          "state": "uploaded",
+          "digest": "sha256:316d48f43895163874cba43fff12de0b708edc418de66adaf41bf39ec535d3d7"
+        },
+        {
+          "id": 700893752,
+          "name": "rustdesk-1.5.1-sos-linux-aarch64-0.aarch64-suse.rpm",
+          "size": 33544692,
+          "state": "uploaded",
+          "digest": "sha256:8016f37b5293398768e845d71c88a1e5b17a2ba0773bbbcc67c98f8706f27826"
+        },
+        {
+          "id": 700893757,
+          "name": "rustdesk-1.5.1-sos-linux-aarch64-0.aarch64.rpm",
+          "size": 33544646,
+          "state": "uploaded",
+          "digest": "sha256:a0663d81a1e13ccc4581185811ebb330c8162c0d778934f2cef2cd7d9ae2fec2"
+        },
+        {
+          "id": 700893763,
+          "name": "rustdesk-1.5.1-sos-linux-aarch64.deb",
+          "size": 23632788,
+          "state": "uploaded",
+          "digest": "sha256:908ccdba7cf0a45da5fb01391aa1b3a943eb87bfed3eb1cde0b4ac1c56cd3593"
+        },
+        {
+          "id": 700893772,
+          "name": "rustdesk-1.5.1-sos-linux-x86_64-0.x86_64-suse.rpm",
+          "size": 34371068,
+          "state": "uploaded",
+          "digest": "sha256:ec49c5547a8aa4ca197358e0d3cc99cc064f33a2681561b305e0b2804d6030d6"
+        },
+        {
+          "id": 700893773,
+          "name": "rustdesk-1.5.1-sos-linux-x86_64-0.x86_64.rpm",
+          "size": 34371009,
+          "state": "uploaded",
+          "digest": "sha256:f94f4a1e20eab6800e308e5930b36f413c8c8ab384ae24e109ff81f9e3a3a5f2"
+        },
+        {
+          "id": 700893800,
+          "name": "rustdesk-1.5.1-sos-linux-x86_64.deb",
+          "size": 25365756,
+          "state": "uploaded",
+          "digest": "sha256:22c6632e665e1fca6a1e9717d726659d4239c9af72cfaeafb6fbc7b3c71eff21"
+        },
+        {
+          "id": 700893804,
+          "name": "rustdesk-1.5.1-sos-macos-aarch64-unsigned.dmg",
+          "size": 30288326,
+          "state": "uploaded",
+          "digest": "sha256:6bdfdad587ed106299ebdc017219ee8b425328efcb954a300f3a614d2c7902d8"
+        },
+        {
+          "id": 700893823,
+          "name": "rustdesk-1.5.1-sos-macos-x86_64-unsigned.dmg",
+          "size": 37267448,
+          "state": "uploaded",
+          "digest": "sha256:26216d3e3d63e12a2f86169a24e07d34d05ce775c87f45c17ef3710560671374"
+        },
+        {
+          "id": 700893820,
+          "name": "rustdesk-1.5.1-sos-windows-aarch64.exe",
+          "size": 23621120,
+          "state": "uploaded",
+          "digest": "sha256:a05ef0c31745d6a8f4e6cf513ab0753e9b4374ece12f1784400e2ccca2f0308a"
+        },
+        {
+          "id": 700893831,
+          "name": "rustdesk-1.5.1-sos-windows-aarch64.msi",
+          "size": 24243205,
+          "state": "uploaded",
+          "digest": "sha256:c4fad3c44b9dd8d858987f3dd8a2299b93a60af0a36e584fe6df0d4d6094d78d"
+        },
+        {
+          "id": 700893864,
+          "name": "rustdesk-1.5.1-sos-windows-x86_64.exe",
+          "size": 26058752,
+          "state": "uploaded",
+          "digest": "sha256:fbf5928aa37faa76aa6aec49c9cca96869ca4e151231806efe172818c76cc735"
+        },
+        {
+          "id": 700893899,
+          "name": "rustdesk-1.5.1-sos-windows-x86_64.msi",
+          "size": 26607390,
+          "state": "uploaded",
+          "digest": "sha256:04eed70c7e8b5e581f50ba0db873e7df0501a3c44dcb96dc319edd9a9fb41589"
+        },
+        {
+          "id": 700893903,
+          "name": "rustdesk-1.5.1-windows-aarch64.exe",
+          "size": 23624192,
+          "state": "uploaded",
+          "digest": "sha256:aaa0787c7cbdea0221af58589eb89b50848d494dba0c9d67792cdf26f6a7569b"
+        },
+        {
+          "id": 700893904,
+          "name": "rustdesk-1.5.1-windows-aarch64.msi",
+          "size": 24243205,
+          "state": "uploaded",
+          "digest": "sha256:f7210c3ea9fbd4b24b052e860ec33e1df3e8fbe6bbd5b668fc5b37147873b741"
+        },
+        {
+          "id": 700893918,
+          "name": "rustdesk-1.5.1-windows-x86_64.exe",
+          "size": 26057728,
+          "state": "uploaded",
+          "digest": "sha256:f65609bad56a947ee5489e39f1b2e86eb0c16022c8b891a49f4c3ebc8ec5e329"
+        },
+        {
+          "id": 700893922,
+          "name": "rustdesk-1.5.1-windows-x86_64.msi",
+          "size": 26619678,
+          "state": "uploaded",
+          "digest": "sha256:1b38ced768c31abc51653832fea8423aba5ff40502858ca83f9d8b45b6059dd1"
+        },
+        {
+          "id": 700893968,
+          "name": "rustdesk-unattended-wayland-sos-1.5.1-aarch64.deb",
+          "size": 23828928,
+          "state": "uploaded",
+          "digest": "sha256:4a328679183301796c4e8a8301d6bb134587ff21761712b5240830e011287a26"
+        },
+        {
+          "id": 700893988,
+          "name": "rustdesk-unattended-wayland-sos-1.5.1-x86_64.deb",
+          "size": 25596688,
+          "state": "uploaded",
+          "digest": "sha256:fede8a209874eccbe2319361cd9080bec0c9873a60586a9b2efcf4952cd7b8b3"
+        },
+        {
+          "id": 700894004,
+          "name": "rustdesk-unattended-wayland-standard-1.5.1-aarch64.deb",
+          "size": 23836464,
+          "state": "uploaded",
+          "digest": "sha256:ad9125b842e80c82f1cf6b2bdaaffc1c6efb75e0b701ecb0967f4dae2966bcff"
+        },
+        {
+          "id": 700894011,
+          "name": "rustdesk-unattended-wayland-standard-1.5.1-x86_64.deb",
+          "size": 25595764,
+          "state": "uploaded",
+          "digest": "sha256:db962e3eaf4b46d038dd16d404aefe61819c614f4ea6e07f84608971585240de"
+        },
+        {
+          "id": 700893569,
+          "name": "SHA256SUMS",
+          "size": 3353,
+          "state": "uploaded",
+          "digest": "sha256:408ecff5289f98ce3cf2104700c90d9e6b9fe03529d44d4980651a1557d4c7d7"
+        }
+      ]
+    },
+    {
+      "id": 431350507,
+      "name": "nightly",
+      "tag_name": "nightly",
+      "draft": true,
+      "prerelease": true,
+      "target_commitish": "95abfaf706766f670dddcecea41530320c0ebb66",
+      "published_at": null,
+      "immutable": false,
+      "body_sha256": "65a418da7c809a73256b2b8f7b0df489584583ec67a869fd1695ddbf62b8849a",
+      "metadata": {
+        "nightly_identity": "7b45c6b72127db868567c658199568dd15714b1ef2b7a0acf9feb59eb125dc78",
+        "upstream_sha": "23e5bb471a040d62f0a6ad52591fb30784265b73",
+        "custom_repository_sha": "95abfaf706766f670dddcecea41530320c0ebb66",
+        "common_patch_hash": "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "automation_state": "complete"
+      },
+      "assets": [
+        {
+          "id": 701437536,
+          "name": "rustdesk-1.5.1-android-aarch64-signed.apk",
+          "size": 31105276,
+          "state": "uploaded",
+          "digest": "sha256:c7529fc570083d07d4ea643270616b0c5bb97446e0978ee7693b39c7501a0bfa"
+        },
+        {
+          "id": 701437535,
+          "name": "rustdesk-1.5.1-android-armv7-signed.apk",
+          "size": 29413636,
+          "state": "uploaded",
+          "digest": "sha256:aa21459615c6e8c79155cc3e3128b3ba0cc341b63176efb11a0198fb0b1a0390"
+        },
+        {
+          "id": 701437541,
+          "name": "rustdesk-1.5.1-android-x86_64-signed.apk",
+          "size": 30642416,
+          "state": "uploaded",
+          "digest": "sha256:f4c41b148cb20b0c708f228553dc6417bc549a1848ae1047162abf20aebba17b"
+        },
+        {
+          "id": 701437538,
+          "name": "rustdesk-1.5.1-linux-aarch64-0.aarch64-suse.rpm",
+          "size": 33544629,
+          "state": "uploaded",
+          "digest": "sha256:1ce96335d96f85d9d067897c1f91894d68f670efe5106965d32fe9f3ef6df785"
+        },
+        {
+          "id": 701437584,
+          "name": "rustdesk-1.5.1-linux-aarch64-0.aarch64.rpm",
+          "size": 33544584,
+          "state": "uploaded",
+          "digest": "sha256:c5980e94cff07708bd4d6fc8f04ae1e70c208af0f2f456e719df9ccb51348c8c"
+        },
+        {
+          "id": 701437619,
+          "name": "rustdesk-1.5.1-linux-aarch64.deb",
+          "size": 23602740,
+          "state": "uploaded",
+          "digest": "sha256:1c4e889e09e551af8b0b277898b635737fa40af460282c3c21c7831569304d28"
+        },
+        {
+          "id": 701437626,
+          "name": "rustdesk-1.5.1-linux-x86_64-0.x86_64-suse.rpm",
+          "size": 34370847,
+          "state": "uploaded",
+          "digest": "sha256:2613b91fc5a1dabe3a42b7836b7fbd0ec7bb3049ad5bf1f72a3b2f449c4c8f05"
+        },
+        {
+          "id": 701437627,
+          "name": "rustdesk-1.5.1-linux-x86_64-0.x86_64.rpm",
+          "size": 34370764,
+          "state": "uploaded",
+          "digest": "sha256:225bc83fd446962479e4d989f70b0408b6bca6cfc438daf216fb16fec6cc20c3"
+        },
+        {
+          "id": 701437631,
+          "name": "rustdesk-1.5.1-linux-x86_64.deb",
+          "size": 25345044,
+          "state": "uploaded",
+          "digest": "sha256:479b1ed516c737cf81e95f2ec60ed9073c533c720657a3c9bad7472badb0b3a5"
+        },
+        {
+          "id": 701437664,
+          "name": "rustdesk-1.5.1-macos-aarch64-unsigned.dmg",
+          "size": 30289726,
+          "state": "uploaded",
+          "digest": "sha256:bf45ffe5de860b4df6f5d0c7a68772170ac9f72a31219ead816d97ba7b353660"
+        },
+        {
+          "id": 701437771,
+          "name": "rustdesk-1.5.1-macos-x86_64-unsigned.dmg",
+          "size": 37266843,
+          "state": "uploaded",
+          "digest": "sha256:16d38ba660613f7b237f393d3287e5309ce7f24fdeec67cc23f675be1a6e4fe1"
+        },
+        {
+          "id": 701437782,
+          "name": "rustdesk-1.5.1-sos-linux-aarch64-0.aarch64-suse.rpm",
+          "size": 33544826,
+          "state": "uploaded",
+          "digest": "sha256:6cb0ae50c9760f2aa85c8378f6b7871485aa060b085a8543f985823ca5811658"
+        },
+        {
+          "id": 701437789,
+          "name": "rustdesk-1.5.1-sos-linux-aarch64-0.aarch64.rpm",
+          "size": 33544755,
+          "state": "uploaded",
+          "digest": "sha256:fc57c6578f272ca46bca5df312fe9ba036ac69f6c19aee40b750a34200b6db41"
+        },
+        {
+          "id": 701437787,
+          "name": "rustdesk-1.5.1-sos-linux-aarch64.deb",
+          "size": 23623480,
+          "state": "uploaded",
+          "digest": "sha256:c9861cc38cf2efe74768be6993f4c3b1e1bebb27c24357fd81d7ff6f6519cf1a"
+        },
+        {
+          "id": 701437813,
+          "name": "rustdesk-1.5.1-sos-linux-x86_64-0.x86_64-suse.rpm",
+          "size": 34370652,
+          "state": "uploaded",
+          "digest": "sha256:eba9ef770f73f9f1447a9b5a179157baabf97a0f9adf3542950d29cc0b1adfc0"
+        },
+        {
+          "id": 701437864,
+          "name": "rustdesk-1.5.1-sos-linux-x86_64-0.x86_64.rpm",
+          "size": 34370629,
+          "state": "uploaded",
+          "digest": "sha256:2a2aa2d46719c5462b5821a202a9660a3a94b8c8f5f896590304750a1cddac50"
+        },
+        {
+          "id": 701437870,
+          "name": "rustdesk-1.5.1-sos-linux-x86_64.deb",
+          "size": 25352184,
+          "state": "uploaded",
+          "digest": "sha256:5eada27eaf6ab101232815a937c147c65fd7fbe52fc434ef097b76c61342e5b7"
+        },
+        {
+          "id": 701437888,
+          "name": "rustdesk-1.5.1-sos-macos-aarch64-unsigned.dmg",
+          "size": 30288143,
+          "state": "uploaded",
+          "digest": "sha256:81b829e19e46425d8dacf40cb72fcfca977989028863d184fdffa80765ec3561"
+        },
+        {
+          "id": 701437893,
+          "name": "rustdesk-1.5.1-sos-macos-x86_64-unsigned.dmg",
+          "size": 37267457,
+          "state": "uploaded",
+          "digest": "sha256:c22737bd07af0917868b82af5ebd8c43b84857e648ab993e8cdc61998ea32348"
+        },
+        {
+          "id": 701437944,
+          "name": "rustdesk-1.5.1-sos-windows-aarch64.exe",
+          "size": 23617024,
+          "state": "uploaded",
+          "digest": "sha256:30f8ea743fd99cec0b77960560b37aac85f50912c3737604b9551415425a06e8"
+        },
+        {
+          "id": 701437968,
+          "name": "rustdesk-1.5.1-sos-windows-aarch64.msi",
+          "size": 24239109,
+          "state": "uploaded",
+          "digest": "sha256:830044a98a9f7bd847ec957cd4ec772e796d0461b481cfe220d6160fa275c684"
+        },
+        {
+          "id": 701437972,
+          "name": "rustdesk-1.5.1-sos-windows-x86_64.exe",
+          "size": 26056192,
+          "state": "uploaded",
+          "digest": "sha256:25749082f72d07b365f9d78edb274b22174546018a69ead361849211e5259de9"
+        },
+        {
+          "id": 701438005,
+          "name": "rustdesk-1.5.1-sos-windows-x86_64.msi",
+          "size": 26631966,
+          "state": "uploaded",
+          "digest": "sha256:cab68a61395f09e3a727a80f9e8aeba220fa78b5e6fb643f59659744174dd212"
+        },
+        {
+          "id": 701438014,
+          "name": "rustdesk-1.5.1-windows-aarch64.exe",
+          "size": 23619584,
+          "state": "uploaded",
+          "digest": "sha256:0b8c721b4ff2ac37275d65d165333cc7b0a427a361ac6db3c4a13449607409fe"
+        },
+        {
+          "id": 701438024,
+          "name": "rustdesk-1.5.1-windows-aarch64.msi",
+          "size": 24243205,
+          "state": "uploaded",
+          "digest": "sha256:ece9d4519b06f16a45a39857c3e5ab59a7cd0f06854092081d35ddaed398bfc5"
+        },
+        {
+          "id": 701438045,
+          "name": "rustdesk-1.5.1-windows-x86_64.exe",
+          "size": 26052608,
+          "state": "uploaded",
+          "digest": "sha256:4e15bc7659c0eb53b04f0f1d302a144e751d6bf8bd12c9e1d97738e8ccb0545d"
+        },
+        {
+          "id": 701438053,
+          "name": "rustdesk-1.5.1-windows-x86_64.msi",
+          "size": 26627870,
+          "state": "uploaded",
+          "digest": "sha256:b3052f8a83bc03c38848b5f01b3ca7f6baaec41acf6d7851b1902bce890faacf"
+        },
+        {
+          "id": 701438055,
+          "name": "rustdesk-unattended-wayland-sos-1.5.1-aarch64.deb",
+          "size": 23818160,
+          "state": "uploaded",
+          "digest": "sha256:71eaaafd321d3a0f44481c03ef85ac8e4388b375763e3a7ccede7f24767a9fef"
+        },
+        {
+          "id": 701438068,
+          "name": "rustdesk-unattended-wayland-sos-1.5.1-x86_64.deb",
+          "size": 25604160,
+          "state": "uploaded",
+          "digest": "sha256:9fdaa90eefcc06bb38324f1a73a09d993e03cafe031a259e01b8f5b12355a85d"
+        },
+        {
+          "id": 701438115,
+          "name": "rustdesk-unattended-wayland-standard-1.5.1-aarch64.deb",
+          "size": 23826104,
+          "state": "uploaded",
+          "digest": "sha256:f518e1952d807c386f8e17aa40211376903ea8e4e44adb595d20111c29ca3080"
+        },
+        {
+          "id": 701438124,
+          "name": "rustdesk-unattended-wayland-standard-1.5.1-x86_64.deb",
+          "size": 25603272,
+          "state": "uploaded",
+          "digest": "sha256:169e5145bdee3a0e39f024017d1fa3fa20e5c89f87bafae227ecbdd83b92d893"
+        },
+        {
+          "id": 701437537,
+          "name": "SHA256SUMS",
+          "size": 3353,
+          "state": "uploaded",
+          "digest": "sha256:e312e084ef247f28ba37a3f9979d3381c8b24b34951e2ed87ad671936b59ac68"
+        }
+      ]
+    },
+    {
+      "id": 430489827,
+      "name": "v1.5.0-custom.v2.6",
+      "tag_name": "untagged-1adf51dab8dd95750d11",
+      "draft": true,
+      "prerelease": false,
+      "target_commitish": "bed8113783f8e9da9ae0ae9a4b300f68bc445ddd",
+      "published_at": null,
+      "immutable": false,
+      "body_sha256": "9b6de508b2cd57bc556d9fbb532b5721ebafb6052d5f9f87d99e70496ccbf723",
+      "metadata": {
+        "upstream_sha": "fada664df7a294d1d1a9ca3e7cd3637069122f17",
+        "common_patch_hash": "c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6",
+        "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+        "custom_repository_sha": "bed8113783f8e9da9ae0ae9a4b300f68bc445ddd",
+        "build_identity": "d9cb2c710b9efbd9f127fca98da58431597c1c92f4c2ac340edb76bc24a65bff",
+        "custom_release_revision": "v2.6",
+        "automation_state": "complete"
+      },
+      "assets": [
+        {
+          "id": 697928231,
+          "name": "rustdesk-1.5.0-android-aarch64-signed.apk",
+          "size": 30617796,
+          "state": "uploaded",
+          "digest": "sha256:6c80bdb2584ba6cfbf710a83ef6978ae355c77d899c1ab8e1daacbae187fc36a"
+        },
+        {
+          "id": 697928224,
+          "name": "rustdesk-1.5.0-android-armv7-signed.apk",
+          "size": 28954828,
+          "state": "uploaded",
+          "digest": "sha256:905b8283b7e294d22e0343ed977dcafda1047a674035e6f1e5311d2e1e9be409"
+        },
+        {
+          "id": 697928223,
+          "name": "rustdesk-1.5.0-android-x86_64-signed.apk",
+          "size": 30105784,
+          "state": "uploaded",
+          "digest": "sha256:34bbbe176ca09f2ad66f8ad871dac7e34d2df0c6242a587fe7ce23a682b766ae"
+        },
+        {
+          "id": 697928225,
+          "name": "rustdesk-1.5.0-linux-aarch64-0.aarch64-suse.rpm",
+          "size": 32986057,
+          "state": "uploaded",
+          "digest": "sha256:6afe3ca7ac2a9b3c38b4d1b3db1f03947bd68e65dad94516e7fce2b36eba50c3"
+        },
+        {
+          "id": 697928247,
+          "name": "rustdesk-1.5.0-linux-aarch64-0.aarch64.rpm",
+          "size": 32986020,
+          "state": "uploaded",
+          "digest": "sha256:2975264595a7593831b14c6fa6cced417c75cbc83f1993b1cb5baf202fae9261"
+        },
+        {
+          "id": 697928303,
+          "name": "rustdesk-1.5.0-linux-aarch64.deb",
+          "size": 23220328,
+          "state": "uploaded",
+          "digest": "sha256:dbc3fc7d0af8163be1ac28352c375b900d283bf1810b69c910acbe4d8da38c79"
+        },
+        {
+          "id": 697928311,
+          "name": "rustdesk-1.5.0-linux-x86_64-0.x86_64-suse.rpm",
+          "size": 33758724,
+          "state": "uploaded",
+          "digest": "sha256:4f4451a0600172b1cdcd0a29a4f0dd9215f8e0c75dca74aca17439d850221488"
+        },
+        {
+          "id": 697928313,
+          "name": "rustdesk-1.5.0-linux-x86_64-0.x86_64.rpm",
+          "size": 33758645,
+          "state": "uploaded",
+          "digest": "sha256:d8fc212164b9eba4e484a883fe7d34b8bfe0cd94bb972a4c2284d392674d5a40"
+        },
+        {
+          "id": 697928316,
+          "name": "rustdesk-1.5.0-linux-x86_64.deb",
+          "size": 24966796,
+          "state": "uploaded",
+          "digest": "sha256:c9dce570b6cadd2b013191727f555d3c7d387e7da1b710529f71cf46eb780557"
+        },
+        {
+          "id": 697928331,
+          "name": "rustdesk-1.5.0-macos-aarch64-unsigned.dmg",
+          "size": 29620489,
+          "state": "uploaded",
+          "digest": "sha256:ae3b0848b1529b844834a0e9d028210edfb1fa9e377571044ae812435e473bfc"
+        },
+        {
+          "id": 697928352,
+          "name": "rustdesk-1.5.0-macos-x86_64-unsigned.dmg",
+          "size": 36485013,
+          "state": "uploaded",
+          "digest": "sha256:543e3bd3e3d778ff32adea88f86e065cfc4ea3ae0abe008eaa16c544aadc14b1"
+        },
+        {
+          "id": 697928368,
+          "name": "rustdesk-1.5.0-sos-linux-aarch64-0.aarch64-suse.rpm",
+          "size": 32987601,
+          "state": "uploaded",
+          "digest": "sha256:be5d6dfed5fdc29394b37b26e7bc3ca4d1c92aa044325ed06e5b3dc1e8aaa864"
+        },
+        {
+          "id": 697928370,
+          "name": "rustdesk-1.5.0-sos-linux-aarch64-0.aarch64.rpm",
+          "size": 32987554,
+          "state": "uploaded",
+          "digest": "sha256:dabc35c2f4a27493e1938d8805b213214e434c95e0000000fb135065bdd16b27"
+        },
+        {
+          "id": 697928371,
+          "name": "rustdesk-1.5.0-sos-linux-aarch64.deb",
+          "size": 23237860,
+          "state": "uploaded",
+          "digest": "sha256:2625bd3be6426480c6052b8cbc15ccb1100ceb83023b36fd174995c524d0d24c"
+        },
+        {
+          "id": 697928405,
+          "name": "rustdesk-1.5.0-sos-linux-x86_64-0.x86_64-suse.rpm",
+          "size": 33760202,
+          "state": "uploaded",
+          "digest": "sha256:9dce85814ce5ab957a462ceb4eed6480bcd252559b1c75b891a64503c3a76ae2"
+        },
+        {
+          "id": 697928418,
+          "name": "rustdesk-1.5.0-sos-linux-x86_64-0.x86_64.rpm",
+          "size": 33760152,
+          "state": "uploaded",
+          "digest": "sha256:d03d8a3031773d3b69447f8275c9f518fe4348c9d683c18685b2ce8dbb4ef25a"
+        },
+        {
+          "id": 697928436,
+          "name": "rustdesk-1.5.0-sos-linux-x86_64.deb",
+          "size": 24963020,
+          "state": "uploaded",
+          "digest": "sha256:b24cb09e7bf72dbafe3efe0a60e64bacad0fefd9e2567af7235bb894adf74457"
+        },
+        {
+          "id": 697928448,
+          "name": "rustdesk-1.5.0-sos-macos-aarch64-unsigned.dmg",
+          "size": 29621684,
+          "state": "uploaded",
+          "digest": "sha256:db0afc7854d0046e1ecab7e763affe9c9ebdacaca605c55d1521cb24d3790bc5"
+        },
+        {
+          "id": 697928454,
+          "name": "rustdesk-1.5.0-sos-macos-x86_64-unsigned.dmg",
+          "size": 36486367,
+          "state": "uploaded",
+          "digest": "sha256:5c2250f013299dcc05bf8d3c9de85f870e2d9ef18e4724d17246ee440a7b3264"
+        },
+        {
+          "id": 697928464,
+          "name": "rustdesk-1.5.0-sos-windows-aarch64.exe",
+          "size": 23224832,
+          "state": "uploaded",
+          "digest": "sha256:88bc8aacc682042683f5b4aad48db995fc5dd88c66cc9f91ec59d1e6591130b7"
+        },
+        {
+          "id": 697928484,
+          "name": "rustdesk-1.5.0-sos-windows-aarch64.msi",
+          "size": 23825263,
+          "state": "uploaded",
+          "digest": "sha256:60b2886678105f8d08d3c3931627faf65de8275704af86cd8d19211eafdd0077"
+        },
+        {
+          "id": 697928512,
+          "name": "rustdesk-1.5.0-sos-windows-x86_64.exe",
+          "size": 25247744,
+          "state": "uploaded",
+          "digest": "sha256:d4a7d26c9009c253d066af0ba1105d7dbc39564b087cf95419585af131b33a98"
+        },
+        {
+          "id": 697928516,
+          "name": "rustdesk-1.5.0-sos-windows-x86_64.msi",
+          "size": 25766660,
+          "state": "uploaded",
+          "digest": "sha256:e4d9be4827031c69963c0682a75c8d4f4f3b6abaa79dfad2b1b077a64a0ff84e"
+        },
+        {
+          "id": 697928522,
+          "name": "rustdesk-1.5.0-windows-aarch64.exe",
+          "size": 23224320,
+          "state": "uploaded",
+          "digest": "sha256:8bf73e40298ccc1d169aff1cf6ac54a20113c74fa08db5a2663855113ecc5ebe"
+        },
+        {
+          "id": 697928529,
+          "name": "rustdesk-1.5.0-windows-aarch64.msi",
+          "size": 23821167,
+          "state": "uploaded",
+          "digest": "sha256:d818209afa3761803e54a77ff3d3dc21a80ca1974c922f7a05161463965f1b97"
+        },
+        {
+          "id": 697928546,
+          "name": "rustdesk-1.5.0-windows-x86_64.exe",
+          "size": 25246720,
+          "state": "uploaded",
+          "digest": "sha256:6f60b984b87652974e1560f90633e86d8f3a532bfe3a2fd878405dd688938a9c"
+        },
+        {
+          "id": 697928568,
+          "name": "rustdesk-1.5.0-windows-x86_64.msi",
+          "size": 25766660,
+          "state": "uploaded",
+          "digest": "sha256:ba18810ce825b60e348313a660b393088c18ae69a5225fa71414bc8590803c65"
+        },
+        {
+          "id": 697928579,
+          "name": "rustdesk-unattended-wayland-sos-1.5.0-aarch64.deb",
+          "size": 23425072,
+          "state": "uploaded",
+          "digest": "sha256:cdbe54ad0e73117871cdb6cd6386a30efd73fe4904ab52a9a712a6345b777ea9"
+        },
+        {
+          "id": 697928582,
+          "name": "rustdesk-unattended-wayland-sos-1.5.0-x86_64.deb",
+          "size": 25192804,
+          "state": "uploaded",
+          "digest": "sha256:f2270747747506f2928ccf4130425493d667848ff86f52518174a1c477dee75a"
+        },
+        {
+          "id": 697928584,
+          "name": "rustdesk-unattended-wayland-standard-1.5.0-aarch64.deb",
+          "size": 23440492,
+          "state": "uploaded",
+          "digest": "sha256:233c0e22c19574326ee7c0e097fe13aeaed6477445aa998e30a9983adf0c3bca"
+        },
+        {
+          "id": 697928588,
+          "name": "rustdesk-unattended-wayland-standard-1.5.0-x86_64.deb",
+          "size": 25193768,
+          "state": "uploaded",
+          "digest": "sha256:47531a5c7421467df0244bdd054db90cfc560cadace403ecb844f15607b9e14f"
+        },
+        {
+          "id": 697928232,
+          "name": "SHA256SUMS",
+          "size": 3353,
+          "state": "uploaded",
+          "digest": "sha256:d1e67ee8062f5e3f51c1f30f33c9efb03f470f7f1bf510284f1a5d7e445296c8"
+        }
+      ]
+    }
+  ],
+  "historical_observations": [
+    {
+      "name": "v1.5.0-custom.v2.5",
+      "semantics": "legacy-per-upstream-release-allocation",
+      "evidence": "docs/release-coordinator-preactivation.md; archived coordinator run 40647868248",
+      "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
+      "sos_patch_hash": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813",
+      "qualification": "historical no-build reuse observation only; producer and release no longer available"
+    }
+  ],
+  "candidate_initial_revisions": {
+    "v1": 1,
+    "v2": 7
+  },
+  "activation_blockers": [
+    "COORDINATOR_REVISION_IDENTITY",
+    "BUILD_POLICY_IDENTITY",
+    "ACTIVE_WORKERS",
+    "INCOMPLETE_HISTORICAL_ALLOCATION",
+    "CUTOVER_NOT_COMMITTED"
+  ]
+}
