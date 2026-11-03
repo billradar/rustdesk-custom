@@ -108,6 +108,29 @@ class ContentContract(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'evidence digest mismatch'):
                     content.require_cutover()
 
+    def test_cutover_rejects_symlinked_attestation_directory(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actual = root / 'actual'
+            actual.mkdir()
+            evidence = dict(schema='content-v2-activation-attestation-v1', decision='GO',
+                            v2_only=True, journal_reconciled=True, workers_quiescent=True,
+                            releases_inventoried=True, version_gate_passed=True)
+            raw = json.dumps(evidence).encode()
+            (actual / 'proof.json').write_bytes(raw)
+            parent = root / 'metadata/release'
+            parent.mkdir(parents=True)
+            (parent / 'attestations').symlink_to(actual, target_is_directory=True)
+            gate = root / 'patchset-cutover.json'
+            gate.write_text(json.dumps(dict(
+                schema='patchset-cutover-v1', status='ACTIVE', blockers=[],
+                activation_evidence=dict(path='metadata/release/attestations/proof.json',
+                                         sha256=hashlib.sha256(raw).hexdigest()))))
+            with patch.object(content, 'ROOT', root), patch.object(content, 'CUTOVER', gate):
+                with self.assertRaisesRegex(ValueError, 'evidence digest mismatch'):
+                    content.require_cutover()
+
     def test_policy_hash_changes_for_toolchain_but_not_docs(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
