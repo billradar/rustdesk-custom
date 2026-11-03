@@ -56,9 +56,7 @@ def discover(run_id=''):
     cargo = api(f'repos/{OFFICIAL}/contents/Cargo.toml?ref={sha}')
     version = tomllib.loads(base64.b64decode(cargo['content']).decode())['package']['version']
     patchset = patchset_for_version(version)
-    from scripts.release.content import inputs
-    content = inputs(patchset)
-    return dict(**content, channel='nightly', upstream_repository=OFFICIAL, upstream_sha=sha,
+    return dict(channel='nightly', upstream_repository=OFFICIAL, upstream_sha=sha,
                 upstream_ref=sha, upstream_tag='', upstream_version=version, patchset=patchset,
                 official_run_id=str(run['id']), official_run_url=run['html_url'],
                 common_patch_hash=patch_hash('common', patchset), sos_patch_hash=patch_hash('sos', patchset))
@@ -69,9 +67,6 @@ def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
                     common_patch_hash=data['common_patch_hash'], sos_patch_hash=data['sos_patch_hash'],
                     wayland=wayland, signing=signing,
                     wayland_policy_sha256=data.get('wayland_policy_sha256', '') if wayland == 'true' else '')
-    if data.get('patchset_version'):
-        identity.update(schema='nightly-build-identity-v2', patchset_version=data['patchset_version'],
-                        build_policy_sha256=data['build_policy_sha256'])
     if release_mode is not None:
         identity['release_mode'] = release_mode
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -205,9 +200,6 @@ def route(data):
     if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')):
         raise ValueError('Nightly router requires trusted main context')
-    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
-        from scripts.release.coordinator.runtime import route_nightly
-        return route_nightly(data)
     rows = []
     for page in range(1, 11):
         batch = api(f'repos/{repo}/actions/workflows/nightly.yml/runs?event=workflow_dispatch&branch=main&per_page=100&page={page}')['workflow_runs']
@@ -262,10 +254,6 @@ def dedup():
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                 output.write('skip=false\nstate=RETRY\n')
         print('Nightly dedup: development dry-run is isolated from production history')
-        return
-    if os.environ.get('RELEASE_COORDINATOR_ENABLED') == 'true':
-        from scripts.release.coordinator.runtime import outputs
-        outputs(skip=False, state='COORDINATOR_ADMISSION_REQUIRED')
         return
     rows = []
     for page in range(1, 11):
@@ -364,10 +352,6 @@ def aggregate(root, discovery):
                     upstream_repository=OFFICIAL)
     if any(data.get(k) != v for k, v in required.items()):
         raise ValueError('Nightly discovery identity mismatch')
-    from scripts.release.content import inputs as content_inputs
-    content = content_inputs(data['patchset'])
-    if any(data.get(k) != v for k,v in content.items()):
-        raise ValueError('Nightly discovery content/build policy mismatch')
     mode = os.environ.get('RELEASE_MODE', 'dry-run')
     if mode not in ('dry-run', 'draft', 'release'):
         raise ValueError('Unsupported Nightly release mode')
@@ -380,7 +364,6 @@ def aggregate(root, discovery):
         expected = dict(required, custom_repository_sha=os.environ['GITHUB_SHA'],
                         common_patch_hash=patch_hash('common', data['patchset']))
         expected.pop('upstream_repository')
-        expected.update(content)
         for k, v in expected.items():
             if info.get(k) != v:
                 raise ValueError('Nightly artifact identity mismatch: ' + k)
@@ -465,8 +448,6 @@ def delete_refresh_draft(existing):
 
 
 def draft(root, discovery):
-    from scripts.release.content import require_cutover
-    require_cutover()
     from scripts.release.github import request, gh
     from scripts.release.production import scan_job_log
     require_draft_context()
@@ -489,9 +470,7 @@ def draft(root, discovery):
                          wayland_policy_sha256=report.get('wayland', {}).get('policy_sha256', ''),
                          release_mode=release_mode,
                          signing='true' if signing_required else 'false')
-    from scripts.release.content import inputs as content_inputs, notes as content_notes
-    content = content_inputs(data['patchset'])
-    identity_source = dict(**content, upstream_sha=identity_data['upstream_sha'],
+    identity_source = dict(upstream_sha=identity_data['upstream_sha'],
                            patchset=identity_data['patchset'],
                            common_patch_hash=identity_data['common_patch_hash'],
                            sos_patch_hash=identity_data['sos_patch_hash'],
@@ -533,9 +512,6 @@ def draft(root, discovery):
     if checksum_actual != checksum_expected:
         raise ValueError('Nightly SHA256SUMS does not match public assets')
     metadata = [f'channel=nightly', 'nightly_identity=' + identity,
-                'patchset_version=' + content['patchset_version'],
-                'version_semantics=' + content['version_semantics'],
-                'build_policy_sha256=' + content['build_policy_sha256'],
                 'upstream_repository=' + OFFICIAL, 'upstream_sha=' + data['upstream_sha'],
                 'official_run_id=' + run_id, 'official_run_url=' + data['official_run_url'],
                 'custom_repository_sha=' + os.environ['GITHUB_SHA'], 'build_run=' + os.environ['GITHUB_RUN_ID'],
@@ -551,8 +527,7 @@ def draft(root, discovery):
     if identity_data['wayland_policy_sha256']:
         metadata.append('wayland_policy_sha256=' + identity_data['wayland_policy_sha256'])
     notes = (upstream_notes + '\n\n'
-             '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n'
-             + '\n' + content_notes(data['patchset'], nightly=True))
+             '<!-- rustdesk-custom-release-metadata\n' + '\n'.join(metadata) + '\n-->\n')
 
     # The tag remains moving. Refresh private Drafts with a new Release identity;
     # published prereleases retain the explicitly authorized release-mode path.
