@@ -162,7 +162,7 @@ Nightly 的 `release_mode` 默认 `draft`：仓库变量开启时，主分支的
 已有该 ref 时使用 GitHub 的 `PATCH force=true` 直接移动到本次自定义仓库提交，绝不采用先删除 Git Tag 再创建的方式。
 之后清除旧 assets，上传并验证新产物；
 替换期间先把 Release 暂设为 Draft，验证完成后按 `release_mode` 保持 Draft 或公开为 prerelease。
-Release 记录和下载入口保持稳定。构建或验证失败时不会开始替换；身份、tag 所有权或远端
+刷新私有 Draft 时 Release ID 及 `untagged-*` 下载 URL 可以变化，不保证固定；构建或验证失败时不会开始替换；身份、tag 所有权或远端
 资产校验不符合预期时停止。相同来源与构建配置仍按去重规则跳过，不重复构建。
 运行时与真实远程连接状态保持未测试，构建成功不能证明锁屏兼容。
 
