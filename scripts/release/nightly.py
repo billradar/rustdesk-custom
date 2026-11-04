@@ -17,7 +17,7 @@ try:
 except ImportError:
     import tomli as tomllib
 from scripts.release.router_retry_policy import decide, requested_force_retry
-from scripts.release.coordinator_lite import from_hashes as lite_identity
+from scripts.release.coordinator_lite import from_hashes as lite_identity, patchset_sha256
 from scripts.upstream.resolve import api
 from scripts.upstream.patchsets import patchset_for_version, patch_hash
 
@@ -25,6 +25,14 @@ REPO = 'billradar/rustdesk-custom'
 OFFICIAL = 'rustdesk/rustdesk'
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / '.work/qualification-aggregate/assets'
+
+# New titles are for display only; dedup never trusts shortened SHA values.
+DISPLAY_RUN_TITLE = re.compile(
+    r'Nightly (?P<label>[0-9]+\.[0-9]+\.[0-9]+ / upstream=[0-9a-f]{8} / '
+    r'patchset=v[1-9][0-9]*@[0-9a-f]{8} / build=[0-9a-f]{8})'
+    r' / (?P<mode>dry-run|draft|release) / wayland=(?P<wayland>true|false)'
+    r' / android-signing=(?P<signing>true|false)'
+)
 
 
 def repository():
@@ -68,9 +76,33 @@ def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
     return lite_identity(data['upstream_sha'], data['common_patch_hash'], data['sos_patch_hash'])
 
 
+def display_label(data):
+    """User-facing abbreviations of the already-defined Lite build identity."""
+    version = data['upstream_version']
+    patchset = data['patchset']
+    if not isinstance(version, str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+        raise ValueError('Invalid Nightly display version')
+    if not isinstance(patchset, str) or not re.fullmatch(r'v[1-9][0-9]*', patchset):
+        raise ValueError('Invalid Nightly display patchset')
+    combined = patchset_sha256(data['common_patch_hash'], data['sos_patch_hash'])
+    build = nightly_identity(data)
+    return (f"{version} / upstream={data['upstream_sha'][:8]} / "
+            f"patchset={patchset}@{combined[:8]} / build={build[:8]}")
+
+
+def verify_display_label(data, supplied):
+    """Fail closed if the Router's advertised version/source drifted."""
+    if supplied and supplied != display_label(data):
+        raise ValueError('Nightly display label disagrees with resolved build identity')
+
+
 def is_dry_run(row):
     """Exclude historical test-only Nightly batches, including active ones."""
-    parts = row.get('display_title', '').split(' / ')
+    title = row.get('display_title', '')
+    new = DISPLAY_RUN_TITLE.fullmatch(title)
+    if new:
+        return new.group('mode') == 'dry-run'
+    parts = title.split(' / ')
     return (len(parts) >= 4 and parts[0].startswith('Nightly ')
             and parts[2] == 'dry-run' and parts[3] in ('wayland=true', 'wayland=false'))
 
@@ -132,9 +164,9 @@ def source_sha_from_run(row):
         except (ValueError, KeyError, urllib.error.HTTPError) as error:
             print(f"Nightly dedup: cannot recover historical official run {match.group(1)}: {error}")
             return ''
-    # Older runs named "latest" retain a same-run discovery artifact. Read it
-    # when available so migration does not rebuild a completed identical batch.
-    if title.startswith('Nightly latest / ') and row.get('id'):
+    # Legacy latest and short-display titles need a full SHA from the immutable
+    # same-run artifact, not from any eight-character title abbreviation.
+    if (title.startswith('Nightly latest / ') or DISPLAY_RUN_TITLE.fullmatch(title)) and row.get('id'):
         with tempfile.TemporaryDirectory(prefix='nightly-dedup-') as temp:
             artifact = f'nightly-discovery-{row["id"]}'
             result = subprocess.run(['gh', 'run', 'download', str(row['id']), '--repo', repository(),
@@ -182,20 +214,33 @@ def annotate_history(rows, upstream_sha=None):
             continue
         row['_upstream_sha'] = source_sha_from_run(row)
         title = row.get('display_title', '')
-        if upstream_sha and row['_upstream_sha'] != upstream_sha and not title.startswith('Nightly latest /'):
+        new = DISPLAY_RUN_TITLE.fullmatch(title)
+        if (upstream_sha and row['_upstream_sha'] != upstream_sha
+                and not title.startswith('Nightly latest /') and not new):
             continue
-        match = re.fullmatch(r'Nightly (?:[0-9a-f]{40}|[1-9][0-9]*|latest) / [0-9a-f]{40} / (dry-run|draft|release) / wayland=(true|false)(?: / android-signing=(true|false))?', title)
-        if not match:
+        legacy = re.fullmatch(r'Nightly (?:[0-9a-f]{40}|[1-9][0-9]*|latest) / [0-9a-f]{40} / (dry-run|draft|release) / wayland=(true|false)(?: / android-signing=(true|false))?', title)
+        if not legacy and not new:
             continue
         data = discovery_from_run(row)
-        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN', 'DISPLAY_MISMATCH'):
             row['_nightly_identity_skipped'] = True
             continue
         if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
                 or (upstream_sha and data and data['upstream_sha'] != upstream_sha)):
             row['_nightly_identity_unresolved'] = True
             continue
-        row['_nightly_identity'] = nightly_identity(data, match.group(1), match.group(2), match.group(3) or 'false')
+        if new:
+            try:
+                if new.group('label') != display_label(data):
+                    row['_nightly_identity_unresolved'] = True
+                    continue
+            except (KeyError, TypeError, ValueError):
+                row['_nightly_identity_unresolved'] = True
+                continue
+        mode = new.group('mode') if new else legacy.group(1)
+        wayland = new.group('wayland') if new else legacy.group(2)
+        signing = new.group('signing') if new else (legacy.group(3) or 'false')
+        row['_nightly_identity'] = nightly_identity(data, mode, wayland, signing)
     return rows
 
 
@@ -237,7 +282,8 @@ def route(data):
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true',
-                        '-f', f'force_retry={str(force_retry).lower()}'], check=True)
+                        '-f', f'force_retry={str(force_retry).lower()}',
+                        '-f', f'display_label={display_label(data)}'], check=True)
 
 
 def skip_duplicate_dispatch(state, mode):
@@ -768,6 +814,16 @@ def main(argv=None):
         aggregate(a.root, a.discovery)
     else:
         data = discover()
+        if a.mode == 'resolve':
+            try:
+                verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
+            except ValueError:
+                # Keep immutable evidence that this dispatch never built: the
+                # upstream may have advanced between Router and resolve.
+                # Do not count the failed, display-only run as an attempt.
+                data['dedup_state'] = 'DISPLAY_MISMATCH'
+                save(data)
+                raise
         save(data)
         if a.mode == 'route':
             route(data)

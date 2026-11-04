@@ -172,14 +172,103 @@ class NightlyTests(unittest.TestCase):
         clone='example/rustdesk-custom'
         env=dict(GITHUB_REPOSITORY=clone,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
         with patch.dict(os.environ,env),patch.object(nightly,'api',return_value={'workflow_runs':[]}),patch.object(nightly.subprocess,'run') as dispatch:
-            nightly.route({'official_run_id':'17','upstream_sha':'b'*40,'patchset':'v2',
+            nightly.route({'official_run_id':'17','upstream_version':'1.5.1',
+                           'upstream_sha':'b'*40,'patchset':'v2',
                            'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
             self.assertFalse(any(x.startswith(('official_run_id=', 'expected_sha=')) for x in args))
             self.assertIn('release_mode=draft',args)
             self.assertIn('force_retry=false',args)
+            self.assertIn('display_label=' + nightly.display_label(
+                dict(upstream_version='1.5.1', upstream_sha='b'*40, patchset='v2',
+                     common_patch_hash='c'*64, sos_patch_hash='d'*64)), args)
             self.assertEqual(args[args.index('--repo')+1],clone)
             self.assertEqual(args[args.index('--ref')+1],'main')
+
+
+    def test_nightly_display_label_and_verification(self):
+        from scripts.release.coordinator_lite import patchset_sha256
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='b'*64, sos_patch_hash='c'*64)
+        rendered = nightly.display_label(fixture)
+        self.assertEqual(rendered, ('1.5.1 / upstream=aaaaaaaa / patchset=v2@' +
+                         patchset_sha256('b'*64, 'c'*64)[:8] + ' / build=' +
+                         nightly.nightly_identity(fixture)[:8]))
+        nightly.verify_display_label(fixture, rendered)
+        nightly.verify_display_label(fixture, '')  # manual latest is unchanged
+        with self.assertRaisesRegex(ValueError, 'display label disagrees'):
+            nightly.verify_display_label(fixture, rendered.replace('upstream=aaaaaaaa', 'upstream=bbbbbbbb'))
+        self.assertNotEqual(rendered, nightly.display_label(dict(fixture, common_patch_hash='d'*64)))
+
+    def test_new_title_history_and_dry_run_compatibility(self):
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='b'*64, sos_patch_hash='c'*64)
+        title = ('Nightly ' + nightly.display_label(fixture) +
+                 ' / draft / wayland=true / android-signing=false')
+        row = dict(id=90, display_title=title, event='workflow_dispatch',
+                   head_branch='main', status='completed', conclusion='success')
+        with patch.object(nightly, 'source_sha_from_run', return_value='a'*40), \
+             patch.object(nightly, 'discovery_from_run', return_value=fixture):
+            nightly.annotate_history([row], 'a'*40)
+        self.assertEqual(row['_nightly_identity'], nightly.nightly_identity(fixture))
+        self.assertEqual(nightly.route_state([row], nightly.nightly_identity(fixture),
+                                             upstream_sha='a'*40), 'SUCCESS')
+        dry = dict(row, display_title=title.replace(' / draft / ', ' / dry-run / '))
+        dry.pop('_nightly_identity')
+        self.assertTrue(nightly.is_dry_run(dry))
+        with patch.object(nightly, 'source_sha_from_run', side_effect=AssertionError('dry-run source read')), \
+             patch.object(nightly, 'discovery_from_run', side_effect=AssertionError('dry-run artifact read')):
+            nightly.annotate_history([dry], 'a'*40)
+        self.assertNotIn('_nightly_identity', dry)
+        forged = dict(row, display_title=title.replace('upstream=aaaaaaaa', 'upstream=bbbbbbbb'))
+        forged.pop('_nightly_identity')
+        with patch.object(nightly, 'source_sha_from_run', return_value='a'*40), \
+             patch.object(nightly, 'discovery_from_run', return_value=fixture):
+            nightly.annotate_history([forged], 'a'*40)
+        self.assertTrue(forged['_nightly_identity_unresolved'])
+
+    def test_new_title_full_sha_is_sourced_from_artifact(self):
+        import json
+        from pathlib import Path
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='b'*64, sos_patch_hash='c'*64)
+        title = ('Nightly ' + nightly.display_label(fixture) +
+                 ' / draft / wayland=true / android-signing=false')
+        def download(args, **kwargs):
+            Path(args[args.index('--dir')+1], 'nightly-discovery.json').write_text(json.dumps(fixture))
+            return nightly.subprocess.CompletedProcess(args, 0)
+        with patch.object(nightly.subprocess, 'run', side_effect=download):
+            self.assertEqual(nightly.source_sha_from_run(dict(id=90, display_title=title)),
+                             fixture['upstream_sha'])
+
+    def test_mismatched_manual_display_fails_before_save(self):
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='b'*64, sos_patch_hash='c'*64)
+        with patch.dict(os.environ, {'NIGHTLY_DISPLAY_LABEL': 'invalid'}), \
+             patch.object(nightly, 'discover', return_value=fixture), \
+             patch.object(nightly, 'save') as save:
+            with self.assertRaisesRegex(ValueError, 'display label disagrees'):
+                nightly.main(['resolve'])
+        save.assert_called_once()
+        self.assertEqual(save.call_args.args[0]['dedup_state'], 'DISPLAY_MISMATCH')
+
+    def test_display_mismatch_is_not_a_failed_build_attempt(self):
+        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='c'*64, sos_patch_hash='d'*64,
+                       dedup_state='DISPLAY_MISMATCH')
+        old = dict(fixture, upstream_sha='a'*40)
+        row = dict(id=77, display_title=('Nightly ' + nightly.display_label(old) +
+                   ' / draft / wayland=true / android-signing=false'),
+                   event='workflow_dispatch', head_branch='main', status='completed',
+                   conclusion='failure')
+        with patch.object(nightly, 'source_sha_from_run', return_value='b'*40), \
+             patch.object(nightly, 'discovery_from_run', return_value=fixture):
+            nightly.annotate_history([row], 'b'*40)
+        self.assertTrue(row['_nightly_identity_skipped'])
+        self.assertNotIn('_nightly_identity', row)
+        self.assertNotIn('_nightly_identity_unresolved', row)
+        self.assertEqual(nightly.route_state([row], nightly.nightly_identity(fixture),
+                                             upstream_sha='b'*40), 'RETRY')
 
     def test_nightly_cannot_enter_stable_publication(self):
         with patch.object(qualification,'aggregate') as gate:
@@ -230,12 +319,17 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['options'],['dry-run','draft','release'])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['resolve']['if'])
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
-        self.assertTrue(w['run-name'].startswith('Nightly latest /'))
-        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland', 'force_retry'})
+        self.assertTrue(w['run-name'].startswith('Nightly ${{ inputs.display_label'))
+        self.assertIn("format('latest / {0}', github.sha)", w['run-name'])
+        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland', 'force_retry', 'display_label'})
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['type'], 'string')
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['default'], '')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
         self.assertIs(w['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
         dedup_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'dedup')
         self.assertIn('inputs.force_retry', dedup_step['env']['FORCE_RETRY'])
+        self.assertIn('inputs.display_label',
+                      next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')['env']['NIGHTLY_DISPLAY_LABEL'])
         resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')

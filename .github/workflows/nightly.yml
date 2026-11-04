@@ -1,5 +1,5 @@
 name: Nightly Build Pipeline
-run-name: Nightly latest / ${{ github.sha }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+run-name: Nightly ${{ inputs.display_label || format('latest / {0}', github.sha) }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
 env:
   PYTHONPATH: .
 'on':
@@ -18,6 +18,10 @@ env:
         type: boolean
         default: false
         description: Bypass cooldown only on manual main runs; active/success/review still block
+      display_label:
+        type: string
+        default: ''
+        description: Router-only display identity; leave empty for manual latest builds
 permissions:
   contents: read
   actions: read
@@ -63,6 +67,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+        NIGHTLY_DISPLAY_LABEL: ${{ inputs.display_label || '' }}
       run: python3 scripts/release/nightly.py resolve
     - id: dedup
       name: Skip an active or completed identical Nightly batch
