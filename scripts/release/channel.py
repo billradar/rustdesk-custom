@@ -416,8 +416,15 @@ def draft(root):
         raise ValueError('Incomplete draft upload; remains unpublished')
     from scripts.release.stable_tag import ensure
     ensure(REPOSITORY,tag,info['custom_repository_sha'])
-    final=request('PATCH',f'repos/{REPOSITORY}/releases/{result["id"]}',{'draft':True,'body':notes})
-    print('Draft created; automatic publication disabled.')
+    # GitHub can keep an untagged-* Draft URL even when its API tag_name and
+    # the backing immutable Git ref are both canonical. Never publish to fix UI.
+    final=request('PATCH',f'repos/{REPOSITORY}/releases/{result["id"]}',
+                  {'tag_name':tag,'target_commitish':info['custom_repository_sha'],
+                   'draft':True,'prerelease':False,'body':notes})
+    if (final.get('draft') is not True or final.get('prerelease') is not False
+            or final.get('tag_name') != tag):
+        raise ValueError('Stable Draft state or tag association mismatch')
+    print('Draft created with verified immutable Git tag; publication disabled.')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['resolve','release-preflight','validate','draft']);p.add_argument('--channel',choices=['ci','stable','nightly'],default='ci');p.add_argument('--ref',default='');p.add_argument('--discovery-only',action='store_true');p.add_argument('--discovery',type=Path);p.add_argument('--patchset',default='');p.add_argument('--root',type=Path,default=Path('.work/collected'));a=p.parse_args()

@@ -743,11 +743,13 @@ def draft(root, discovery):
             updated_ref = request('PATCH', ref_update_path, dict(sha=os.environ['GITHUB_SHA'], force=True))
             if updated_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
                 raise ValueError('Nightly tag did not move to the validated custom source commit')
-    elif existing:
+    else:
+        # A new private Draft does not create a backing Git ref on GitHub.
+        # Keep one canonical moving `nightly` tag, even for the first Draft.
         created_ref = request('POST', f'repos/{repository()}/git/refs',
                               dict(ref='refs/tags/' + tag, sha=os.environ['GITHUB_SHA']))
         if created_ref.get('object', {}).get('sha') != os.environ['GITHUB_SHA']:
-            raise ValueError('Nightly tag could not be recreated at the validated custom source commit')
+            raise ValueError('Nightly tag could not be created at the validated custom source commit')
     if not existing:
         created = request('POST', f'repos/{repository()}/releases',
                           dict(tag_name=tag, name=release_name,

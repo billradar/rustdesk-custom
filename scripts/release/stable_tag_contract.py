@@ -66,6 +66,19 @@ class StableTagTests(unittest.TestCase):
             self.assertLess(body.index('    ensure('),body.rindex("request("))
         nightly=(ROOT/'scripts/release/nightly.py').read_text()
         self.assertNotIn('stable_tag',nightly)
+        # Both Stable paths must rebind the metadata to the verified real
+        # Git ref while keeping private Drafts unpublished.
+        for file,function in [('qualification.py','_release'),('channel.py','draft')]:
+            source=(ROOT/'scripts/release'/file).read_text()
+            tree=ast.parse(source)
+            node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==function)
+            body=ast.get_source_segment(source,node)
+            self.assertIn("'tag_name':tag",body)
+            self.assertIn("'target_commitish':",body)
+            self.assertIn("'prerelease':False",body)
+        # No per-run Nightly tags: nightly.py only uses a moving `nightly` ref.
+        self.assertIn("tag = 'nightly'",nightly)
+        self.assertIn("dict(ref='refs/tags/' + tag, sha=os.environ['GITHUB_SHA'])",nightly)
         self.assertNotIn("request('PATCH'",(ROOT/'scripts/release/stable_tag.py').read_text())
         self.assertNotIn("request('DELETE'",(ROOT/'scripts/release/stable_tag.py').read_text())
 
