@@ -45,7 +45,7 @@ class StablePatchsetNotesContract(unittest.TestCase):
                 raise AssertionError(path)
             def fake_request(method,path,payload):
                 captured.append((method,payload))
-                return {'id':7,'draft':True}
+                return {'id':7,'draft':True,'prerelease':False,'tag_name':payload['tag_name']}
             with patch.dict(os.environ, {'GITHUB_REPOSITORY':channel.REPOSITORY,
                                          'REQUIRE_ANDROID_PRODUCTION_SIGNING':'false'}), \
                  patch.object(channel,'collect',return_value=({'standard':info,'sos':sos},{})), \
@@ -68,6 +68,10 @@ class StablePatchsetNotesContract(unittest.TestCase):
             self.assertIn(patchset_notes('v2'),body)
             self.assertLess(body.index('## Patchset v2.8'),body.index('<!-- rustdesk-custom-release-metadata'))
             self.assertEqual(body,captured[-1][1]['body'])
+            self.assertEqual(captured[-1][1]['tag_name'],'v1.5.1-custom.v2.8')
+            self.assertEqual(captured[-1][1]['target_commitish'],'b'*40)
+            self.assertIs(captured[-1][1]['draft'],True)
+            self.assertIs(captured[-1][1]['prerelease'],False)
 
 
 class BuildInterfaceTests(unittest.TestCase):
