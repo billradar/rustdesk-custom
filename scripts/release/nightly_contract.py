@@ -331,15 +331,20 @@ class NightlyDraftTests(unittest.TestCase):
                 if '/releases/tags/' in path:
                     if mode=='published':return {'id':7,'tag_name':'nightly','name':'nightly','draft':False,'prerelease':True,'body':'channel=nightly'}
                     return {'id':7} if mode=='existing' else None
-                if '/git/ref/tags/' in path:return None
+                if '/git/ref/tags/' in path:
+                    return None if mode == 'missing-tag' else {'object': {'sha': 'a'*40}}
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return uploaded
                 if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
                 raise AssertionError(path)
             report=dict(result='PASS',android_production_signing=mode!='unsigned')
-            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',return_value={'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}) as write:
-                if mode!='ok':
+            def release_write(method,path,payload):
+                if path == f'repos/{self.repo}/git/refs':
+                    return {'ref':'refs/tags/nightly','object':{'sha':'a'*40}}
+                return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
+            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',side_effect=release_write) as write:
+                if mode not in ('ok','missing-tag'):
                     with self.assertRaises(ValueError):nightly.draft(root,discovery)
                     if mode in ['unsigned','existing','published','bad-checksum','forbidden-json']:
                         write.assert_not_called()
@@ -348,8 +353,15 @@ class NightlyDraftTests(unittest.TestCase):
                 else:
                     result=nightly.draft(root,discovery)
                     self.assertTrue(result['draft']);self.assertTrue(result['prerelease'])
-                    self.assertEqual(write.call_count,2)
-                    for call in write.call_args_list:
+                    release_calls=[call for call in write.call_args_list if '/releases' in call.args[1]]
+                    self.assertEqual(len(release_calls),2)
+                    if mode == 'missing-tag':
+                        self.assertEqual(write.call_count,3)
+                        self.assertEqual(write.call_args_list[0].args[:2],('POST',f'repos/{self.repo}/git/refs'))
+                        self.assertEqual(write.call_args_list[0].args[2],{'ref':'refs/tags/nightly','sha':'a'*40})
+                    else:
+                        self.assertEqual(write.call_count,2)
+                    for call in release_calls:
                         self.assertTrue(call.args[2]['draft']);self.assertTrue(call.args[2]['prerelease'])
                     self.assertIn('automation_state=complete',write.call_args.args[2]['body'])
                     self.assertIn('<!-- rustdesk-custom-release-metadata',write.call_args.args[2]['body'])
@@ -371,6 +383,9 @@ class NightlyDraftTests(unittest.TestCase):
                     self.assertEqual(result['tag'], 'nightly')
 
     def test_create_verified_draft_only(self):self.perform()
+
+    def test_first_nightly_draft_creates_moving_tag_without_publishing(self):
+        self.perform('missing-tag')
 
     def test_complete_matching_draft_is_deleted_and_created_with_new_id(self):
         self.refresh_matching_draft()
@@ -397,7 +412,8 @@ class NightlyDraftTests(unittest.TestCase):
                 return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly'}
             def first_api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
+                if '/releases/tags/' in path:return None
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
                 if '/releases?' in path:return []
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
@@ -509,7 +525,8 @@ class NightlyDraftTests(unittest.TestCase):
             def first_api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
                 if '/releases?' in path:return []
-                if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
+                if '/releases/tags/' in path:return None
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return remote
                 if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
@@ -541,7 +558,8 @@ class NightlyDraftTests(unittest.TestCase):
             uploaded=[dict(name=x.name,state='uploaded',size=x.stat().st_size,digest='sha256:'+hashlib.sha256(x.read_bytes()).hexdigest()) for x in assets.iterdir()]
             def api(path,missing=False):
                 if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path or '/git/ref/tags/' in path:return None
+                if '/releases/tags/' in path:return None
+                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return uploaded
