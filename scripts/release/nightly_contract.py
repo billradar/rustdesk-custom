@@ -332,7 +332,7 @@ class NightlyDraftTests(unittest.TestCase):
                     if mode=='published':return {'id':7,'tag_name':'nightly','name':'nightly','draft':False,'prerelease':True,'body':'channel=nightly'}
                     return {'id':7} if mode=='existing' else None
                 if '/git/ref/tags/' in path:
-                    return None if mode == 'missing-tag' else {'object': {'sha': 'a'*40}}
+                    return None if mode in ('missing-tag','bad-tag-create') else {'object': {'sha': ('c'*40 if mode == 'move-tag' else 'a'*40)}}
                 if '/releases?' in path:return []
                 if '/actions/runs/' in path:return {'jobs':[]}
                 if '/assets?' in path:return uploaded
@@ -341,15 +341,21 @@ class NightlyDraftTests(unittest.TestCase):
             report=dict(result='PASS',android_production_signing=mode!='unsigned')
             def release_write(method,path,payload):
                 if path == f'repos/{self.repo}/git/refs':
-                    return {'ref':'refs/tags/nightly','object':{'sha':'a'*40}}
+                    return {'ref':'refs/tags/nightly','object':{'sha':('c'*40 if mode == 'bad-tag-create' else 'a'*40)}}
+                if path == f'repos/{self.repo}/git/refs/tags/nightly':
+                    return {'object':{'sha':'a'*40}}
                 return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',side_effect=release_write) as write:
-                if mode not in ('ok','missing-tag'):
+                if mode not in ('ok','missing-tag','move-tag'):
                     with self.assertRaises(ValueError):nightly.draft(root,discovery)
                     if mode in ['unsigned','existing','published','bad-checksum','forbidden-json']:
                         write.assert_not_called()
                         upload.assert_not_called()
                     if mode=='bad-upload':self.assertEqual(write.call_count,1)
+                    if mode=='bad-tag-create':
+                        self.assertEqual(write.call_count,1)
+                        self.assertEqual(write.call_args.args[:2],('POST',f'repos/{self.repo}/git/refs'))
+                        upload.assert_not_called()
                 else:
                     result=nightly.draft(root,discovery)
                     self.assertTrue(result['draft']);self.assertTrue(result['prerelease'])
@@ -359,6 +365,10 @@ class NightlyDraftTests(unittest.TestCase):
                         self.assertEqual(write.call_count,3)
                         self.assertEqual(write.call_args_list[0].args[:2],('POST',f'repos/{self.repo}/git/refs'))
                         self.assertEqual(write.call_args_list[0].args[2],{'ref':'refs/tags/nightly','sha':'a'*40})
+                    elif mode == 'move-tag':
+                        self.assertEqual(write.call_count,3)
+                        self.assertEqual(write.call_args_list[0].args[:2],('PATCH',f'repos/{self.repo}/git/refs/tags/nightly'))
+                        self.assertEqual(write.call_args_list[0].args[2],{'sha':'a'*40,'force':True})
                     else:
                         self.assertEqual(write.call_count,2)
                     for call in release_calls:
@@ -386,6 +396,12 @@ class NightlyDraftTests(unittest.TestCase):
 
     def test_first_nightly_draft_creates_moving_tag_without_publishing(self):
         self.perform('missing-tag')
+
+    def test_existing_nightly_tag_is_force_moved_not_deleted(self):
+        self.perform('move-tag')
+
+    def test_failed_initial_tag_write_leaves_no_draft(self):
+        self.perform('bad-tag-create')
 
     def test_complete_matching_draft_is_deleted_and_created_with_new_id(self):
         self.refresh_matching_draft()
