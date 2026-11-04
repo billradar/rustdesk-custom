@@ -157,8 +157,10 @@ Nightly 的 `release_mode` 默认 `draft`：仓库变量开启时，主分支的
 普通构建 job 不接触 PIN，Draft job 也不接触 PIN；公开 Nightly 预发布版只能通过明确选择
 `release` 手动触发。
 `dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
-所有 Nightly 输出使用固定的 `nightly` tag 和同一个 Release 入口。全矩阵、签名、
-来源和校验和验证通过后，更新 tag 到本次自定义仓库提交，清除旧 assets，上传并验证新产物；
+所有 Nightly 输出只使用固定的 `nightly` Git tag 和最新一份 Release，不为每天创建独立历史 Tag。
+全矩阵、签名、来源和校验和验证通过后，首次创建 Draft 会明确创建真实的 `refs/tags/nightly`；
+已有该 ref 时使用 GitHub 的 `PATCH force=true` 直接移动到本次自定义仓库提交，绝不采用先删除 Git Tag 再创建的方式。
+之后清除旧 assets，上传并验证新产物；
 替换期间先把 Release 暂设为 Draft，验证完成后按 `release_mode` 保持 Draft 或公开为 prerelease。
 Release 记录和下载入口保持稳定。构建或验证失败时不会开始替换；身份、tag 所有权或远端
 资产校验不符合预期时停止。相同来源与构建配置仍按去重规则跳过，不重复构建。
@@ -229,3 +231,18 @@ Stable 自动化在完成产物、架构、来源和上传清单校验后，显�
 Nightly 私有草稿刷新采用删除重建，当前草稿在本地产物、签名、清单和日志校验完成前不会删除。删除前再次检查草稿归属和完整状态快照；删除后确认旧 Release 不存在，才创建新 Release。保留同源成功构建去重，不为刷新日期强制重编译。删除重建存在窗口：若删除后创建或上传失败，该次可能暂时没有完整草稿；Actions 产物仍保留，可按原流程恢复。新草稿只有上传摘要全部匹配才标记 complete。
 
 [GitHub 对 `created_at` 的说明](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)指出它可能表示关联 tag/commit 的日期，不能保证删除重建后页面 “drafted … ago” 一定刷新；不要伪造提交时间或创建空提交。说明末尾单独记录真实 UTC 产物校验完成时间和 Actions 运行链接。这个字段不参与源码/构建身份，也不代表 Runtime 测试或公开发布。
+
+
+**Draft Tag 绑定校验（Stable 与 Nightly）：** 已创建的真实 Git Tag 与 GitHub Draft 页面 URL 是不同层次的对象。
+Stable `qualification.py` / `channel.py` 会在通过产物校验并确认不可变 Git ref 后，显式更新
+Release 的 `tag_name`、`target_commitish` 和 `draft=true`，并检查 API 回执。
+Nightly 首次 Draft 也会创建真实 `nightly` Git ref，后续只移动该固定 ref；更新和上传失败不能标记
+`automation_state=complete`。任何情况下都不得为了去除 GitHub 页面上的 `untagged-*`
+而擅自将 Draft 公开发布。`untagged-*` 可能仍是 GitHub 的内部 Draft URL，即便 REST API
+的 `tag_name` 和真实 Git ref 都正确。使用 `gh api repos/billradar/rustdesk-custom/git/ref/tags/<版本>`
+和 `gh api repos/billradar/rustdesk-custom/releases` 分别验证真实 Git 引用和 Draft 元数据；
+不要把浏览器 URL 当作 Git Tag 的唯一证据。
+
+Nightly 维持**最新一份**策略：仅创建/移动 `nightly`，新草稿完成后清理同通道旧 Release；
+替换草稿涉及多个非原子 API 操作。如果新产物上传中途失败，可能产生尚未完成的 Draft，
+必须检查并重试，不能承诺在所有故障情况下旧附件始终可下载。
