@@ -249,7 +249,26 @@ class NightlyTests(unittest.TestCase):
              patch.object(nightly, 'save') as save:
             with self.assertRaisesRegex(ValueError, 'display label disagrees'):
                 nightly.main(['resolve'])
-        save.assert_not_called()
+        save.assert_called_once()
+        self.assertEqual(save.call_args.args[0]['dedup_state'], 'DISPLAY_MISMATCH')
+
+    def test_display_mismatch_is_not_a_failed_build_attempt(self):
+        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='c'*64, sos_patch_hash='d'*64,
+                       dedup_state='DISPLAY_MISMATCH')
+        old = dict(fixture, upstream_sha='a'*40)
+        row = dict(id=77, display_title=('Nightly ' + nightly.display_label(old) +
+                   ' / draft / wayland=true / android-signing=false'),
+                   event='workflow_dispatch', head_branch='main', status='completed',
+                   conclusion='failure')
+        with patch.object(nightly, 'source_sha_from_run', return_value='b'*40), \
+             patch.object(nightly, 'discovery_from_run', return_value=fixture):
+            nightly.annotate_history([row], 'b'*40)
+        self.assertTrue(row['_nightly_identity_skipped'])
+        self.assertNotIn('_nightly_identity', row)
+        self.assertNotIn('_nightly_identity_unresolved', row)
+        self.assertEqual(nightly.route_state([row], nightly.nightly_identity(fixture),
+                                             upstream_sha='b'*40), 'RETRY')
 
     def test_nightly_cannot_enter_stable_publication(self):
         with patch.object(qualification,'aggregate') as gate:

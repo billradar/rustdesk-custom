@@ -222,7 +222,7 @@ def annotate_history(rows, upstream_sha=None):
         if not legacy and not new:
             continue
         data = discovery_from_run(row)
-        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN'):
+        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN', 'DISPLAY_MISMATCH'):
             row['_nightly_identity_skipped'] = True
             continue
         if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
@@ -815,7 +815,15 @@ def main(argv=None):
     else:
         data = discover()
         if a.mode == 'resolve':
-            verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
+            try:
+                verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
+            except ValueError:
+                # Keep immutable evidence that this dispatch never built: the
+                # upstream may have advanced between Router and resolve.
+                # Do not count the failed, display-only run as an attempt.
+                data['dedup_state'] = 'DISPLAY_MISMATCH'
+                save(data)
+                raise
         save(data)
         if a.mode == 'route':
             route(data)
