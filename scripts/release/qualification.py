@@ -462,8 +462,14 @@ def _release(root, publish, channel='stable', experimental=False):
         if 'automation_state=complete' not in final_body:
             raise ValueError('New release body missing automation_state=complete marker')
         final_body=final_body.replace('automation_state=complete','automation_state=published',1)
-    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',{'draft':not publish,'body':final_body})
-    if final['draft']!= (not publish): raise ValueError('Release state transition failed')
+    # Draft URLs may remain untagged-* in GitHub's UI. Bind the actual release
+    # metadata to the already verified immutable ref without publishing it.
+    final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',
+                  {'tag_name':tag,'target_commitish':standard['custom_repository_sha'],
+                   'draft':not publish,'prerelease':False,'body':final_body})
+    if (final.get('draft') is not (not publish) or final.get('prerelease') is not False
+            or final.get('tag_name') != tag):
+        raise ValueError('Stable Release state or tag association mismatch')
 
 def publish_existing_draft(channel='stable'):
     from scripts.release.stable_lock import require
