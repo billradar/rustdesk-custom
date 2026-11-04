@@ -71,6 +71,8 @@ Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方�
 ### Nightly
 
 1. 自动同步由 **Upstream Nightly Router**（`.github/workflows/upstream-nightly.yml`）每日 UTC 02:23（香港时间 10:23）启动，避开整点；不保证这是低峰时段或能准点执行。路由检查最新成功的官方 Nightly 并派发构建，不等待当天尚未成功的运行；GitHub schedule 可能延迟。
+2. Nightly 自动 Router 的构建标题展示官方版本、上游 SHA 前 8 位、Patchset 名称与组合 SHA-256 前 8 位、Coordinator Lite Build Identity 前 8 位。它们只用于显示；去重始终使用完整身份。手动直接运行 `nightly.yml` 时 `display_label` 留空，保留 `Nightly latest / 定制仓库 SHA` 形式；若 Router 传来的展示标签与实际解析结果不符，构建会在解析阶段停止。
+
 2. 手动构建时运行 **Nightly Build Pipeline**（`.github/workflows/nightly.yml`），选择 `main` 分支。手动和自动均选择启动时最新成功的官方 `flutter-nightly.yml` 运行，不再提供 `official_run_id`、`expected_sha` 输入。解析阶段记录运行 ID 并锁定完整源码 SHA，后续各阶段共用该 SHA。
 3. `release_mode` 选 `dry-run` 做无发布验证，`draft` 创建私有 prerelease Draft，`release` 仅用于明确公开已验证的 Nightly prerelease。生产模式要求所有平台与 Android 生产签名门禁通过。`include_wayland` 默认开启。
 4. development 分支只允许 `dry-run`，用于开发验证；不得把 development 的构建结果当作 main 的发布资格。

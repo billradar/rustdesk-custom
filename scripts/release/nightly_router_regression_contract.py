@@ -106,7 +106,7 @@ class NightlyRouterRegression(unittest.TestCase):
         env = dict(GITHUB_REPOSITORY='example/repo', GITHUB_REF='refs/heads/main',
                    GITHUB_EVENT_NAME='workflow_dispatch', FORCE_RETRY='true',
                    ANDROID_PRODUCTION_SIGNING_ENABLED='false')
-        data = dict(upstream_sha='a'*40, patchset='v2',
+        data = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
                     common_patch_hash='b'*64, sos_patch_hash='c'*64)
         with patch.dict(os.environ, env), \
              patch.object(nightly,'api',return_value={'workflow_runs':[]}), \
@@ -115,6 +115,8 @@ class NightlyRouterRegression(unittest.TestCase):
             nightly.route(data)
         self.assertTrue(decision.call_args.kwargs['force_retry'])
         self.assertIn('force_retry=true', dispatch.call_args.args[0])
+        self.assertIn('display_label=' + nightly.display_label(data),
+                      dispatch.call_args.args[0])
 
     def test_retry_policy_does_not_count_cancelled_as_retryable(self):
         from scripts.release.router_retry_policy import decide
