@@ -12,7 +12,9 @@ def inspect(tree,platform,arch):
  env={k:str(v) for k,v in d['env'].items() if 'secrets.' not in str(v) and 'inputs.' not in str(v)}
  rows=job.get('strategy',{}).get('matrix',{}).get('job',[{'arch':'web','os':job.get('runs-on')}]);row=next((r for r in rows if r.get('arch')==arch),None)
  if row is None:raise ValueError('BUILD_COMPAT: official architecture not present')
- runner=row.get('os') or row.get('on') or row.get(True)
+ upstream_runner=row.get('os') or row.get('on') or row.get(True)
+ from scripts.platform.runner_migrations import effective_runner
+ runner=effective_runner(platform,arch,upstream_runner)
  # YAML 1.1 parses the official matrix field "on" as boolean True. Normalize keys.
  normalized=json.loads(json.dumps(job));identity={'job':normalized,'env':env,'files':{}}
  for p in FILES:
@@ -20,7 +22,7 @@ def inspect(tree,platform,arch):
  if platform=='android':
   for p in ['flutter/build_android_deps.sh','flutter/ndk_arm64.sh','flutter/ndk_arm.sh','flutter/ndk_x64.sh','flutter/android/app/build.gradle']:
    identity['files'][p]=hashlib.sha256((tree/p).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
- result={'platform':platform,'architecture':arch,'runner':runner,'target':row.get('target'),'triplet':row.get('vcpkg-triplet'),'official_matrix':row,'signature':digest(identity),'rust':env.get('MAC_RUST_VERSION') if platform=='macos' else env['RUST_VERSION'],'flutter':env.get('ANDROID_FLUTTER_VERSION') if platform=='android' else env.get('FLUTTER_MACOS_ARM_VERSION',env['FLUTTER_VERSION']) if platform=='macos' and arch=='aarch64' else env['FLUTTER_VERSION'],'vcpkg':env['VCPKG_COMMIT_ID'],'ndk':env.get('NDK_VERSION'),'cargo_ndk':env.get('CARGO_NDK_VERSION'),'cmake':env.get('VCPKG_CMAKE_VERSION',''),'official_disabled':job.get('if') is False,'tools':env}
+ result={'platform':platform,'architecture':arch,'runner':runner,'upstream_runner':upstream_runner,'target':row.get('target'),'triplet':row.get('vcpkg-triplet'),'official_matrix':row,'signature':digest(identity),'rust':env.get('MAC_RUST_VERSION') if platform=='macos' else env['RUST_VERSION'],'flutter':env.get('ANDROID_FLUTTER_VERSION') if platform=='android' else env.get('FLUTTER_MACOS_ARM_VERSION',env['FLUTTER_VERSION']) if platform=='macos' and arch=='aarch64' else env['FLUTTER_VERSION'],'vcpkg':env['VCPKG_COMMIT_ID'],'ndk':env.get('NDK_VERSION'),'cargo_ndk':env.get('CARGO_NDK_VERSION'),'cmake':env.get('VCPKG_CMAKE_VERSION',''),'official_disabled':job.get('if') is False,'tools':env}
  return result,job
 
 def check(tree,platform,arch):
