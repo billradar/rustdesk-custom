@@ -97,3 +97,14 @@ jobs:
         xcodebuild -version
         brew --version
         echo "macOS 26 Intel runner smoke: PASS (no application build or signing)"
+
+  runner-policy-contract:
+    name: Validate fail-closed runner migration policy
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Run runner migration contract
+      run: python3 -m scripts.platform.runner_migrations_contract
