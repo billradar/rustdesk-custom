@@ -1,19 +1,21 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "migrations": [
     {
       "platform": "macos",
       "architecture": "x86_64",
       "source_runner": "macos-15-intel",
+      "upstream_runner": "macos-15-intel",
       "runner": "macos-26-intel",
-      "reason": "Move the Intel macOS build to the current supported macOS 26 image."
+      "reason": "Move the Intel macOS build from the reviewed macOS 15 image to the supported macOS 26 Intel image."
     },
     {
       "platform": "macos",
       "architecture": "aarch64",
       "source_runner": "macos-14",
+      "upstream_runner": "macos-15",
       "runner": "macos-26",
-      "reason": "Replace the retired macOS 14 ARM64 image with macOS 26 ARM64."
+      "reason": "Preserve the reviewed macOS 14 baseline while explicitly accepting the current upstream macOS 15 ARM64 matrix label and mapping it to macOS 26 ARM64."
     }
   ]
 }

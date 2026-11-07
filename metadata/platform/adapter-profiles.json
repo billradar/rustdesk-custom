@@ -12,7 +12,8 @@
       "05ef79604398c3bdfe43cc45e3993f1b6375b3a11256d64197f76ddcebd1f674",
       "42ef96742adf240e154b4fc0b2e1f2cb08719d82a6175e7e6a08edcd1c60974c",
       "0da1287b35a91ebd0650843363ee73feaf0423ec34bde5a380d6a8ba0f48d766",
-      "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f"
+      "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f",
+      "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3"
     ],
     "android": [
       "fade10df57f50b94f7d6947f7a6596e4d22183f6980c0a3962e0a47c863bccd4",
@@ -1848,6 +1849,96 @@
         "VERSION": "1.5.1",
         "NDK_VERSION": "r28c"
       }
+    },
+    {
+      "upstream_sha": "f4c0b13df71ec343b57fc98ae39c4b81845624cb",
+      "platform": "macos",
+      "architecture": "x86_64",
+      "runner": "macos-26-intel",
+      "target": "x86_64-apple-darwin",
+      "triplet": "x64-osx",
+      "official_matrix": {
+        "target": "x86_64-apple-darwin",
+        "os": "macos-15-intel",
+        "extra-build-args": "",
+        "extra-cargo-features": "",
+        "arch": "x86_64",
+        "vcpkg-triplet": "x64-osx"
+      },
+      "signature": "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3",
+      "rust": "1.81",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      },
+      "upstream_runner": "macos-15-intel"
+    },
+    {
+      "upstream_sha": "f4c0b13df71ec343b57fc98ae39c4b81845624cb",
+      "platform": "macos",
+      "architecture": "aarch64",
+      "runner": "macos-26",
+      "target": "aarch64-apple-darwin",
+      "triplet": "arm64-osx",
+      "official_matrix": {
+        "target": "aarch64-apple-darwin",
+        "os": "macos-15",
+        "extra-build-args": "--screencapturekit",
+        "extra-cargo-features": ",screencapturekit",
+        "arch": "aarch64",
+        "vcpkg-triplet": "arm64-osx"
+      },
+      "signature": "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3",
+      "rust": "1.81",
+      "flutter": "3.44.9",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.1",
+        "NDK_VERSION": "r28c"
+      },
+      "upstream_runner": "macos-15"
     }
   ],
   "reviews": [
@@ -1921,6 +2012,28 @@
         "Mac ARM approval is coupled to macos-arm64-policy.json and macos_arm64 source/bridge/worker/package receipts. A signature alone cannot bypass those checks. Native package/runtime validation is not claimed by this static review."
       ],
       "review_report": "docs/audits/nightly-macos-arm64-20261103/review.json"
+    },
+    {
+      "upstream_sha": "f4c0b13df71ec343b57fc98ae39c4b81845624cb",
+      "compared_upstream_sha": "4ec4ec3d14e5e191b1bbc53003bd37f9357c7d11",
+      "scope": [
+        "macos"
+      ],
+      "critical_files_sha256": {
+        "build.py": "97a8a98d9c5babe6577fe874315f312e4900a484e4f50b614c21943e54f14bcb",
+        "build.rs": "afce55931f2426b7f440641e0b613ca66c9a2538bd2e2b7f86992a47fd50e64b",
+        "Cargo.toml": "043256bd8be659af0cfea0c5005aa89c98ff46eb7131f37af6e0263ddc1ee5c8",
+        "flutter/pubspec.yaml": "47ace6934543241cd0b7f201d1ea46e3bbc3cfafd05378cc4b0e3b8eaa452857",
+        ".github/workflows/bridge.yml": "329008b35e539706cf0b4332edfedf776d5be9f21b59ee0744eed76f4c52ff30",
+        ".github/workflows/flutter-build.yml": "f4a74854520d1998b17cc0ba627c6cd9351c045f7269815250ac29e0291aea2b"
+      },
+      "notes": [
+        "Compared exact upstream macOS build jobs at 4ec4ec3d14e5e191b1bbc53003bd37f9357c7d11 and f4c0b13df71ec343b57fc98ae39c4b81845624cb. The only line-level change inside build-for-macOS is the ARM64 matrix runner label: macos-14 to macos-15.",
+        "build.py, build.rs, Cargo.toml, flutter/pubspec.yaml and .github/workflows/bridge.yml are byte-identical between the two source commits. The ARM64 Flutter 3.44.9 SDK selection, dedicated bridge artifact, CocoaPods setting, GNU-sed source adaptation, deployment-target transformation and named build commands are unchanged.",
+        "The exact new platform adapter signature is 5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3. The same signature applies to both architectures because the reviewed identity binds the complete macOS job matrix.",
+        "Runner migration distinguishes the previously reviewed baseline label from the exact current upstream matrix label. macos-15 maps to macos-26 for ARM64; macos-15-intel maps to macos-26-intel for x86_64. Unknown future labels fail closed.",
+        "Static recipe review only. This approval does not claim that either macOS 26 native build, package, signing or runtime validation has passed."
+      ]
     }
   ]
 }

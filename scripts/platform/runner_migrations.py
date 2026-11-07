@@ -1,34 +1,37 @@
-"""Explicit, fail-closed aliases from retired official runners to supported images."""
+"""Explicit, fail-closed aliases from reviewed upstream runners to supported images."""
 import json
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]
 POLICY=ROOT/'metadata/platform/runner-migrations.json'
-KEYS={'platform','architecture','source_runner','runner','reason'}
+KEYS={'platform','architecture','source_runner','upstream_runner','runner','reason'}
 
 
 def migrations():
     data=json.loads(POLICY.read_text())
-    if set(data)!={'schema_version','migrations'} or data['schema_version']!=1 or type(data['migrations']) is not list:
+    if (set(data)!={'schema_version','migrations'} or data['schema_version']!=2
+            or type(data['migrations']) is not list):
         raise ValueError('BUILD_COMPAT: unknown runner migration policy')
     seen=set()
     for item in data['migrations']:
         if set(item)!=KEYS or any(type(item[k]) is not str or not item[k] for k in KEYS):
             raise ValueError('BUILD_COMPAT: malformed runner migration')
         key=(item['platform'],item['architecture'])
-        if key in seen or item['source_runner']==item['runner']:
+        allowed={item['source_runner'],item['upstream_runner']}
+        if key in seen or item['runner'] in allowed:
             raise ValueError('BUILD_COMPAT: duplicate or ineffective runner migration')
         seen.add(key)
     return data['migrations']
 
 
 def effective_runner(platform, architecture, source_runner):
+    """Map only the reviewed legacy/current upstream labels; reject future drift."""
     rows=[m for m in migrations() if m['platform']==platform and m['architecture']==architecture]
     if not rows:
         return source_runner
     migration=rows[0]
-    if source_runner!=migration['source_runner']:
-        return source_runner
+    if source_runner not in (migration['source_runner'],migration['upstream_runner']):
+        raise ValueError('BUILD_COMPAT: unreviewed official runner migration source: '+str(source_runner))
     return migration['runner']
 
 
