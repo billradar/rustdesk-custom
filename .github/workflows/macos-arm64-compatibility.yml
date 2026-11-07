@@ -9,6 +9,8 @@ name: Mac ARM64 Flutter recipe compatibility
     - 'scripts/platform/platform_adapter.py'
     - 'scripts/platform/platform_commands.py'
     - 'metadata/build/macos-arm64-policy.json'
+    - 'metadata/platform/matrix.json'
+    - 'metadata/platform/runner-migrations.json'
     - 'metadata/platform/adapter-profiles.json'
   workflow_dispatch: {}
 permissions:
@@ -19,7 +21,7 @@ concurrency:
 jobs:
   source-and-sdk:
     name: Verify native Mac ARM SDK and reviewed source helper
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 45
     env:
       PYTHONPATH: .

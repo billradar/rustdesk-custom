@@ -3,7 +3,8 @@
   "profiles": [
     {
       "signature": "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f",
-      "runner": "macos-14",
+      "runner": "macos-26",
+      "upstream_runner": "macos-14",
       "target": "aarch64-apple-darwin",
       "triplet": "arm64-osx",
       "rust": "1.81",

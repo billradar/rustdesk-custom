@@ -17,7 +17,7 @@ BRIDGE_INFO = 'macos-arm64-bridge-info.json'
 BRIDGE_FILES = bridge_recipe.BRIDGE_FILES
 TRANSFORMS = bridge_recipe.TRANSFORMS
 INPUTS = TRANSFORMS + BRIDGE_FILES
-POLICY_KEYS = ('signature','runner','target','triplet','rust','flutter','vcpkg',
+POLICY_KEYS = ('signature','runner','upstream_runner','target','triplet','rust','flutter','vcpkg',
                'bridge_signature','bridge_flutter','bridge_rust','cargo_expand','frb','patch_sha256','source_workflow_sha256')
 # Exact substitutions in the already reviewed official Mac ARM build step.
 # These are checked only after compilation; all remaining bytes must still

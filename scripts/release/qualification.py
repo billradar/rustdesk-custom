@@ -17,7 +17,8 @@ def entries():
         if e['platform'] in FORBIDDEN and e['variant']!='standard':raise ValueError('Forbidden SOS target')
         if e['support_status']=='SUPPORTED' and not e.get('evidence_run'):raise ValueError('SUPPORTED without Actions evidence')
         if e.get('enabled') and not e.get('runner'):raise ValueError('Enabled target without runner')
-        if e.get('enabled') and not any(p['platform']==e['platform'] and p['architecture']==e['arch'] and p['runner']==e['runner'] for p in reviewed):
+        from scripts.platform.runner_migrations import validates_matrix_runner
+        if e.get('enabled') and not validates_matrix_runner(e['platform'],e['arch'],e['runner'],reviewed):
             raise ValueError('Matrix runner/architecture not present in reviewed upstream definitions')
         if e['support_status'] not in ('SUPPORTED','EXPERIMENTAL','PLANNED','BLOCKED','UNSUPPORTED','DISABLED'):
             raise ValueError('Unknown support status')

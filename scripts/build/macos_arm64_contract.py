@@ -255,7 +255,7 @@ class MacWorkflowContract(unittest.TestCase):
     def test_native_sdk_smoke_has_no_production_authority(self):
         w=yaml.safe_load((ROOT/'.github/workflows/macos-arm64-compatibility.yml').read_text())
         self.assertEqual(w['permissions'],{'contents':'read'})
-        self.assertEqual(w['jobs']['source-and-sdk']['runs-on'],'macos-14')
+        self.assertEqual(w['jobs']['source-and-sdk']['runs-on'],'macos-26')
         text=json.dumps(w)
         for forbidden in ('secrets.', 'YUBIKEY', 'android-production-signing', 'RELEASE_APP', 'RUSTDESK_PASSWORD'):
             self.assertNotIn(forbidden,text)
