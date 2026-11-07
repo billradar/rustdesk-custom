@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 45
     env:
       PYTHONPATH: .
-      UPSTREAM_EXPECTED_SHA: 4ec4ec3d14e5e191b1bbc53003bd37f9357c7d11
+      UPSTREAM_EXPECTED_SHA: f4c0b13df71ec343b57fc98ae39c4b81845624cb
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -79,3 +79,21 @@ jobs:
         print('Actual official native deployment-target edits: PASS')
         print('Native Mac ARM SDK and reviewed source helper: PASS; application compilation/runtime not tested')
         PY
+
+  intel-runner:
+    name: Verify migrated macOS 26 Intel runner
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Verify native Intel runner and toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$(uname -m)" = "x86_64"
+        sw_vers
+        xcodebuild -version
+        brew --version
+        echo "macOS 26 Intel runner smoke: PASS (no application build or signing)"

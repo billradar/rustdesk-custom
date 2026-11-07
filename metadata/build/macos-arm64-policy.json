@@ -2,9 +2,9 @@
   "schema_version": 1,
   "profiles": [
     {
-      "signature": "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f",
+      "signature": "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3",
       "runner": "macos-26",
-      "upstream_runner": "macos-14",
+      "upstream_runner": "macos-15",
       "target": "aarch64-apple-darwin",
       "triplet": "arm64-osx",
       "rust": "1.81",
@@ -16,7 +16,7 @@
       "cargo_expand": "1.0.95",
       "frb": "1.80.1",
       "patch_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
-      "source_workflow_sha256": "62c2ee5637964270a4c78a74ec8bcb1b5017fe159c00f61be8dcfb69a3aac43c"
+      "source_workflow_sha256": "f4a74854520d1998b17cc0ba627c6cd9351c045f7269815250ac29e0291aea2b"
     }
   ]
 }
