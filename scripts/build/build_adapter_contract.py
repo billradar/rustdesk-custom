@@ -30,6 +30,16 @@ class AdapterContract(unittest.TestCase):
         self.meta=self.root/'metadata/build/adapter-profiles.json';self.meta.parent.mkdir(parents=True)
         self.meta.write_text(json.dumps({'profiles':[dict(p,id='synthetic-reviewed')]}))
 
+    def test_digest_normalizes_yaml_boolean_and_mixed_mapping_keys(self):
+        sample={'workflow': {True: 'trigger', 'runs-on': 'ubuntu-22.04'}}
+        canonical={'workflow': {'True': 'trigger', 'runs-on': 'ubuntu-22.04'}}
+        expected=hashlib.sha256(json.dumps(
+            canonical,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        self.assertEqual(adapter.digest(sample),expected)
+        string_only={'workflow': {'name': 'test', 'runs-on': 'ubuntu-22.04'}}
+        self.assertEqual(adapter.digest(string_only),hashlib.sha256(json.dumps(
+            string_only,sort_keys=True,separators=(',',':')).encode()).hexdigest())
+
     def test_exact_review_passes_but_critical_file_drift_fails(self):
         with patch.object(adapter,'ROOT',self.root):
             self.assertEqual(adapter.check(self.source)['reviewed_profile'],'synthetic-reviewed')
