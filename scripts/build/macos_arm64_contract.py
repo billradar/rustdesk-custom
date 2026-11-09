@@ -188,9 +188,22 @@ class MacArmContract(unittest.TestCase):
         self.assertTrue(mac.requires_receipt(dict(downgraded,platform_adapter_signature=self.p['signature']),old))
         self.assertTrue(mac.requires_receipt(dict(downgraded,build_toolchain={'flutter':'3.44.9'}),old))
 
-    def test_unknown_recipe_and_schema_remain_blocked(self):
+    def test_unknown_recipe_reports_exact_field_differences_and_remains_blocked(self):
         mac.approved(self.p)
-        with self.assertRaisesRegex(ValueError,'Unreviewed'):mac.approved(dict(self.p,flutter='3.45.0'))
+        changed=dict(self.p,flutter='3.45.0',runner='macos-27')
+        with patch('sys.stderr', new_callable=__import__('io').StringIO) as diagnostic:
+            with self.assertRaisesRegex(ValueError,'field-level differences'):
+                mac.approved(changed)
+        output=diagnostic.getvalue()
+        self.assertIn('Closest approved profile #1',output)
+        self.assertIn('flutter:',output)
+        self.assertIn('approved: 3.44.9',output)
+        self.assertIn('observed: 3.45.0',output)
+        self.assertIn('runner:',output)
+        self.assertIn('approved: macos-26',output)
+        self.assertIn('observed: macos-27',output)
+
+    def test_unknown_recipe_and_schema_remain_blocked(self):
         path=mac.POLICY;v=json.loads(path.read_text());v['schema_version']=2;path.write_text(json.dumps(v))
         with self.assertRaisesRegex(ValueError,'schema'):mac.approved(self.p)
 
