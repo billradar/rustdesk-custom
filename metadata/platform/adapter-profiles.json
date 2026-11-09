@@ -5,7 +5,8 @@
       "059a3ff345df456a5f0bd36ab831b0e76079765c4888c793cb374e0721c3644a",
       "4eb774b0cf065bcd8f3e48d2be65a4a95a6c44aea8eb63863c63590bc0c85b9b",
       "60cebb76cc4acaaf0fa75f5efa35e889e233df8a389dbd771724cca2c45a9da9",
-      "07baf83759773d0b0994dcbd535456f2623a1be22cfcd087d35efbecd525f566"
+      "07baf83759773d0b0994dcbd535456f2623a1be22cfcd087d35efbecd525f566",
+      "6032163ea7a18138a118a38c022ee9043192732f17fb3e3ddd685cf4905aac11"
     ],
     "macos": [
       "a26b22aceb5e2f19543fee740048250e0441782f3a24585d43ec75a50468cef7",
@@ -13,14 +14,16 @@
       "42ef96742adf240e154b4fc0b2e1f2cb08719d82a6175e7e6a08edcd1c60974c",
       "0da1287b35a91ebd0650843363ee73feaf0423ec34bde5a380d6a8ba0f48d766",
       "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f",
-      "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3"
+      "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3",
+      "64ea97dc089c86f0133fc9e03e01781164347dd6a543b76c205cca2b2af144c1"
     ],
     "android": [
       "fade10df57f50b94f7d6947f7a6596e4d22183f6980c0a3962e0a47c863bccd4",
       "396230d95650e2e7609405db12c95e52f0c398905a1c24f8ebfd9c710b4aac93",
       "c4cd18eeb5d64e728964dea681ba249bca6885a891a04fc86c3fedcb75b9f6b6",
       "a01d6bcab0ddd27d62b7435c90dd58bde86adc93a7fa95826576d28d88721b10",
-      "4c559801587c74270c5b20e82a9ebe71bd602bf75a4d41d6006dd027b09e5f62"
+      "4c559801587c74270c5b20e82a9ebe71bd602bf75a4d41d6006dd027b09e5f62",
+      "4ba4ab998882f78e6d3e1d745d7e6712c67a75647bb7cde2f56bb8939b9410bd"
     ],
     "ios": [
       "9ef1f6c65b6135f22d9ff626b30159f9da1ba4c875232f4470be4039963687b9",
@@ -1939,6 +1942,83 @@
         "NDK_VERSION": "r28c"
       },
       "upstream_runner": "macos-15"
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "signature": "6032163ea7a18138a118a38c022ee9043192732f17fb3e3ddd685cf4905aac11",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "signature": "6032163ea7a18138a118a38c022ee9043192732f17fb3e3ddd685cf4905aac11",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "macos",
+      "architecture": "x86_64",
+      "signature": "64ea97dc089c86f0133fc9e03e01781164347dd6a543b76c205cca2b2af144c1",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "macos",
+      "architecture": "aarch64",
+      "signature": "64ea97dc089c86f0133fc9e03e01781164347dd6a543b76c205cca2b2af144c1",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "android",
+      "architecture": "aarch64",
+      "signature": "4ba4ab998882f78e6d3e1d745d7e6712c67a75647bb7cde2f56bb8939b9410bd",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "android",
+      "architecture": "armv7",
+      "signature": "4ba4ab998882f78e6d3e1d745d7e6712c67a75647bb7cde2f56bb8939b9410bd",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
+    },
+    {
+      "upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "platform": "android",
+      "architecture": "x86_64",
+      "signature": "4ba4ab998882f78e6d3e1d745d7e6712c67a75647bb7cde2f56bb8939b9410bd",
+      "review_scope": "exact-source static interface review",
+      "notes": [
+        "Fingerprint observed by nightly preflight against this exact upstream commit.",
+        "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
+      ]
     }
   ],
   "reviews": [
