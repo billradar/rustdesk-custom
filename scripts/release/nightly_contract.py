@@ -163,6 +163,28 @@ class NightlyTests(unittest.TestCase):
                 save.assert_called_once_with({'upstream_sha': 'b'*40})
                 self.assertEqual(route.call_count, int(mode == 'route'))
 
+    def test_resolve_uses_router_pinned_official_run_and_sha(self):
+        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
+                   NIGHTLY_DISPLAY_LABEL=nightly.display_label(fixture))
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover', return_value=fixture) as discover, \
+             patch.object(nightly, 'save') as save:
+            nightly.main(['resolve'])
+        discover.assert_called_once_with('17')
+        save.assert_called_once_with(fixture)
+
+    def test_resolve_rejects_router_sha_mismatch(self):
+        fixture = dict(upstream_sha='c'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
+                   NIGHTLY_DISPLAY_LABEL='')
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover', return_value=fixture), \
+             patch.object(nightly, 'save') as save:
+            with self.assertRaisesRegex(ValueError, 'router-pinned expected SHA'):
+                nightly.main(['resolve'])
+        save.assert_not_called()
+
     def test_route_rejects_non_main_before_dispatch(self):
         with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
             with self.assertRaises(ValueError):nightly.route({})
