@@ -183,7 +183,10 @@ class NightlyTests(unittest.TestCase):
              patch.object(nightly, 'save') as save:
             with self.assertRaisesRegex(ValueError, 'router-pinned expected SHA'):
                 nightly.main(['resolve'])
-        save.assert_not_called()
+        save.assert_called_once()
+        saved = save.call_args.args[0]
+        self.assertEqual(saved['dedup_state'], 'DISPLAY_MISMATCH')
+        self.assertEqual(saved['upstream_sha'], 'c'*40)
 
     def test_route_rejects_non_main_before_dispatch(self):
         with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
@@ -344,7 +347,9 @@ class NightlyTests(unittest.TestCase):
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
         self.assertTrue(w['run-name'].startswith('Nightly ${{ inputs.display_label'))
         self.assertIn("format('latest / {0}', github.sha)", w['run-name'])
-        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland', 'force_retry', 'display_label'})
+        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {
+            'release_mode', 'include_wayland', 'force_retry', 'display_label',
+            'official_run_id', 'expected_sha'})
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['type'], 'string')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['default'], '')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
