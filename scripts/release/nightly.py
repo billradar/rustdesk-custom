@@ -815,10 +815,19 @@ def main(argv=None):
     elif a.mode == 'aggregate':
         aggregate(a.root, a.discovery)
     else:
-        data = discover()
         if a.mode == 'resolve':
+            run_id = os.environ.get('OFFICIAL_RUN_ID', '').strip()
+            expected_sha = os.environ.get('UPSTREAM_EXPECTED_SHA', '').strip()
+            if bool(run_id) != bool(expected_sha):
+                raise ValueError('Router-pinned Nightly source requires both official_run_id and expected_sha')
+            if expected_sha and not re.fullmatch(r'[0-9a-f]{40}', expected_sha):
+                raise ValueError('Invalid router-pinned upstream SHA')
+            data = discover(run_id) if run_id else discover()
             try:
+                if expected_sha and data['upstream_sha'] != expected_sha:
+                    raise ValueError('Official run SHA disagrees with router-pinned expected SHA')
                 verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
+            except ValueError:
             except ValueError:
                 # Keep immutable evidence that this dispatch never built: the
                 # upstream may have advanced between Router and resolve.
