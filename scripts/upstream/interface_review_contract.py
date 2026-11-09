@@ -169,7 +169,7 @@ class ReviewContract(unittest.TestCase):
             self.assertIsNone(review.collect(Path(td),'b'*40,out));self.assertFalse(out.exists())
 
     def test_unknown_platform_interface_is_not_hidden_by_known_bridge_profile(self):
-        profile={'signature':'known'}
+        profile={'signature':'known','id':'test-base','reviewed_upstream_sha':'c'*40}
         approved={'approved':{'linux':['approved'],'macos':['approved'],'android':['approved']}}
         observations=[({'signature':'unknown'}, {})]+[({'signature':'approved'}, {}) for _ in range(6)]
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,{})),patch.object(review.platform_adapter,'inspect',side_effect=observations),patch.object(review.json,'loads',side_effect=[{'profiles':[profile]},approved]):
