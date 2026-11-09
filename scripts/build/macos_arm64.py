@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from scripts.build import windows_arm64 as bridge_recipe
@@ -56,8 +57,27 @@ def policy():
 
 
 def approved(profile):
-    identity={key:profile[key] for key in POLICY_KEYS}
-    require(identity in policy()['profiles'], 'Unreviewed macOS ARM64/Flutter 3.44 recipe')
+    approved_profiles=policy()['profiles']
+    identity={key:profile.get(key) for key in POLICY_KEYS}
+    if identity not in approved_profiles:
+        print('BUILD_COMPAT: Unreviewed macOS ARM64/Flutter 3.44 recipe', file=sys.stderr)
+        print('Observed recipe identity:', file=sys.stderr)
+        for key in POLICY_KEYS:
+            print('  {}: {}'.format(key, identity[key] if identity[key] is not None else '<missing>'),
+                  file=sys.stderr)
+        for index, approved_identity in enumerate(approved_profiles, 1):
+            differences=[key for key in POLICY_KEYS if identity[key] != approved_identity[key]]
+            print('Closest approved profile #{} ({} of {} fields differ):'.format(
+                index, len(differences), len(POLICY_KEYS)), file=sys.stderr)
+            if not differences:
+                print('  No identity differences; investigate profile-purpose metadata.', file=sys.stderr)
+            for key in differences:
+                actual=identity[key] if identity[key] is not None else '<missing>'
+                expected=approved_identity[key]
+                print('  {}:'.format(key), file=sys.stderr)
+                print('    approved: {}'.format(expected), file=sys.stderr)
+                print('    observed: {}'.format(actual), file=sys.stderr)
+        raise ValueError('Unreviewed macOS ARM64/Flutter 3.44 recipe; see field-level differences above')
     require(profile.get('platform')=='macos' and profile.get('architecture')=='aarch64'
             and profile.get('macos_flutter344') is True, 'Wrong Mac ARM recipe purpose')
     return profile
