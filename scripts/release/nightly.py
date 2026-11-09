@@ -96,6 +96,23 @@ def verify_display_label(data, supplied):
         raise ValueError('Nightly display label disagrees with resolved build identity')
 
 
+def require_router_source_authority(run_id):
+    """Only accept caller-pinned upstream identities from the Actions router.
+
+    A human workflow_dispatch may still request the latest successful source,
+    but must not be able to choose an older official run and refresh the
+    shared Nightly draft with it. The router dispatches with GITHUB_TOKEN,
+    whose workflow_dispatch actor is github-actions[bot].
+    """
+    if not run_id:
+        return
+    if (os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+            or os.environ.get('GITHUB_ACTOR') != 'github-actions[bot]'):
+        raise ValueError(
+            'Router-pinned Nightly source is restricted to the GitHub Actions router'
+        )
+
+
 def is_dry_run(row):
     """Exclude historical test-only Nightly batches, including active ones."""
     title = row.get('display_title', '')
@@ -828,6 +845,7 @@ def main(argv=None):
             expected_sha = os.environ.get('UPSTREAM_EXPECTED_SHA', '').strip()
             if bool(run_id) != bool(expected_sha):
                 raise ValueError('Router-pinned Nightly source requires both official_run_id and expected_sha')
+            require_router_source_authority(run_id)
             if expected_sha and not re.fullmatch(r'[0-9a-f]{40}', expected_sha):
                 raise ValueError('Invalid router-pinned upstream SHA')
             data = discover(run_id) if run_id else discover()
