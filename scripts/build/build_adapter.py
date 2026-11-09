@@ -9,8 +9,27 @@ CRITICAL_FILES = ['build.py', 'build.rs', '.github/workflows/bridge.yml',
                   '.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff']
 TOOLS = ['RUST_VERSION', 'FLUTTER_VERSION', 'LLVM_VERSION', 'VCPKG_COMMIT_ID']
 
+def _digest_value(value):
+    if isinstance(value, dict):
+        normalized = {}
+        for key, item in value.items():
+            # PyYAML's YAML 1.1 resolver turns keys such as "on"/"off"
+            # into bools. Normalize mapping keys before JSON sorting.
+            normalized_key = key if isinstance(key, str) else str(key)
+            if normalized_key in normalized:
+                raise ValueError('Digest mapping key collision after key normalization')
+            normalized[normalized_key] = _digest_value(item)
+        return normalized
+    if isinstance(value, list):
+        return [_digest_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_digest_value(item) for item in value]
+    return value
+
+
 def digest(data):
-    return hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    canonical = _digest_value(data)
+    return hashlib.sha256(json.dumps(canonical,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 def inspect(tree):
     tree=Path(tree)
