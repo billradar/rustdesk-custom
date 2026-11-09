@@ -29,3 +29,16 @@ The credential-free contract injects stale bridge run/source/custom identity, wr
 Historical run [41496715461](https://github.com/billradar/rustdesk-custom/actions/runs/41496715461) was blocked by an interface review; it does not prove current native compilation success. The retired Coordinator retry-grant workflow is unavailable. After a reviewed fix, use the current Stable/Nightly router's source-and-patchset dedup and conservative retry policy. Do not classify interface mismatches as transient infrastructure failures.
 
 Rollback requires a protected revert/fix PR and no conflicting active build. Preserve approved profiles, prepared manifests and signed release/tag evidence; retired journal/index refs are not production inputs. If the recipe is withdrawn, its source must return to review; do not fall back to the old SDK or publish a partial platform set.
+
+
+## Upstream 1.5.3 profile refresh
+
+Nightly run [42546687995](https://github.com/billradar/rustdesk-custom/actions/runs/42546687995) stopped at the exact-source macOS ARM64 approval gate before installing native dependencies. The field-level receipt showed only two mismatches against the existing ARM64 profile: the derived recipe signature and the whole-workflow SHA-256. The runner, upstream runner, target, triplet, Rust 1.81, Flutter 3.44.9, vcpkg pin, bridge signature/tool versions and Flutter patch digest remained identical.
+
+The upstream comparison from reviewed source `f4c0b13df71ec343b57fc98ae39c4b81845624cb` to `09871abd0bc13a69b4318edad031287d8d4314d2` contains eight commits. Within the files that define the macOS build interface:
+- `.github/workflows/flutter-build.yml` changes only the global release `VERSION` from 1.5.1 to 1.5.3; the `build-for-macOS` job itself is unchanged.
+- `Cargo.toml` changes the package version to 1.5.3 and adds Windows-target API features (`Wdk_Foundation`, `Wdk_Storage_FileSystem`, and `Win32_System_WindowsProgramming`); the macOS target dependency section is unchanged.
+- `flutter/pubspec.yaml` advances package metadata from 1.5.1+69 to 1.5.3+70.
+- `build.py`, `build.rs`, and `.github/workflows/bridge.yml` are unchanged.
+
+The new profile is added alongside, not instead of, the previous approved profile. It records the exact observed signature `64ea97dc089c86f0133fc9e03e01781164347dd6a543b76c205cca2b2af144c1` and exact workflow digest `14ed5f0a99ca04cc482e1716eb175234d53344f3133527c22dc90297efea9dc6`. No gate is weakened, no toolchain version or runner is changed, and this static profile refresh does not claim a native macOS build/package/runtime pass.
