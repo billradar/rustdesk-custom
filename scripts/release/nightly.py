@@ -828,7 +828,6 @@ def main(argv=None):
                     raise ValueError('Official run SHA disagrees with router-pinned expected SHA')
                 verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
             except ValueError:
-            except ValueError:
                 # Keep immutable evidence that this dispatch never built: the
                 # upstream may have advanced between Router and resolve.
                 # Do not count the failed, display-only run as an attempt.
