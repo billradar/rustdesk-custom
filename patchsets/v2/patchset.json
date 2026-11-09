@@ -18,7 +18,7 @@
     }
   },
   "hashes": {
-    "common": "b2a84cd71638a5b3a0cf1421e19efc87ce1a64712801444bbc2d6adb9c742424",
+    "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "runtime_ui": {
@@ -27,7 +27,7 @@
   "real_remote_session": {
     "status": "not_tested"
   },
-  "revision": 9,
+  "revision": 8,
   "derived_from": {
     "patchset": "v1"
   },
@@ -76,12 +76,12 @@
   "cm_background_window": {
     "status": "native_runtime_validation_pending",
     "display_policy": "manual_only",
-    "common_patch_hash": "b2a84cd71638a5b3a0cf1421e19efc87ce1a64712801444bbc2d6adb9c742424",
+    "common_patch_hash": "7bfc16729d9d16fbd289ddb6de9b6f98b1e86ea38869273a69416a7e2fb25845",
     "runtime_ui": "not_tested",
     "real_remote_session": "not_tested",
     "native_package_build": "not_run",
     "local_validation": {
-      "patch_apply_standard_and_sos": "pending",
+      "patch_apply_standard_and_sos": "pass",
       "prepared_source_contracts": "pass",
       "compiled_configuration_helper": "pass",
       "dart_policy_sequences": "pass",
@@ -177,42 +177,6 @@
         "compatibility": "The upstream selection boundary and numeric upstream-first update ordering are unchanged. Known legacy releases are recognized only by audited tag/source/hash mappings; unmarked unknown tags fail closed.",
         "limitations": "Production cutover remains blocked. No device installation or runtime remote-session test was performed; independent update signatures remain deferred.",
         "review_status": "reviewed"
-      },
-      {
-        "revision": 9,
-        "kind": "content-change",
-        "base_sha": "3c53d9e5677b6a322be7d195f1c40b04ef2707e4",
-        "before": {
-          "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
-          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
-        },
-        "after": {
-          "common": "b2a84cd71638a5b3a0cf1421e19efc87ce1a64712801444bbc2d6adb9c742424",
-          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
-        },
-        "scopes": [
-          "common"
-        ],
-        "categories": {
-          "Added": [],
-          "Changed": [],
-          "Fixed": [
-            "Rebase the manual-only CM window patch on upstream 1.5.3 chat_model.dart while preserving the upstream Windows-specific window-bounds branches."
-          ],
-          "Removed": [],
-          "Security": [],
-          "Compatibility": [
-            "Keep the CM visibility guard and manual-only show behavior; change only patch context and the two show calls to match the current upstream function structure."
-          ]
-        },
-        "reason": "Restore Standard/SOS patch applicability to current upstream 1.5.3 without reverting upstream Windows window-management logic.",
-        "references": [
-          "https://github.com/billradar/rustdesk-custom/actions/runs/42572512338",
-          "https://github.com/rustdesk/rustdesk/commit/05b9f2d8919b5cdfaa0bb3280601a02881556a42"
-        ],
-        "compatibility": "Patch selection remains version-based; this update does not approve the upstream build interface or claim native package/runtime validation.",
-        "limitations": "Standard/SOS patch application and downstream Rust/Flutter validation remain pending CI confirmation.",
-        "review_status": "pending_validation"
       }
     ],
     "features": {
