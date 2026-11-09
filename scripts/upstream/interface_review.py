@@ -13,6 +13,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from scripts.build import build_adapter
+from scripts.platform import platform_adapter
 from scripts.upstream.patchsets import patchset_for_version, patch_hash
 from scripts.validation.compatibility import contracts
 
@@ -38,7 +39,31 @@ def collect(source, upstream_sha, out):
         inspection_error=None
     except Exception as e:
         profile=None;critical=None;inspection_error=str(e)
-    if profile and any(p['signature']==profile['signature'] for p in known):
+
+    # The bridge adapter and native platform adapters are independent review
+    # surfaces. A known Windows/bridge profile must never hide an unknown
+    # Linux, macOS, or Android build interface.
+    platform_known=json.loads((ROOT/'metadata/platform/adapter-profiles.json').read_text())
+    platform_interfaces={}
+    platform_unknown=[]
+    for platform,architectures in {
+        'linux':['x86_64','aarch64'],
+        'macos':['x86_64','aarch64'],
+        'android':['aarch64','armv7','x86_64'],
+    }.items():
+        for arch in architectures:
+            key=platform+'/'+arch
+            try:
+                observed,_=platform_adapter.inspect(source,platform,arch)
+                platform_interfaces[key]=observed
+                if observed['signature'] not in platform_known['approved'].get(platform,[]):
+                    platform_unknown.append(key+': '+observed['signature'])
+            except Exception as e:
+                platform_interfaces[key]={'platform':platform,'architecture':arch,'inspection_error':str(e)}
+                platform_unknown.append(key+': inspection failed: '+str(e))
+
+    build_known=bool(profile and any(p['signature']==profile['signature'] for p in known))
+    if build_known and not platform_unknown:
         output('review_needed','false');return None
     base=known[-1]
     # Public diagnostics only; the read job never loads production configuration.
@@ -46,6 +71,9 @@ def collect(source, upstream_sha, out):
         'upstream_sha':upstream_sha,'custom_repository_sha':os.environ['GITHUB_SHA'],
         'workflow_run':os.environ['GITHUB_RUN_ID'],'observed_profile':profile,
         'inspection_error':inspection_error,'critical':critical,'compared_profile':base['id'],
+        'platform_interfaces':platform_interfaces,'platform_unknown':platform_unknown,
+        'review_identity':build_adapter.digest({'upstream_sha':upstream_sha,'observed_profile':profile,
+                                                'platform_interfaces':platform_interfaces}),
         'checks':{'interface':'UNKNOWN / BLOCKED','patches':{},'rust_compile':'NOT RUN',
                   'bridge':'NOT RUN','flutter_analyze':'NOT RUN','runtime':'NOT TESTED'}}
     old=json.dumps(base.get('critical',{}),indent=2,sort_keys=True).splitlines()
@@ -113,6 +141,19 @@ def validate_report(p):
                 or not re.fullmatch('[0-9a-f]{64}',str(p['observed_profile'].get('signature','')))
                 or build_adapter.digest(p['critical'])!=p['observed_profile']['signature']):
             raise ValueError('Observed interface signature mismatch')
+    if 'platform_interfaces' in p:
+        if not isinstance(p['platform_interfaces'],dict) or not isinstance(p.get('platform_unknown'),list):
+            raise ValueError('Invalid native platform review data')
+        expected=build_adapter.digest({'upstream_sha':p['upstream_sha'],
+            'observed_profile':p.get('observed_profile'),
+            'platform_interfaces':p['platform_interfaces']})
+        if p.get('review_identity')!=expected:
+            raise ValueError('Native platform review identity mismatch')
+        for key,item in p['platform_interfaces'].items():
+            if not isinstance(key,str) or not isinstance(item,dict):
+                raise ValueError('Invalid native platform observation')
+            if 'inspection_error' not in item and not re.fullmatch('[0-9a-f]{64}',str(item.get('signature',''))):
+                raise ValueError('Invalid native platform signature')
 
 
 def validate_packet(p):
@@ -122,6 +163,8 @@ def validate_packet(p):
 
 
 def report_identity(packet):
+    if packet.get('review_identity'):
+        return packet['review_identity']
     return packet['observed_profile']['signature'] if packet.get('observed_profile') else packet['upstream_sha']
 
 
