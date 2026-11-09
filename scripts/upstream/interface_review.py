@@ -70,7 +70,7 @@ def collect(source, upstream_sha, out):
     packet={'schema':SCHEMA,'approval':'REQUIRED / NOT APPROVED','upstream_repository':'rustdesk/rustdesk',
         'upstream_sha':upstream_sha,'custom_repository_sha':os.environ['GITHUB_SHA'],
         'workflow_run':os.environ['GITHUB_RUN_ID'],'observed_profile':profile,
-        'inspection_error':inspection_error,'critical':critical,'compared_profile':base['id'],
+        'inspection_error':inspection_error,'critical':critical,'compared_profile':base.get('id','latest-reviewed-profile'),
         'platform_interfaces':platform_interfaces,'platform_unknown':platform_unknown,
         'review_identity':build_adapter.digest({'upstream_sha':upstream_sha,'observed_profile':profile,
                                                 'platform_interfaces':platform_interfaces}),

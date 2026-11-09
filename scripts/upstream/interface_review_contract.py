@@ -163,9 +163,21 @@ class ReviewContract(unittest.TestCase):
 
     def test_known_interface_creates_no_report(self):
         profile={'signature':'known'}
-        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,{})),patch.object(review.json,'loads',return_value={'profiles':[profile]}):
+        approved={'approved':{'linux':['approved'],'macos':['approved'],'android':['approved']}}
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,{})),patch.object(review.platform_adapter,'inspect',return_value=({'signature':'approved'},{})),patch.object(review.json,'loads',side_effect=[{'profiles':[profile]},approved]):
             out=Path(td)/'out'
             self.assertIsNone(review.collect(Path(td),'b'*40,out));self.assertFalse(out.exists())
+
+    def test_unknown_platform_interface_is_not_hidden_by_known_bridge_profile(self):
+        profile={'signature':'known'}
+        approved={'approved':{'linux':['approved'],'macos':['approved'],'android':['approved']}}
+        observations=[({'signature':'unknown'}, {})]+[({'signature':'approved'}, {}) for _ in range(6)]
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,{})),patch.object(review.platform_adapter,'inspect',side_effect=observations),patch.object(review.json,'loads',side_effect=[{'profiles':[profile]},approved]):
+            out=Path(td)/'out'
+            packet=review.collect(Path(td),'b'*40,out)
+            self.assertTrue(out.exists())
+            self.assertEqual(packet['platform_unknown'],['linux/x86_64: unknown'])
+            self.assertEqual(packet['approval'],'REQUIRED / NOT APPROVED')
 
     def test_unknown_interface_records_patch_failure_without_approving(self):
         critical={'files':{},'tools':{}};profile={'signature':review.build_adapter.digest(critical),'upstream_version':'1.5.1'}
