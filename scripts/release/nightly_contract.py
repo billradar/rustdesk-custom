@@ -167,12 +167,23 @@ class NightlyTests(unittest.TestCase):
         fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
                        common_patch_hash='c'*64, sos_patch_hash='d'*64)
         env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
-                   NIGHTLY_DISPLAY_LABEL=nightly.display_label(fixture))
+                   NIGHTLY_DISPLAY_LABEL=nightly.display_label(fixture),
+                   GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_ACTOR='github-actions[bot]')
         with patch.dict(os.environ, env), patch.object(nightly, 'discover', return_value=fixture) as discover, \
              patch.object(nightly, 'save') as save:
             nightly.main(['resolve'])
         discover.assert_called_once_with('17')
         save.assert_called_once_with(fixture)
+
+    def test_resolve_rejects_manual_pinned_source(self):
+        env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
+                   GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_ACTOR='bill')
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover') as discover, \\
+             patch.object(nightly, 'save') as save:
+            with self.assertRaisesRegex(ValueError, 'restricted to the GitHub Actions router'):
+                nightly.main(['resolve'])
+        discover.assert_not_called()
+        save.assert_not_called()
 
     def test_resolve_rejects_router_sha_mismatch(self):
         fixture = dict(upstream_sha='c'*40, upstream_version='1.5.1', patchset='v2',
@@ -362,6 +373,9 @@ class NightlyTests(unittest.TestCase):
         self.assertIn('inputs.expected_sha', resolve_step['env']['UPSTREAM_EXPECTED_SHA'])
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['official_run_id']['type'], 'string')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['expected_sha']['type'], 'string')
+        # Caller-pinned source IDs are accepted only from the GITHUB_TOKEN
+        # dispatch actor; human manual dispatches must resolve latest instead.
+        self.assertIn('require_router_source_authority(run_id)', (ROOT/'scripts/release/nightly.py').read_text())
         resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
