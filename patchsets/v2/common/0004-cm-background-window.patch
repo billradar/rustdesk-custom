@@ -286,31 +286,23 @@ diff --git a/flutter/lib/models/chat_model.dart b/flutter/lib/models/chat_model.
 index d79c9f0..5bab753 100644
 --- a/flutter/lib/models/chat_model.dart
 +++ b/flutter/lib/models/chat_model.dart
-@@ -292,12 +292,13 @@ class ChatModel with ChangeNotifier {
- 
+@@ -313,3 +313,4 @@ class ChatModel with ChangeNotifier {
    var _togglingCMSidePage = false; // protect order for await
    toggleCMSidePage() async {
 +    if (desktopType == DesktopType.cm && !cmIsVisible) return false;
      if (_togglingCMSidePage) return false;
-     _togglingCMSidePage = true;
-     if (_isShowCMSidePage) {
+@@ -319,4 +320,4 @@ class ChatModel with ChangeNotifier {
        _isShowCMSidePage = !_isShowCMSidePage;
        notifyListeners();
 -      await windowManager.show();
 +      await showCmWindow();
-       await windowManager.setSizeAlignment(
-           kConnectionManagerWindowSizeClosedChat, Alignment.topRight);
-     } else {
-@@ -309,7 +310,7 @@ class ChatModel with ChangeNotifier {
-         client.unreadChatMessageCount.value = 0;
+       if (isWindows) {
+@@ -335,4 +336,4 @@ class ChatModel with ChangeNotifier {
        }
        requestChatInputFocus();
 -      await windowManager.show();
 +      await showCmWindow();
-       await windowManager.setSizeAlignment(
-           kConnectionManagerWindowSizeOpenChat, Alignment.topRight);
-       _isShowCMSidePage = !_isShowCMSidePage;
-diff --git a/flutter/lib/models/cm_window_policy.dart b/flutter/lib/models/cm_window_policy.dart
+       if (isWindows) {diff --git a/flutter/lib/models/cm_window_policy.dart b/flutter/lib/models/cm_window_policy.dart
 new file mode 100644
 index 0000000..4c199f7
 --- /dev/null
