@@ -279,11 +279,19 @@ def route(data):
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review (cancelled, unknown, or exhausted)')
     if state == 'RETRY':
+        official_run_id = str(data.get('official_run_id', '')).strip()
+        upstream_sha = str(data.get('upstream_sha', '')).strip()
+        if not re.fullmatch(r'[1-9][0-9]*', official_run_id):
+            raise ValueError('Router requires an immutable official Nightly run ID')
+        if not re.fullmatch(r'[0-9a-f]{40}', upstream_sha):
+            raise ValueError('Router requires a full immutable upstream SHA')
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true',
                         '-f', f'force_retry={str(force_retry).lower()}',
-                        '-f', f'display_label={display_label(data)}'], check=True)
+                        '-f', f'display_label={display_label(data)}',
+                        '-f', f'official_run_id={official_run_id}',
+                        '-f', f'expected_sha={upstream_sha}'], check=True)
 
 
 def skip_duplicate_dispatch(state, mode):
@@ -828,12 +836,15 @@ def main(argv=None):
                     raise ValueError('Official run SHA disagrees with router-pinned expected SHA')
                 verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
             except ValueError:
-                # Keep immutable evidence that this dispatch never built: the
-                # upstream may have advanced between Router and resolve.
-                # Do not count the failed, display-only run as an attempt.
+                # Preserve evidence that this dispatch did not build. This is
+                # deliberately excluded from retry accounting by dedup logic.
                 data['dedup_state'] = 'DISPLAY_MISMATCH'
                 save(data)
                 raise
+        else:
+            # The scheduled/manual Router must resolve once, then pass this
+            # immutable source identity to the downstream Resolve workflow.
+            data = discover()
         save(data)
         if a.mode == 'route':
             route(data)
