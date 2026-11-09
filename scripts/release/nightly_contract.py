@@ -163,6 +163,43 @@ class NightlyTests(unittest.TestCase):
                 save.assert_called_once_with({'upstream_sha': 'b'*40})
                 self.assertEqual(route.call_count, int(mode == 'route'))
 
+    def test_resolve_uses_router_pinned_official_run_and_sha(self):
+        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
+                   NIGHTLY_DISPLAY_LABEL=nightly.display_label(fixture),
+                   GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_ACTOR='github-actions[bot]')
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover', return_value=fixture) as discover, \
+             patch.object(nightly, 'save') as save:
+            nightly.main(['resolve'])
+        discover.assert_called_once_with('17')
+        save.assert_called_once_with(fixture)
+
+    def test_resolve_rejects_manual_pinned_source(self):
+        env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
+                   GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_ACTOR='bill')
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover') as discover, \
+             patch.object(nightly, 'save') as save:
+            with self.assertRaisesRegex(ValueError, 'restricted to the GitHub Actions router'):
+                nightly.main(['resolve'])
+        discover.assert_not_called()
+        save.assert_not_called()
+
+    def test_resolve_rejects_router_sha_mismatch(self):
+        fixture = dict(upstream_sha='c'*40, upstream_version='1.5.1', patchset='v2',
+                       common_patch_hash='c'*64, sos_patch_hash='d'*64)
+        env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
+                   NIGHTLY_DISPLAY_LABEL='', GITHUB_EVENT_NAME='workflow_dispatch',
+                   GITHUB_ACTOR='github-actions[bot]')
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover', return_value=fixture), \
+             patch.object(nightly, 'save') as save:
+            with self.assertRaisesRegex(ValueError, 'router-pinned expected SHA'):
+                nightly.main(['resolve'])
+        save.assert_called_once()
+        saved = save.call_args.args[0]
+        self.assertEqual(saved['dedup_state'], 'DISPLAY_MISMATCH')
+        self.assertEqual(saved['upstream_sha'], 'c'*40)
+
     def test_route_rejects_non_main_before_dispatch(self):
         with patch.dict(os.environ,GITHUB_REPOSITORY=nightly.REPO,GITHUB_REF='refs/heads/development',GITHUB_EVENT_NAME='workflow_dispatch'),patch.object(nightly,'api') as api:
             with self.assertRaises(ValueError):nightly.route({})
@@ -176,7 +213,8 @@ class NightlyTests(unittest.TestCase):
                            'upstream_sha':'b'*40,'patchset':'v2',
                            'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
-            self.assertFalse(any(x.startswith(('official_run_id=', 'expected_sha=')) for x in args))
+            self.assertIn('official_run_id=17', args)
+            self.assertIn('expected_sha=' + 'b'*40, args)
             self.assertIn('release_mode=draft',args)
             self.assertIn('force_retry=false',args)
             self.assertIn('display_label=' + nightly.display_label(
@@ -321,15 +359,24 @@ class NightlyTests(unittest.TestCase):
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
         self.assertTrue(w['run-name'].startswith('Nightly ${{ inputs.display_label'))
         self.assertIn("format('latest / {0}', github.sha)", w['run-name'])
-        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {'release_mode', 'include_wayland', 'force_retry', 'display_label'})
+        self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {
+            'release_mode', 'include_wayland', 'force_retry', 'display_label',
+            'official_run_id', 'expected_sha'})
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['type'], 'string')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['default'], '')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
         self.assertIs(w['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
         dedup_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'dedup')
         self.assertIn('inputs.force_retry', dedup_step['env']['FORCE_RETRY'])
-        self.assertIn('inputs.display_label',
-                      next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')['env']['NIGHTLY_DISPLAY_LABEL'])
+        resolve_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
+        self.assertIn('inputs.display_label', resolve_step['env']['NIGHTLY_DISPLAY_LABEL'])
+        self.assertIn('inputs.official_run_id', resolve_step['env']['OFFICIAL_RUN_ID'])
+        self.assertIn('inputs.expected_sha', resolve_step['env']['UPSTREAM_EXPECTED_SHA'])
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['official_run_id']['type'], 'string')
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['expected_sha']['type'], 'string')
+        # Caller-pinned source IDs are accepted only from the GITHUB_TOKEN
+        # dispatch actor; human manual dispatches must resolve latest instead.
+        self.assertIn('require_router_source_authority(run_id)', (ROOT/'scripts/release/nightly.py').read_text())
         resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')

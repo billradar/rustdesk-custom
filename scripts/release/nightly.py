@@ -96,6 +96,23 @@ def verify_display_label(data, supplied):
         raise ValueError('Nightly display label disagrees with resolved build identity')
 
 
+def require_router_source_authority(run_id):
+    """Only accept caller-pinned upstream identities from the Actions router.
+
+    A human workflow_dispatch may still request the latest successful source,
+    but must not be able to choose an older official run and refresh the
+    shared Nightly draft with it. The router dispatches with GITHUB_TOKEN,
+    whose workflow_dispatch actor is github-actions[bot].
+    """
+    if not run_id:
+        return
+    if (os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+            or os.environ.get('GITHUB_ACTOR') != 'github-actions[bot]'):
+        raise ValueError(
+            'Router-pinned Nightly source is restricted to the GitHub Actions router'
+        )
+
+
 def is_dry_run(row):
     """Exclude historical test-only Nightly batches, including active ones."""
     title = row.get('display_title', '')
@@ -279,11 +296,19 @@ def route(data):
     if state == 'REVIEW':
         raise ValueError('Nightly retry requires manual review (cancelled, unknown, or exhausted)')
     if state == 'RETRY':
+        official_run_id = str(data.get('official_run_id', '')).strip()
+        upstream_sha = str(data.get('upstream_sha', '')).strip()
+        if not re.fullmatch(r'[1-9][0-9]*', official_run_id):
+            raise ValueError('Router requires an immutable official Nightly run ID')
+        if not re.fullmatch(r'[0-9a-f]{40}', upstream_sha):
+            raise ValueError('Router requires a full immutable upstream SHA')
         subprocess.run(['gh', 'workflow', 'run', 'nightly.yml', '--repo', repo, '--ref', 'main',
                         '-f', 'release_mode=draft',
                         '-f', 'include_wayland=true',
                         '-f', f'force_retry={str(force_retry).lower()}',
-                        '-f', f'display_label={display_label(data)}'], check=True)
+                        '-f', f'display_label={display_label(data)}',
+                        '-f', f'official_run_id={official_run_id}',
+                        '-f', f'expected_sha={upstream_sha}'], check=True)
 
 
 def skip_duplicate_dispatch(state, mode):
@@ -815,17 +840,29 @@ def main(argv=None):
     elif a.mode == 'aggregate':
         aggregate(a.root, a.discovery)
     else:
-        data = discover()
         if a.mode == 'resolve':
+            run_id = os.environ.get('OFFICIAL_RUN_ID', '').strip()
+            expected_sha = os.environ.get('UPSTREAM_EXPECTED_SHA', '').strip()
+            if bool(run_id) != bool(expected_sha):
+                raise ValueError('Router-pinned Nightly source requires both official_run_id and expected_sha')
+            require_router_source_authority(run_id)
+            if expected_sha and not re.fullmatch(r'[0-9a-f]{40}', expected_sha):
+                raise ValueError('Invalid router-pinned upstream SHA')
+            data = discover(run_id) if run_id else discover()
             try:
+                if expected_sha and data['upstream_sha'] != expected_sha:
+                    raise ValueError('Official run SHA disagrees with router-pinned expected SHA')
                 verify_display_label(data, os.environ.get('NIGHTLY_DISPLAY_LABEL', ''))
             except ValueError:
-                # Keep immutable evidence that this dispatch never built: the
-                # upstream may have advanced between Router and resolve.
-                # Do not count the failed, display-only run as an attempt.
+                # Preserve evidence that this dispatch did not build. This is
+                # deliberately excluded from retry accounting by dedup logic.
                 data['dedup_state'] = 'DISPLAY_MISMATCH'
                 save(data)
                 raise
+        else:
+            # The scheduled/manual Router must resolve once, then pass this
+            # immutable source identity to the downstream Resolve workflow.
+            data = discover()
         save(data)
         if a.mode == 'route':
             route(data)
