@@ -176,7 +176,8 @@ class NightlyTests(unittest.TestCase):
                            'upstream_sha':'b'*40,'patchset':'v2',
                            'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
-            self.assertFalse(any(x.startswith(('official_run_id=', 'expected_sha=')) for x in args))
+            self.assertIn('official_run_id=17', args)
+            self.assertIn('expected_sha=' + 'b'*40, args)
             self.assertIn('release_mode=draft',args)
             self.assertIn('force_retry=false',args)
             self.assertIn('display_label=' + nightly.display_label(
@@ -328,8 +329,12 @@ class NightlyTests(unittest.TestCase):
         self.assertIs(w['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
         dedup_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'dedup')
         self.assertIn('inputs.force_retry', dedup_step['env']['FORCE_RETRY'])
-        self.assertIn('inputs.display_label',
-                      next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')['env']['NIGHTLY_DISPLAY_LABEL'])
+        resolve_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
+        self.assertIn('inputs.display_label', resolve_step['env']['NIGHTLY_DISPLAY_LABEL'])
+        self.assertIn('inputs.official_run_id', resolve_step['env']['OFFICIAL_RUN_ID'])
+        self.assertIn('inputs.expected_sha', resolve_step['env']['UPSTREAM_EXPECTED_SHA'])
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['official_run_id']['type'], 'string')
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['expected_sha']['type'], 'string')
         resolve = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertEqual(resolve['run'], 'python3 scripts/release/nightly.py resolve')
         self.assertEqual(w['jobs']['resolve']['outputs']['dedup_skip'],'${{ steps.dedup.outputs.skip }}')
