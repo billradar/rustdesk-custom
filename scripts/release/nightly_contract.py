@@ -178,7 +178,7 @@ class NightlyTests(unittest.TestCase):
     def test_resolve_rejects_manual_pinned_source(self):
         env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
                    GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_ACTOR='bill')
-        with patch.dict(os.environ, env), patch.object(nightly, 'discover') as discover, \\
+        with patch.dict(os.environ, env), patch.object(nightly, 'discover') as discover, \
              patch.object(nightly, 'save') as save:
             with self.assertRaisesRegex(ValueError, 'restricted to the GitHub Actions router'):
                 nightly.main(['resolve'])
@@ -189,7 +189,8 @@ class NightlyTests(unittest.TestCase):
         fixture = dict(upstream_sha='c'*40, upstream_version='1.5.1', patchset='v2',
                        common_patch_hash='c'*64, sos_patch_hash='d'*64)
         env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
-                   NIGHTLY_DISPLAY_LABEL='')
+                   NIGHTLY_DISPLAY_LABEL='', GITHUB_EVENT_NAME='workflow_dispatch',
+                   GITHUB_ACTOR='github-actions[bot]')
         with patch.dict(os.environ, env), patch.object(nightly, 'discover', return_value=fixture), \
              patch.object(nightly, 'save') as save:
             with self.assertRaisesRegex(ValueError, 'router-pinned expected SHA'):
