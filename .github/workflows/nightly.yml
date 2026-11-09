@@ -22,6 +22,14 @@ env:
         type: string
         default: ''
         description: Router-only display identity; leave empty for manual latest builds
+      official_run_id:
+        type: string
+        default: ''
+        description: Immutable official upstream Nightly run selected by the router; leave empty for manual latest builds
+      expected_sha:
+        type: string
+        default: ''
+        description: Full immutable upstream commit SHA selected by the router; leave empty for manual latest builds
 permissions:
   contents: read
   actions: read
@@ -68,6 +76,8 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
         NIGHTLY_DISPLAY_LABEL: ${{ inputs.display_label || '' }}
+        OFFICIAL_RUN_ID: ${{ inputs.official_run_id || '' }}
+        UPSTREAM_EXPECTED_SHA: ${{ inputs.expected_sha || '' }}
       run: python3 scripts/release/nightly.py resolve
     - id: dedup
       name: Skip an active or completed identical Nightly batch
