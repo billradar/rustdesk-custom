@@ -64,6 +64,8 @@ class ArtifactTests(unittest.TestCase):
                     if name.startswith(('rustdesk-','android-build-input-','prepared-')):
                         self.assertNotIn('github.run_attempt',name)
         self.assertGreaterEqual(checked,12)
+        compatibility=yaml.safe_load((ROOT/'.github/workflows/compat-check.yml').read_text())
+        self.assertEqual(compatibility['jobs']['validation-report']['permissions'],{'contents':'read','actions':'read'})
 
 
 if __name__=='__main__':unittest.main()
