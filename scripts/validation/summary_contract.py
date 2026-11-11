@@ -147,9 +147,9 @@ class SummaryContract(unittest.TestCase):
         script='\n'.join(run.splitlines()[1:-1])
         folder=Path(self.temp.name)
         for name,values in [('preflight',{'Patch Apply':'PASS','Rust real-config compile':'PASS','Build System':'WARNING'}),('flutter',{'Patch Apply':'PASS','Flutter Analyze':'PASS'})]:
-            path=folder/'diagnostics'/name/'report.json';path.parent.mkdir(parents=True)
+            path=folder/'diagnostics'/f'{name}-standard-report-42-attempt-2'/'report.json';path.parent.mkdir(parents=True)
             path.write_text(json.dumps(dict(upstream_sha='a'*40,patchset='v2',variants={'standard':values,'sos':values})))
-        env=dict(os.environ,GITHUB_STEP_SUMMARY=str(self.path),PYTHONPATH=str(ROOT),SELECTED='v2',UPSTREAM_EXPECTED_SHA='a'*40,UPSTREAM_VERSION='1.5.1',CONTRACT_RESULT='success',PREFLIGHT_RESULT='success',BRIDGE_RESULT='success',FLUTTER_RESULT='success',HELPER_RESULT='skipped',CHANNEL='ci',ANDROID_SIGNING_SMOKE='false')
+        env=dict(os.environ,GITHUB_RUN_ID='42',GITHUB_RUN_ATTEMPT='2',GITHUB_STEP_SUMMARY=str(self.path),PYTHONPATH=str(ROOT),SELECTED='v2',UPSTREAM_EXPECTED_SHA='a'*40,UPSTREAM_VERSION='1.5.1',CONTRACT_RESULT='success',PREFLIGHT_RESULT='success',BRIDGE_RESULT='success',FLUTTER_RESULT='success',HELPER_RESULT='skipped',CHANNEL='ci',ANDROID_SIGNING_SMOKE='false')
         result=subprocess.run([sys.executable,'-c',script],cwd=folder,env=env,text=True,capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
         report=json.loads((folder/'compatibility-report.json').read_text())
@@ -238,6 +238,9 @@ class SummaryContract(unittest.TestCase):
         scripts.mkdir(parents=True)
         for name in ('build_reliability.py','summary.py','summary_dashboard.py'):
             shutil.copy2(ROOT/'scripts/validation'/name,scripts/name)
+        release=workspace/'scripts/release'
+        release.mkdir(parents=True)
+        shutil.copy2(ROOT/'scripts/release/artifacts.py',release/'artifacts.py')
         event=workspace/'event.json'
         run=dict(id=42,repository={'full_name':'example/repo'},head_repository={'full_name':'example/repo'},
                  event='workflow_dispatch',head_branch='main',path='.github/workflows/nightly.yml',
@@ -302,6 +305,15 @@ with patch('subprocess.run',side_effect=fake_gh):
         self.assertEqual(values['standard']['Rust Compile'],'PASS')
         self.assertEqual(values['standard']['Flutter Analyze'],'PASS')
         self.assertEqual(values['sos']['Patch Apply'],'NOT RUN')
+
+    def test_latest_generation_attempt_replaces_old_failure(self):
+        base='generation-compatibility-123'
+        data={base+'-attempt-1':{'upstream_sha':'a'*40,'patchset':'v2','variants':{'standard':{'Patch Apply':'FAIL'}}},
+              base+'-attempt-2':{'upstream_sha':'a'*40,'patchset':'v2','variants':{'standard':{'Patch Apply':'PASS'}}}}
+        with patch.object(collector,'snapshot',return_value=({'id':123,'run_attempt':2},[])),patch.object(collector,'pages',return_value=[{'name':name} for name in data]),patch.object(collector,'read_artifact',side_effect=lambda repo,run_id,name,filename:data[name]) as reader:
+            _,_,_,values=collector.collect('example/repo',123)
+        self.assertEqual(values['standard']['Patch Apply'],'PASS')
+        self.assertEqual(reader.call_args.args[2],base+'-attempt-2')
 
     def test_foreign_source_generation_metadata_is_not_used(self):
         data={'channel-discovery-123':{'upstream_sha':'a'*40},'generation-compatibility-123':{'upstream_sha':'b'*40,'upstream_version':'9.0.0','patchset':'v2','variants':{'standard':{'Patch Apply':'PASS'}}}}

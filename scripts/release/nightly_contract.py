@@ -275,7 +275,10 @@ class NightlyTests(unittest.TestCase):
         def download(args, **kwargs):
             Path(args[args.index('--dir')+1], 'nightly-discovery.json').write_text(json.dumps(fixture))
             return nightly.subprocess.CompletedProcess(args, 0)
-        with patch.object(nightly.subprocess, 'run', side_effect=download):
+        from scripts.release import artifacts
+        run=dict(id=90,run_attempt=2,repository={'full_name':nightly.repository()})
+        listing={'artifacts':[{'name':'nightly-discovery-90-attempt-1'}]}
+        with patch.object(artifacts,'api',side_effect=[run,listing]),patch.object(nightly.subprocess, 'run', side_effect=download):
             self.assertEqual(nightly.source_sha_from_run(dict(id=90, display_title=title)),
                              fixture['upstream_sha'])
 

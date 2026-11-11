@@ -311,6 +311,8 @@ The recorded legacy and current production certificate fingerprints differ. Do *
 
 For each signed APK, validate package name, certificate fingerprint, version/version code, ABI, hash, signature schemes, and source/artifact provenance. Never weaken the requirement from “v2 and v3” to “either v2 or v3”.
 
+Release asset normalization must be idempotent. Aggregate staging reserves all public names before copying and rejects collisions rather than overwriting. Rerunnable diagnostic reports include `run_attempt`; their readers select the latest same-run report with legacy fallback and preserve untouched job evidence on partial reruns. Build/signing payload names remain immutable. See `docs/workflows-and-release.md` and run `scripts.release.artifacts_contract` plus affected release/summary contracts.
+
 ## 9. Release qualification and publication safety
 
 Release writers use `.github/actions/release-app-token` with repository Variable `RELEASE_APP_CLIENT_ID` and Secret `RELEASE_APP_PRIVATE_KEY`; see `docs/release-app.md`. Mint only inside the existing gated main-branch Stable/Nightly write jobs, restrict to this repository with Contents/Workflows write and Actions read, revoke after the job, and expose the token only to the final release step. Never pass the App key/token to CI, compilers or Android signing. Dry-run does not require it. Keep build commit provenance and all publication gates unchanged.

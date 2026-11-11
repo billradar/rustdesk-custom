@@ -152,7 +152,7 @@ jobs:
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
-        name: release-preflight-${{ github.run_id }}
+        name: release-preflight-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: .work/channel.json
         if-no-files-found: warn
   prepare:
@@ -390,7 +390,7 @@ jobs:
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
-        name: platform-aggregate-${{ github.run_id }}
+        name: platform-aggregate-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: .work/qualification-aggregate/
         if-no-files-found: warn
   publish-existing:

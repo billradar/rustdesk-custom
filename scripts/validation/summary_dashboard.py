@@ -7,6 +7,7 @@ import re
 import subprocess
 import tempfile
 from scripts.validation import summary
+from scripts.release.artifacts import select_name
 
 
 def gh(*args):
@@ -61,7 +62,8 @@ def collect(repo,run_id):
            (f'channel-discovery-{run_id}','channel.json')]
     locks=[name for name in available if re.fullmatch(f'stable-build-lock-{run_id}-[1-9][0-9]*',name)]
     if locks:names.append((max(locks,key=lambda n:int(n.rsplit('-',1)[1])),'stable-lock.json'))
-    for name,filename in names:
+    for base,filename in names:
+        name=select_name(artifacts,base,run.get('run_attempt',1))
         if name not in available:continue
         try:
             data=read_artifact(repo,run_id,name,filename)
@@ -71,7 +73,7 @@ def collect(repo,run_id):
                 upstream=data
         except Exception:
             pass  # Missing or unreadable optional evidence must not invent a result.
-    name=f'generation-compatibility-{run_id}'
+    name=select_name(artifacts,f'generation-compatibility-{run_id}',run.get('run_attempt',1))
     if name in available:
         try:
             data=read_artifact(repo,run_id,name,'compatibility-report.json')
@@ -89,7 +91,7 @@ def collect(repo,run_id):
     if not any(isinstance(r.get('variants'),dict) and r['variants'] for r in reports):
         for stage in ('preflight','flutter'):
             for variant in ('standard','sos'):
-                name=f'{stage}-{variant}-report-{run_id}'
+                name=select_name(artifacts,f'{stage}-{variant}-report-{run_id}',run.get('run_attempt',1))
                 if name not in available:continue
                 try:
                     data=read_artifact(repo,run_id,name,'report.json')
