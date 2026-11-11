@@ -121,7 +121,7 @@ class ChannelPolicyTests(unittest.TestCase):
         self._env=patch.dict(os.environ,GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false');self._env.start()
         self._verify=patch.object(channel,'verify',return_value=True);self._verify.start()
         self._hash=patch.object(channel,'patch_hash',return_value='c'*64);self._hash.start()
-        self._assets=patch.object(channel,'verify_release_asset_checksums',return_value=True);self._assets.start()
+        self._assets=patch.object(channel,'verify_release_asset_attestation',return_value=True);self._assets.start()
         self.addCleanup(self._verify.stop);self.addCleanup(self._hash.stop);self.addCleanup(self._assets.stop);self.addCleanup(self._env.stop)
     def discovery(self, patchset='v999999'):
         return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,patchset=patchset)
@@ -130,7 +130,7 @@ class ChannelPolicyTests(unittest.TestCase):
         tag=f'v1.4.9-custom.{patchset}.{revision}'
         included,policy=channel.wayland_identity()
         identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,'b'*40,included,policy)
-        assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+        assets=['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         if included:
             from scripts.platform.wayland import asset_names
             assets += sorted(asset_names('1.4.9'))
@@ -250,86 +250,58 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertFalse(data['draft_needed'])
             self.assertFalse(data['publish_existing'])
 
-    def test_untagged_draft_preflight_downloads_exact_checksum_asset(self):
-        import hashlib,subprocess
+    def test_attestation_wrapper_binds_tag_and_delegates_to_strict_verifier(self):
         self._assets.stop()
-        existing=self.draft_fixture('v1','2')
-        for index,asset in enumerate(existing['assets'],1):asset['id']=700+index
-        sums=''.join(a['digest'][7:]+'  '+a['name']+'\n' for a in existing['assets'] if a['name']!='SHA256SUMS').encode()
-        checksum=existing['assets'][0]
-        checksum.update(size=len(sums),digest='sha256:'+hashlib.sha256(sums).hexdigest())
-        def api(path,missing=False):
-            if '/releases/tags/' in path:return None
-            if '/releases?per_page=' in path:return [existing]
-            self.fail('Unexpected API '+path)
-        def download(args,**kwargs):
-            if args[:3]==['gh','release','download']:
-                raise subprocess.CalledProcessError(1,args,stderr='release not found')
-            self.assertEqual(args,['gh','api','repos/'+channel.REPOSITORY+'/releases/assets/701',
-                                   '--header','Accept: application/octet-stream'])
-            self.assertTrue(kwargs['check']);self.assertNotIn('input',kwargs)
-            kwargs['stdout'].write(sums)
         try:
-            with patch.object(channel,'release_rows',return_value=[existing]), \
-                 patch.object(channel,'api',side_effect=api), \
-                 patch.object(channel.subprocess,'run',side_effect=download) as command:
-                result=channel.release_preflight(self.discovery('v1'))
-            command.assert_called_once()
-            self.assertEqual(existing['tag_name'],'untagged-123')
-            self.assertEqual(result['release_tag'],'v1.4.9-custom.v1.2')
-            self.assertFalse(result['build_needed']);self.assertFalse(result['draft_needed'])
-            self.assertTrue(result['publish_existing'])
+            with patch('scripts.release.attestation.verify_remote',return_value=True) as verify:
+                self.assertTrue(channel.verify_release_asset_attestation('v1.4.9-custom.v1.1',[]))
+                verify.assert_called_once_with('v1.4.9-custom.v1.1',[],None)
+            with patch('scripts.release.attestation.verify_remote') as verify:
+                with self.assertRaises(ValueError):channel.verify_release_asset_attestation('bad/tag',[])
+                verify.assert_not_called()
         finally:self._assets.start()
 
-    def test_remote_sha256_manifest_must_match_github_asset_digests(self):
+    def test_untagged_draft_verifies_both_json_assets_by_exact_id(self):
+        from scripts.release import attestation as a
         import hashlib
         self._assets.stop()
-        package=b'package';package_hash=hashlib.sha256(package).hexdigest()
-        sums=(package_hash+'  package.deb\n').encode();sums_hash=hashlib.sha256(sums).hexdigest()
-        assets=[{'id':701,'name':'SHA256SUMS','state':'uploaded','size':len(sums),'digest':'sha256:'+sums_hash},
-                {'name':'package.deb','state':'uploaded','size':len(package),'digest':'sha256:'+package_hash}]
-        def download(args,**kwargs):
-            self.assertEqual(args[2],'repos/'+channel.REPOSITORY+'/releases/assets/701')
-            kwargs['stdout'].write(sums)
         try:
-            with patch.object(channel.subprocess,'run',side_effect=download):
-                self.assertTrue(channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',assets))
-            bad=[dict(assets[0]),dict(assets[1],digest='sha256:'+'0'*64)]
-            with patch.object(channel.subprocess,'run',side_effect=download):
-                with self.assertRaisesRegex(ValueError,'do not match'):
-                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',bad)
-        finally:
-            self._assets.start()
-
-    def test_checksum_asset_id_and_size_fail_closed_before_download(self):
-        self._assets.stop()
-        asset=dict(id=701,name='SHA256SUMS',state='uploaded',size=1,digest='sha256:'+'a'*64)
-        try:
-            for value in (None,False,True,0,-1,'701','701/../../secrets'):
-                with self.subTest(value=value),patch.object(channel.subprocess,'run') as command:
-                    with self.assertRaisesRegex(ValueError,'asset ID'):
-                        channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[dict(asset,id=value)])
-                    command.assert_not_called()
-            with patch.object(channel.subprocess,'run') as command:
-                with self.assertRaisesRegex(ValueError,'download limit'):
-                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[dict(asset,size=1024*1024+1)])
-                command.assert_not_called()
+            with tempfile.TemporaryDirectory() as td:
+                root=Path(td);existing=self.draft_fixture('v1','2');entries=[]
+                for variant in ('standard','sos'):
+                    for extension in ('exe','msi'):
+                        p=root/windows_installer_name('1.4.9',variant,extension);p.write_bytes(b'package')
+                        entries.append(a.entry(p,dict(platform='windows-x86_64',architecture='x86_64',variant=variant)))
+                info=dict(upstream_version='1.4.9',upstream_sha='a'*40,custom_repository_sha='b'*40,patchset='v1',patch_revision='v1.2',common_patch_hash='c'*64,sos_patch_hash='c'*64)
+                with patch.dict(os.environ,GITHUB_REPOSITORY=a.REPOSITORY,GITHUB_RUN_ID='9'):
+                    a.write(root,'stable',entries,info,{'result':'PASS'})
+                (root/a.BUNDLE).write_text('{}')
+                files=sorted(root.iterdir());content={700+i:p.read_bytes() for i,p in enumerate(files)}
+                existing['assets']=[dict(id=700+i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for i,p in enumerate(files)]
+                lines=existing['body'].splitlines()
+                existing['body']='\n'.join('Asset Inventory: '+json.dumps([p.name for p in files]) if line.startswith('Asset Inventory: ') else line for line in lines)
+                def api(path,missing=False):
+                    if '/releases/tags/' in path:return None
+                    if '/releases?per_page=' in path:return [existing]
+                    self.fail('Unexpected API '+path)
+                def download(args,**kwargs):
+                    self.assertEqual(args[:2],['gh','api'])
+                    self.assertTrue(args[2].startswith('repos/'+a.REPOSITORY+'/releases/assets/'))
+                    kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
+                with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',side_effect=api),patch.object(a.subprocess,'run',side_effect=download) as command,patch.object(a,'verify_signature') as signature:
+                    result=channel.release_preflight(self.discovery('v1'))
+                self.assertEqual(command.call_count,2);signature.assert_called_once()
+                self.assertEqual(existing['tag_name'],'untagged-123')
+                self.assertFalse(result['build_needed']);self.assertTrue(result['publish_existing'])
         finally:self._assets.start()
 
-    def test_checksum_asset_download_failure_and_tamper_never_reuse(self):
-        import subprocess
-        self._assets.stop()
-        asset=dict(id=701,name='SHA256SUMS',state='uploaded',size=1,digest='sha256:'+'a'*64)
-        try:
-            with patch.object(channel.subprocess,'run',side_effect=subprocess.CalledProcessError(1,['gh','api'])) as command:
-                with self.assertRaises(subprocess.CalledProcessError):
-                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[asset])
-                command.assert_called_once()
-            def tamper(args,**kwargs):kwargs['stdout'].write(b'tampered')
-            with patch.object(channel.subprocess,'run',side_effect=tamper):
-                with self.assertRaisesRegex(ValueError,'does not match the GitHub asset digest'):
-                    channel.verify_release_asset_checksums('v1.4.9-custom.v1.1',[asset])
-        finally:self._assets.start()
+    def test_legacy_checksum_only_release_cannot_be_reused(self):
+        existing=self.draft_fixture('v1','2')
+        existing['body']=existing['body'].replace('update-manifest.json','SHA256SUMS').replace(', "release-attestation.json"','')
+        existing['assets']=[dict(a,name='SHA256SUMS') if a['name']=='update-manifest.json' else a for a in existing['assets'] if a['name']!='release-attestation.json']
+        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
+            with self.assertRaises(ValueError):channel.release_preflight(self.discovery('v1'))
+
 
     def test_custom_commit_does_not_change_identity_but_wayland_does(self):
         base=self.discovery('v1')
@@ -506,7 +478,7 @@ class ChannelPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'verified official-run Nightly resolver'):
             channel.resolve('nightly')
 
-    def test_public_release_assets_are_binary_only(self):
+    def test_public_release_assets_allow_only_binaries_and_attestation_json(self):
         source=(ROOT/'scripts/release/qualification.py').read_text()
         self.assertNotIn("source-'+name+'.zip",source)
         self.assertNotIn("build-info-'+name+'.json",source)
@@ -515,14 +487,14 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn("allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}",source)
         self.assertIn("name.startswith('source-')",source)
         self.assertIn("name.startswith('build-info-')",source)
-        names=['SHA256SUMS',
+        names=['update-manifest.json','release-attestation.json',
                windows_installer_name('1.4.9','standard','exe'),
                windows_installer_name('1.4.9','standard','msi'),
                windows_installer_name('1.4.9','sos','exe'),
                windows_installer_name('1.4.9','sos','msi'),
                native_package_name('1.4.9','standard','linux','x86_64','standard-rustdesk-1.4.9-x86_64.deb'),
                native_package_name('1.4.9','standard','macos','x86_64','standard-rustdesk-1.4.9-x86_64.dmg')]
-        forbidden=[n for n in names if n.lower().endswith('.json') or n.startswith('source-') or n.startswith('build-info-')]
+        forbidden=[n for n in names if (n.lower().endswith('.json') and n not in ('update-manifest.json','release-attestation.json')) or n.startswith('source-') or n.startswith('build-info-')]
         self.assertEqual(forbidden,[])
         qualification=source
         self.assertIn("packages_dir=folder/'packages'", qualification)
@@ -543,9 +515,9 @@ class ChannelPolicyTests(unittest.TestCase):
             'name':'v1.4.9-custom.v999999.1','tag_name':'v1.4.9-custom.v999999.1','draft':True,'prerelease':False,
             'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}',
                 'Custom Repository SHA: '+'b'*40,'Wayland Included: false','Patch Revision: v999999.1',
-                'Build Identity: '+identity,'Asset Inventory: '+json.dumps(['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']),
+                'Build Identity: '+identity,'Asset Inventory: '+json.dumps(['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']),
                 'version_semantics=patchset-content-v1','automation_state=complete']),
-            'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in ['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
+            'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in ['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
         }
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
             data=channel.release_preflight(self.discovery())

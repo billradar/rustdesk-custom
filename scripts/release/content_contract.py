@@ -91,7 +91,7 @@ class ContentContract(unittest.TestCase):
         common=channel.patch_hash('common','v2');sos=channel.patch_hash('sos','v2')
         identity=channel.build_identity('a'*40,'v2',common,sos,wayland_included=False)
         tag='v1.5.1-custom.'+inputs['patchset_version']
-        names=['SHA256SUMS','rustdesk-1.5.1-standard-windows-x86_64.zip','rustdesk-1.5.1-sos-windows-x86_64.zip']
+        names=['update-manifest.json','release-attestation.json','rustdesk-1.5.1-standard-windows-x86_64.zip','rustdesk-1.5.1-sos-windows-x86_64.zip']
         body='\n'.join(['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: v2',
             'Common Patch Hash: '+common,'SOS Patch Hash: '+sos,'Patch Revision: '+inputs['patchset_version'],
             'Build Identity: '+identity,'Wayland Included: false','version_semantics=patchset-content-v1',
@@ -105,7 +105,7 @@ class ContentContract(unittest.TestCase):
                   upstream_sha='a'*40,patchset='v2')
         with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'),\
              patch.object(channel,'api',return_value=existing),\
-             patch.object(channel,'verify_release_asset_checksums') as checks:
+             patch.object(channel,'verify_release_asset_attestation') as checks:
             result=channel.release_preflight(data)
             self.assertFalse(result['build_needed'])
             self.assertTrue(result['publish_existing'])

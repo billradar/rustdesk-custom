@@ -397,7 +397,8 @@ class NightlyTests(unittest.TestCase):
             self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
         for name,j in w['jobs'].items():
             if name!='android-sign':self.assertNotIn('environment',j)
-            if name not in ('draft','propose-interface-review'):self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name not in ('draft','propose-interface-review','aggregate'):self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name=='aggregate':self.assertEqual(j['permissions'],{'contents':'read','actions':'read','id-token':'write','attestations':'write'})
             if name!='android-sign':self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(j))
         signer=w['jobs']['android-sign'];tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']['android-sign']
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
@@ -474,8 +475,20 @@ class NightlyTests(unittest.TestCase):
 
 
 class NightlyDraftTests(unittest.TestCase):
+    def make_manifest(self, assets):
+        from scripts.release import attestation as a
+        info=dict(platform='android',architecture='aarch64',variant='standard',upstream_version='1.5.1',
+                  upstream_sha='b'*40,custom_repository_sha='a'*40,patchset='v2',patch_revision=None,
+                  common_patch_hash=nightly.patch_hash('common','v2'),sos_patch_hash=nightly.patch_hash('sos','v2'))
+        a.write(assets,'nightly',[a.entry(assets/'client.apk',info)],info,{'result':'PASS'})
+        (assets/a.BUNDLE).write_text('{}')
+
     def setUp(self):
-        self.repo='example/rustdesk-custom'
+        from scripts.release import attestation as a
+        signature=patch.object(a,'verify_signature');signature.start();self.addCleanup(signature.stop)
+        attach=patch.object(a,'attach',side_effect=lambda directory,channel:a.verify_local(directory,channel,Path(directory)/a.BUNDLE))
+        attach.start();self.addCleanup(attach.stop)
+        self.repo='billradar/rustdesk-custom'
         self.env={'GITHUB_REPOSITORY':self.repo,'GITHUB_REF':'refs/heads/main',
                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':self.repo+'/.github/workflows/nightly.yml@refs/heads/main',
                   'RELEASE_MODE':'draft','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'9',
@@ -489,9 +502,10 @@ class NightlyDraftTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
             (assets/'client.apk').write_bytes(b'validated package fixture')
-            (assets/'SHA256SUMS').write_text(hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()+'  client.apk\n')
+            self.make_manifest(assets)
+            if mode == 'missing-proof':(assets/'release-attestation.json').unlink()
             if mode == 'bad-checksum':
-                (assets/'SHA256SUMS').write_text('0'*64 + '  client.apk\n')
+                (assets/'update-manifest.json').write_text('{}')
             if mode == 'forbidden-json':
                 (assets/'build-info-secret.json').write_text('{}')
             discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
@@ -519,7 +533,7 @@ class NightlyDraftTests(unittest.TestCase):
             with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=report),patch.object(nightly,'api',side_effect=api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh') as upload,patch('scripts.release.github.request',side_effect=release_write) as write:
                 if mode not in ('ok','missing-tag','move-tag'):
                     with self.assertRaises(ValueError):nightly.draft(root,discovery)
-                    if mode in ['unsigned','existing','published','bad-checksum','forbidden-json']:
+                    if mode in ['unsigned','existing','published','bad-checksum','forbidden-json','missing-proof']:
                         write.assert_not_called()
                         upload.assert_not_called()
                     if mode=='bad-upload':self.assertEqual(write.call_count,1)
@@ -589,7 +603,7 @@ class NightlyDraftTests(unittest.TestCase):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
             (assets/'client.apk').write_bytes(b'validated package fixture')
             digest=hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()
-            (assets/'SHA256SUMS').write_text(digest+'  client.apk\n')
+            self.make_manifest(assets)
             discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
             remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
             create_payload={}
@@ -701,7 +715,7 @@ class NightlyDraftTests(unittest.TestCase):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
             (assets/'client.apk').write_bytes(b'validated package fixture')
             digest=hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()
-            (assets/'SHA256SUMS').write_text(digest+'  client.apk\n')
+            self.make_manifest(assets)
             discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
             remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
             create_payload={}
@@ -740,7 +754,7 @@ class NightlyDraftTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,dict(self.env,RELEASE_MODE='release')):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
             (assets/'client.apk').write_bytes(b'validated package fixture')
-            (assets/'SHA256SUMS').write_text(hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()+'  client.apk\n')
+            self.make_manifest(assets)
             discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
             uploaded=[dict(name=x.name,state='uploaded',size=x.stat().st_size,digest='sha256:'+hashlib.sha256(x.read_bytes()).hexdigest()) for x in assets.iterdir()]
             def api(path,missing=False):
@@ -768,6 +782,8 @@ class NightlyDraftTests(unittest.TestCase):
     def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
     def test_existing_release_never_overwritten(self):self.perform('existing')
     def test_draft_refresh_does_not_hide_a_published_release(self):self.perform('published')
+    def test_missing_attestation_cannot_create_or_publish_a_release(self):self.perform('missing-proof')
+
     def test_bad_upload_digest_cannot_mark_draft_complete(self):self.perform('bad-upload')
     def test_bad_checksums_block_publication(self):self.perform('bad-checksum')
     def test_nonpublic_json_blocks_publication(self):self.perform('forbidden-json')

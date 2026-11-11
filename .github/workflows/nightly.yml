@@ -323,6 +323,11 @@ jobs:
       RELEASE_MODE: ${{ inputs.release_mode }}
       ANDROID_PRODUCTION_SIGNING_ENABLED: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
       REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ inputs.release_mode != 'dry-run' && vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -354,6 +359,26 @@ jobs:
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
     - name: Revalidate complete matrix, exact source and same-run artifacts
       run: python3 scripts/release/nightly.py aggregate --discovery .work/discovery/nightly-discovery.json
+    - name: Attest qualified release inventory
+      id: release-attestation
+      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.release_mode != 'dry-run'
+      uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+      with:
+        subject-path: .work/qualification-aggregate/assets/update-manifest.json
+    - name: Stage Sigstore release attestation bundle
+      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.release_mode != 'dry-run'
+      env:
+        ATTESTATION_BUNDLE: ${{ steps.release-attestation.outputs.bundle-path }}
+      run: cp -- "$ATTESTATION_BUNDLE" .work/qualification-aggregate/assets/release-attestation.json
+    - name: Upload verified-release proof handoff
+      if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.release_mode != 'dry-run'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: release-attestation-nightly-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+        path: |
+          .work/qualification-aggregate/assets/update-manifest.json
+          .work/qualification-aggregate/assets/release-attestation.json
+        if-no-files-found: error
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
@@ -418,6 +443,10 @@ jobs:
       run: |
         sudo apt-get update -y
         sudo apt-get install -y rpm rpm2cpio cpio apksigner aapt
+    - name: Download same-run attested aggregate
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.release.artifacts --repo "$GITHUB_REPOSITORY" --run "$GITHUB_RUN_ID" --base "release-attestation-nightly-$GITHUB_RUN_ID" --destination .work/attested-aggregate
     - name: Mint repository-scoped release App token
       id: release-app
       uses: ./.github/actions/release-app-token

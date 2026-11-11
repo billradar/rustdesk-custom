@@ -42,3 +42,5 @@
 - [Patchset release integration and immutable publication gates](patchset-release-integration.md)
 
 - [Patch Profiles and candidate isolation](patch-profiles.md)
+
+- [Release inventory and Sigstore attestation](release-attestation.md) — direct JSON integrity format, trusted workflows and client boundary.

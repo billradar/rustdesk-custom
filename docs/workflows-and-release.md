@@ -300,3 +300,12 @@ replaces that job's older failure. Missing or malformed evidence does not create
 a successful gate. Immutable prepared-source, installer and signing payload names
 remain unchanged. Run `python3 -m scripts.release.artifacts_contract` together
 with qualification, Nightly and summary contracts after changing these handoffs.
+
+## Public release integrity format
+
+New releases use `update-manifest.json` plus a Sigstore `release-attestation.json`
+bundle, replacing public `SHA256SUMS` directly. The main-only aggregate job signs
+the qualified manifest; write jobs revalidate it before Release/tag writes.
+Checksum-only historical Drafts cannot pass the new publication/reuse gate.
+See [Release inventory and Sigstore attestation](release-attestation.md) for the
+trust policy, old-client boundary and internal checksum exceptions.

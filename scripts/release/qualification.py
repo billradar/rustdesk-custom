@@ -44,7 +44,7 @@ def stage_assets(packages, directory):
     reserved={}
     for source,name in packages:
         if (not source.is_file() or source.is_symlink() or Path(name).name!=name
-                or name in ('', '.', '..', 'SHA256SUMS') or any(char in name for char in ('/',chr(92)))):
+                or name in ('', '.', '..', 'SHA256SUMS', 'update-manifest.json', 'release-attestation.json') or any(char in name for char in ('/',chr(92)))):
             raise ValueError('PACKAGE: invalid public asset input: '+name)
         if name in reserved:
             raise ValueError('PACKAGE: public asset name collision: '+name+
@@ -122,7 +122,7 @@ def aggregate(root,channel,experimental):
             if file.is_file():rows.append(hashlib.sha256(file.read_bytes()).hexdigest()+'  '+name+'/'+file.relative_to(folder).as_posix())
     (out/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
     if required_pass and channel in ('stable', 'nightly'):
-        assets=out/'assets';staged=[]
+        assets=out/'assets';staged=[];asset_infos={}
         try:
             for name,e in expected.items():
                 if name not in found:continue
@@ -137,6 +137,7 @@ def aggregate(root,channel,experimental):
                     for package in packages:
                         filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix, e['arch'])
                         staged.append((package,filename))
+                        asset_infos[filename]=info
                 else:
                     packages_dir=folder/'packages'
                     if not packages_dir.is_dir():
@@ -149,15 +150,21 @@ def aggregate(root,channel,experimental):
                             raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
                         filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
                         staged.append((package,filename))
+                        asset_infos[filename]=info
             stage_assets(staged,assets)
             if os.environ.get('INCLUDE_WAYLAND') == 'true':
                 from scripts.platform.wayland import attach_assets
                 peers = {(i['variant'], i['architecture']): i for i in found.values() if i['platform'] == 'linux'}
                 report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peers, channel)
-            from scripts.platform.platform_package import checksums
-            checksums(assets)
+                for file in (ROOT / '.work/wayland-targets').rglob('build-info.json'):
+                    info=json.loads(file.read_text())
+                    for package in (file.parent/'packages').iterdir():asset_infos[package.name]=info
+            from scripts.release.attestation import write, entry
+            first=dict(next(iter(found.values())))
+            first['sos_patch_hash']=patch_hash('sos',first['patchset'])
+            write(assets,channel,[entry(assets/name,info) for name,info in asset_infos.items()],first,report)
             public_assets=sorted(p.name for p in assets.iterdir())
-            forbidden=[name for name in public_assets if name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')]
+            forbidden=[name for name in public_assets if (name.lower().endswith('.json') and name!='update-manifest.json') or name.startswith('source-') or name.startswith('build-info-')]
             if forbidden:
                 raise ValueError('PACKAGE: non-public release assets generated: '+', '.join(forbidden))
         except Exception as error:
@@ -424,6 +431,8 @@ def _release(root, publish, channel='stable', experimental=False):
     for j in api(f'repos/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}/jobs?per_page=100')['jobs']:
         if j['status']=='completed' and j['conclusion']=='success':scan_job_log(j['id'])
     directory=ROOT/'.work/qualification-aggregate/assets'
+    from scripts.release.attestation import attach
+    attach(directory, 'stable')
     official_notes=release_notes_body(standard['upstream_tag'] or standard['upstream_version'])
     from scripts.release.channel import build_identity
     wayland_included=os.environ.get('INCLUDE_WAYLAND') == 'true'
@@ -510,7 +519,7 @@ def publish_existing_draft(channel='stable'):
     tag=os.environ.get('RELEASE_TAG','')
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}',tag):
         raise ValueError('Invalid existing Stable release tag')
-    from scripts.release.channel import matching_drafts, verify_release_asset_checksums
+    from scripts.release.channel import matching_drafts, verify_release_asset_attestation
     drafts=matching_drafts(tag)
     if len(drafts) != 1:
         raise ValueError('Expected exactly one existing Stable draft')
@@ -561,7 +570,7 @@ def publish_existing_draft(channel='stable'):
     if (len(inventory)!=len(set(inventory)) or set(inventory)!=uploaded or len(assets)!=len(uploaded)
             or any(not re.fullmatch(r'sha256:[0-9a-f]{64}',asset.get('digest','')) or asset.get('size',0)<=0 for asset in assets)):
         raise ValueError('Existing Stable draft asset inventory/digests are incomplete')
-    verify_release_asset_checksums(tag,assets)
+    verify_release_asset_attestation(tag,assets,dict(upstream_sha=upstream_sha,custom_repository_sha=custom_sha,patchset=patchset,common_patch_hash=patch_hash('common',patchset),sos_patch_hash=patch_hash('sos',patchset)))
     from scripts.release.stable_tag import ensure
     ensure(repo,tag,custom_sha)
     final=request(

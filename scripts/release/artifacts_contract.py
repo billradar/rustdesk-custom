@@ -49,7 +49,7 @@ class ArtifactTests(unittest.TestCase):
             download.assert_not_called()
 
     def test_rerunnable_reports_have_attempts_but_payload_names_are_unchanged(self):
-        prefixes=('platform-aggregate-','channel-discovery-','patchset-selection-',
+        prefixes=('release-attestation-','platform-aggregate-','channel-discovery-','patchset-selection-',
                   'preflight-','flutter-','generation-compatibility-','nightly-discovery-',
                   'nightly-qualification-','release-preflight-','upstream-main-','nightly-route-')
         checked=0

@@ -315,6 +315,17 @@ Release asset normalization must be idempotent. Aggregate staging reserves all p
 
 ## 9. Release qualification and publication safety
 
+New public Release inventories use `update-manifest.json` and a standard Sigstore
+`release-attestation.json` bundle, without public SHA256SUMS fallback. Only main
+workflow-dispatch aggregate jobs mint provenance after qualification; write jobs
+regenerate/verify the inventory and proof before writes. Stable reuse verifies
+JSON asset IDs/digests, trusted workflow/ref/commit and exact installer inventory.
+Internal source/build checksum manifests remain separate. Do not claim client
+Sigstore verification: historical updater patches still use GitHub API digests.
+Read `docs/release-attestation.md` and run `scripts.release.attestation_contract`
+plus affected release contracts.
+
+
 Release writers use `.github/actions/release-app-token` with repository Variable `RELEASE_APP_CLIENT_ID` and Secret `RELEASE_APP_PRIVATE_KEY`; see `docs/release-app.md`. Mint only inside the existing gated main-branch Stable/Nightly write jobs, restrict to this repository with Contents/Workflows write and Actions read, revoke after the job, and expose the token only to the final release step. Never pass the App key/token to CI, compilers or Android signing. Dry-run does not require it. Keep build commit provenance and all publication gates unchanged.
 
 A valid qualification must match the exact:
