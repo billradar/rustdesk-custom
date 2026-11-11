@@ -15,10 +15,11 @@ from scripts.upstream import interface_review as review
 class ReviewContract(unittest.TestCase):
     def setUp(self):
         self.env={'GITHUB_REPOSITORY':review.REPOSITORY,'GITHUB_REF':'refs/heads/main',
-            'GITHUB_EVENT_NAME':'schedule','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'17'}
+            'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'17',
+            'GITHUB_WORKFLOW_REF':review.REPOSITORY+'/.github/workflows/nightly.yml@refs/heads/main'}
         self.packet={'schema':review.SCHEMA,'approval':'REQUIRED / NOT APPROVED',
             'upstream_repository':'rustdesk/rustdesk','upstream_sha':'b'*40,'custom_repository_sha':'a'*40,
-            'workflow_run':'17','observed_profile':None,'critical':None,
+            'workflow_run':'17','channel':'nightly','observed_profile':None,'critical':None,
             'checks':{'interface':'UNKNOWN / BLOCKED','rust_compile':'NOT RUN','bridge':'NOT RUN','flutter_analyze':'NOT RUN','runtime':'NOT TESTED'}}
 
     def test_rejects_foreign_context_stale_packets_and_fabricated_validation(self):
@@ -29,7 +30,9 @@ class ReviewContract(unittest.TestCase):
                 with self.assertRaises(ValueError):review.validate_packet(p)
             p=copy.deepcopy(self.packet);p['checks']['rust_compile']='PASS'
             with self.assertRaises(ValueError):review.validate_packet(p)
-            for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),('GITHUB_REPOSITORY','other/repo')]:
+            for key,value in [('GITHUB_REF','refs/heads/development'),('GITHUB_EVENT_NAME','pull_request'),
+                              ('GITHUB_EVENT_NAME','schedule'),('GITHUB_REPOSITORY','other/repo'),
+                              ('GITHUB_WORKFLOW_REF',review.REPOSITORY+'/.github/workflows/upstream-main-compatibility.yml@refs/heads/main')]:
                 with patch.dict(os.environ,{key:value}),patch.object(review,'request') as api:
                     with self.assertRaises(ValueError):review.publish(self.packet)
                     api.assert_not_called()
@@ -78,6 +81,7 @@ class ReviewContract(unittest.TestCase):
         current['critical']={'files':{},'tools':{}}
         current['observed_profile']={'signature':review.build_adapter.digest(current['critical'])}
         stored=copy.deepcopy(current)
+        stored.pop('channel')  # Preserve recovery of immutable historical main reports.
         stored.update(upstream_sha='c'*40,custom_repository_sha='d'*40,workflow_run='11')
         path='docs/upstream-interface-reviews/'+'c'*40+'.json'
         state={'files':[{'filename':path,'status':'added','sha':'e'*40}],
@@ -140,6 +144,7 @@ class ReviewContract(unittest.TestCase):
             'approved report':lambda s:s['stored'].update(approval='APPROVED'),
             'digest mismatch':lambda s:s['stored']['critical'].update(unexpected=True),
             'untrusted workflow':lambda s:s['run'].update(path='.github/workflows/other.yml'),
+            'wrong Nightly channel':lambda s:s['run'].update(path='.github/workflows/nightly.yml',event='workflow_dispatch'),
             'foreign run':lambda s:s['run'].update(repository={'full_name':'other/repo'}),
             'wrong historical commit':lambda s:s['run'].update(head_sha='0'*40),
             'main advanced':lambda s:s.update(main_changed=True),
@@ -160,6 +165,23 @@ class ReviewContract(unittest.TestCase):
         with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api):
             with self.assertRaisesRegex(ValueError,'different source or interface'):review.publish(current)
         self.assertFalse(any(method!='GET' for _,method,_ in calls))
+
+    def test_nightly_report_recovery_requires_nightly_manual_discovery(self):
+        def change(state):
+            state['stored']['channel']='nightly'
+            state['run'].update(path='.github/workflows/nightly.yml',event='workflow_dispatch')
+        current,calls,api=self.recovery(change)
+        with patch.dict(os.environ,self.env),patch.object(review,'request',side_effect=api):
+            self.assertEqual(review.publish(current),'recovered-draft')
+        self.assertEqual([(p,m) for p,m,_ in calls if m!='GET'],[('pulls','POST')])
+
+    def test_ci_reports_cannot_create_prs_even_in_nightly_context(self):
+        with patch.dict(os.environ,self.env),patch.object(review,'request') as api:
+            for channel in ('ci',None):
+                packet=dict(self.packet,channel=channel) if channel else {k:v for k,v in self.packet.items() if k!='channel'}
+                with self.assertRaisesRegex(ValueError,'Only Nightly'):
+                    review.publish(packet)
+            api.assert_not_called()
 
     def test_known_interface_creates_no_report(self):
         profile={'signature':'known'}
@@ -210,10 +232,12 @@ class ReviewContract(unittest.TestCase):
         critical={'files':{},'tools':{}};profile={'signature':review.build_adapter.digest(critical),'upstream_version':'1.5.1'}
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,critical)),patch.object(review.shutil,'copytree'),patch.object(review.subprocess,'run') as run:
             run.return_value.returncode=1;run.return_value.stdout='patch conflict';run.return_value.stderr=''
-            p=review.collect(Path(td),'b'*40,Path(td)/'out')
+            p=review.collect(Path(td),'b'*40,Path(td)/'out','nightly')
             self.assertEqual(p['approval'],'REQUIRED / NOT APPROVED')
             self.assertEqual(p['checks']['patches']['sos']['patch_apply'],'FAIL')
             self.assertEqual(p['checks']['rust_compile'],'NOT RUN')
+            self.assertEqual(p['channel'],'nightly')
+            self.assertTrue(all(call.kwargs['env']['BUILD_CHANNEL']=='nightly' for call in run.call_args_list))
 
     def test_unknown_version_still_records_review(self):
         profile={'signature':'unknown','upstream_version':'1.5.2-dev'}
@@ -236,13 +260,24 @@ class ReviewContract(unittest.TestCase):
     def test_workflow_separates_read_only_inspection_and_writer(self):
         w=yaml.safe_load((review.ROOT/'.github/workflows/upstream-main-compatibility.yml').read_text())
         self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
+        self.assertEqual(set(w['jobs']),{'resolve','compatibility'})
+        self.assertEqual(w['jobs']['compatibility']['with']['channel'],'ci')
+        self.assertNotIn('interface_review.py',json.dumps(w))
+        w=yaml.safe_load((review.ROOT/'.github/workflows/nightly.yml').read_text())
+        self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
         read=w['jobs']['interface-review'];writer=w['jobs']['propose-interface-review']
+        self.assertEqual(read['needs'],'resolve')
+        self.assertEqual(read['if'],"needs.resolve.outputs.dedup_skip != 'true'")
+        self.assertEqual(read['env']['UPSTREAM_SHA'],'${{ needs.resolve.outputs.upstream_sha }}')
+        self.assertIn('--channel nightly',next(s['run'] for s in read['steps'] if s.get('id')=='review'))
         self.assertNotIn('permissions',read)
         self.assertEqual(writer['permissions'],{'contents':'write','pull-requests':'write','actions':'read'})
         self.assertIn("github.ref == 'refs/heads/main'",writer['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'",writer['if'])
+        self.assertIn("format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository)",writer['if'])
         self.assertIn("needs.interface-review.result == 'success'",writer['if'])
         self.assertEqual(writer['needs'],'interface-review')
-        self.assertNotIn('continue-on-error',json.dumps(w))
+        self.assertNotIn('continue-on-error',json.dumps(read)+json.dumps(writer))
         self.assertNotIn('secrets.',json.dumps(read))
         self.assertNotIn('environment',writer)
         self.assertFalse(any('collect' in x.get('run','') or 'prepare.sh' in x.get('run','') for x in writer['steps']))
