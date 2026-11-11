@@ -71,10 +71,10 @@ jobs:
         CHANNEL: stable
       run: python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
     - id: patchset
-      name: Select Stable patchset by version boundary
+      name: Select Stable patchset by version boundary / exact maintained Profile
       env:
         UPSTREAM_VERSION: ${{ steps.resolve.outputs.version }}
-      run: python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION"
+      run: python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION" --channel stable
     - name: Validate Stable execution identity
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}

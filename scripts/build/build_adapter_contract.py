@@ -40,6 +40,14 @@ class AdapterContract(unittest.TestCase):
         self.assertEqual(adapter.digest(string_only),hashlib.sha256(json.dumps(
             string_only,sort_keys=True,separators=(',',':')).encode()).hexdigest())
 
+    def test_digest_is_order_independent_and_rejects_normalized_collisions(self):
+        self.assertEqual(adapter.digest({'nested': [{True: 1, 'os': 'linux'}]}),
+                         adapter.digest({'nested': [{'os': 'linux', True: 1}]}))
+        for sample in ({True: 1, 'True': 2}, {1: 1, '1': 2},
+                       {'nested': [{None: 1, 'None': 2}]}):
+            with self.assertRaisesRegex(ValueError, 'collision'):
+                adapter.digest(sample)
+
     def test_exact_review_passes_but_critical_file_drift_fails(self):
         with patch.object(adapter,'ROOT',self.root):
             self.assertEqual(adapter.check(self.source)['reviewed_profile'],'synthetic-reviewed')

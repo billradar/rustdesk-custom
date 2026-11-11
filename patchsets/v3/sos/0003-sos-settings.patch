@@ -1,0 +1,43 @@
+diff --git a/flutter/lib/desktop/pages/desktop_setting_page.dart b/flutter/lib/desktop/pages/desktop_setting_page.dart
+index 276b2ae..9f1b193 100644
+--- a/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -61,19 +61,19 @@ enum SettingsTabKey {
+ class DesktopSettingPage extends StatefulWidget {
+   final SettingsTabKey initialTabkey;
+   static final List<SettingsTabKey> tabKeys = [
+-    if (bind.mainGetBuildinOption(key: kOptionHideGeneralSetting) != 'Y')
++    if (bind.mainGetBuildinOption(key: 'sos-mode') != 'Y' && bind.mainGetBuildinOption(key: kOptionHideGeneralSetting) != 'Y')
+       SettingsTabKey.general,
+-    if (!isWeb &&
++    if (bind.mainGetBuildinOption(key: 'sos-mode') != 'Y' && !isWeb &&
+         !bind.isOutgoingOnly() &&
+         !bind.isDisableSettings() &&
+         bind.mainGetBuildinOption(key: kOptionHideSecuritySetting) != 'Y')
+       SettingsTabKey.safety,
+-    if (!bind.isDisableSettings() &&
++    if (bind.mainGetBuildinOption(key: 'sos-mode') != 'Y' && !bind.isDisableSettings() &&
+         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) != 'Y')
+       SettingsTabKey.network,
+-    if (!bind.isIncomingOnly()) SettingsTabKey.display,
+-    if (!bind.isDisableAccount()) SettingsTabKey.account,
+-    if (isWindows &&
++    if (bind.mainGetBuildinOption(key: 'sos-mode') != 'Y' && !bind.isIncomingOnly()) SettingsTabKey.display,
++    if (bind.mainGetBuildinOption(key: 'sos-mode') != 'Y' && !bind.isDisableAccount()) SettingsTabKey.account,
++    if (bind.mainGetBuildinOption(key: 'sos-mode') != 'Y' && isWindows &&
+         !bind.isDisableSettings() &&
+         bind.mainGetBuildinOption(key: kOptionHideRemotePrinterSetting) != 'Y')
+       SettingsTabKey.printer,
+diff --git a/flutter/lib/desktop/pages/desktop_tab_page.dart b/flutter/lib/desktop/pages/desktop_tab_page.dart
+index 6440e55..299f398 100644
+--- a/flutter/lib/desktop/pages/desktop_tab_page.dart
++++ b/flutter/lib/desktop/pages/desktop_tab_page.dart
+@@ -97,7 +97,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
+             body: DesktopTab(
+               controller: tabController,
+               tail: Offstage(
+-                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
++                offstage: bind.isIncomingOnly() || bind.isDisableSettings() || bind.mainGetBuildinOption(key: 'sos-mode') == 'Y',
+                 child: ActionIcon(
+                   message: 'Settings',
+                   icon: IconFont.menu,

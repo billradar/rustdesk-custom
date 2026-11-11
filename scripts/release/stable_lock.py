@@ -27,7 +27,7 @@ def plan(data, patchset):
             or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version)
             or tag not in (version, 'v' + version) or data.get('upstream_ref') != tag):
         raise ValueError('Invalid Stable discovery for identity lock')
-    if patchset != patchset_for_version(version):
+    if patchset != patchset_for_version(version, channel="stable"):
         raise ValueError('Locked patchset differs from explicit version selection')
     verify(patchset)
     custom = os.environ.get('GITHUB_SHA', '')

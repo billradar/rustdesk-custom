@@ -4,7 +4,7 @@ import argparse, hashlib, json, os, re, subprocess, tempfile
 from pathlib import Path
 from scripts.upstream.resolve import api, choose_stable, resolve_ref
 from scripts.release.github import collect, request, gh
-from scripts.upstream.patchsets import verify, patch_hash
+from scripts.upstream.patchsets import verify, patch_hash, require_selection
 from scripts.upstream.patchset_version import current, SCHEMA as VERSION_SEMANTICS
 from scripts.release.production import assets, REPOSITORY
 from scripts.release.naming import windows_installer_name
@@ -124,6 +124,7 @@ def next_patch_revision(version, patchset):
     """Current Patchset content revision; never allocate from GitHub Releases."""
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
         raise ValueError('Invalid Stable upstream version')
+    require_selection(version, patchset, channel='stable')
     if not PATCHSET_RE.fullmatch(patchset):
         raise ValueError('Invalid Patchset version namespace')
     try:
@@ -212,6 +213,7 @@ def release_preflight(data, *, dry_run=False):
     if not PATCHSET_RE.fullmatch(data.get("patchset","")): raise ValueError("Invalid patchset")
     if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
         raise ValueError('Locked stable ref mismatch')
+    require_selection(data['version'], data['patchset'], channel='stable')
     custom_sha=os.environ.get('GITHUB_SHA','')
     if not re.fullmatch(r'[0-9a-f]{40}',custom_sha): raise ValueError('Stable preflight requires the exact custom repository SHA')
     wayland_included,wayland_policy_sha256=wayland_identity()

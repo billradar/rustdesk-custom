@@ -19,3 +19,5 @@ The allocation records the exact base commit, not its merge-base. Version valida
 The retired bootstrap/migration path is no longer accepted. A verification base must already contain reviewed `versioning` history; older unversioned branches must be rebased. Never infer Patchset revisions from historical Release numbering.
 
 Current features are separately maintained under `versioning.features`; revision categories describe only that revision's delta. Neither tooling nor CI invents semantic descriptions. The initial baseline explicitly states metadata migration only, with historical validation limits preserved.
+
+A new generation absent from the integration base may establish revision 1 only as `candidate_only`, with one reviewed migration baseline anchored to the exact base commit and an existing parent generation's exact revision/hashes. This does not change the parent or permit Stable release. Existing generations continue to require immutable, sequential, base-anchored history.

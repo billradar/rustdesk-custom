@@ -40,3 +40,5 @@
 
 - [Patchset content revision workflow](patchset-content-version.md)
 - [Patchset release integration and immutable publication gates](patchset-release-integration.md)
+
+- [Patch Profiles and candidate isolation](patch-profiles.md)

@@ -6,11 +6,17 @@ variant=${2:?Variant required}
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 patchset=${PATCHSET:-v1}
 [[ "$patchset" =~ ^v[1-9][0-9]*$ ]] || exit 1
-PYTHONPATH="$root" python3 - "$root/scripts" "$patchset" <<'PYCODE'
-import sys
+PYTHONPATH="$root" python3 - "$root/scripts" "$patchset" "$source_tree" <<'PYCODE'
+import sys, os, re
+from pathlib import Path
 sys.path.insert(0,sys.argv[1])
-from scripts.upstream.patchsets import verify
+from scripts.upstream.patchsets import verify, require_selection
 verify(sys.argv[2])
+version = re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
+                    (Path(sys.argv[3]) / 'Cargo.toml').read_text(), re.M)
+if not version:
+    raise ValueError('Numeric source version required before patching')
+require_selection(version.group(1), sys.argv[2], os.environ.get('BUILD_CHANNEL', 'ci'))
 PYCODE
 apply_one() {
     local patch=$1 target=$2

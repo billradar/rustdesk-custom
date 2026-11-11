@@ -47,6 +47,22 @@ class VersionContract(unittest.TestCase):
         self.write(data)
         return data
 
+    def test_new_candidate_generation_requires_exact_parent_and_base(self):
+        shutil.copytree(version.ROOT / 'patchsets/v3', self.root / 'patchsets/v3')
+        target = self.root / 'patchsets/v3/patchset.json'
+        data = json.loads(target.read_text())
+        data['versioning']['migration_base'] = self.base
+        data['versioning']['history'][0]['base_sha'] = self.base
+        def write():
+            target.write_text(json.dumps(data))
+            (target.parent / 'CHANGELOG.md').write_text(version.render(data))
+        write()
+        self.assertEqual(version.verify('v3', self.base, self.root)['result'], 'PASS')
+        data['derived_from']['revision'] += 1
+        write()
+        with self.assertRaisesRegex(ValueError, 'isolated candidate baseline'):
+            version.verify('v3', self.base, self.root)
+
     def test_each_content_scope_increments_exactly_once(self):
         for folders in [('common',), ('sos',), ('common', 'sos')]:
             with self.subTest(folders=folders):

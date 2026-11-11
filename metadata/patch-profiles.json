@@ -1,0 +1,15 @@
+{
+  "schema": "patch-profiles-v1",
+  "latest_maintained": "rd-1.5.3-candidate",
+  "profiles": {
+    "legacy-pre-1.5": {"patchset": "v1", "stable_allowed": true},
+    "rd-1.5.0": {"patchset": "v2", "stable_allowed": true},
+    "rd-1.5.1": {"patchset": "v2", "stable_allowed": true},
+    "rd-1.5.3-candidate": {"patchset": "v3", "stable_allowed": false}
+  },
+  "exact_versions": {
+    "1.5.0": "rd-1.5.0",
+    "1.5.1": "rd-1.5.1",
+    "1.5.3": "rd-1.5.3-candidate"
+  }
+}

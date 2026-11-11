@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from scripts.build import build_adapter
 from scripts.platform import platform_adapter
-from scripts.upstream.patchsets import patchset_for_version, patch_hash
+from scripts.upstream.patchsets import patchset_for_version, patch_hash, profile_for_version
 from scripts.validation.compatibility import contracts
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -90,6 +90,7 @@ def collect(source, upstream_sha, out):
     else:
         patchset=None
     if patchset:
+        packet['patch_profile']=profile_for_version(profile['upstream_version'])
         packet['patchset']=patchset
         packet['patch_hashes']={k:patch_hash(k,patchset) for k in ['common','sos']}
         for variant in ['standard','sos']:

@@ -101,10 +101,10 @@ jobs:
       name: Fail-closed official build adapter
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
     - id: selection
-      name: Select patchset by upstream version boundary
+      name: Select version Patch Profile (Stable forbids fallback)
       run: 'source scripts/validation/test_config.sh
 
-        python3 scripts/upstream/patchsets.py "$UP_SHA" --version "${{ steps.adapter.outputs.upstream_version }}"'
+        python3 scripts/upstream/patchsets.py "$UP_SHA" --version "${{ steps.adapter.outputs.upstream_version }}" --channel "${{ inputs.channel }}"'
       env:
         UP_SHA: ${{ inputs.upstream_sha }}
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -130,6 +130,7 @@ jobs:
       run: |
         set -euo pipefail
         python3 scripts/upstream/interface_review_contract.py
+        python3 -m scripts.upstream.patch_profiles_contract
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.platform.runner_migrations_contract
         python3 -m scripts.build.macos_arm64_contract

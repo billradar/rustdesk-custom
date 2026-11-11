@@ -46,8 +46,7 @@ generation, both Flutter analyses and CI qualification passed in run
 [40175351746](https://github.com/billradar/rustdesk-custom/actions/runs/40175351746).
 The exact evidence commit and upstream identity are recorded in the v2 manifest.
 This is not a claim about an unobserved future 1.5.1 tag, native packages or real
-remote-session behavior. A v3 generation is reserved for an actual incompatible
-upstream API boundary, not a new version number alone.
+remote-session behavior. The isolated candidate v3 generation now preserves upstream 1.5.3 Windows DPI-aware CM side-panel handling; it does not alter v2.8 or approve Stable support. See [Patch Profiles](patch-profiles.md).
 
 ## Hardware rendering policy in all custom builds
 
@@ -69,7 +68,7 @@ validation entries remain explicitly historical.
 
 ## Connection manager background window
 
-Common `0004-cm-background-window.patch` is shared by Standard and SOS in both
+Common `0004-cm-background-window.patch` is shared by Standard and SOS in all
 patch generations. It adds `approve-mode=password` as a default (saved approval
 choices remain effective). CM visibility is an independent, manual-only policy;
 password verification and click approval remain backend authentication decisions.
