@@ -110,7 +110,7 @@ jobs:
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
-        name: patchset-selection-${{ github.run_id }}
+        name: patchset-selection-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: '.work/patchset-selection.json
 
           .work/build-profile.json'
@@ -137,6 +137,7 @@ jobs:
         python3 scripts/platform/wayland_contract.py
         python3 scripts/release/production_contract.py
         python3 scripts/release/qualification_contract.py
+        python3 -m scripts.release.artifacts_contract
         python3 scripts/release/channel_contract.py
         python3 -m scripts.release.content_contract
         python3 scripts/release/nightly_contract.py
@@ -207,7 +208,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: preflight-${{ matrix.variant }}-report-${{ github.run_id }}
+        name: preflight-${{ matrix.variant }}-report-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: '.work/validation/*.json
 
           .work/validation/*.md
@@ -404,7 +405,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: flutter-${{ matrix.variant }}-report-${{ github.run_id }}
+        name: flutter-${{ matrix.variant }}-report-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: '.work/validation/*.json
 
           .work/validation/*.md
@@ -431,12 +432,12 @@ jobs:
         persist-credentials: false
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       with:
-        pattern: '*report-${{ github.run_id }}'
+        pattern: '*report-${{ github.run_id }}*'
         path: diagnostics
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      with:
-        name: patchset-selection-${{ github.run_id }}
-        path: diagnostics/selection
+    - name: Download latest same-run patchset-selection report
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.release.artifacts --repo "$GITHUB_REPOSITORY" --run "$GITHUB_RUN_ID" --base "patchset-selection-$GITHUB_RUN_ID" --destination diagnostics/selection
     - name: Report generation and actual compile coverage
       env:
         SELECTED: ${{ needs.resolve.outputs.patchset }}
@@ -469,13 +470,8 @@ jobs:
             report['selected']=os.environ['SELECTED']
             report['full_compatibility']='COMPATIBLE' if passed else 'NOT VALIDATED'
         from scripts.validation.summary import merge_compatibility, compatibility_cards, details, publish
-        reports=[]
-        for path in Path('diagnostics').rglob('report.json'):
-            try:
-                candidate=json.loads(path.read_text())
-                if isinstance(candidate,dict): reports.append(candidate)
-            except (OSError,ValueError):
-                pass
+        from scripts.release.artifacts import compatibility_reports
+        reports=compatibility_reports(Path('diagnostics'),os.environ['GITHUB_RUN_ID'],int(os.environ['GITHUB_RUN_ATTEMPT']))
         report['upstream_sha']=os.environ.get('UPSTREAM_EXPECTED_SHA','')
         report['upstream_version']=os.environ.get('UPSTREAM_VERSION','')
         report['patchset']=os.environ['SELECTED']
@@ -490,5 +486,5 @@ jobs:
         PYCODE
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: generation-compatibility-${{ github.run_id }}
+        name: generation-compatibility-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: compatibility-report.json

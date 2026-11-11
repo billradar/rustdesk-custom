@@ -95,7 +95,7 @@ jobs:
       # On early failures there may be no file; warn so the router can fail closed.
       if: always()
       with:
-        name: nightly-discovery-${{ github.run_id }}
+        name: nightly-discovery-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: .work/nightly-discovery.json
         if-no-files-found: warn
   interface-review:
@@ -332,10 +332,10 @@ jobs:
       with:
         pattern: rustdesk-nightly-*
         path: .work/all-targets
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      with:
-        name: nightly-discovery-${{ github.run_id }}
-        path: .work/discovery
+    - name: Download latest same-run nightly-discovery report
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.release.artifacts --repo "$GITHUB_REPOSITORY" --run "$GITHUB_RUN_ID" --base "nightly-discovery-$GITHUB_RUN_ID" --destination .work/discovery
     - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
       if: inputs.include_wayland
       with:
@@ -357,7 +357,7 @@ jobs:
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: always()
       with:
-        name: nightly-qualification-${{ github.run_id }}
+        name: nightly-qualification-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: .work/qualification-aggregate
         if-no-files-found: error
         retention-days: 30
@@ -410,10 +410,10 @@ jobs:
         pattern: android-build-input-nightly-*
         path: .work/all-targets/unsigned-android
         merge-multiple: false
-    - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-      with:
-        name: nightly-discovery-${{ github.run_id }}
-        path: .work/discovery
+    - name: Download latest same-run nightly-discovery report
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 -m scripts.release.artifacts --repo "$GITHUB_REPOSITORY" --run "$GITHUB_RUN_ID" --base "nightly-discovery-$GITHUB_RUN_ID" --destination .work/discovery
     - name: Package inspectors
       run: |
         sudo apt-get update -y

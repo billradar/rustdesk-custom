@@ -277,3 +277,26 @@ Nightly 首次 Draft 也会创建真实 `nightly` Git ref，后续只移动该�
 Nightly 维持**最新一份**策略：仅创建/移动 `nightly`，新草稿完成后清理同通道旧 Release；
 替换草稿涉及多个非原子 API 操作。如果新产物上传中途失败，可能产生尚未完成的 Draft，
 必须检查并重试，不能承诺在所有故障情况下旧附件始终可下载。
+
+## Release names and rerun reports
+
+Public package names are normalized once or repeatedly to the same name by
+`scripts/release/naming.py`. Standard has no variant token; SOS has `-sos`.
+Linux DEB normalization strips an existing OS/architecture prefix even when the
+extension immediately follows it. Existing RPM names retain their architecture
+suffix (including the RPM-native architecture field) for old client selectors.
+No historical asset is renamed by this change.
+
+Aggregation reserves every public filename before copying packages into a fresh
+asset directory. Duplicate normalized names, reserved checksum names, symlinks,
+and an existing destination fail the aggregate gate; no payload is overwritten.
+Wayland attachment retains its independent collision and provenance checks.
+
+Rerunnable discovery, qualification and compatibility reports use
+`<base>-<run_id>-attempt-<run_attempt>`. Readers select the newest available report
+for the same run up to its current attempt, with legacy unsuffixed fallback.
+A failed-jobs-only rerun can reuse an untouched job's prior report; a newer report
+replaces that job's older failure. Missing or malformed evidence does not create
+a successful gate. Immutable prepared-source, installer and signing payload names
+remain unchanged. Run `python3 -m scripts.release.artifacts_contract` together
+with qualification, Nightly and summary contracts after changing these handoffs.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Release qualification, target matrix and workflow dependency contracts."""
-import hashlib,json,os,struct,sys,tempfile,unittest
+import contextlib,hashlib,io,json,os,struct,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import yaml
@@ -147,6 +147,49 @@ class ArchitectureTests(unittest.TestCase):
             with self.assertRaises(ValueError):platform_package.verify_checksums(root)
 
 class AggregateTests(unittest.TestCase):
+    def test_public_name_normalization_is_idempotent(self):
+        for variant in ('standard','sos'):
+            for arch in ('x86_64','aarch64'):
+                for platform,tail in [('linux','.deb'),('linux',f'-0.{arch}.rpm'),
+                                      ('linux',f'-0.{arch}-suse.rpm'),('macos','-unsigned.dmg')]:
+                    raw=f'{variant}-rustdesk-1.5.1-{arch}{tail}'
+                    canonical=native_package_name('1.5.1',variant,platform,arch,raw)
+                    self.assertEqual(native_package_name('1.5.1',variant,platform,arch,canonical),canonical)
+
+    def test_public_name_collision_is_rejected_before_copy(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);first=root/'first';second=root/'second'
+            first.write_bytes(b'first');second.write_bytes(b'second');dest=root/'assets'
+            with self.assertRaisesRegex(ValueError,'name collision'):
+                qualification.stage_assets([(first,'same.deb'),(second,'same.deb')],dest)
+            self.assertFalse(dest.exists())
+            dest.mkdir();(dest/'same.deb').write_bytes(b'existing')
+            with self.assertRaises(FileExistsError):
+                qualification.stage_assets([(second,'same.deb')],dest)
+            self.assertEqual((dest/'same.deb').read_bytes(),b'existing')
+
+    def test_aggregate_collision_cannot_leave_a_pass_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);folder=root/'inputs/target';packages=folder/'packages';packages.mkdir(parents=True)
+            info=dict(platform='linux',architecture='x86_64',variant='standard',channel='nightly',
+                      upstream_version='1.5.1',upstream_sha='a'*40,patchset='v2',common_patch_hash='c'*64,
+                      custom_repository_sha='b'*40,build_run='123',prepared_source_identity='d'*64,
+                      server_config_fingerprint='e'*64)
+            (folder/'build-info.json').write_text(json.dumps(info))
+            for name in ('rustdesk-1.5.1-x86_64.deb','standard-rustdesk-1.5.1-x86_64.deb'):
+                (packages/name).write_bytes(name.encode())
+            entry=dict(id='linux-x86_64-standard',platform='linux',arch='x86_64',variant='standard',
+                       required=True,support_status='SUPPORTED')
+            env=dict(UPSTREAM_EXPECTED_SHA='a'*40,PATCHSET='v2',GITHUB_RUN_ID='123',GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false')
+            with patch.dict(os.environ,env),patch.object(qualification,'ROOT',root),patch.object(
+                    qualification,'plan',return_value={'selected':[entry]}),patch.object(
+                    platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(ValueError,'name collision'):
+                    qualification.aggregate(root/'inputs','nightly',False)
+            report=json.loads((root/'.work/qualification-aggregate/aggregate.json').read_text())
+            self.assertEqual(report['result'],'FAIL');self.assertEqual(report['required_gate'],'FAIL')
+            self.assertFalse((root/'.work/qualification-aggregate/assets').exists())
+
     def test_missing_required_target_fails_and_report_survives(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v999999','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)

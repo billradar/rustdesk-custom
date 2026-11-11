@@ -184,18 +184,8 @@ def source_sha_from_run(row):
     # Legacy latest and short-display titles need a full SHA from the immutable
     # same-run artifact, not from any eight-character title abbreviation.
     if (title.startswith('Nightly latest / ') or DISPLAY_RUN_TITLE.fullmatch(title)) and row.get('id'):
-        with tempfile.TemporaryDirectory(prefix='nightly-dedup-') as temp:
-            artifact = f'nightly-discovery-{row["id"]}'
-            result = subprocess.run(['gh', 'run', 'download', str(row['id']), '--repo', repository(),
-                                     '--name', artifact, '--dir', temp],
-                                    text=True, capture_output=True)
-            if result.returncode == 0:
-                candidates = list(Path(temp).rglob('nightly-discovery.json'))
-                if len(candidates) == 1:
-                    data = json.loads(candidates[0].read_text())
-                    sha = data.get('upstream_sha', '')
-                    if re.fullmatch(r'[0-9a-f]{40}', sha):
-                        return sha
+        data=discovery_from_run(row)
+        if data:return data['upstream_sha']
     return ''
 
 
@@ -204,10 +194,10 @@ def discovery_from_run(row):
     if not row.get('id'):
         return None
     with tempfile.TemporaryDirectory(prefix='nightly-dedup-') as temp:
-        artifact = f'nightly-discovery-{row["id"]}'
-        result = subprocess.run(['gh', 'run', 'download', str(row['id']), '--repo', repository(),
-                                 '--name', artifact, '--dir', temp], text=True, capture_output=True)
-        if result.returncode != 0:
+        from scripts.release.artifacts import download
+        try:
+            download(repository(),row['id'],f'nightly-discovery-{row["id"]}',Path(temp))
+        except (ValueError,KeyError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
             return None
         candidates = list(Path(temp).rglob('nightly-discovery.json'))
         if len(candidates) != 1:

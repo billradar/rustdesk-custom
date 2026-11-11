@@ -38,6 +38,24 @@ def plan(channel,experimental=False):
 def build_provenance_identity(i):
     return (i['upstream_sha'],i['patchset'],i['common_patch_hash'],i['custom_repository_sha'],str(i['build_run']))
 
+def stage_assets(packages, directory):
+    """Reserve every public name before writing; never replace another payload."""
+    packages=list(packages)
+    reserved={}
+    for source,name in packages:
+        if (not source.is_file() or source.is_symlink() or Path(name).name!=name
+                or name in ('', '.', '..', 'SHA256SUMS') or any(char in name for char in ('/',chr(92)))):
+            raise ValueError('PACKAGE: invalid public asset input: '+name)
+        if name in reserved:
+            raise ValueError('PACKAGE: public asset name collision: '+name+
+                             ' ('+str(reserved[name])+'; '+str(source)+')')
+        reserved[name]=source
+    directory.mkdir(parents=True,exist_ok=False)
+    for source,name in packages:
+        with source.open('rb') as reader,(directory/name).open('xb') as writer:
+            shutil.copyfileobj(reader,writer)
+
+
 def aggregate(root,channel,experimental):
     from scripts.platform.platform_package import validate
     from scripts.release.github import validate as windows_validate
@@ -104,42 +122,49 @@ def aggregate(root,channel,experimental):
             if file.is_file():rows.append(hashlib.sha256(file.read_bytes()).hexdigest()+'  '+name+'/'+file.relative_to(folder).as_posix())
     (out/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
     if required_pass and channel in ('stable', 'nightly'):
-        assets=out/'assets';assets.mkdir(exist_ok=True)
-        for name,e in expected.items():
-            if name not in found:continue
-            info=found[name];folder=folders[name]
-            if e['platform']=='windows':
-                packages_dir=folder/'packages'
-                if not packages_dir.is_dir():
-                    raise ValueError('PACKAGE: missing validated Windows installer directory')
-                packages=sorted(p for p in packages_dir.iterdir() if p.is_file())
-                if {p.suffix.lower() for p in packages} != {'.exe','.msi'}:
-                    raise ValueError('PACKAGE: Windows release requires exactly one EXE and one MSI')
-                for package in packages:
-                    filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix, e['arch'])
-                    shutil.copy2(package,assets/filename)
-            else:
-                packages_dir=folder/'packages'
-                if not packages_dir.is_dir():
-                    raise ValueError('PACKAGE: missing validated native package directory')
-                allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}[e['platform']]
-                for package in sorted(packages_dir.iterdir()):
-                    if not package.is_file():
-                        raise ValueError('PACKAGE: unexpected non-file package entry')
-                    if package.suffix.lower() not in allowed_suffixes:
-                        raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
-                    filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
-                    shutil.copy2(package,assets/filename)
-        if os.environ.get('INCLUDE_WAYLAND') == 'true':
-            from scripts.platform.wayland import attach_assets
-            peers = {(i['variant'], i['architecture']): i for i in found.values() if i['platform'] == 'linux'}
-            report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peers, channel)
-        from scripts.platform.platform_package import checksums
-        checksums(assets)
-        public_assets=sorted(p.name for p in assets.iterdir())
-        forbidden=[name for name in public_assets if name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')]
-        if forbidden:
-            raise ValueError('PACKAGE: non-public release assets generated: '+', '.join(forbidden))
+        assets=out/'assets';staged=[]
+        try:
+            for name,e in expected.items():
+                if name not in found:continue
+                info=found[name];folder=folders[name]
+                if e['platform']=='windows':
+                    packages_dir=folder/'packages'
+                    if not packages_dir.is_dir():
+                        raise ValueError('PACKAGE: missing validated Windows installer directory')
+                    packages=sorted(p for p in packages_dir.iterdir() if p.is_file())
+                    if {p.suffix.lower() for p in packages} != {'.exe','.msi'}:
+                        raise ValueError('PACKAGE: Windows release requires exactly one EXE and one MSI')
+                    for package in packages:
+                        filename=windows_installer_name(info['upstream_version'], info['variant'], package.suffix, e['arch'])
+                        staged.append((package,filename))
+                else:
+                    packages_dir=folder/'packages'
+                    if not packages_dir.is_dir():
+                        raise ValueError('PACKAGE: missing validated native package directory')
+                    allowed_suffixes={'android': {'.apk'}, 'linux': {'.deb', '.rpm'}, 'macos': {'.dmg'}}[e['platform']]
+                    for package in sorted(packages_dir.iterdir()):
+                        if not package.is_file():
+                            raise ValueError('PACKAGE: unexpected non-file package entry')
+                        if package.suffix.lower() not in allowed_suffixes:
+                            raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
+                        filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
+                        staged.append((package,filename))
+            stage_assets(staged,assets)
+            if os.environ.get('INCLUDE_WAYLAND') == 'true':
+                from scripts.platform.wayland import attach_assets
+                peers = {(i['variant'], i['architecture']): i for i in found.values() if i['platform'] == 'linux'}
+                report['wayland'] = attach_assets(ROOT / '.work/wayland-targets', assets, peers, channel)
+            from scripts.platform.platform_package import checksums
+            checksums(assets)
+            public_assets=sorted(p.name for p in assets.iterdir())
+            forbidden=[name for name in public_assets if name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')]
+            if forbidden:
+                raise ValueError('PACKAGE: non-public release assets generated: '+', '.join(forbidden))
+        except Exception as error:
+            report.update(result='FAIL',required_gate='FAIL')
+            report['errors'].append(str(error))
+            (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
+            raise
     (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
     if errors:raise ValueError('Aggregate required gate FAIL')

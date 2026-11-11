@@ -30,30 +30,34 @@ def native_package_name(version, variant, platform, arch, package_name):
             tail = tail[len(prefix):]
             break
 
-    if tail.startswith(f'{arch}.'):
-        payload = tail[len(arch):]
+    prefixes = (
+        f'{variant}-{platform}-{arch}-',
+        f'{platform}-{arch}-{variant}-{platform}-{arch}-',
+        f'{platform}-{arch}-{platform}-{arch}-',
+        f'{platform}-{arch}-',
+        f'{arch}-',
+        f'{variant}-',
+    )
+    changed = True
+    while changed:
+        changed = False
+        for prefix in prefixes:
+            if tail.startswith(prefix):
+                tail = tail[len(prefix):]
+                changed = True
+                break
+    for marker in (f'-{variant}-{platform}-{arch}-', f'-{platform}-{arch}-'):
+        if marker in tail:
+            tail = tail.replace(marker, '-', 1)
+    if not tail:
+        raise ValueError('Package name has no payload suffix: '+package_name)
+    # An extension can follow the architecture directly in raw or canonical
+    # names. Strip this form too, making normalization idempotent for DEBs.
+    for prefix in (f'{variant}-{platform}-{arch}', f'{platform}-{arch}', arch):
+        if tail.startswith(prefix+'.'):
+            payload = tail[len(prefix):]
+            break
     else:
-        prefixes = (
-            f'{variant}-{platform}-{arch}-',
-            f'{platform}-{arch}-{variant}-{platform}-{arch}-',
-            f'{platform}-{arch}-{platform}-{arch}-',
-            f'{platform}-{arch}-',
-            f'{arch}-',
-            f'{variant}-',
-        )
-        changed = True
-        while changed:
-            changed = False
-            for prefix in prefixes:
-                if tail.startswith(prefix):
-                    tail = tail[len(prefix):]
-                    changed = True
-                    break
-        for marker in (f'-{variant}-{platform}-{arch}-', f'-{platform}-{arch}-'):
-            if marker in tail:
-                tail = tail.replace(marker, '-', 1)
-        if not tail:
-            raise ValueError('Package name has no payload suffix: '+package_name)
         payload = '-' + tail
 
     return f'rustdesk-{version}{variant_suffix(variant)}-{platform}-{arch}{payload}'
