@@ -100,6 +100,12 @@ application and API-structure results. Rust compilation, bridge generation,
 Flutter analysis and runtime are explicitly **not run** in this unapproved path.
 The normal compatibility gate continues to fail until the interface is reviewed.
 
+Reports normalize YAML mapping keys using the same collision-rejecting rules as
+their identity digest before writing JSON. This preserves identity across the
+artifact upload/download boundary, including YAML 1.1 boolean keys such as `on`.
+The writer still rejects changed identities, stale run/commit bindings and
+fabricated validation claims.
+
 A separate trusted-main job, with repository contents/PR write and Actions read permissions,
 can propose a **draft, report-only PR**. It cannot change the approved profile
 list, patch policy, signing or release settings. Reports live under
