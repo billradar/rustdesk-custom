@@ -56,47 +56,11 @@ def wayland_identity():
     return True, hashlib.sha256(POLICY.read_bytes()).hexdigest()
 
 
-def verify_release_asset_checksums(tag, assets):
+def verify_release_asset_attestation(tag, assets, expected_identity=None):
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}',tag):
         raise ValueError('Invalid Stable release tag for asset verification')
-    names=[asset.get('name','') for asset in assets]
-    if len(names)!=len(set(names)) or 'SHA256SUMS' not in names:
-        raise ValueError('Stable release asset inventory is duplicate or missing SHA256SUMS')
-    expected={}
-    for asset in assets:
-        digest=asset.get('digest','')
-        if asset.get('state')!='uploaded' or asset.get('size',0)<=0 or not re.fullmatch(r'sha256:[0-9a-f]{64}',digest):
-            raise ValueError('Stable release asset is incomplete or lacks a GitHub SHA-256 digest')
-        if asset['name']!='SHA256SUMS':expected[asset['name']]=digest.removeprefix('sha256:')
-    checksum_asset=next(a for a in assets if a['name']=='SHA256SUMS')
-    asset_id=checksum_asset.get('id')
-    if type(asset_id) is not int or asset_id<=0:
-        raise ValueError('Stable checksum asset requires a verified GitHub asset ID')
-    if checksum_asset['size']>1024*1024:
-        raise ValueError('Stable release SHA256SUMS exceeds the download limit')
-    with tempfile.TemporaryDirectory(prefix='stable-release-assets-') as temp:
-        checksum=Path(temp)/'SHA256SUMS'
-        # Drafts may have an untagged-* tag_name while their reviewed name and
-        # metadata identify the immutable custom revision. Download the exact
-        # asset from that verified inventory, independent of either tag alias.
-        with checksum.open('wb') as stream:
-            subprocess.run(['gh','api',f'repos/{REPOSITORY}/releases/assets/{asset_id}',
-                            '--header','Accept: application/octet-stream'],
-                           check=True,stdout=stream,stderr=subprocess.PIPE,env=os.environ)
-        if not checksum.is_file() or checksum.stat().st_size>1024*1024:
-            raise ValueError('Stable release SHA256SUMS could not be safely downloaded')
-        raw=checksum.read_bytes()
-        if hashlib.sha256(raw).hexdigest()!=checksum_asset['digest'][7:]:
-            raise ValueError('Stable remote SHA256SUMS digest does not match the GitHub asset digest')
-    actual={}
-    for line in raw.decode('utf-8').splitlines():
-        match=re.fullmatch(r'([0-9a-f]{64})  ([^/\\]+)',line)
-        if not match or match.group(2) in actual:
-            raise ValueError('Stable remote SHA256SUMS is malformed or contains duplicate assets')
-        actual[match.group(2)]=match.group(1)
-    if actual!=expected:
-        raise ValueError('Stable release asset digests do not match its SHA256SUMS')
-    return True
+    from scripts.release.attestation import verify_remote
+    return verify_remote(tag, assets, expected_identity)
 
 PATCHSET_RE = re.compile(r'^v([1-9][0-9]*)$')
 CUSTOM_REVISION_RE = re.compile(r'^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-custom\.v(?P<patch>[1-9][0-9]*)\.(?P<revision>[1-9][0-9]{0,5})$')
@@ -288,8 +252,8 @@ def release_preflight(data, *, dry_run=False):
     if metadata_lines and metadata_lines not in (['automation_state=complete'],['automation_state=published']): raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
     if legacy_lines and metadata_lines: raise ValueError('Existing release has duplicate automation state markers')
     if not legacy_lines and not metadata_lines: raise ValueError('Existing release missing its automation completion marker')
-    required={'SHA256SUMS',windows_installer_name(data['version'],'standard','exe'),windows_installer_name(data['version'],'standard','msi'),windows_installer_name(data['version'],'sos','exe'),windows_installer_name(data['version'],'sos','msi')}
-    legacy_required={'SHA256SUMS',f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
+    required={'update-manifest.json','release-attestation.json',windows_installer_name(data['version'],'standard','exe'),windows_installer_name(data['version'],'standard','msi'),windows_installer_name(data['version'],'sos','exe'),windows_installer_name(data['version'],'sos','msi')}
+    legacy_required={'update-manifest.json','release-attestation.json',f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
     inventory=re.search(r'^Asset Inventory: (.+)$',body,re.M) or re.search(r'^asset_inventory=(.+)$',body,re.M)
     has_inventory=bool(inventory)
     if inventory:
@@ -312,7 +276,7 @@ def release_preflight(data, *, dry_run=False):
         assets_ok=required.issubset(uploaded) or legacy_required.issubset(uploaded)
     if existing.get('prerelease') or not assets_ok: raise ValueError('Existing release incomplete or incompatible; never overwrite')
     if identity_ok:
-        verify_release_asset_checksums(data['release_tag'],all_assets)
+        verify_release_asset_attestation(data['release_tag'],all_assets,dict(upstream_sha=data['upstream_sha'],patchset=name,common_patch_hash=common_hash,sos_patch_hash=sos_hash,custom_repository_sha=recorded_custom_sha))
         data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
         return data
     raise ValueError('Existing revision tag has a different Build Identity; immutable revision collision')

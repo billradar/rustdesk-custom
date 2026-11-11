@@ -190,6 +190,28 @@ class AggregateTests(unittest.TestCase):
             self.assertEqual(report['result'],'FAIL');self.assertEqual(report['required_gate'],'FAIL')
             self.assertFalse((root/'.work/qualification-aggregate/assets').exists())
 
+    def test_successful_aggregate_emits_only_the_new_public_manifest(self):
+        from scripts.release import attestation
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);folder=root/'inputs/target';packages=folder/'packages';packages.mkdir(parents=True)
+            info=dict(platform='linux',architecture='x86_64',variant='standard',channel='nightly',
+                      upstream_version='1.5.1',upstream_sha='a'*40,patchset='v2',common_patch_hash='c'*64,
+                      custom_repository_sha='b'*40,build_run='123',prepared_source_identity='d'*64,
+                      server_config_fingerprint='e'*64,patch_revision='1')
+            (folder/'build-info.json').write_text(json.dumps(info))
+            (packages/'standard-rustdesk-1.5.1-x86_64.deb').write_bytes(b'validated package')
+            target=dict(id='linux-x86_64-standard',platform='linux',arch='x86_64',variant='standard',required=True,support_status='SUPPORTED')
+            env=dict(GITHUB_REPOSITORY='billradar/rustdesk-custom',UPSTREAM_EXPECTED_SHA='a'*40,PATCHSET='v2',GITHUB_RUN_ID='123',GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false')
+            with patch.dict(os.environ,env),patch.object(qualification,'ROOT',root),patch.object(qualification,'plan',return_value={'selected':[target]}),patch.object(platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):
+                report=qualification.aggregate(root/'inputs','nightly',False)
+            self.assertEqual(report['result'],'PASS')
+            assets=root/'.work/qualification-aggregate/assets'
+            self.assertEqual({p.name for p in assets.iterdir()},{'update-manifest.json','rustdesk-1.5.1-linux-x86_64.deb'})
+            manifest=attestation.loads((assets/'update-manifest.json').read_bytes())
+            self.assertEqual(manifest['assets'][0]['sha256'],hashlib.sha256(b'validated package').hexdigest())
+            self.assertEqual(manifest['build_run'],'123')
+            self.assertIsNone(manifest['patch_revision'])
+
     def test_missing_required_target_fails_and_report_survives(self):
         with tempfile.TemporaryDirectory() as tmp,patch.object(qualification,'ROOT',Path(tmp)),patch.object(qualification,'plan',return_value={'selected':[{'id':'windows-x86_64-standard','required':True,'support_status':'SUPPORTED','variant':'standard'}]}),patch.dict(os.environ,{'UPSTREAM_EXPECTED_SHA':'a'*40,'PATCHSET':'v999999','GITHUB_RUN_ID':'123','GITHUB_SHA':'b'*40}):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)
@@ -201,7 +223,7 @@ class AggregateTests(unittest.TestCase):
         custom='b'*40
         identity=channel.build_identity(sha,patchset,'c'*64,'d'*64,custom,False)
         name='v1.4.9-custom.v999999.1'
-        assets=['SHA256SUMS','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+        assets=['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
         draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
                'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,
                    'Custom Repository SHA: '+custom,'Wayland Included: false','Patch Revision: v999999.1','Build Identity: '+identity,
@@ -211,7 +233,7 @@ class AggregateTests(unittest.TestCase):
             if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
             if path.endswith('releases?per_page=100&page=1'): return [draft]
             return None
-        with patch.object(channel, 'require_selection', return_value={}),patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
+        with patch.object(channel, 'require_selection', return_value={}),patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_attestation',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
             data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
             self.assertFalse(data['build_needed'])
             self.assertFalse(data['draft_needed'])
@@ -262,21 +284,21 @@ class ReleaseBodyContractTests(unittest.TestCase):
         upstream='a'*40;custom='b'*40;patchset='v1'
         common=channel.patch_hash('common',patchset);sos=channel.patch_hash('sos',patchset)
         identity=channel.build_identity(upstream,patchset,common,sos,custom,False)
-        names=['SHA256SUMS']
+        names=['update-manifest.json','release-attestation.json']
         body='\n'.join(['automation_state=complete','build_package_checksum_architecture_provenance=PASS',
             'build_identity='+identity,'upstream_sha='+upstream,'custom_repository_sha='+custom,'patchset='+patchset,
             'common_patch_hash='+common,'sos_patch_hash='+sos,'wayland_included=false','asset_inventory='+json.dumps(names)])
         release={'id':7,'draft':True,'prerelease':False,'body':body,
-                 'assets':[{'name':'SHA256SUMS','state':'uploaded','size':10,'digest':'sha256:'+'c'*64}]}
+                 'assets':[{'name':name,'state':'uploaded','size':10,'digest':'sha256:'+'c'*64} for name in names]}
         env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','RELEASE_TAG':'v1.4.9-custom.v1.1',
              'BUILD_IDENTITY':identity,'UPSTREAM_SHA':upstream,'CUSTOM_REPOSITORY_SHA':custom,
              'PATCHSET':patchset,'WAYLAND_INCLUDED':'false','WAYLAND_POLICY_SHA256':''}
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request',return_value={'draft':False}) as write,patch('scripts.release.stable_tag.ensure') as tag_write:
+        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch.object(channel,'verify_release_asset_attestation',return_value=True),patch('scripts.release.github.request',return_value={'draft':False}) as write,patch('scripts.release.stable_tag.ensure') as tag_write:
             qualification.publish_existing_draft()
             tag_write.assert_called_once_with('billradar/rustdesk-custom','v1.4.9-custom.v1.1',custom)
             write.assert_called_once()
         mismatch=dict(release,body=body.replace('custom_repository_sha='+custom,'custom_repository_sha='+'d'*40))
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[mismatch]),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch('scripts.release.github.request') as write:
+        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[mismatch]),patch.object(channel,'verify_release_asset_attestation',return_value=True),patch('scripts.release.github.request') as write:
             with self.assertRaisesRegex(ValueError,'identity differs'):
                 qualification.publish_existing_draft()
             write.assert_not_called()

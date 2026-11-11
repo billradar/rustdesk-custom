@@ -184,6 +184,6 @@ hashing does not strip comments or normalize unknown interfaces. This review
 changes no source resolution, patches, matrix, Wayland, signing or publication
 authorization, and does not claim native package/runtime validation.
 
-### Stable Draft checksum lookup
+### Stable Draft attestation lookup
 
-Stable reuse verifies `SHA256SUMS` using the immutable GitHub asset ID from the already validated release inventory. A Draft can retain an `untagged-*` `tag_name` while its name and metadata identify the canonical custom revision; that display alias must not be used to locate checksum bytes. The download stays within this repository and uses the existing token permissions. Positive integer asset ID, bounded manifest size, GitHub SHA-256 of the downloaded manifest and exact package digest inventory remain mandatory. Missing IDs, download failures and corrupt bytes fail closed; none authorize a rebuild or an overwrite. `channel_contract` reproduces the untagged Draft failure and covers those boundaries.
+Stable reuse verifies both JSON metadata files by immutable GitHub asset ID, then verifies the manifest's Sigstore proof and exact installer inventory. Public checksum-only releases no longer satisfy this gate; historical Releases remain unchanged. See [Release attestation](release-attestation.md).

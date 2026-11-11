@@ -581,24 +581,10 @@ def draft(root, discovery):
     for job in jobs:
         if job['status'] == 'completed' and job['conclusion'] == 'success':
             scan_job_log(job['id'], repo)
+    from scripts.release.attestation import attach
+    attach(ASSETS, 'nightly')
     files = sorted(p for p in ASSETS.iterdir() if p.is_file())
-    if any(p.suffix.lower() == '.json' or p.name.startswith(('source-', 'build-info-')) for p in files):
-        raise ValueError('Non-public metadata in Nightly release assets')
-    if len({p.name for p in files}) != len(files):
-        raise ValueError('Duplicate Nightly asset names')
-    if not files or not (ASSETS / 'SHA256SUMS').is_file():
-        raise ValueError('Nightly public package inventory missing')
     expected = {p.name: {'size': p.stat().st_size, 'digest': 'sha256:' + hashlib.sha256(p.read_bytes()).hexdigest()} for p in files}
-    checksum_lines = (ASSETS / 'SHA256SUMS').read_text().splitlines()
-    checksum_expected = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.name != 'SHA256SUMS'}
-    checksum_actual = {}
-    for line in checksum_lines:
-        match = re.fullmatch(r'([0-9a-f]{64})  ([^/\\\\]+)', line)
-        if not match or match.group(2) in checksum_actual:
-            raise ValueError('Malformed or duplicate Nightly checksum entry')
-        checksum_actual[match.group(2)] = match.group(1)
-    if checksum_actual != checksum_expected:
-        raise ValueError('Nightly SHA256SUMS does not match public assets')
     # Release note content is reviewed alongside the Common/SOS patch hashes;
     # it is never a Coordinator Lite deduplication input.
     from scripts.upstream.patchset_version import current as current_patchset, SCHEMA as VERSION_SEMANTICS
