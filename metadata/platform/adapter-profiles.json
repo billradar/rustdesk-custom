@@ -6,7 +6,8 @@
       "4eb774b0cf065bcd8f3e48d2be65a4a95a6c44aea8eb63863c63590bc0c85b9b",
       "60cebb76cc4acaaf0fa75f5efa35e889e233df8a389dbd771724cca2c45a9da9",
       "07baf83759773d0b0994dcbd535456f2623a1be22cfcd087d35efbecd525f566",
-      "6032163ea7a18138a118a38c022ee9043192732f17fb3e3ddd685cf4905aac11"
+      "6032163ea7a18138a118a38c022ee9043192732f17fb3e3ddd685cf4905aac11",
+      "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17"
     ],
     "macos": [
       "a26b22aceb5e2f19543fee740048250e0441782f3a24585d43ec75a50468cef7",
@@ -15,7 +16,8 @@
       "0da1287b35a91ebd0650843363ee73feaf0423ec34bde5a380d6a8ba0f48d766",
       "66bf6a330952a15830070faab41d4d211f9513b8d9ef63c4ebb3d9a14b00d39f",
       "5acdbd9188cb99818279905269af874cfab742981106b61b7952d7451c0047b3",
-      "64ea97dc089c86f0133fc9e03e01781164347dd6a543b76c205cca2b2af144c1"
+      "64ea97dc089c86f0133fc9e03e01781164347dd6a543b76c205cca2b2af144c1",
+      "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47"
     ],
     "android": [
       "fade10df57f50b94f7d6947f7a6596e4d22183f6980c0a3962e0a47c863bccd4",
@@ -23,7 +25,8 @@
       "c4cd18eeb5d64e728964dea681ba249bca6885a891a04fc86c3fedcb75b9f6b6",
       "a01d6bcab0ddd27d62b7435c90dd58bde86adc93a7fa95826576d28d88721b10",
       "4c559801587c74270c5b20e82a9ebe71bd602bf75a4d41d6006dd027b09e5f62",
-      "4ba4ab998882f78e6d3e1d745d7e6712c67a75647bb7cde2f56bb8939b9410bd"
+      "4ba4ab998882f78e6d3e1d745d7e6712c67a75647bb7cde2f56bb8939b9410bd",
+      "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f"
     ],
     "ios": [
       "9ef1f6c65b6135f22d9ff626b30159f9da1ba4c875232f4470be4039963687b9",
@@ -2019,6 +2022,97 @@
         "Fingerprint observed by nightly preflight against this exact upstream commit.",
         "Approval is limited to this interface fingerprint; it does not claim native build, package, signing, or runtime validation."
       ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "runner": "ubuntu-22.04",
+      "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "linux",
+      "architecture": "aarch64",
+      "runner": "ubuntu-22.04-arm",
+      "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "macos",
+      "architecture": "x86_64",
+      "runner": "macos-26-intel",
+      "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "macos",
+      "architecture": "aarch64",
+      "runner": "macos-26",
+      "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "android",
+      "architecture": "aarch64",
+      "runner": "ubuntu-24.04",
+      "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "android",
+      "architecture": "armv7",
+      "runner": "ubuntu-24.04",
+      "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "platform": "android",
+      "architecture": "x86_64",
+      "runner": "ubuntu-24.04",
+      "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+      "review_scope": "exact-source static interface review",
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json",
+      "notes": [
+        "Compared native job, tools and critical inputs with 09871abd0bc13a69b4318edad031287d8d4314d2. See report for exact deltas.",
+        "Static review only; native build, package, signing and runtime validation remain unverified."
+      ]
     }
   ],
   "reviews": [
@@ -2114,6 +2208,39 @@
         "Runner migration distinguishes the previously reviewed baseline label from the exact current upstream matrix label. macos-15 maps to macos-26 for ARM64; macos-15-intel maps to macos-26-intel for x86_64. Unknown future labels fail closed.",
         "Static recipe review only. This approval does not claim that either macOS 26 native build, package, signing or runtime validation has passed."
       ]
+    },
+    {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "compared_upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+      "scope": [
+        "linux",
+        "macos",
+        "android"
+      ],
+      "critical_files_sha256": {
+        "build.py": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+        "build.rs": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46",
+        "Cargo.toml": "d9a33d83fa972d6defeea8407060a39d9601efcb6a46b1dadc569c38237d2630",
+        "flutter/pubspec.yaml": "7165d1fb87fd35cea83241636b48808b7ba7187d48b00582a2b47ff4ad2345e9",
+        ".github/workflows/bridge.yml": "bc3714806b91f7a99748e68540c136103c7a7f7333703047e75a6f21bae61ae7",
+        ".github/workflows/flutter-build.yml": "707d23672b5b2746ec5e071fda8d03b3d790a1387a244ee2a03d7c02b7630688",
+        "flutter/build_android_deps.sh": "d26f10bb73389dbdcf5ec5eb60e8dd9a12b9bf7038c0a2e2a3b1a0738fa85b32",
+        "flutter/ndk_arm64.sh": "962484e3792883126716432916d30e228fd58bb8ae3d0d65b3a21945533d7aed",
+        "flutter/ndk_arm.sh": "7ee0ef03baa0c7380dc882231274c0954e7a820c9b890e0e18a051660bfef9dc",
+        "flutter/ndk_x64.sh": "39746bda8732f5533a2c6bcf7fb86866fc6cc9f02f84c8e240b532be3ad84a63",
+        "flutter/android/app/build.gradle": "450a93d75c8f524591d0245bdc504fde60fcc8e1c68ceee9be0dff9664aa5c3d",
+        ".github/patches/apply_flutter_3.44_source_patches.sh": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d"
+      },
+      "notes": [
+        "Compared exact native jobs and global environment against 09871abd0bc13a69b4318edad031287d8d4314d2: Linux, macOS and Android jobs and toolchains are identical.",
+        "Cargo adds only profile.dev.package.sciter-rs debug-assertions=false; release settings, dependencies and Flutter release build commands are unchanged. Flutter package version advances 1.5.3+70 to 1.5.3+71; all remaining pubspec data is identical.",
+        "The workflow adds a no-overwrite check only to publish-signed-update-metadata, an upstream job not executed by custom native recipes. No upstream publication/signing job or permission is imported.",
+        "Android dependency scripts, Gradle file, build.py, build.rs, bridge workflow and Flutter 3.44 patch helper are byte-identical to the compared source.",
+        "macOS ARM64 keeps Flutter 3.44.9, dedicated 3.44.8 bridge, CocoaPods, exact transforms and receipts. Its independent policy additionally binds the exact full source workflow hash.",
+        "Wayland DRM job, packaging source and libdrmtap pin still match upstream-151-1297da; no Wayland policy changes are needed.",
+        "The candidate remains ineligible for Stable. This review does not claim package build, production signature, installation, native UI or real remote-session validation."
+      ],
+      "review_report": "docs/audits/nightly-interfaces-43062159481/review.json"
     }
   ]
 }
