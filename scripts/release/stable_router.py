@@ -39,7 +39,7 @@ def discovery():
         'upstream_ref': release['upstream_tag'],
         'upstream_sha': release['upstream_sha'],
         'version': release['version'],
-        'patchset': patchset_for_version(release['version']),
+        'patchset': patchset_for_version(release['version'], channel='stable'),
     }
     return data
 
@@ -78,7 +78,7 @@ def recorded_identity(row):
     for key, size in (('upstream_sha', 40), ('common_patch_hash', 64), ('sos_patch_hash', 64)):
         if not re.fullmatch('[0-9a-f]{' + str(size) + '}', str(data.get(key, ''))):
             raise ValueError('Invalid historical Stable source identity')
-    if data.get('patchset') != patchset_for_version(data.get('version', '')):
+    if data.get('patchset') != patchset_for_version(data.get('version', ''), channel='stable'):
         raise ValueError('Invalid historical Stable patchset')
     identity = build_identity(data['upstream_sha'], data['patchset'], data['common_patch_hash'],
                               data['sos_patch_hash'], wayland_included=data['wayland_included'],

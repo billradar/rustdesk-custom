@@ -60,19 +60,17 @@ Windows x64 packaging stages checksum-pinned official printer driver and adapter
 
 Both Common patch generations force `allow-always-software-render=N` via `OVERWRITE_SETTINGS`, overriding saved/custom settings in all variants and platforms. Keep the structural, native-helper and compiled-MIR gates aligned; do not reduce this to a default that persisted `Y` can override.
 
-### Patchset selection is version-bounded
+### Patch Profile selection
 
-The current selector is `scripts/upstream/patchsets.py`:
-- upstream versions below `1.5.0` select `patchsets/v1`;
-- upstream versions `1.5.0` and later select `patchsets/v2`.
+`scripts/upstream/patchsets.py` reads `metadata/patch-profiles.json`:
+- explicit versions 1.5.0 and 1.5.1 select their exact profiles, both using unchanged v2 revision 8;
+- versions below 1.5.0 retain the historical v1 policy;
+- source version 1.5.3 selects an isolated candidate-only v3 profile;
+- unadapted versions (including 1.5.2) test the explicitly configured latest maintained profile, currently v3.
 
-Selection is based on the explicit numeric upstream version boundary. Patch contents, hashes, source SHA, or whether a patch happens to apply must not silently influence selection. Integrity and applicability are separate validation gates. When a new upstream API migration requires another patch generation, add an explicit reviewed version boundary and the corresponding metadata/contracts; do not add heuristics to the selector.
+Fallback is compatibility testing only. Candidate/fallback Profiles cannot enter Stable discovery, lock, preflight, revision allocation or client identity. A successful test never changes profile eligibility. Missing metadata/directories, integrity failures or failed patches stop immediately; do not probe another profile. Build/platform adapter approvals remain separate, exact-interface gates. A version in Cargo.toml or a candidate SHA is never evidence of an official release tag.
 
-The patchset manifests currently record:
-- `v1`: validated against upstream `1.4.9` / `6c578292e8ebbbec708b76986ba8c4bc7c509747`;
-- `v2`: compatibility-validated against upstream `1.5.0` / `fada664df7a294d1d1a9ca3e7cd3637069122f17`.
-
-These are baseline records, not a promise that every current upstream commit or target is fully validated. Always inspect the manifest and fresh CI evidence for the exact revision being changed.
+v3.1 is derived from v2.8 and changes only Common 0004 context/hooks around upstream Windows DPI-aware CM side-panel bounds. All other Common/SOS patch bytes are identical to v2.8. Keep v2 patches, manifests and history immutable for this migration. New-generation version validation requires a candidate baseline anchored to the integration base and exact parent revision/hashes. Read `docs/patch-profiles.md` and run `python3 -m scripts.upstream.patch_profiles_contract` plus affected release/source contracts.
 
 ## 3. Repository map: where to look first
 
@@ -112,7 +110,7 @@ Official rustdesk/rustdesk
   │ resolve ref/tag and lock exact 40-character commit SHA
   ▼
 Upstream compatibility and reviewed build-interface checks
-  │ select patchset by explicit upstream version boundary
+  │ select exact Patch Profile or compatibility-test-only latest fallback
   ▼
 Clean prepared source + recursive submodules + verified patch hashes
   │ prepare Standard and SOS in separate source trees

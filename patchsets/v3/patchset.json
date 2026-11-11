@@ -1,0 +1,89 @@
+{
+  "id": "v3",
+  "status": "candidate_only",
+  "revision": 1,
+  "baseline": {
+    "upstream_sha": "05b9f2d8919b5cdfaa0bb3280601a02881556a42",
+    "upstream_version": "1.5.3",
+    "upstream_tag": null
+  },
+  "derived_from": {
+    "patchset": "v2",
+    "revision": 8,
+    "hashes": {
+      "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
+      "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+    }
+  },
+  "hashes": {
+    "common": "5ea2ba8cc9c55e7e85dde4c6a79dd1e6a934e5d80583e26283a635f74e323f93",
+    "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+  },
+  "variants": {
+    "standard": {
+      "common": true,
+      "sos": false
+    },
+    "sos": {
+      "common": true,
+      "sos": true
+    }
+  },
+  "runtime_ui": {
+    "status": "not_tested"
+  },
+  "real_remote_session": {
+    "status": "not_tested"
+  },
+  "versioning": {
+    "schema": "patchset-content-v1",
+    "migration_base": "3c53d9e5677b6a322be7d195f1c40b04ef2707e4",
+    "initial_revision": 1,
+    "history": [
+      {
+        "revision": 1,
+        "kind": "migration-baseline",
+        "base_sha": "3c53d9e5677b6a322be7d195f1c40b04ef2707e4",
+        "before": {
+          "common": "5ea2ba8cc9c55e7e85dde4c6a79dd1e6a934e5d80583e26283a635f74e323f93",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "after": {
+          "common": "5ea2ba8cc9c55e7e85dde4c6a79dd1e6a934e5d80583e26283a635f74e323f93",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "scopes": [
+          "common",
+          "sos"
+        ],
+        "categories": {
+          "Added": [],
+          "Changed": [],
+          "Fixed": [],
+          "Removed": [],
+          "Security": [],
+          "Compatibility": [
+            "Rebase only the CM chat-window visibility hooks around upstream Windows monitor/DPI-aware bounds handling. All other Common and SOS patch bytes are inherited from v2.8."
+          ]
+        },
+        "reason": "Create an isolated candidate patch generation derived from v2 revision 8; retain the complete upstream DPI-aware CM resize branches.",
+        "references": [
+          "https://github.com/billradar/rustdesk-custom/pull/247"
+        ],
+        "compatibility": "Candidate source 05b9f2d8919b5cdfaa0bb3280601a02881556a42 reports 1.5.3; this is not a release tag or Stable approval.",
+        "limitations": "Native builds, generated bridge, Flutter analysis, runtime UI and remote sessions require fresh validation.",
+        "review_status": "reviewed"
+      }
+    ],
+    "features": {
+      "common": [
+        "Configured server and client defaults, hidden connection-manager setting, and manual-only connection-manager visibility.",
+        "Forced hardware rendering policy; latest-only custom repository updates with exact package and API size/SHA256 checks.",
+        "Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged."
+      ],
+      "sos": [
+        "SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common."
+      ]
+    }
+  }
+}

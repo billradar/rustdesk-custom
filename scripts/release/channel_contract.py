@@ -13,7 +13,8 @@ import yaml
 class RealPatchsetRevisionContract(unittest.TestCase):
     def test_reviewed_manifest_controls_current_custom_revision(self):
         self.assertEqual(channel.next_patch_revision('1.5.1','v2'),'v2.8')
-        self.assertEqual(channel.next_patch_revision('1.5.2','v2'),'v2.8')
+        with self.assertRaisesRegex(ValueError, 'Stable'):
+            channel.next_patch_revision('1.5.2','v2')
         self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.2')
         with self.assertRaises(ValueError):
             channel.next_patch_revision('1.5.1','v999999')
@@ -112,6 +113,8 @@ class ChannelPolicyTests(unittest.TestCase):
     def setUp(self):
         # Synthetic patchsets in these contracts are stand-ins for the
         # reviewed content manifest; production uses current() validation.
+        self._selection=patch.object(channel, 'require_selection', return_value={})
+        self._selection.start();self.addCleanup(self._selection.stop)
         self._content=patch.object(channel, 'current', side_effect=lambda name: {
             'id':name, 'revision': 2 if name=='v1' else 8 if name=='v2' else 1})
         self._content.start();self.addCleanup(self._content.stop)

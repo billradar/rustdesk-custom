@@ -168,7 +168,7 @@ class AggregateTests(unittest.TestCase):
             if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
             if path.endswith('releases?per_page=100&page=1'): return [draft]
             return None
-        with patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
+        with patch.object(channel, 'require_selection', return_value={}),patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_checksums',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
             data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
             self.assertFalse(data['build_needed'])
             self.assertFalse(data['draft_needed'])

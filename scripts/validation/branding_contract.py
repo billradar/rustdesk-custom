@@ -132,7 +132,7 @@ class BrandingTests(unittest.TestCase):
             self.assertEqual(left,right)
 
     def test_about_variant_helper_patch_applies_and_localizes(self):
-        for generation in ('v1', 'v2'):
+        for generation in ('v1', 'v2', 'v3'):
             text=(ROOT/'patchsets'/generation/PATCH).read_text(encoding='utf-8')
             helper=text.split('diff --git ',2)[1]
             with tempfile.TemporaryDirectory() as td:

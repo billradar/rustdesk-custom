@@ -20,7 +20,7 @@ def write_identity(tree, *, repository, version, sha, variant, run, channel, rev
         raise ValueError("Non-release builds must not claim a Stable revision")
     from scripts.upstream.patchsets import patchset_for_version
     from scripts.release.content import inputs
-    content = inputs(patchset_for_version(version))
+    content = inputs(patchset_for_version(version, channel=channel))
     if channel == 'stable' and revision != content['patchset_version']:
         raise ValueError('Stable revision differs from version-controlled Patchset content')
     data = dict(repository=repository, version=version, revision=revision or None, upstream_sha=sha,

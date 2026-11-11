@@ -45,6 +45,16 @@ def source_contract(tree):
     side = chat.split('toggleCMSidePage() async {', 1)[1].split('changeCurrentKey(', 1)[0]
     require('desktopType == DesktopType.cm && !cmIsVisible' in side and 'windowManager.show()' not in side,
             'incoming chat must not map or resize a hidden CM')
+    position_path = 'flutter/lib/desktop/widgets/windows_cm_window_position.dart'
+    if (tree / position_path).exists():
+        position = read(position_path)
+        for size in ('ClosedChat', 'OpenChat'):
+            require('await setWindowsCmWindowBounds(kConnectionManagerWindowSize' + size + ');' in side,
+                    'preserve upstream Windows monitor-aware side-panel bounds')
+        for token in ('window_size.getWindowInfo()', 'size * window.scaleFactor',
+                      'screen.visibleFrame.right - scaledSize.width',
+                      'ignoreDevicePixelRatio: true'):
+            require(token in position, 'preserve upstream physical-pixel DPI handling: ' + token)
     model = read('flutter/lib/models/server_model.dart')
     require("cmGetConfig(name: 'custom-cm-show')" in model and 'showCmWindow(manual: true)' in model,
             'latched tray request must be polled and manually displayed')
@@ -130,10 +140,10 @@ def main():
     parser.add_argument('--dart', help='Dart executable; required when checking policy execution in Flutter CI')
     args = parser.parse_args()
     policies = []
-    for gen in ('v1', 'v2'):
+    for gen in ('v1', 'v2', 'v3'):
         patch = (ROOT / 'patchsets' / gen / 'common/0004-cm-background-window.patch').read_text(encoding='utf-8')
         policies.append(new_file(patch, POLICY))
-    require(policies[0] == policies[1], 'policy must be identical across patch generations')
+    require(all(policy == policies[0] for policy in policies), 'policy must be identical across patch generations')
     if args.source:
         require(source_contract(args.source) == policies[0], 'prepared policy differs from reviewed patch')
         print('CM prepared-source wiring: PASS')

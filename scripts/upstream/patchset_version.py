@@ -147,8 +147,27 @@ def verify(name, base='origin/main', root=ROOT):
     base_sha = commit(base, root)
     # Do not accept merge-base verification against an obsolete base branch.
     subprocess.run(['git', 'merge-base', '--is-ancestor', base_sha, 'HEAD'], cwd=root, check=True)
-    old = manifest(name, root, base_sha)
     data = current(name, root)
+    existing = git('ls-tree', '--name-only', base_sha, '--',
+                   f'patchsets/{name}', root=root).decode().strip()
+    if not existing:
+        # A new generation gets one base-anchored content baseline. It cannot
+        # rewrite an existing generation or inherit its release eligibility.
+        history = data['versioning']['history']
+        parent = data.get('derived_from', {})
+        origin = manifest(parent.get('patchset', ''), root, base_sha)
+        validate(origin, hashes(parent['patchset'], root, base_sha))
+        if (data['id'] != name or data['revision'] != 1 or len(history) != 1
+                or data['versioning']['initial_revision'] != 1
+                or data['versioning']['migration_base'] != base_sha
+                or history[0]['base_sha'] != base_sha
+                or parent.get('revision') != origin['revision']
+                or parent.get('hashes') != origin['hashes']
+                or data.get('status') != 'candidate_only'):
+            raise ValueError('New Patchset requires an isolated candidate baseline anchored to its parent')
+        return dict(patchset=name, patchset_version=f'{name}.1', base_sha=base_sha,
+                    content_changed=True, hashes=data['hashes'], result='PASS')
+    old = manifest(name, root, base_sha)
     before, after = hashes(name, root, base_sha), hashes(name, root)
     if 'versioning' not in old:
         raise ValueError('Unversioned Patchset base is retired; rebase onto a reviewed versioned main')
@@ -207,12 +226,12 @@ def bump(name, base='origin/main', check=False, root=ROOT):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=('bump', 'verify', 'render'))
-    parser.add_argument('--patchset', choices=('v1', 'v2'))
+    parser.add_argument('--patchset')
     parser.add_argument('--base', default='origin/main')
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     try:
-        names = [args.patchset] if args.patchset else ['v1', 'v2']
+        names = [args.patchset] if args.patchset else sorted(p.parent.name for p in (ROOT / 'patchsets').glob('v*/patchset.json'))
         if args.mode == 'bump' and not args.patchset:
             raise ValueError('bump requires --patchset')
         results = []

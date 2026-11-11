@@ -1,0 +1,34 @@
+# Patch Profiles and candidate isolation
+
+`metadata/patch-profiles.json` is the routing policy. Numeric source version chooses a Profile; applicability, SHA, build success and patch hashes do not influence selection. Source identity remains separately locked to an exact upstream SHA.
+
+| Source version | Profile | Patchset | Stable eligibility |
+| --- | --- | --- | --- |
+| Below 1.5.0 | legacy-pre-1.5 | v1 | Existing historical policy |
+| 1.5.0 | rd-1.5.0 | v2.8 | Existing gates apply |
+| 1.5.1 | rd-1.5.1 | v2.8 | Existing gates apply |
+| 1.5.3 | rd-1.5.3-candidate | v3.1 | Forbidden |
+| Unadapted versions, including 1.5.2 | latest_maintained | currently v3.1 | Forbidden |
+
+The 1.5.3 source inspected here is candidate commit `05b9f2d8919b5cdfaa0bb3280601a02881556a42` from failed compatibility run 42572512338. Its Cargo version is not an official release tag. No 1.5.2 source snapshot or release is approved by this change. Unknown-version fallback means “try the latest maintained patchset and report compatibility”; it does not promise applicability or support.
+
+The selection report records `profile`, `selected`, `fallback`, `compatibility_test_only` and `stable_allowed`. Exact candidate Profiles are test-only even though `fallback=false`. CI/Nightly may test them; adapter approvals and publication authorization remain independent. Stable rejects candidates/fallback even in dry-run, and rechecks policy at lock/preflight/content revision and client identity gates. Test success never updates registry policy. No build identity schema, hash algorithm for patch contents, signing permissions or publishing authorization is changed.
+
+Common patches are applied in lexical order, with 0001 targeting the locked hbb_common submodule. Standard stops after Common 0006; SOS then applies SOS 0001–0003. Each patch must pass `git apply --check` before application. A failure stops immediately without trying an older profile. Source preparation validates that supplied patchset matches numeric source version and channel, preventing v3 from leaking into 1.5.1.
+
+v3 exists to preserve isolation using existing vN patch/provenance interfaces. It derives from v2 revision 8 and only rebases Common 0004's chat-model visibility hooks. It preserves upstream `setWindowsCmWindowBounds`, monitor selection, physical-pixel scaling and `ignoreDevicePixelRatio: true`, plus non-Windows fallback branches. It does not restore the malformed intermediate patch from PR #247 history. Other Common/SOS patch bytes remain identical to v2.8; v2 itself is unchanged.
+
+## Validation
+
+```sh
+python3 -m scripts.upstream.patch_profiles_contract
+python3 -m scripts.build.build_adapter_contract
+python3 -m scripts.upstream.patchset_version verify --base origin/main
+python3 scripts/validation/repository_contract.py
+```
+
+For each clean exact upstream snapshot, copy independent Standard/SOS trees, run `PATCHSET=v2` (1.5.1) or `PATCHSET=v3` (candidate) through `scripts/source/apply_patches.sh`, then `scripts.validation.compatibility.contracts`. Run the CM contract on prepared source; Dart policy execution requires Dart. Native build, generated bridge, Flutter analysis and real-session validation require their reviewed toolchains and remain distinct from structural checks.
+
+New Profiles require reviewed metadata and exact fresh evidence before Stable eligibility can be enabled. Unknown native build interface signatures continue to block build execution; do not add signatures merely because patches apply.
+
+Local source identities, test counts and limitations: [audit record](patch-profile-audit.md).

@@ -32,6 +32,8 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     identity_path=tree/'src/custom_update/build.json'
     if not identity_path.is_file():raise ValueError('Client update identity missing')
     update_identity=json.loads(identity_path.read_text(encoding='utf-8'))
+    from scripts.upstream.patchsets import require_selection
+    require_selection(manifest['upstream_version'], patchset, update_identity['channel'])
     if update_identity!=manifest.get('client_update_identity'):
         raise ValueError('Client update identity differs from prepared-source manifest')
     if any(update_identity[k]!=manifest[v] for k,v in
@@ -80,7 +82,10 @@ def prepare(base,output,ref,sha,name,bridge):
     if git(base,'rev-parse','HEAD')!=sha or git(base,'status','--porcelain','--ignore-submodules=none'):
         raise ValueError('Prepare requires clean exact official source')
     if not re.fullmatch('[0-9a-f]{40}',sha):raise ValueError('Exact SHA required')
-    profile=check(base);os.environ['PATCHSET']=name
+    profile=check(base)
+    from scripts.upstream.patchsets import require_selection
+    require_selection(profile['upstream_version'], name, os.environ['BUILD_CHANNEL'])
+    os.environ['PATCHSET']=name
     output.mkdir(parents=True,exist_ok=False)
     common=output/'common'
     # Copies remove Git shared-object alternates; archives are standalone across runners.

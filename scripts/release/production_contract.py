@@ -135,7 +135,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(patchset_for_version('1.4.99'), 'v1')
         self.assertEqual(patchset_for_version('1.5.0'), 'v2')
         self.assertEqual(patchset_for_version('1.5.1'), 'v2')
-        self.assertEqual(patchset_for_version('2.0.0'), 'v2')
+        self.assertEqual(patchset_for_version('2.0.0'), 'v3')
 
     def test_selection_uses_directories_and_ignores_sha_and_hashes(self):
         from scripts.upstream import patchsets
@@ -149,6 +149,9 @@ class GenerationTests(unittest.TestCase):
     def test_missing_selected_directory_fails_closed(self):
         from scripts.upstream import patchsets
         with tempfile.TemporaryDirectory() as tmp, patch.object(patchsets, 'ROOT', Path(tmp)):
+            import shutil
+            (Path(tmp) / 'metadata').mkdir()
+            shutil.copyfile(Path(__file__).resolve().parents[2] / 'metadata/patch-profiles.json', Path(tmp) / 'metadata/patch-profiles.json')
             (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
             (Path(tmp) / 'patchsets' / 'v2' / 'sos').mkdir(parents=True)
             self.assertEqual(patchsets.patchset_for_version('1.5.0'), 'v2')
@@ -409,7 +412,7 @@ class StaticPatchsetSelectionTests(unittest.TestCase):
         from scripts.upstream.patchsets import patchset_for_version, select
         self.assertEqual(patchset_for_version('1.4.9'), 'v1')
         self.assertEqual(patchset_for_version('1.5.0'), 'v2')
-        self.assertEqual(patchset_for_version('1.6.0'), 'v2')
+        self.assertEqual(patchset_for_version('1.6.0'), 'v3')
         self.assertEqual(select('0' * 40, Path('/does/not/exist'), upstream_ref='1.5.0'), 'v2')
 
     def test_selection_does_not_call_hash_or_verify(self):
@@ -420,6 +423,9 @@ class StaticPatchsetSelectionTests(unittest.TestCase):
     def test_missing_selected_directory_fails_closed(self):
         from scripts.upstream import patchsets
         with tempfile.TemporaryDirectory() as tmp, patch.object(patchsets, 'ROOT', Path(tmp)):
+            import shutil
+            (Path(tmp) / 'metadata').mkdir()
+            shutil.copyfile(Path(__file__).resolve().parents[2] / 'metadata/patch-profiles.json', Path(tmp) / 'metadata/patch-profiles.json')
             (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
             with self.assertRaisesRegex(RuntimeError, 'incomplete'):
                 patchsets.patchset_for_version('1.5.0')
