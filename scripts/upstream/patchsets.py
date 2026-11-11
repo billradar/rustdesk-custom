@@ -29,10 +29,8 @@ def profile_for_version(version, channel='ci'):
         raise ValueError('Unknown Patch Profile schema')
     profile_id = registry['exact_versions'].get(normalized)
     fallback = profile_id is None and numeric >= V2_BOUNDARY
-    if numeric < V2_BOUNDARY:
-        profile_id = 'legacy-pre-1.5'
-    elif fallback:
-        profile_id = registry['latest_maintained']
+    if profile_id is None:
+        profile_id = 'legacy-pre-1.5' if numeric < V2_BOUNDARY else registry['latest_maintained']
     profile = registry['profiles'][profile_id]
     if type(profile['stable_allowed']) is not bool:
         raise ValueError('Invalid Stable Patch Profile policy')

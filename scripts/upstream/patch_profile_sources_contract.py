@@ -51,6 +51,15 @@ def exercise(source, version, sha, name, channel):
                 raise ValueError('Common/SOS patch order changed')
             result['variants'][variant] = dict(patch_order=order, git_apply_check='PASS',
                                                contracts=contracts(tree, variant, name))
+            result['variants'][variant]['native_helper_compile'] = 'NOT_RUN (rustc unavailable)'
+            if shutil.which('rustc'):
+                subprocess.run(['bash', '-c',
+                    'source scripts/validation/test_config.sh; '
+                    'python3 scripts/source/verify_source.py "$1" "$2" --automation',
+                    'native-helper', str(tree), variant], cwd=ROOT, check=True,
+                    env=dict(os.environ, PATCHSET=name, PYTHONPATH=str(ROOT)),
+                    stdout=subprocess.DEVNULL)
+                result['variants'][variant]['native_helper_compile'] = 'PASS'
             if name == 'v3':
                 if (tree / POSITION).read_bytes() != (source / POSITION).read_bytes():
                     raise ValueError('Upstream Windows DPI helper changed')

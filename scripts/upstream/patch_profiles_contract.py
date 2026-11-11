@@ -26,6 +26,21 @@ class ProfileContract(unittest.TestCase):
         self.assertTrue(candidate['compatibility_test_only'])
         self.assertFalse(candidate['stable_allowed'])
 
+    def test_exact_profile_precedes_legacy_boundary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'metadata').mkdir()
+            registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
+            registry['exact_versions']['1.4.9'] = 'rd-1.5.1'
+            (root / 'metadata/patch-profiles.json').write_text(json.dumps(registry))
+            for scope in ('common', 'sos'):
+                (root / 'patchsets/v2' / scope).mkdir(parents=True)
+            with patch.object(patchsets, 'ROOT', root):
+                result = patchsets.profile_for_version('1.4.9')
+            self.assertEqual(result['profile'], 'rd-1.5.1')
+            self.assertEqual(result['selected'], 'v2')
+            self.assertFalse(result['fallback'])
+
     def test_unknown_versions_test_latest_but_never_gain_stable(self):
         for version in ('1.5.2', '1.5.4', '2.0.0'):
             for lane in ('ci', 'nightly'):
