@@ -179,6 +179,33 @@ class ReviewContract(unittest.TestCase):
             self.assertEqual(packet['platform_unknown'],['linux/x86_64: unknown'])
             self.assertEqual(packet['approval'],'REQUIRED / NOT APPROVED')
 
+    def test_collected_native_review_survives_json_artifact_round_trip(self):
+        critical={'files':{},'tools':{}}
+        profile={'signature':review.build_adapter.digest(critical),
+                 'id':'test-base','reviewed_upstream_sha':'c'*40}
+        # YAML 1.1 turns the actual Linux matrix's `on` key into True.
+        observed={'signature':'d'*64,
+                  'official_matrix':yaml.safe_load('on: ubuntu-22.04\narch: x86_64\n')}
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);meta=root/'metadata';(meta/'build').mkdir(parents=True)
+            (meta/'platform').mkdir()
+            (meta/'build/adapter-profiles.json').write_text(json.dumps({'profiles':[profile]}))
+            (meta/'platform/adapter-profiles.json').write_text(json.dumps(
+                {'approved':{'linux':[],'macos':[],'android':[]}}))
+            with patch.dict(os.environ,self.env),patch.object(review,'ROOT',root),patch.object(
+                    review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(
+                    review.build_adapter,'inspect',return_value=(profile,critical)),patch.object(
+                    review.platform_adapter,'inspect',return_value=(observed,{})):
+                packet=review.collect(root,'b'*40,root/'out')
+                loaded=json.loads((root/'out/proposal.json').read_text())
+                review.validate_packet(loaded)
+                self.assertEqual(loaded,packet)
+                self.assertEqual(review.report_identity(loaded),review.report_identity(packet))
+                changed=copy.deepcopy(loaded)
+                changed['platform_interfaces']['linux/x86_64']['official_matrix']['arch']='aarch64'
+                with self.assertRaisesRegex(ValueError,'Native platform review identity mismatch'):
+                    review.validate_packet(changed)
+
     def test_unknown_interface_records_patch_failure_without_approving(self):
         critical={'files':{},'tools':{}};profile={'signature':review.build_adapter.digest(critical),'upstream_version':'1.5.1'}
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,critical)),patch.object(review.shutil,'copytree'),patch.object(review.subprocess,'run') as run:

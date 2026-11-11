@@ -106,6 +106,11 @@ def collect(source, upstream_sha, out):
                     try:contracts(tree,variant,patchset);result['api_structure']='PASS'
                     except Exception as e:result.update(api_structure='FAIL',diagnostic=str(e))
                 packet['checks']['patches'][variant]=result
+    # Preserve the digest's key spelling in the artifact. JSON otherwise turns
+    # YAML boolean keys into lowercase "true"/"false", while digest() uses
+    # "True"/"False". Normalize the report with the same collision checks before
+    # writing it so the reader verifies exactly the identity collected here.
+    packet=build_adapter._digest_value(packet)
     out.mkdir(parents=True,exist_ok=True)
     (out/'proposal.json').write_text(json.dumps(packet,indent=2)+'\n')
     output('review_needed','true')
