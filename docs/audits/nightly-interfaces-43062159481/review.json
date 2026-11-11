@@ -1,0 +1,491 @@
+{
+  "schema_version": 1,
+  "kind": "reviewed-platform-interface-migration",
+  "upstream_repository": "rustdesk/rustdesk",
+  "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+  "compared_upstream_sha": "09871abd0bc13a69b4318edad031287d8d4314d2",
+  "custom_base_sha": "44168f81035911df415c94c01da588a657f5b65d",
+  "observed_run": 43062159481,
+  "observed_job": 130667904667,
+  "critical_file_comparison": {
+    "build.py": {
+      "before": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3",
+      "after": "0328ffd4f654dee01ce8baf18c3b10f21b5bda7e8043a3f9e3b25ea53b1005c3"
+    },
+    "build.rs": {
+      "before": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46",
+      "after": "64b1600c2ebd7988a0802ca60aa9ea05c16f22da4cba00284a3f0f8ed02abe46"
+    },
+    "Cargo.toml": {
+      "before": "2f4ebdc9afaacb6dc002e14093f7fba489b90b97dd197eb7fe9c5f7fce290390",
+      "after": "d9a33d83fa972d6defeea8407060a39d9601efcb6a46b1dadc569c38237d2630"
+    },
+    "flutter/pubspec.yaml": {
+      "before": "61a4ab42bc00ee715f360f52cacb2af04997711810e1efa6d4560590795b687f",
+      "after": "7165d1fb87fd35cea83241636b48808b7ba7187d48b00582a2b47ff4ad2345e9"
+    },
+    ".github/workflows/bridge.yml": {
+      "before": "bc3714806b91f7a99748e68540c136103c7a7f7333703047e75a6f21bae61ae7",
+      "after": "bc3714806b91f7a99748e68540c136103c7a7f7333703047e75a6f21bae61ae7"
+    },
+    ".github/workflows/flutter-build.yml": {
+      "before": "14ed5f0a99ca04cc482e1716eb175234d53344f3133527c22dc90297efea9dc6",
+      "after": "707d23672b5b2746ec5e071fda8d03b3d790a1387a244ee2a03d7c02b7630688"
+    },
+    "flutter/build_android_deps.sh": {
+      "before": "d26f10bb73389dbdcf5ec5eb60e8dd9a12b9bf7038c0a2e2a3b1a0738fa85b32",
+      "after": "d26f10bb73389dbdcf5ec5eb60e8dd9a12b9bf7038c0a2e2a3b1a0738fa85b32"
+    },
+    "flutter/ndk_arm64.sh": {
+      "before": "962484e3792883126716432916d30e228fd58bb8ae3d0d65b3a21945533d7aed",
+      "after": "962484e3792883126716432916d30e228fd58bb8ae3d0d65b3a21945533d7aed"
+    },
+    "flutter/ndk_arm.sh": {
+      "before": "7ee0ef03baa0c7380dc882231274c0954e7a820c9b890e0e18a051660bfef9dc",
+      "after": "7ee0ef03baa0c7380dc882231274c0954e7a820c9b890e0e18a051660bfef9dc"
+    },
+    "flutter/ndk_x64.sh": {
+      "before": "39746bda8732f5533a2c6bcf7fb86866fc6cc9f02f84c8e240b532be3ad84a63",
+      "after": "39746bda8732f5533a2c6bcf7fb86866fc6cc9f02f84c8e240b532be3ad84a63"
+    },
+    "flutter/android/app/build.gradle": {
+      "before": "450a93d75c8f524591d0245bdc504fde60fcc8e1c68ceee9be0dff9664aa5c3d",
+      "after": "450a93d75c8f524591d0245bdc504fde60fcc8e1c68ceee9be0dff9664aa5c3d"
+    },
+    ".github/patches/apply_flutter_3.44_source_patches.sh": {
+      "before": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
+      "after": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d"
+    }
+  },
+  "diffs": {
+    "Cargo.toml": "--- 09871abd0bc13a69b4318edad031287d8d4314d2/Cargo.toml\n+++ 95cca3f661f635b3cc85c04935fe8d96d8f432ef/Cargo.toml\n@@ -295,3 +295,8 @@\n \n [profile.dev]\n debug = 1\n+\n+# sciter-rs transmutes OR'ed flags into fieldless enums; rustc's debug-build\n+# enum check aborts on them (release builds never had the check).\n+[profile.dev.package.sciter-rs]\n+debug-assertions = false",
+    "flutter/pubspec.yaml": "--- 09871abd0bc13a69b4318edad031287d8d4314d2/flutter/pubspec.yaml\n+++ 95cca3f661f635b3cc85c04935fe8d96d8f432ef/flutter/pubspec.yaml\n@@ -16,7 +16,7 @@\n # Read more about iOS versioning at\n # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html\n # 1.1.9-1 works for android, but for ios it becomes 1.1.91, need to set it to 1.1.9-a.1 for iOS, will get 1.1.9.1, but iOS store not allow 4 numbers\n-version: 1.5.3+70\n+version: 1.5.3+71\n \n environment:\n   sdk: '^3.1.0'",
+    ".github/workflows/flutter-build.yml": "--- 09871abd0bc13a69b4318edad031287d8d4314d2/.github/workflows/flutter-build.yml\n+++ 95cca3f661f635b3cc85c04935fe8d96d8f432ef/.github/workflows/flutter-build.yml\n@@ -1214,6 +1214,32 @@\n       # Required to inspect and publish signed release assets for the target tag.\n       contents: write\n     steps:\n+      - name: Refuse to replace published update metadata\n+        shell: bash\n+        env:\n+          GH_TOKEN: ${{ github.token }}\n+          TAG_NAME: ${{ env.TAG_NAME }}\n+        run: |\n+          set -euo pipefail\n+          releases=\"$(gh api --paginate --slurp \"repos/${GITHUB_REPOSITORY}/releases?per_page=100\")\"\n+          release_id=\"$(\n+            jq -r --arg tag \"$TAG_NAME\" '\n+              [.[][] | select(.tag_name == $tag)] |\n+              if length == 0 then \"\"\n+              elif length == 1 then .[0].id\n+              else error(\"multiple releases found for tag\")\n+              end\n+            ' <<<\"$releases\"\n+          )\"\n+          if [ -z \"$release_id\" ]; then\n+            exit 0\n+          fi\n+          assets=\"$(gh api --paginate --slurp \"repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100\")\"\n+          if jq -e 'any(.[][]; .name == \"rustdesk-update.json\")' <<<\"$assets\" >/dev/null; then\n+            echo \"::error::Signed update metadata is already published for ${TAG_NAME}; use a new release tag for corrected artifacts.\"\n+            exit 1\n+          fi\n+\n       - name: Checkout source code\n         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n         with:"
+  },
+  "profiles": [
+    {
+      "platform": "linux",
+      "architecture": "x86_64",
+      "runner": "ubuntu-22.04",
+      "upstream_runner": "ubuntu-22.04",
+      "target": "x86_64-unknown-linux-gnu",
+      "triplet": "x64-linux",
+      "official_matrix": {
+        "arch": "x86_64",
+        "target": "x86_64-unknown-linux-gnu",
+        "distro": "ubuntu18.04",
+        "true": "ubuntu-22.04",
+        "deb_arch": "amd64",
+        "vcpkg-triplet": "x64-linux"
+      },
+      "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "platform": "linux",
+      "architecture": "aarch64",
+      "runner": "ubuntu-22.04-arm",
+      "upstream_runner": "ubuntu-22.04-arm",
+      "target": "aarch64-unknown-linux-gnu",
+      "triplet": "arm64-linux",
+      "official_matrix": {
+        "arch": "aarch64",
+        "target": "aarch64-unknown-linux-gnu",
+        "distro": "ubuntu18.04",
+        "true": "ubuntu-22.04-arm",
+        "deb_arch": "arm64",
+        "vcpkg-triplet": "arm64-linux"
+      },
+      "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "platform": "macos",
+      "architecture": "x86_64",
+      "runner": "macos-26-intel",
+      "upstream_runner": "macos-15-intel",
+      "target": "x86_64-apple-darwin",
+      "triplet": "x64-osx",
+      "official_matrix": {
+        "target": "x86_64-apple-darwin",
+        "os": "macos-15-intel",
+        "extra-build-args": "",
+        "extra-cargo-features": "",
+        "arch": "x86_64",
+        "vcpkg-triplet": "x64-osx"
+      },
+      "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+      "rust": "1.81",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "platform": "macos",
+      "architecture": "aarch64",
+      "runner": "macos-26",
+      "upstream_runner": "macos-15",
+      "target": "aarch64-apple-darwin",
+      "triplet": "arm64-osx",
+      "official_matrix": {
+        "target": "aarch64-apple-darwin",
+        "os": "macos-15",
+        "extra-build-args": "--screencapturekit",
+        "extra-cargo-features": ",screencapturekit",
+        "arch": "aarch64",
+        "vcpkg-triplet": "arm64-osx"
+      },
+      "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+      "rust": "1.81",
+      "flutter": "3.44.9",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      },
+      "bridge_signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+      "source_workflow_sha256": "707d23672b5b2746ec5e071fda8d03b3d790a1387a244ee2a03d7c02b7630688",
+      "bridge_flutter": "3.44.8",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "patch_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d"
+    },
+    {
+      "platform": "android",
+      "architecture": "aarch64",
+      "runner": "ubuntu-24.04",
+      "upstream_runner": "ubuntu-24.04",
+      "target": "aarch64-linux-android",
+      "triplet": null,
+      "official_matrix": {
+        "arch": "aarch64",
+        "target": "aarch64-linux-android",
+        "os": "ubuntu-24.04",
+        "reltype": "release",
+        "suffix": ""
+      },
+      "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "platform": "android",
+      "architecture": "armv7",
+      "runner": "ubuntu-24.04",
+      "upstream_runner": "ubuntu-24.04",
+      "target": "armv7-linux-androideabi",
+      "triplet": null,
+      "official_matrix": {
+        "arch": "armv7",
+        "target": "armv7-linux-androideabi",
+        "os": "ubuntu-24.04",
+        "reltype": "release",
+        "suffix": ""
+      },
+      "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      }
+    },
+    {
+      "platform": "android",
+      "architecture": "x86_64",
+      "runner": "ubuntu-24.04",
+      "upstream_runner": "ubuntu-24.04",
+      "target": "x86_64-linux-android",
+      "triplet": null,
+      "official_matrix": {
+        "arch": "x86_64",
+        "target": "x86_64-linux-android",
+        "os": "ubuntu-24.04",
+        "reltype": "release",
+        "suffix": ""
+      },
+      "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "ndk": "r28c",
+      "cargo_ndk": "3.1.2",
+      "cmake": "4.3.0",
+      "official_disabled": false,
+      "tools": {
+        "SCITER_RUST_VERSION": "1.75",
+        "RUST_VERSION": "1.75",
+        "MAC_RUST_VERSION": "1.81",
+        "CARGO_NDK_VERSION": "3.1.2",
+        "SCITER_ARMV7_CMAKE_VERSION": "3.29.7",
+        "SCITER_NASM_DEBVERSION": "2.15.05-1",
+        "LLVM_VERSION": "15.0.6",
+        "FLUTTER_VERSION": "3.24.5",
+        "ANDROID_FLUTTER_VERSION": "3.24.5",
+        "FLUTTER_WINDOWS_ARM_VERSION": "3.44.9",
+        "FLUTTER_MACOS_ARM_VERSION": "3.44.9",
+        "FLUTTER_ELINUX_VERSION": "3.16.9",
+        "VCPKG_BINARY_SOURCES": "clear;x-gha,readwrite",
+        "VCPKG_COMMIT_ID": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+        "VCPKG_CMAKE_VERSION": "4.3.0",
+        "ARMV7_VCPKG_COMMIT_ID": "6f29f12e82a8293156836ad81cc9bf5af41fe836",
+        "VERSION": "1.5.3",
+        "NDK_VERSION": "r28c"
+      }
+    }
+  ],
+  "macos_arm64_policy": {
+    "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+    "runner": "macos-26",
+    "upstream_runner": "macos-15",
+    "target": "aarch64-apple-darwin",
+    "triplet": "arm64-osx",
+    "rust": "1.81",
+    "flutter": "3.44.9",
+    "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+    "bridge_signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+    "bridge_flutter": "3.44.8",
+    "bridge_rust": "1.75",
+    "cargo_expand": "1.0.95",
+    "frb": "1.80.1",
+    "patch_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
+    "source_workflow_sha256": "707d23672b5b2746ec5e071fda8d03b3d790a1387a244ee2a03d7c02b7630688"
+  },
+  "review_notes": [
+    "Compared exact native jobs and global environment against 09871abd0bc13a69b4318edad031287d8d4314d2: Linux, macOS and Android jobs and toolchains are identical.",
+    "Cargo adds only profile.dev.package.sciter-rs debug-assertions=false; release settings, dependencies and Flutter release build commands are unchanged. Flutter package version advances 1.5.3+70 to 1.5.3+71; all remaining pubspec data is identical.",
+    "The workflow adds a no-overwrite check only to publish-signed-update-metadata, an upstream job not executed by custom native recipes. No upstream publication/signing job or permission is imported.",
+    "Android dependency scripts, Gradle file, build.py, build.rs, bridge workflow and Flutter 3.44 patch helper are byte-identical to the compared source.",
+    "macOS ARM64 keeps Flutter 3.44.9, dedicated 3.44.8 bridge, CocoaPods, exact transforms and receipts. Its independent policy additionally binds the exact full source workflow hash.",
+    "Wayland DRM job, packaging source and libdrmtap pin still match upstream-151-1297da; no Wayland policy changes are needed.",
+    "The candidate remains ineligible for Stable. This review does not claim package build, production signature, installation, native UI or real remote-session validation."
+  ],
+  "native_build_executed": false,
+  "runtime_validation": "NOT TESTED",
+  "production_signing_executed": false,
+  "local_validation": {
+    "nightly_native_preflight": "PASS (all seven platform/architecture pairs)",
+    "wayland_preflight": "PASS (x86_64 and aarch64)",
+    "patch_sources": {
+      "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+      "upstream_version": "1.5.3",
+      "profile": "rd-1.5.3-candidate",
+      "selected": "v3",
+      "fallback": false,
+      "compatibility_test_only": true,
+      "stable_allowed": false,
+      "variants": {
+        "standard": {
+          "patch_order": [
+            "0001-hbb-server-defaults.patch",
+            "0002-client-defaults.patch",
+            "0003-hide-cm-setting.patch",
+            "0004-cm-background-window.patch",
+            "0005-custom-release-updates.patch",
+            "0006-public-branding.patch"
+          ],
+          "git_apply_check": "PASS",
+          "contracts": {
+            "Config API": "PASS",
+            "Rust API structure": "PASS",
+            "Flutter API structure": "PASS",
+            "SOS UI structure": "N/A"
+          },
+          "native_helper_compile": "NOT_RUN (rustc unavailable)",
+          "upstream_dpi_preservation": "PASS"
+        },
+        "sos": {
+          "patch_order": [
+            "0001-hbb-server-defaults.patch",
+            "0002-client-defaults.patch",
+            "0003-hide-cm-setting.patch",
+            "0004-cm-background-window.patch",
+            "0005-custom-release-updates.patch",
+            "0006-public-branding.patch",
+            "0001-sos-mode.patch",
+            "0002-sos-home.patch",
+            "0003-sos-settings.patch"
+          ],
+          "git_apply_check": "PASS",
+          "contracts": {
+            "Config API": "PASS",
+            "Rust API structure": "PASS",
+            "Flutter API structure": "PASS",
+            "SOS UI structure": "PASS"
+          },
+          "native_helper_compile": "NOT_RUN (rustc unavailable)",
+          "upstream_dpi_preservation": "PASS"
+        }
+      }
+    },
+    "negative_checks": [
+      "linux critical-file drift rejected",
+      "macos critical-file drift rejected",
+      "android critical-file drift rejected",
+      "unreviewed toolchain rejected",
+      "Mac ARM independent workflow receipt drift rejected"
+    ],
+    "native_build": "NOT RUN",
+    "production_signing": "NOT RUN",
+    "runtime": "NOT TESTED",
+    "repository_architecture": "PASS (umask 022)",
+    "contracts": {
+      "commands": [
+        "PYTHONPATH=. python3 scripts/build/build_adapter_contract.py",
+        "python3 -m scripts.build.macos_arm64_contract",
+        "PYTHONPATH=. python3 scripts/release/nightly_contract.py",
+        "python3 -m scripts.upstream.patch_profiles_contract",
+        "PYTHONPATH=. python3 scripts/release/qualification_contract.py",
+        "python3 -m scripts.release.stable_lock_contract",
+        "python3 -m scripts.platform.runner_migrations_contract"
+      ],
+      "tests": 116,
+      "passed": 114,
+      "skipped": 2,
+      "skip_reason": "Two platform-adapter snapshot fixtures absent from the unit-test harness."
+    },
+    "invariants": "Existing approval entries preserved; all patchsets unchanged; 1.5.1 selects v2 revision 8; candidate and fallback versions rejected by Stable."
+  }
+}

@@ -160,6 +160,8 @@ A filename, release label, branch name, or manually edited JSON field is not suf
 
 `metadata/platform/matrix.json` is the authority for enabled targets, required targets, support status, runner, and experimental eligibility. `metadata/platform/adapter-profiles.json` and `metadata/build/adapter-profiles.json` hold separate reviewed build-interface/profile data; they are not interchangeable with the target matrix.
 
+The exact Nightly source `95cca3f661f635b3cc85c04935fe8d96d8f432ef` has a static native-interface review in `docs/audits/nightly-interfaces-43062159481/review.json`. Its native jobs/toolchains match the prior reviewed source; macOS ARM64 also binds the new full workflow hash in its independent policy. This does not grant candidate v3 Stable eligibility or claim native build/runtime validation.
+
 The README currently summarizes these intended platform/variant families:
 - Windows x86_64: Standard and SOS;
 - Windows ARM64: Standard and SOS as experimental Tag/Nightly targets; builds and release assets are enabled, runtime qualification is pending;
