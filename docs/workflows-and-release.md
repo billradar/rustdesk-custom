@@ -92,13 +92,20 @@ Wayland 开关和启用时的策略 SHA-256，以及 Android 签名策略。自�
 
 ## Unknown-interface review automation
 
-The existing upstream-main monitor runs a separate read-only inspection alongside
-normal compatibility checks. Known signatures produce no review. Unknown ones
-produce a same-run JSON report with the observed interface, changed critical
-file/tool fingerprints, a full upstream compare link, and Standard/SOS patch
-application and API-structure results. Rust compilation, bridge generation,
-Flutter analysis and runtime are explicitly **not run** in this unapproved path.
-The normal compatibility gate continues to fail until the interface is reviewed.
+The upstream-main monitor provides patch/API, bridge and Flutter compatibility
+signals only; it does not collect native platform fingerprints or propose
+interface-review PRs. Its reviewed bridge/build recipe gate remains in place
+before executing dependency or generator commands.
+
+Nightly owns interface discovery for the exact upstream SHA selected from a
+successful official Nightly run. After source resolution and duplicate checks,
+a separate read-only job inspects that same immutable source, independently of
+source preparation. Known signatures produce no review. Unknown ones produce a
+same-run JSON report with interface fingerprints, a full upstream compare link,
+and Standard/SOS patch application and API-structure results. Compilation,
+bridge generation, Flutter analysis and runtime are **not run** by this report
+collector. Native preflight remains fail-closed before bridge dependencies;
+creating or merging a report never approves an interface.
 
 Reports normalize YAML mapping keys using the same collision-rejecting rules as
 their identity digest before writing JSON. This preserves identity across the
@@ -106,7 +113,8 @@ artifact upload/download boundary, including YAML 1.1 boolean keys such as `on`.
 The writer still rejects changed identities, stale run/commit bindings and
 fabricated validation claims.
 
-A separate trusted-main job, with repository contents/PR write and Actions read permissions,
+A separate job in the protected-main Nightly workflow, restricted to its
+`workflow_dispatch` context and with contents/PR write and Actions read permissions,
 can propose a **draft, report-only PR**. It cannot change the approved profile
 list, patch policy, signing or release settings. Reports live under
 `docs/upstream-interface-reviews/`; automation branches use the full interface
@@ -114,7 +122,9 @@ signature and are deduplicated across repeated runs. Partial PR-creation retries
 can reuse only a branch adding one regular, non-executable JSON report. Recovery
 compares immutable commit IDs, verifies the stored report's filename/source and
 interface digest, and checks its recorded discovery run against this repository's
-trusted main workflow. Different upstream source commits may share an interface
+trusted Nightly discovery workflow. Immutable historical upstream-main reports
+remain eligible for recovery after the same provenance checks; new CI reports
+cannot create PRs. Different upstream source commits may share an interface
 branch: recovery retains the original file and creates only the missing draft PR,
 with the historical source/run and current discovery clearly distinguished. It
 does not copy old check results onto the new source. Extra files, malformed or
@@ -128,6 +138,21 @@ remains available and the writer fails visibly. GITHUB_TOKEN-created PRs may not
 trigger new CI automatically; the report makes no CI-qualification claim. A human
 must inspect the diff, add a reviewed profile if appropriate, and run the full
 compatibility path. Nothing is automatically approved, merged or published.
+
+## Shared interface approvals for Nightly and Stable
+
+Nightly and Stable consume the same reviewed build/platform metadata and exact
+architecture-specific recipe policies. A fingerprint approved after Nightly
+review is reusable by Stable when its complete checked identity matches; no
+separate Stable copy of the registry or version-wide approval is created.
+Unknown fingerprints still fail closed in both channels. Nightly success or a
+report PR is not itself approval.
+
+Stable separately requires an official Stable tag and locked source SHA,
+Stable-eligible Profile, reviewed patch content revision, complete artifact
+qualification and its signing/publication authorization. Nightly artifacts or
+qualification are not promoted implicitly. In particular, 1.5.1 keeps v2
+revision 8 and candidate/fallback Profiles remain ineligible for Stable.
 
 ## Nightly 同步与构建
 

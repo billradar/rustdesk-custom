@@ -394,7 +394,7 @@ class NightlyTests(unittest.TestCase):
             self.assertEqual(set(j['secrets']),{'RUSTDESK_KEY','RUSTDESK_PASSWORD'})
         for name,j in w['jobs'].items():
             if name!='android-sign':self.assertNotIn('environment',j)
-            if name!='draft':self.assertNotIn('write',json.dumps(j.get('permissions',{})))
+            if name not in ('draft','propose-interface-review'):self.assertNotIn('write',json.dumps(j.get('permissions',{})))
             if name!='android-sign':self.assertNotIn('YUBIKEY_PIV_PIN',json.dumps(j))
         signer=w['jobs']['android-sign'];tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']['android-sign']
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
@@ -415,11 +415,38 @@ class NightlyTests(unittest.TestCase):
         self.assertIn("vars.ANDROID_PRODUCTION_SIGNING_ENABLED != 'true'",unsigned['if'])
         draft=w['jobs']['draft']
         self.assertEqual(draft['permissions'],{'contents':'write','actions':'read'})
+        self.assertEqual(w['jobs']['propose-interface-review']['permissions'],
+                         {'contents':'write','pull-requests':'write','actions':'read'})
         self.assertEqual(draft['concurrency'],{'group':'rustdesk-nightly-release-write','cancel-in-progress':False})
         self.assertIn('aggregate',draft['needs'])
         self.assertTrue(any('nightly.py draft' in s.get('run','') for s in draft['steps']))
         for token in ['qualification.py release','secrets: inherit','continue-on-error']:
             self.assertNotIn(token,(ROOT/'.github/workflows/nightly.yml').read_text())
+
+    def test_stable_and_nightly_reuse_exact_platform_approval_and_reject_drift(self):
+        from scripts.platform import platform_adapter as adapter
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            for name in adapter.FILES:
+                path=root/name;path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_text('# immutable fixture input\n')
+            workflow={'env':{'RUST_VERSION':'1.75','FLUTTER_VERSION':'3.24.5','VCPKG_COMMIT_ID':'a'*40},
+                      'jobs':{'build-rustdesk-linux':{'strategy':{'matrix':{'job':[
+                          {'arch':'x86_64','on':'ubuntu-22.04','target':'x86_64-unknown-linux-gnu',
+                           'vcpkg-triplet':'x64-linux'}]}}}}}
+            (root/'.github/workflows/flutter-build.yml').write_text(yaml.safe_dump(workflow))
+            signature=adapter.inspect(root,'linux','x86_64')[0]['signature']
+            metadata=root/'metadata/platform/adapter-profiles.json';metadata.parent.mkdir(parents=True)
+            metadata.write_text(json.dumps({'approved':{'linux':[signature]}}))
+            with patch.object(adapter,'ROOT',root):
+                for channel in ('nightly','stable'):
+                    with patch.dict(os.environ,BUILD_CHANNEL=channel):
+                        self.assertEqual(adapter.check(root,'linux','x86_64')[0]['signature'],signature)
+                (root/'build.rs').write_text('# unreviewed source drift\n')
+                for channel in ('nightly','stable'):
+                    with patch.dict(os.environ,BUILD_CHANNEL=channel):
+                        with self.assertRaisesRegex(ValueError,'unreviewed official linux'):
+                            adapter.check(root,'linux','x86_64')
 
     def test_all_platform_review_happens_before_bridge_dependencies(self):
         w=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())

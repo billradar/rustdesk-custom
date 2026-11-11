@@ -27,7 +27,8 @@ def output(key,value):
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write(key+'='+value+'\n')
 
 
-def collect(source, upstream_sha, out):
+def collect(source, upstream_sha, out, channel='ci'):
+    if channel not in ('ci','nightly'):raise ValueError('Unsupported interface review channel')
     if not re.fullmatch('[0-9a-f]{40}',upstream_sha):raise ValueError('Exact upstream SHA required')
     actual=subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()
     if actual!=upstream_sha:raise ValueError('Source identity mismatch')
@@ -68,6 +69,7 @@ def collect(source, upstream_sha, out):
     base=known[-1]
     # Public diagnostics only; the read job never loads production configuration.
     packet={'schema':SCHEMA,'approval':'REQUIRED / NOT APPROVED','upstream_repository':'rustdesk/rustdesk',
+        'channel':channel,
         'upstream_sha':upstream_sha,'custom_repository_sha':os.environ['GITHUB_SHA'],
         'workflow_run':os.environ['GITHUB_RUN_ID'],'observed_profile':profile,
         'inspection_error':inspection_error,'critical':critical,'compared_profile':base.get('id','latest-reviewed-profile'),
@@ -83,21 +85,21 @@ def collect(source, upstream_sha, out):
     packet['critical_diff']='\n'.join(difflib.unified_diff(old,new,fromfile=base['id'],tofile=upstream_sha,lineterm=''))
     if profile:
         try:
-            patchset=patchset_for_version(profile['upstream_version'])
+            patchset=patchset_for_version(profile['upstream_version'],channel)
         except (ValueError, KeyError) as e:
             packet['patchset_error']=str(e)
             patchset=None
     else:
         patchset=None
     if patchset:
-        packet['patch_profile']=profile_for_version(profile['upstream_version'])
+        packet['patch_profile']=profile_for_version(profile['upstream_version'],channel)
         packet['patchset']=patchset
         packet['patch_hashes']={k:patch_hash(k,patchset) for k in ['common','sos']}
         for variant in ['standard','sos']:
             with tempfile.TemporaryDirectory() as tmp:
                 tree=Path(tmp)/'source';shutil.copytree(source,tree,symlinks=True)
                 p=subprocess.run(['bash',str(ROOT/'scripts/source/apply_patches.sh'),str(tree),variant],
-                    env=dict(os.environ,PATCHSET=patchset),capture_output=True,text=True)
+                    env=dict(os.environ,PATCHSET=patchset,BUILD_CHANNEL=channel),capture_output=True,text=True)
                 result={'patch_apply':'PASS' if p.returncode==0 else 'FAIL','api_structure':'NOT RUN'}
                 if p.returncode:
                     # Only file/hunk diagnostics, never an environment dump.
@@ -135,6 +137,7 @@ def validate_report(p):
     if not isinstance(p,dict):raise ValueError('Invalid review report')
     if p.get('schema')!=SCHEMA or p.get('approval')!='REQUIRED / NOT APPROVED' or p.get('upstream_repository')!='rustdesk/rustdesk':
         raise ValueError('Invalid/unapproved review packet')
+    if p.get('channel','ci') not in ('ci','nightly'):raise ValueError('Invalid report channel')
     for key in ['upstream_sha','custom_repository_sha']:
         if not re.fullmatch('[0-9a-f]{40}',str(p.get(key,''))):raise ValueError('Invalid packet identity')
     if not re.fullmatch('[1-9][0-9]*',str(p.get('workflow_run',''))):raise ValueError('Invalid report run')
@@ -200,9 +203,13 @@ def recover_report(current, head, signature):
     if path!='docs/upstream-interface-reviews/'+report['upstream_sha']+'.json' or report_identity(report)!=signature:
         raise ValueError('Existing review report has a different source or interface identity')
     run=request('actions/runs/'+str(report['workflow_run']))
+    trusted_discovery=((run.get('path')=='.github/workflows/nightly.yml'
+                        and run.get('event')=='workflow_dispatch' and report.get('channel')=='nightly')
+                       or (run.get('path')=='.github/workflows/upstream-main-compatibility.yml'
+                           and run.get('event') in ('schedule','workflow_dispatch')
+                           and report.get('channel','ci')=='ci'))
     if (run.get('head_sha')!=report['custom_repository_sha'] or run.get('head_branch')!='main'
-            or run.get('event') not in ('schedule','workflow_dispatch')
-            or run.get('path')!='.github/workflows/upstream-main-compatibility.yml'
+            or not trusted_discovery
             or run.get('repository',{}).get('full_name')!=REPOSITORY):
         raise ValueError('Existing review report is not from the trusted discovery workflow')
     return report
@@ -210,9 +217,12 @@ def recover_report(current, head, signature):
 
 def publish(packet):
     # Even an edited workflow cannot accidentally use this path from a PR or another branch.
-    if os.environ.get('GITHUB_REPOSITORY')!=REPOSITORY or os.environ.get('GITHUB_REF')!='refs/heads/main' or os.environ.get('GITHUB_EVENT_NAME') not in ['schedule','workflow_dispatch']:
-        raise ValueError('Review PR writes require protected main scheduled/manual context')
+    if (os.environ.get('GITHUB_REPOSITORY')!=REPOSITORY or os.environ.get('GITHUB_REF')!='refs/heads/main'
+            or os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch'
+            or os.environ.get('GITHUB_WORKFLOW_REF')!=REPOSITORY+'/.github/workflows/nightly.yml@refs/heads/main'):
+        raise ValueError('Review PR writes require protected main Nightly context')
     validate_packet(packet)
+    if packet.get('channel')!='nightly':raise ValueError('Only Nightly discovery may propose interface reviews')
     signature=report_identity(packet)
     if not re.fullmatch('[0-9a-f]{40}|[0-9a-f]{64}',signature):raise ValueError('Invalid review identity')
     branch='automation/upstream-interface-'+signature
@@ -257,8 +267,8 @@ def publish(packet):
 
 if __name__=='__main__':
     a=argparse.ArgumentParser();sub=a.add_subparsers(dest='mode',required=True)
-    p=sub.add_parser('collect');p.add_argument('--source',type=Path,required=True);p.add_argument('--sha',required=True);p.add_argument('--out',type=Path,required=True)
+    p=sub.add_parser('collect');p.add_argument('--source',type=Path,required=True);p.add_argument('--sha',required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--channel',choices=('ci','nightly'),default='ci')
     p=sub.add_parser('publish');p.add_argument('--packet',type=Path,required=True)
     args=a.parse_args()
-    if args.mode=='collect':collect(args.source,args.sha,args.out)
+    if args.mode=='collect':collect(args.source,args.sha,args.out,args.channel)
     else:publish(json.loads(args.packet.read_text()))
