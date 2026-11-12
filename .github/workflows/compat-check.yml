@@ -226,7 +226,7 @@ jobs:
       run: |
         python3 - <<'PYCODE'
         from pathlib import Path
-        import shutil, subprocess
+        import base64, hashlib, shutil, subprocess, zlib
         root=Path('.work/validation')
         log=root/'standard.log'
         if log.is_file() and 'needs to be updated but --locked was passed' in log.read_text():
@@ -236,7 +236,13 @@ jobs:
                 result=subprocess.run(['cargo','metadata','--format-version','1'],cwd=root/'standard',stdout=subprocess.DEVNULL,stderr=output,timeout=840)
             if result.returncode:
                 raise SystemExit('Cargo diagnostic resolution failed; see preserved log')
+            lock=(root/'standard/Cargo.lock').read_bytes()
             shutil.copyfile(root/'standard/Cargo.lock',root/'cargo-lock-resolved.lock')
+            # Public dependency metadata only; also available when artifact delivery is blocked.
+            print('CARGO_LOCK_SHA256:'+hashlib.sha256(lock).hexdigest())
+            encoded=base64.b64encode(zlib.compress(lock)).decode()
+            for start in range(0,len(encoded),120):
+                print('CARGO_LOCK_CHUNK:'+encoded[start:start+120])
         PYCODE
     - name: Preserve diagnostics even on conflict
       if: always()

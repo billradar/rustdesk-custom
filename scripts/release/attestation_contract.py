@@ -14,14 +14,19 @@ from scripts.release import attestation as a
 ROOT=Path(__file__).resolve().parents[2]
 
 
-def fixture(directory, channel='stable'):
+def fixture(directory, channel='stable', *, unsigned_android=False):
     p=directory/'rustdesk-1.5.1-linux-aarch64.deb';p.write_bytes(b'package')
     info=dict(platform='linux',architecture='aarch64',variant='standard',upstream_version='1.5.1',
               upstream_sha='a'*40,custom_repository_sha='b'*40,patchset='v2',
               patch_revision='v2.8' if channel=='stable' else None,
               common_patch_hash='c'*64,sos_patch_hash='d'*64)
+    entries=[a.entry(p,info)]
+    if unsigned_android:
+        for arch in ('aarch64','armv7','x86_64'):
+            apk=directory/f'client-{arch}.apk';apk.write_bytes(b'test-signed APK fixture')
+            entries.append(a.entry(apk,dict(info,platform='android',architecture=arch,signed_status='TEST SIGNED / NOT PRODUCTION SIGNED')))
     with patch.dict(os.environ,GITHUB_REPOSITORY=a.REPOSITORY,GITHUB_RUN_ID='42'):
-        value=a.write(directory,channel,[a.entry(p,info)],info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
+        value=a.write(directory,channel,entries,info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
     (directory/a.BUNDLE).write_text('{"fixture":"signature verification is mocked only in tests"}')
     return value
 
@@ -29,8 +34,9 @@ def fixture(directory, channel='stable'):
 class AttestationTests(unittest.TestCase):
     def test_configured_signing_allows_dry_run_inventory_but_blocks_publication_and_reuse(self):
         for channel in ('stable','nightly'):
-            with self.subTest(channel=channel),tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='true',REQUIRE_ANDROID_PRODUCTION_SIGNING='false',RELEASE_MODE='dry-run'):
-                root=Path(td);value=fixture(root,channel)
+            with self.subTest(channel=channel),tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='true',REQUIRE_ANDROID_PRODUCTION_SIGNING='false',RELEASE_MODE='dry-run',clear=True):
+                root=Path(td);value=fixture(root,channel,unsigned_android=True)
+                self.assertEqual(len([x for x in value['assets'] if x['os']=='android']),3)
                 self.assertTrue(value['android_signing_enabled'])
                 self.assertFalse(value['android_production_signed'])
                 self.assertEqual(a.loads((root/a.MANIFEST).read_bytes()),value)
