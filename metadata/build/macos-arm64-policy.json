@@ -51,6 +51,23 @@
       "frb": "1.80.1",
       "patch_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
       "source_workflow_sha256": "707d23672b5b2746ec5e071fda8d03b3d790a1387a244ee2a03d7c02b7630688"
+    },
+    {
+      "signature": "b521395a464997d9aab164509876a199669b7c3e29220c77c9f5b747f46f14f2",
+      "runner": "macos-26",
+      "upstream_runner": "macos-26",
+      "target": "aarch64-apple-darwin",
+      "triplet": "arm64-osx",
+      "rust": "1.81",
+      "flutter": "3.44.9",
+      "vcpkg": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+      "bridge_signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+      "bridge_flutter": "3.44.8",
+      "bridge_rust": "1.75",
+      "cargo_expand": "1.0.95",
+      "frb": "1.80.1",
+      "patch_sha256": "cae11571d63a4ea5b4e98dbb07aff62ae89612bb04e9c71423642b4c657b177d",
+      "source_workflow_sha256": "9babe41d2188a8af0e2eaf6390fc707aba1848535bea2bc0067287203d4e695a"
     }
   ]
 }

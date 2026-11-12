@@ -134,6 +134,7 @@ jobs:
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.build.updater_dependencies_contract
         python3 -m scripts.platform.runner_migrations_contract
+        python3 -m scripts.platform.platform_adapter_contract
         python3 -m scripts.build.macos_arm64_contract
         python3 scripts/platform/wayland_contract.py
         python3 scripts/release/production_contract.py

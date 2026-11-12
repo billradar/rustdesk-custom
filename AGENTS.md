@@ -160,6 +160,16 @@ A filename, release label, branch name, or manually edited JSON field is not suf
 
 ## 5. Platform support: how to interpret it correctly
 
+The exact `3ccb4c4b5b5a8422276dd5f6f211b42e05ec9534` native interfaces are
+reviewed in `docs/audits/nightly-interfaces-3ccb4c4b/review.json`. Linux and
+Wayland render only the reviewed `inputs.upload-artifact` expression as literal
+`false`, preserving the upstream x86_64 CI test branch without upstream uploads.
+Android runs the reviewed JNI validation step before dependencies when present;
+older approved recipes keep their original behavior. Mac ARM64 additionally
+requires its exact source-workflow hash and recipe policy. Run
+`scripts.platform.platform_adapter_contract` with the affected platform contracts.
+This static approval does not prove native compilation, signing or runtime.
+
 `metadata/platform/matrix.json` is the authority for enabled targets, required targets, support status, runner, and experimental eligibility. `metadata/platform/adapter-profiles.json` and `metadata/build/adapter-profiles.json` hold separate reviewed build-interface/profile data; they are not interchangeable with the target matrix.
 
 The exact Nightly source `95cca3f661f635b3cc85c04935fe8d96d8f432ef` has a static native-interface review in `docs/audits/nightly-interfaces-43062159481/review.json`. Its native jobs/toolchains match the prior reviewed source; macOS ARM64 also binds the new full workflow hash in its independent policy. This does not grant candidate v3 Stable eligibility or claim native build/runtime validation.
