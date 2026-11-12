@@ -3,6 +3,7 @@ import ast
 from pathlib import Path
 import subprocess
 import unittest
+import urllib.error
 from unittest.mock import patch
 from scripts.release import stable_tag as tags
 
@@ -18,6 +19,33 @@ class StableTagTests(unittest.TestCase):
         with patch.object(tags,'api',side_effect=[None,{'sha':SHA},REF]),patch.object(tags,'request',return_value=REF) as write:
             self.assertEqual(tags.ensure(REPO,TAG,SHA),REF)
         write.assert_called_once_with('POST',f'repos/{REPO}/git/refs',{'ref':'refs/tags/'+TAG,'sha':SHA})
+
+    def test_created_tag_can_be_temporarily_missing_without_another_write(self):
+        with patch.object(tags,'api',side_effect=[None,{'sha':SHA},None,None,REF]) as read,patch.object(tags,'request',return_value=REF) as write,patch.object(tags.time,'sleep') as sleep:
+            self.assertEqual(tags.ensure(REPO,TAG,SHA),REF)
+        self.assertEqual(write.call_count,1)
+        self.assertEqual([call.args for call in sleep.call_args_list],[(1,),(2,)])
+        for call in read.call_args_list[2:]:self.assertEqual(call.kwargs,{'missing':True})
+
+    def test_absent_readback_exhausts_bounded_retries_and_still_fails(self):
+        with patch.object(tags,'api',side_effect=[None,{'sha':SHA}]+[None]*5) as read,patch.object(tags,'request',return_value=REF) as write,patch.object(tags.time,'sleep') as sleep:
+            with self.assertRaisesRegex(ValueError,'verification incomplete'):tags.ensure(REPO,TAG,SHA)
+        self.assertEqual(read.call_count,7);self.assertEqual(write.call_count,1)
+        self.assertEqual([call.args for call in sleep.call_args_list],[(1,),(2,),(4,),(8,)])
+
+    def test_visible_wrong_sha_or_invalid_response_never_gets_retried(self):
+        for wrong in (dict(REF,object=dict(type='commit',sha='b'*40)),{}):
+            with self.subTest(response=wrong),patch.object(tags,'api',side_effect=[None,{'sha':SHA},None,wrong]) as read,patch.object(tags,'request',return_value=REF) as write,patch.object(tags.time,'sleep') as sleep:
+                with self.assertRaisesRegex(ValueError,'never overwrite'):tags.ensure(REPO,TAG,SHA)
+                self.assertEqual(read.call_count,4);self.assertEqual(write.call_count,1)
+                sleep.assert_called_once_with(1)
+
+    def test_non_404_read_errors_propagate_without_retry_or_another_write(self):
+        for code in (401,403,500):
+            error=urllib.error.HTTPError('https://api.github.com/ref',code,'read failed',{},None)
+            with self.subTest(code=code),patch.object(tags,'api',side_effect=[None,{'sha':SHA},error]),patch.object(tags,'request',return_value=REF) as write,patch.object(tags.time,'sleep') as sleep:
+                with self.assertRaises(urllib.error.HTTPError):tags.ensure(REPO,TAG,SHA)
+                self.assertEqual(write.call_count,1);sleep.assert_not_called()
 
     def test_same_existing_tag_is_idempotent_and_other_commit_is_never_overwritten(self):
         with patch.object(tags,'api',return_value=REF),patch.object(tags,'request') as write:

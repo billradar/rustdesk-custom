@@ -283,8 +283,9 @@ Nightly 维持**最新一份**策略：仅创建/移动 `nightly`，新草稿完
 Public package names are normalized once or repeatedly to the same name by
 `scripts/release/naming.py`. Standard has no variant token; SOS has `-sos`.
 Linux DEB normalization strips an existing OS/architecture prefix even when the
-extension immediately follows it. Existing RPM names retain their architecture
-suffix (including the RPM-native architecture field) for old client selectors.
+extension immediately follows it. v1/v2 RPM names retain their legacy architecture suffix for immutable client
+selectors. v3.2+ emits `.rpm` or `-suse.rpm` after one OS/architecture prefix and
+uses matching client selectors; see [RPM asset naming](rpm-asset-naming.md).
 No historical asset is renamed by this change.
 
 Aggregation reserves every public filename before copying packages into a fresh
@@ -309,3 +310,10 @@ the qualified manifest; write jobs revalidate it before Release/tag writes.
 Checksum-only historical Drafts cannot pass the new publication/reuse gate.
 See [Release inventory and Sigstore attestation](release-attestation.md) for the
 trust policy, old-client boundary and internal checksum exceptions.
+
+Stable Tag 创建 API 成功后，读取 API 可能短暂返回 404（运行 43146078797
+的 Draft 作业在此失败，事后已确认 Tag 指向正确构建提交，33 个资产仍保留
+在私有 Draft）。创建后的回读最多尝试 5 次，间隔 1、2、4、8 秒；只重试
+“引用暂不可见”，不重复 POST、不移动引用。出现错误 SHA、无效响应、权限
+或其他 API 错误立即失败；超过次数仍不可见也失败，不以 POST 成功代替验证。
+已有 Draft/Tag 不应通过重跑整套 CD、删除或覆盖来恢复，必须先核对实际状态。

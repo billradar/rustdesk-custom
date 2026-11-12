@@ -95,7 +95,7 @@ def contracts(tree, variant, patchset=None):
     from scripts.validation.cm_window_contract import source_contract
     source_contract(tree)
     from scripts.validation.client_update_contract import source_contract as update_source_contract
-    update_source_contract(tree)
+    update_source_contract(tree, patchset)
     from scripts.validation.branding_contract import source_contract as branding_source_contract
     branding_source_contract(tree)
     return {'Config API': 'PASS', 'Rust API structure': 'PASS', 'Flutter API structure': 'PASS',

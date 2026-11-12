@@ -1,6 +1,7 @@
 """Create immutable Stable Git tags only after the caller's artifact gates pass."""
 import re
 import subprocess
+import time
 from scripts.upstream.resolve import api
 from scripts.release.github import request
 
@@ -38,4 +39,14 @@ def ensure(repo,tag,sha):
         if concurrent:return verify(concurrent)
         raise
     verify(created)
-    return verify(api(path))
+    # GitHub can acknowledge ref creation before its read API exposes the ref.
+    # Retry only absent reads, never another write or a conflicting identity.
+    for attempt in range(5):
+        if attempt:
+            time.sleep(2 ** (attempt - 1))
+        observed=api(path,missing=True)
+        if observed is not None:
+            return verify(observed)
+        if attempt < 4:
+            print('Stable tag creation accepted; readback not yet visible, retrying verification')
+    raise ValueError('Stable tag creation accepted but ref is not visible after 5 reads; verification incomplete')
