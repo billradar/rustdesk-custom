@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "4b1291600a87fe793969888f48be75dcbbeff295a27552e256b1d64f11ed35c7",
+    "common": "2fc6754d391c850ecc5e92b6494965684792dadd9ef14e3cfb44280aba3e4269",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -118,7 +118,7 @@
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "after": {
-          "common": "4b1291600a87fe793969888f48be75dcbbeff295a27552e256b1d64f11ed35c7",
+          "common": "2fc6754d391c850ecc5e92b6494965684792dadd9ef14e3cfb44280aba3e4269",
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "scopes": [
@@ -130,7 +130,7 @@
             "Select updates by signed OS, architecture, Standard/SOS variant, ordinary/Wayland flavor and installer format instead of predicting filenames."
           ],
           "Fixed": [
-            "Detect the package manager owning the running Linux executable and distinguish installed Windows MSI clients from portable clients."
+            "Detect the package manager owning the running executable, using the unattended Wayland Debian identity for that flavor, and distinguish installed Windows MSI clients from portable clients."
           ],
           "Removed": [],
           "Security": [

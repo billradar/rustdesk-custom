@@ -32,7 +32,10 @@ or contradictory selectors stop checking. Release body content has no authority;
 there is no body, schema-v1 or public SHA256SUMS fallback.
 
 Linux determines which package manager owns the actual canonical running
-executable using `dpkg-query -S` and `rpm -qf`. A missing/ambiguous owner requires
+executable using `dpkg-query -S` and `rpm -qf`. Ordinary Standard/SOS clients
+require the internal package name `rustdesk`; unattended Wayland Standard/SOS
+clients require `rustdesk-unattended-wayland`, including the installed-status
+query. Display branding never determines package ownership. A missing/ambiguous owner requires
 manual selection outside this updater. RPM distributions use exact `ID`/`ID_LIKE`
 SUSE tokens; Wayland unattended builds require a managed DEB. Windows portable
 clients select EXE; installed clients select MSI only when the installed MSI

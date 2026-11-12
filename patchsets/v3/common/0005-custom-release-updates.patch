@@ -327,10 +327,10 @@ index 0000000..74d8c65
 +{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0", "repository": ""}
 diff --git a/src/custom_update/mod.rs b/src/custom_update/mod.rs
 new file mode 100644
-index 0000000..a06e0fc
+index 0000000..adfbf98
 --- /dev/null
 +++ b/src/custom_update/mod.rs
-@@ -0,0 +1,632 @@
+@@ -0,0 +1,644 @@
 +//! JSON-only custom updates with offline Sigstore provenance verification.
 +use hbb_common::{anyhow::anyhow, bail, ResultType};
 +use serde_derive::Deserialize;
@@ -622,25 +622,37 @@ index 0000000..a06e0fc
 +        let path = executable
 +            .to_str()
 +            .ok_or_else(|| anyhow!("Unsupported executable path"))?;
-+        let deb_owns = std::process::Command::new("dpkg-query")
-+            .args(["-S", "--", path])
-+            .output()
-+            .is_ok_and(|out| {
-+                out.status.success()
-+                    && String::from_utf8_lossy(&out.stdout).lines().any(|line| {
-+                        line.split_once(": ").is_some_and(|(owner, p)| {
-+                            owner.split(':').next() == Some("rustdesk") && p == path
-+                        })
-+                    })
-+            })
-+            && std::process::Command::new("dpkg-query")
-+                .args(["-W", "-f=${Status}", "rustdesk"])
++        let wayland = cfg!(feature = "drm");
++        let expected_package = policy::linux_package_identity(wayland);
++        let deb_owns = (|| -> bool {
++            let Ok(owner) = std::process::Command::new("dpkg-query")
++                .args(["-S", "--", path])
 +                .output()
-+                .is_ok_and(|out| out.status.success() && out.stdout == b"install ok installed");
++            else {
++                return false;
++            };
++            let Ok(status) = std::process::Command::new("dpkg-query")
++                .args(["-W", "-f=${Status}", expected_package])
++                .output()
++            else {
++                return false;
++            };
++            owner.status.success()
++                && status.status.success()
++                && policy::debian_owns_executable(
++                    wayland,
++                    path,
++                    &String::from_utf8_lossy(&owner.stdout),
++                    &String::from_utf8_lossy(&status.stdout),
++                )
++        })();
 +        let rpm_owns = std::process::Command::new("rpm")
 +            .args(["-qf", "--qf", "%{NAME}\n", "--", path])
 +            .output()
-+            .is_ok_and(|out| out.status.success() && out.stdout == b"rustdesk\n");
++            .is_ok_and(|out| {
++                out.status.success()
++                    && out.stdout == format!("{expected_package}\n").as_bytes()
++            });
 +        let os = fs::read_to_string("/etc/os-release").unwrap_or_default();
 +        return rustdesk_update_manifest::linux_package_format(
 +            deb_owns,
@@ -965,10 +977,10 @@ index 0000000..a06e0fc
 +}
 diff --git a/src/custom_update/policy.rs b/src/custom_update/policy.rs
 new file mode 100644
-index 0000000..349cd05
+index 0000000..e7f9282
 --- /dev/null
 +++ b/src/custom_update/policy.rs
-@@ -0,0 +1,250 @@
+@@ -0,0 +1,267 @@
 +//! Numeric version and build identity policy; Release provenance is JSON-only.
 +pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
 +    let parts: Vec<_> = value.split('.').collect();
@@ -1109,6 +1121,23 @@ index 0000000..349cd05
 +        _ => return None,
 +    };
 +    Some(name)
++}
++/// Internal package identity is independent of branding and Standard/SOS.
++pub fn linux_package_identity(wayland: bool) -> &'static str {
++    if wayland {
++        "rustdesk-unattended-wayland"
++    } else {
++        "rustdesk"
++    }
++}
++pub fn debian_owns_executable(wayland: bool, path: &str, owners: &str, status: &str) -> bool {
++    status == "install ok installed"
++        && owners.lines().any(|line| {
++            line.split_once(": ").is_some_and(|(owner, installed)| {
++                owner.split(':').next() == Some(linux_package_identity(wayland))
++                    && installed == path
++            })
++        })
 +}
 +#[cfg(test)]
 +mod tests {

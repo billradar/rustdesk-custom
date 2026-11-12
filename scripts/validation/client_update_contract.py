@@ -88,6 +88,43 @@ class ClientUpdateTests(unittest.TestCase):
                 self.assertEqual(build.returncode,0,build.stderr)
                 subprocess.run([str(tree/'driver')],check=True,capture_output=True)
 
+    def test_installed_linux_package_ownership_uses_flavor_identity(self):
+        compiler = RUSTC or shutil.which('rustc')
+        if not compiler or not shutil.which('dpkg-query'):
+            self.skipTest('rustc and dpkg-query required for real package ownership fixture')
+        wayland_package = json.loads((ROOT / 'metadata/build/wayland-policy.json').read_text())['package_name']
+        for wayland, package in ((False, 'rustdesk'), (True, wayland_package)):
+            with self.subTest(wayland=wayland), tempfile.TemporaryDirectory() as td:
+                tree = Path(td)
+                admin = tree / 'dpkg'
+                (admin / 'info').mkdir(parents=True)
+                path = '/usr/share/rustdesk/rustdesk'
+                (admin / 'status').write_text(
+                    f'Package: {package}\nStatus: install ok installed\nPriority: optional\n'
+                    'Section: net\nMaintainer: Fixture\nArchitecture: all\nVersion: 1.5.3\n'
+                    'Description: ownership regression fixture\n\n')
+                (admin / 'info' / (package + '.list')).write_text(path + '\n')
+                owner = subprocess.check_output(['dpkg-query', '--admindir=' + str(admin), '-S', '--', path], text=True)
+                status = subprocess.check_output(['dpkg-query', '--admindir=' + str(admin), '-W', '-f=${Status}', package], text=True)
+                (tree / 'owner.txt').write_text(owner)
+                (tree / 'status.txt').write_text(status)
+                (tree / 'policy.rs').write_text(patch_file('v3', 'src/custom_update/policy.rs'))
+                flavor = str(wayland).lower()
+                driver = ('mod policy; fn main() {\n'
+                          f'let wayland = {flavor}; let path = {json.dumps(path)};\n'
+                          f'assert_eq!(policy::linux_package_identity(wayland), {json.dumps(package)});\n'
+                          'let owner = include_str!("owner.txt"); let status = include_str!("status.txt");\n'
+                          'assert!(policy::debian_owns_executable(wayland, path, owner, status));\n'
+                          'assert!(!policy::debian_owns_executable(!wayland, path, owner, status));\n'
+                          'assert!(!policy::debian_owns_executable(wayland, "/wrong/path", owner, status));\n'
+                          'assert!(!policy::debian_owns_executable(wayland, path, owner, "deinstall ok config-files"));\n'
+                          f'let multiarch = format!("{package}:amd64: {{path}}\\n");\n'
+                          'assert!(policy::debian_owns_executable(wayland, path, &multiarch, status));\n}')
+                (tree / 'driver.rs').write_text(driver)
+                build = subprocess.run([compiler, '--edition=2021', str(tree / 'driver.rs'), '-o', str(tree / 'driver')], capture_output=True, text=True)
+                self.assertEqual(build.returncode, 0, build.stderr)
+                subprocess.run([str(tree / 'driver')], check=True, capture_output=True)
+
     def test_new_publisher_excludes_legacy_metadata_without_changing_old_fixture(self):
         official='Official release notes used by the producer/consumer regression.'
         self.assertEqual(build_release_body(official),official+'\n')

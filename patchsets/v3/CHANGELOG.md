@@ -32,7 +32,7 @@ Reason: Move current-generation client updates and release reuse to one attested
 
 #### Fixed
 
-- Detect the package manager owning the running Linux executable and distinguish installed Windows MSI clients from portable clients.
+- Detect the package manager owning the running executable, using the unattended Wayland Debian identity for that flavor, and distinguish installed Windows MSI clients from portable clients.
 
 #### Removed
 
@@ -53,7 +53,7 @@ Known limitations: Native builds on all targets, generated bridge, Flutter analy
 
 Allocation base: `19783a6fd5d3fa02a676532b5ec4aa056d937cbc`
 
-- common: `8fdc855986c8c21e9b4a42f269d4e57fa9eca0d12d6fe4b60be154d1b7a859e3` → `4b1291600a87fe793969888f48be75dcbbeff295a27552e256b1d64f11ed35c7`
+- common: `8fdc855986c8c21e9b4a42f269d4e57fa9eca0d12d6fe4b60be154d1b7a859e3` → `2fc6754d391c850ecc5e92b6494965684792dadd9ef14e3cfb44280aba3e4269`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.2 — content-change
