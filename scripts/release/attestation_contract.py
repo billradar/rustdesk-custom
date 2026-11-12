@@ -50,6 +50,13 @@ class AttestationTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,'three production-signed'):
                         a.read_remote('nightly' if channel=='nightly' else 'v1.5.1-custom.v2.8',assets,channel=channel)
                     signature.assert_not_called()
+                for asset in value['assets']:
+                    if asset['os']=='android':asset['signing_status']='PRODUCTION SIGNED / IDENTITY VERIFIED'
+                value['android_production_signed']=True
+                (root/a.MANIFEST).write_text(json.dumps(value))
+                with patch.object(a,'verify_signature') as signature:
+                    self.assertEqual(a.verify_local(root,channel),value)
+                    signature.assert_called_once()
 
     def test_manifest_generation_and_exact_coverage(self):
         with tempfile.TemporaryDirectory() as td:

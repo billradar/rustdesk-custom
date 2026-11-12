@@ -3352,25 +3352,20 @@ diff --git a/Cargo.toml b/Cargo.toml
 diff --git a/Cargo.lock b/Cargo.lock
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -24,7 +24,16 @@
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "6e4503c46a5c0c7844e948c9a4d6acd9f50cccb4de1c48eb9e291ea17470c678"
- dependencies = [
-- "gimli",
-+ "gimli 0.29.0",
-+]
-+
-+[[package]]
-+name = "addr2line"
+@@ -20,9 +20,9 @@
+
+ [[package]]
+ name = "addr2line"
+-version = "0.22.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "6e4503c46a5c0c7844e948c9a4d6acd9f50cccb4de1c48eb9e291ea17470c678"
 +version = "0.24.2"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "dfbe277e56a376000877090da837660b4427aad530e3028d44e0bffe4f89a1c1"
-+dependencies = [
-+ "gimli 0.31.1",
+ dependencies = [
+  "gimli",
  ]
-
- [[package]]
-@@ -80,7 +89,7 @@
+@@ -80,7 +80,7 @@
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
  dependencies = [
@@ -3379,7 +3374,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "once_cell",
   "version_check",
  ]
-@@ -634,18 +643,42 @@
+@@ -634,18 +634,42 @@
  checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
  [[package]]
@@ -3411,14 +3406,12 @@ diff --git a/Cargo.lock b/Cargo.lock
 -version = "0.3.73"
 -source = "registry+https://github.com/rust-lang/crates.io-index"
 -checksum = "5cc23269a4f8976d0a4d2e7109211a419fe30e8d88d677cd60b6bc79c5732e0a"
--dependencies = [
-- "addr2line",
-- "cc",
 +version = "0.3.74"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "8d82cb332cdfaed17ae235a638438ac4d4839913cc2af585c3c6746e8f8bee1a"
-+dependencies = [
-+ "addr2line 0.24.2",
+ dependencies = [
+  "addr2line",
+- "cc",
   "cfg-if 1.0.0",
   "libc",
 - "miniz_oxide 0.7.4",
@@ -3429,7 +3422,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -730,7 +763,7 @@
+@@ -730,7 +754,7 @@
   "quote 1.0.36",
   "regex",
   "rustc-hash 1.1.0",
@@ -3438,7 +3431,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "which",
  ]
 
-@@ -752,7 +785,7 @@
+@@ -752,7 +776,7 @@
   "quote 1.0.36",
   "regex",
   "rustc-hash 1.1.0",
@@ -3447,7 +3440,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "syn 2.0.98",
   "which",
  ]
-@@ -773,7 +806,7 @@
+@@ -773,7 +797,7 @@
   "quote 1.0.36",
   "regex",
   "rustc-hash 1.1.0",
@@ -3456,7 +3449,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "syn 2.0.98",
  ]
 
-@@ -793,7 +826,7 @@
+@@ -793,7 +817,7 @@
   "quote 1.0.36",
   "regex",
   "rustc-hash 2.1.1",
@@ -3465,7 +3458,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "syn 2.0.98",
  ]
 
-@@ -1097,13 +1130,14 @@
+@@ -1097,13 +1121,14 @@
 
  [[package]]
  name = "cc"
@@ -3485,7 +3478,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -1339,11 +1373,35 @@
+@@ -1339,11 +1364,35 @@
 
  [[package]]
  name = "cmake"
@@ -3524,41 +3517,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -1518,6 +1576,16 @@
-
- [[package]]
- name = "core-foundation"
-+version = "0.10.1"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
-+dependencies = [
-+ "core-foundation-sys 0.8.7",
-+ "libc",
-+]
-+
-+[[package]]
-+name = "core-foundation"
- version = "0.7.0"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "57d24c7a13c43e870e37c1556b74555437870a04514f7685f5b354e090567171"
-@@ -1540,16 +1608,6 @@
- version = "0.9.4"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
--dependencies = [
-- "core-foundation-sys 0.8.7",
-- "libc",
--]
--
--[[package]]
--name = "core-foundation"
--version = "0.10.1"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
- dependencies = [
-  "core-foundation-sys 0.8.7",
-  "libc",
-@@ -1768,6 +1826,18 @@
+@@ -1768,6 +1817,18 @@
  checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
  dependencies = [
   "cfg-if 1.0.0",
@@ -3577,7 +3536,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -2120,6 +2190,8 @@
+@@ -2120,6 +2181,8 @@
  checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
  dependencies = [
   "const-oid",
@@ -3586,7 +3545,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "pem-rfc7468",
   "zeroize",
  ]
-@@ -2136,6 +2208,17 @@
+@@ -2136,6 +2199,17 @@
   "num-bigint",
   "num-traits 0.2.19",
   "rusticata-macros",
@@ -3604,67 +3563,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -2579,6 +2662,29 @@
-
- [[package]]
- name = "env_logger"
-+version = "0.10.2"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
-+dependencies = [
-+ "log",
-+ "regex",
-+]
-+
-+[[package]]
-+name = "env_logger"
-+version = "0.11.6"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "dcaee3d8e3cfc3fd92428d477bc97fc29ec8716d180c0d74c643bb26166660e0"
-+dependencies = [
-+ "anstream",
-+ "anstyle",
-+ "env_filter",
-+ "humantime",
-+ "log",
-+]
-+
-+[[package]]
-+name = "env_logger"
- version = "0.9.3"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
-@@ -2588,29 +2694,6 @@
-  "log",
-  "regex",
-  "termcolor",
--]
--
--[[package]]
--name = "env_logger"
--version = "0.10.2"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
--dependencies = [
-- "log",
-- "regex",
--]
--
--[[package]]
--name = "env_logger"
--version = "0.11.6"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "dcaee3d8e3cfc3fd92428d477bc97fc29ec8716d180c0d74c643bb26166660e0"
--dependencies = [
-- "anstream",
-- "anstyle",
-- "env_filter",
-- "humantime",
-- "log",
- ]
-
- [[package]]
-@@ -2782,10 +2865,22 @@
+@@ -2782,10 +2856,22 @@
  ]
 
  [[package]]
@@ -3687,7 +3586,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "flate2"
-@@ -2962,6 +3057,12 @@
+@@ -2962,6 +3048,12 @@
  ]
 
  [[package]]
@@ -3700,7 +3599,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  name = "fsevent"
  version = "2.1.2"
  source = "registry+https://github.com/rust-lang/crates.io-index"
-@@ -3241,28 +3342,26 @@
+@@ -3241,9 +3333,9 @@
 
  [[package]]
  name = "getrandom"
@@ -3710,87 +3609,35 @@ diff --git a/Cargo.lock b/Cargo.lock
 +version = "0.2.17"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
-+dependencies = [
-+ "cfg-if 1.0.0",
-+ "libc",
-+ "wasi 0.11.0+wasi-snapshot-preview1",
-+]
-+
-+[[package]]
-+name = "getrandom"
-+version = "0.3.2"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "73fea8450eea4bac3940448fb7ae50d91f034f941199fcd9d909a5a07aa455f0"
  dependencies = [
   "cfg-if 1.0.0",
   "js-sys",
+@@ -3262,7 +3354,7 @@
+  "js-sys",
   "libc",
-- "wasi 0.11.0+wasi-snapshot-preview1",
-- "wasm-bindgen",
--]
--
--[[package]]
--name = "getrandom"
--version = "0.3.2"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "73fea8450eea4bac3940448fb7ae50d91f034f941199fcd9d909a5a07aa455f0"
--dependencies = [
-- "cfg-if 1.0.0",
-- "js-sys",
-- "libc",
   "r-efi",
 - "wasi 0.14.2+wasi-0.2.4",
 + "wasi 0.14.4+wasi-0.2.4",
   "wasm-bindgen",
  ]
 
-@@ -3291,6 +3390,12 @@
- version = "0.29.0"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
-+
-+[[package]]
-+name = "gimli"
+@@ -3288,9 +3380,9 @@
+
+ [[package]]
+ name = "gimli"
+-version = "0.29.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
 +version = "0.31.1"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
  [[package]]
  name = "gio"
-@@ -4188,18 +4293,18 @@
+@@ -4217,6 +4309,35 @@
+ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
  [[package]]
- name = "itertools"
-+version = "0.12.1"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-+dependencies = [
-+ "either",
-+]
-+
-+[[package]]
-+name = "itertools"
- version = "0.9.0"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
--dependencies = [
-- "either",
--]
--
--[[package]]
--name = "itertools"
--version = "0.12.1"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
- dependencies = [
-  "either",
- ]
-@@ -4215,6 +4320,35 @@
- version = "1.0.11"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
-+
-+[[package]]
 +name = "jiff"
 +version = "0.2.1"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3818,36 +3665,12 @@ diff --git a/Cargo.lock b/Cargo.lock
 +dependencies = [
 + "jiff-tzdb",
 +]
-
- [[package]]
- name = "jni"
-@@ -4542,6 +4676,12 @@
-
- [[package]]
- name = "linux-raw-sys"
-+version = "0.11.0"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 +
 +[[package]]
-+name = "linux-raw-sys"
- version = "0.3.8"
+ name = "jni"
+ version = "0.21.1"
  source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
-@@ -4557,12 +4697,6 @@
- version = "0.6.5"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "2a385b1be4e5c3e362ad2ffa73c392e53f031eaa5b7d648e64cd87f27f6063d7"
--
--[[package]]
--name = "linux-raw-sys"
--version = "0.11.0"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
-
- [[package]]
- name = "lock_api"
-@@ -4664,9 +4798,9 @@
+@@ -4664,9 +4785,9 @@
 
  [[package]]
  name = "memchr"
@@ -3860,7 +3683,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "memmap2"
-@@ -4826,7 +4960,7 @@
+@@ -4826,7 +4947,7 @@
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
  dependencies = [
@@ -3869,7 +3692,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -5618,9 +5752,9 @@
+@@ -5618,9 +5739,9 @@
 
  [[package]]
  name = "object"
@@ -3882,91 +3705,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  dependencies = [
   "memchr",
  ]
-@@ -5961,6 +6095,15 @@
-
- [[package]]
- name = "phf"
-+version = "0.11.3"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
-+dependencies = [
-+ "phf_shared 0.11.3",
-+]
-+
-+[[package]]
-+name = "phf"
- version = "0.7.24"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "b3da44b85f8e8dfaec21adae67f95d93244b2ecf6ad2a692320598dcc8e6dd18"
-@@ -5969,11 +6112,12 @@
- ]
-
- [[package]]
--name = "phf"
-+name = "phf_codegen"
- version = "0.11.3"
- source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
--dependencies = [
-+checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
-+dependencies = [
-+ "phf_generator 0.11.3",
-  "phf_shared 0.11.3",
- ]
-
-@@ -5988,13 +6132,13 @@
- ]
-
- [[package]]
--name = "phf_codegen"
-+name = "phf_generator"
- version = "0.11.3"
- source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
--dependencies = [
-- "phf_generator 0.11.3",
-+checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
-+dependencies = [
-  "phf_shared 0.11.3",
-+ "rand 0.8.5",
- ]
-
- [[package]]
-@@ -6008,13 +6152,12 @@
- ]
-
- [[package]]
--name = "phf_generator"
-+name = "phf_shared"
- version = "0.11.3"
- source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
--dependencies = [
-- "phf_shared 0.11.3",
-- "rand 0.8.5",
-+checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
-+dependencies = [
-+ "siphasher 1.0.1",
- ]
-
- [[package]]
-@@ -6024,15 +6167,6 @@
- checksum = "234f71a15de2288bcb7e3b6515828d22af7ec8598ee6d24c3b526fa0a80b67a0"
- dependencies = [
-  "siphasher 0.2.3",
--]
--
--[[package]]
--name = "phf_shared"
--version = "0.11.3"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
--dependencies = [
-- "siphasher 1.0.1",
- ]
-
- [[package]]
-@@ -6088,9 +6222,9 @@
+@@ -6088,9 +6209,9 @@
 
  [[package]]
  name = "pin-utils"
@@ -3979,7 +3718,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "piper"
-@@ -6115,9 +6249,9 @@
+@@ -6115,9 +6236,9 @@
 
  [[package]]
  name = "pkg-config"
@@ -3992,7 +3731,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "plist"
-@@ -6207,6 +6341,15 @@
+@@ -6207,6 +6328,15 @@
  version = "1.11.1"
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
@@ -4008,7 +3747,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "portable-pty"
-@@ -6492,7 +6635,7 @@
+@@ -6492,7 +6622,7 @@
   "bytes",
   "getrandom 0.3.2",
   "lru-slab",
@@ -4017,7 +3756,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "ring",
   "rustc-hash 2.1.1",
   "rustls",
-@@ -6580,12 +6723,12 @@
+@@ -6580,12 +6710,12 @@
 
  [[package]]
  name = "rand"
@@ -4034,7 +3773,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -6615,7 +6758,7 @@
+@@ -6615,7 +6745,7 @@
  checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
  dependencies = [
   "ppv-lite86",
@@ -4043,7 +3782,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -6639,14 +6782,14 @@
+@@ -6639,14 +6769,14 @@
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
  dependencies = [
@@ -4062,7 +3801,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  dependencies = [
   "getrandom 0.3.2",
  ]
-@@ -6825,7 +6968,7 @@
+@@ -6825,7 +6955,7 @@
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "bd283d9651eeda4b2a83a43c1c91b266c40fd76ecd39a50a8c630ae69dc72891"
  dependencies = [
@@ -4071,7 +3810,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "libredox",
   "thiserror 1.0.61",
  ]
-@@ -6836,7 +6979,7 @@
+@@ -6836,7 +6966,7 @@
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
  dependencies = [
@@ -4080,7 +3819,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "libredox",
   "thiserror 2.0.17",
  ]
-@@ -6934,6 +7077,38 @@
+@@ -6934,6 +7064,38 @@
  ]
 
  [[package]]
@@ -4119,7 +3858,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  name = "rfc6979"
  version = "0.4.0"
  source = "registry+https://github.com/rust-lang/crates.io-index"
-@@ -6960,9 +7135,9 @@
+@@ -6960,9 +7122,9 @@
  dependencies = [
   "cc",
   "cfg-if 1.0.0",
@@ -4132,7 +3871,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "windows-sys 0.52.0",
  ]
 
-@@ -7048,9 +7223,9 @@
+@@ -7048,9 +7210,9 @@
 
  [[package]]
  name = "rustc-demangle"
@@ -4145,7 +3884,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "rustc-hash"
-@@ -7144,10 +7319,11 @@
+@@ -7144,10 +7306,11 @@
   "rdev",
   "remote_printer",
   "repng",
@@ -4158,7 +3897,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "samplerate",
   "sciter-rs",
   "scrap",
-@@ -7204,6 +7380,17 @@
+@@ -7204,6 +7367,17 @@
  ]
 
  [[package]]
@@ -4176,7 +3915,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  name = "rustfft"
  version = "6.2.0"
  source = "registry+https://github.com/rust-lang/crates.io-index"
-@@ -7337,9 +7524,10 @@
+@@ -7337,9 +7511,10 @@
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
  dependencies = [
@@ -4188,7 +3927,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -7353,6 +7541,12 @@
+@@ -7353,6 +7528,12 @@
  version = "1.0.18"
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
@@ -4201,7 +3940,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "same-file"
-@@ -7579,6 +7773,17 @@
+@@ -7579,6 +7760,17 @@
  ]
 
  [[package]]
@@ -4219,7 +3958,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  name = "serde_repr"
  version = "0.1.19"
  source = "registry+https://github.com/rust-lang/crates.io-index"
-@@ -7723,6 +7928,12 @@
+@@ -7723,6 +7915,12 @@
  checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
  [[package]]
@@ -4232,7 +3971,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  name = "shutdown_hooks"
  version = "0.1.0"
  source = "registry+https://github.com/rust-lang/crates.io-index"
-@@ -7751,6 +7962,164 @@
+@@ -7751,6 +7949,164 @@
  dependencies = [
   "digest",
   "rand_core 0.6.4",
@@ -4397,33 +4136,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -7971,12 +8340,6 @@
-
- [[package]]
- name = "strsim"
--version = "0.8.0"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
--
--[[package]]
--name = "strsim"
- version = "0.10.0"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
-@@ -7986,6 +8349,12 @@
- version = "0.11.1"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-+
-+[[package]]
-+name = "strsim"
-+version = "0.8.0"
-+source = "registry+https://github.com/rust-lang/crates.io-index"
-+checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
-
- [[package]]
- name = "strum"
-@@ -8520,18 +8889,36 @@
+@@ -8520,18 +8876,30 @@
 
  [[package]]
  name = "tinyvec"
@@ -4433,15 +4146,15 @@ diff --git a/Cargo.lock b/Cargo.lock
 -dependencies = [
 - "tinyvec_macros",
 -]
+-
+-[[package]]
+-name = "tinyvec_macros"
+-version = "0.1.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 +version = "1.13.3"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
-
- [[package]]
- name = "tinyvec_macros"
- version = "0.1.1"
- source = "registry+https://github.com/rust-lang/crates.io-index"
- checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 +
 +[[package]]
 +name = "tls_codec"
@@ -4466,7 +4179,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "tokio"
-@@ -8899,7 +9286,7 @@
+@@ -8899,7 +9267,7 @@
   "httparse",
   "log",
   "native-tls",
@@ -4475,7 +4188,7 @@ diff --git a/Cargo.lock b/Cargo.lock
   "rustls",
   "rustls-native-certs",
   "rustls-pki-types",
-@@ -9047,9 +9434,9 @@
+@@ -9047,9 +9415,9 @@
 
  [[package]]
  name = "unicode-bidi"
@@ -4488,7 +4201,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "unicode-ident"
-@@ -9059,9 +9446,9 @@
+@@ -9059,9 +9427,9 @@
 
  [[package]]
  name = "unicode-normalization"
@@ -4501,7 +4214,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  dependencies = [
   "tinyvec",
  ]
-@@ -9099,6 +9486,12 @@
+@@ -9099,6 +9467,12 @@
   "crypto-common",
   "subtle",
  ]
@@ -4514,7 +4227,7 @@ diff --git a/Cargo.lock b/Cargo.lock
 
  [[package]]
  name = "untrusted"
-@@ -9283,11 +9676,11 @@
+@@ -9283,11 +9657,11 @@
 
  [[package]]
  name = "wasi"
@@ -4531,7 +4244,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -10168,6 +10561,15 @@
+@@ -10168,6 +10542,15 @@
 
  [[package]]
  name = "windows-sys"
@@ -4547,20 +4260,25 @@ diff --git a/Cargo.lock b/Cargo.lock
  version = "0.60.2"
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb"
-@@ -10595,6 +10997,12 @@
+@@ -10595,13 +10978,10 @@
  ]
 
  [[package]]
+-name = "wit-bindgen-rt"
+-version = "0.39.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
+-dependencies = [
+- "bitflags 2.9.1",
+-]
 +name = "wit-bindgen"
 +version = "0.45.1"
 +source = "registry+https://github.com/rust-lang/crates.io-index"
 +checksum = "5c573471f125075647d03df72e026074b7203790d41351cd6edc96f46bcccd36"
-+
-+[[package]]
- name = "wit-bindgen-rt"
- version = "0.39.0"
- source = "registry+https://github.com/rust-lang/crates.io-index"
-@@ -10737,6 +11145,20 @@
+
+ [[package]]
+ name = "wl-clipboard-rs"
+@@ -10737,6 +11117,20 @@
   "rand_core 0.6.4",
   "serde 1.0.228",
   "zeroize",
@@ -4581,7 +4299,7 @@ diff --git a/Cargo.lock b/Cargo.lock
  ]
 
  [[package]]
-@@ -10755,6 +11177,17 @@
+@@ -10755,6 +11149,17 @@
   "rusticata-macros",
   "thiserror 1.0.61",
   "time 0.3.36",

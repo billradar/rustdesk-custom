@@ -172,6 +172,47 @@ jobs:
     - run: python3 -m pip install -r requirements.txt
     - name: Verify locked Sigstore implementation and update selectors
       run: python3 -m scripts.validation.update_manifest_native
+  stable-update-source:
+    name: Verify pinned 1.5.3 updater source and Cargo lock
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      PATCHSET: v3
+      BUILD_CHANNEL: stable
+      UPSTREAM_EXPECTED_SHA: 95cca3f661f635b3cc85c04935fe8d96d8f432ef
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.work/stable-updater-target
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: '1.75.0'
+    - name: Install configuration probe prerequisites
+      run: |
+        python3 -m pip install -r requirements.txt
+        sudo apt-get update
+        sudo apt-get install -y libssl-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev pkg-config protobuf-compiler
+    - name: Check both Stable variants without unlocking dependencies
+      run: |
+        set -euo pipefail
+        source scripts/validation/test_config.sh
+        bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/stable-updater/base
+        for variant in standard sos; do
+          tree=".work/stable-updater/$variant"
+          cp -a .work/stable-updater/base "$tree"
+          bash scripts/source/apply_patches.sh "$tree" "$variant"
+          python3 scripts/source/verify_source.py "$tree" "$variant" --automation
+          python3 - "$tree" "$variant" <<'PYCODE'
+        from pathlib import Path
+        import sys
+        from scripts.validation.compatibility import contracts, rust_probe
+        tree=Path(sys.argv[1])
+        contracts(tree,sys.argv[2],'v3')
+        rust_probe(tree)
+        PYCODE
+          cargo check --locked --manifest-path "$tree/Cargo.toml" -p base --bin custom_patch_config
+        done
   preflight:
     name: Validate patch and API compatibility
     needs: resolve
@@ -220,30 +261,6 @@ jobs:
         python3 -m scripts.validation.windows_printer_contract
 
         '
-    - name: Capture Cargo lock resolver diagnostics after a failed locked check
-      if: failure() && matrix.variant == 'standard'
-      timeout-minutes: 15
-      run: |
-        python3 - <<'PYCODE'
-        from pathlib import Path
-        import base64, hashlib, shutil, subprocess, zlib
-        root=Path('.work/validation')
-        log=root/'standard.log'
-        if log.is_file() and 'needs to be updated but --locked was passed' in log.read_text():
-            # The required --locked check has already failed. This only records
-            # Cargo's proposed lock for review; it cannot make the failed gate pass.
-            with (root/'cargo-lock-resolver.log').open('w') as output:
-                result=subprocess.run(['cargo','metadata','--format-version','1'],cwd=root/'standard',stdout=subprocess.DEVNULL,stderr=output,timeout=840)
-            if result.returncode:
-                raise SystemExit('Cargo diagnostic resolution failed; see preserved log')
-            lock=(root/'standard/Cargo.lock').read_bytes()
-            shutil.copyfile(root/'standard/Cargo.lock',root/'cargo-lock-resolved.lock')
-            # Public dependency metadata only; also available when artifact delivery is blocked.
-            print('CARGO_LOCK_SHA256:'+hashlib.sha256(lock).hexdigest())
-            encoded=base64.b64encode(zlib.compress(lock)).decode()
-            for start in range(0,len(encoded),120):
-                print('CARGO_LOCK_CHUNK:'+encoded[start:start+120])
-        PYCODE
     - name: Preserve diagnostics even on conflict
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -254,8 +271,6 @@ jobs:
           .work/validation/*.md
 
           .work/validation/*.log
-
-          .work/validation/*.lock
 
           '
         if-no-files-found: warn
