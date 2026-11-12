@@ -22,6 +22,16 @@ class RunnerMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'unreviewed official runner migration source'):
             effective_runner('macos','x86_64','macos-26-intel-preview')
 
+    def test_supported_images_are_accepted_without_migration(self):
+        self.assertEqual(effective_runner('macos','x86_64','macos-26-intel'),'macos-26-intel')
+        self.assertEqual(effective_runner('macos','aarch64','macos-26'),'macos-26')
+
+    def test_other_architecture_image_fails_closed(self):
+        for arch,runner in [('x86_64','macos-26'),('aarch64','macos-26-intel')]:
+            with self.subTest(arch=arch,runner=runner):
+                with self.assertRaisesRegex(ValueError,'unreviewed official runner migration source'):
+                    effective_runner('macos',arch,runner)
+
     def test_unmigrated_platform_preserves_its_official_runner(self):
         self.assertEqual(effective_runner('linux','x86_64','ubuntu-24.04'),'ubuntu-24.04')
 

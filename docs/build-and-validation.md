@@ -15,6 +15,11 @@
 
 ## 2. 构建分层
 
+macOS runner 识别直接接受 Intel 的 `macos-26-intel` 和 ARM64 的
+`macos-26`。旧上游标签仍按 `metadata/platform/runner-migrations.json`
+映射到对应的 26 镜像，以保留旧版重建兼容性。跨架构、预览版和未知未来标签
+继续拒绝；runner 标签识别不替代完整上游接口签名审核。
+
 1. `scripts/release/qualification.py` 根据矩阵生成目标计划。
 2. `scripts/build/` 的平台脚本负责调用对应工具链。
 3. `scripts/platform/` 执行构建、采集脱敏诊断信息并处理打包。
