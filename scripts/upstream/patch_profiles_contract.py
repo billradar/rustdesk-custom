@@ -48,7 +48,7 @@ class ProfileContract(unittest.TestCase):
             lock = stable_lock.plan(data,'v3')
             with patch.object(channel,'api',side_effect=AssertionError('dry-run must not inspect or write Releases')):
                 result = channel.release_preflight(dict(lock),dry_run=True)
-            self.assertEqual(result['patch_revision'],'v3.3')
+            self.assertEqual(result['patch_revision'],'v3.4')
             self.assertTrue(result['build_needed']);self.assertFalse(result['draft_needed'])
             self.assertFalse(result['publish_existing'])
             with tempfile.TemporaryDirectory() as td:
@@ -56,14 +56,14 @@ class ProfileContract(unittest.TestCase):
                 (tree/'src/custom_update/build.json').write_text('{}')
                 (tree/ABOUT_PATH).parent.mkdir(parents=True);(tree/ABOUT_PATH).write_text('')
                 identity=write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
-                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.3')
+                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.4')
                 self.assertEqual(identity['repository_id'],'1399548376')
                 self.assertEqual(identity['repository_owner_id'],'56966687')
                 with patch.dict(os.environ,GITHUB_REPOSITORY_ID=''):
                     with self.assertRaisesRegex(ValueError,'numeric GitHub'):
-                        write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.3')
-                self.assertEqual(identity['revision'],'v3.3')
-                self.assertEqual(identity['patchset_version'],'v3.3')
+                        write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.4')
+                self.assertEqual(identity['revision'],'v3.4')
+                self.assertEqual(identity['patchset_version'],'v3.4')
                 with self.assertRaises(ValueError):
                     write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
                                    sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v2.8')

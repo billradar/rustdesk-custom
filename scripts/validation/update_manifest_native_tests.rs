@@ -1,29 +1,15 @@
-use rustdesk_update_manifest::{verify, verify_proof, Expected, Manifest, linux_package_format};
+use rustdesk_update_manifest::{verify, verify_release_proof, validate_release_statement, Expected, Manifest, linux_package_format};
 use serde_json::{Value, json};
 fn expected()->Expected<'static>{Expected{repository:"billradar/rustdesk-custom",repository_id:"1399548376",owner_id:"56966687",tag:"v1.5.3-custom.v3.1"}}
 fn fixture(name:&str)->Vec<u8>{std::fs::read(std::path::Path::new(&std::env::var("UPDATE_FIXTURES").unwrap()).join(name)).unwrap()}
 fn value()->Value{serde_json::from_slice(&fixture("schema-v2-unsigned.json")).unwrap()}
 fn parse(v:&Value)->Result<Manifest,String>{Manifest::parse(&serde_json::to_vec(v).unwrap(),expected())}
 #[test]
-fn actual_cd_proof_verifies_and_tampering_fails(){
- let raw=fixture("cd-v1-manifest.json");let proof=fixture("cd-v1-attestation.json");
- let sha="c1d6942ee173979a8d73c393a7ceb12abda20186";
- verify_proof(&raw,&proof,expected(),sha,"43146078797").unwrap();
- let mut changed=raw.clone();changed.push(b' ');
- assert!(verify_proof(&changed,&proof,expected(),sha,"43146078797").is_err());
- assert!(verify_proof(&raw,&proof,expected(),sha,"43146078798").is_err());
- assert!(verify_proof(&raw,&proof,expected(),&"d".repeat(40),"43146078797").is_err());
- let wrong=Expected{repository_id:"1",..expected()};
- assert!(verify_proof(&raw,&proof,wrong,sha,"43146078797").is_err());
- let wrong=Expected{owner_id:"1",..expected()};
- assert!(verify_proof(&raw,&proof,wrong,sha,"43146078797").is_err());
- let wrong=Expected{repository:"other/repo",..expected()};
- assert!(verify_proof(&raw,&proof,wrong,sha,"43146078797").is_err());
- assert!(verify_proof(&raw,b"{}",expected(),sha,"43146078797").is_err());
- // Historical signed v1 verifies cryptographically but is never accepted as v2.
- assert!(verify(&raw,&proof,expected()).is_err());
- // A constructed v2 fixture is parser evidence, never fabricated signing evidence.
- assert!(verify(&fixture("schema-v2-unsigned.json"),&proof,expected()).is_err());
+fn historical_build_proofs_and_unsigned_manifests_are_not_native_release_proofs(){
+ let proof=fixture("cd-v1-attestation.json");
+ for name in ["cd-v1-manifest.json", "schema-v2-unsigned.json"] {
+  assert!(verify(&fixture(name),&proof,expected(),442501039,&"a".repeat(40)).is_err());
+ }
 }
 #[test]
 fn typed_selection_covers_all_31_installers_and_rejects_missing_or_ambiguous(){
@@ -62,32 +48,64 @@ fn package_format_uses_actual_owner_and_exact_distro_tokens(){
  for (d,r,w,id) in [(false,false,false,"ID=fedora"),(true,true,false,"ID=fedora"),(false,true,true,"ID=suse"),(false,true,false,""),(false,true,false,"ID=fedora\nID=suse")]{assert!(linux_package_format(d,r,w,id).is_err());}
 }
 
-// GitHub native Release service uses its own CA and mandatory signed TSA evidence.
-// This test does not change the production updater's Actions/Rekor verification policy.
-fn native_fixture_verify(raw:&[u8], digest:&str, identity:&str, github_root:bool)->Result<(),String>{
- use sigstore_verify::{trust_root::{TrustedRoot,SIGSTORE_GITHUB_TRUSTED_ROOT,SIGSTORE_PRODUCTION_TRUSTED_ROOT},types::{Artifact,Bundle,Sha256Hash},VerificationPolicy};
- let bundle=Bundle::from_json(std::str::from_utf8(raw).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
- if bundle.verification_material.timestamp_verification_data.rfc3161_timestamps.is_empty(){return Err("Native proof requires GitHub TSA evidence".into());}
- let root=TrustedRoot::from_json(if github_root{SIGSTORE_GITHUB_TRUSTED_ROOT}else{SIGSTORE_PRODUCTION_TRUSTED_ROOT}).map_err(|e|e.to_string())?;
- let policy=VerificationPolicy::default().require_identity(identity).skip_tlog().skip_sct();
- let hash=Sha256Hash::from_hex(digest).map_err(|e|e.to_string())?;
- sigstore_verify::verify(Artifact::from_digest(hash.as_bytes()),&bundle,&policy,&root).map_err(|e|e.to_string())?;
- Ok(())
+fn native_expected()->Expected<'static>{Expected{repository:"VeryBaaad/ZNNext",repository_id:"1348255159",owner_id:"245651649",tag:"v2.16.0"}}
+fn native_files()->std::collections::BTreeMap<String,String>{
+ [("ZNNext-v2.16.0-371-52b358c-release.zip".into(),"0915c496189e2130b4cbd754f3de0cefc5b35a74951115d0e0610ce8b89f2534".into())].into()
 }
+const NATIVE_TAG_SHA:&str="7c57ae01206d1ae02164f85f343020f91a768991";
 #[test]
-fn actual_native_release_proof_requires_github_chain_signature_digest_and_tsa(){
- let raw=fixture("native-release-reference.json");let digest="0915c496189e2130b4cbd754f3de0cefc5b35a74951115d0e0610ce8b89f2534";let signer="https://dotcom.releases.github.com";
- native_fixture_verify(&raw,digest,signer,true).unwrap();
- assert!(native_fixture_verify(&raw,&"0".repeat(64),signer,true).is_err());
- assert!(native_fixture_verify(&raw,digest,"https://other.releases.github.com",true).is_err());
- assert!(native_fixture_verify(&raw,digest,signer,false).is_err());
+fn actual_native_release_proof_uses_the_production_verifier(){
+ let raw=fixture("native-release-reference.json");
+ verify_release_proof(&raw,native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).unwrap();
+ for wrong in [Expected{repository:"other/repo",..native_expected()},Expected{repository_id:"1",..native_expected()},Expected{owner_id:"1",..native_expected()},Expected{tag:"v2.16.1",..native_expected()}]{
+  assert!(verify_release_proof(&raw,wrong,438125342,NATIVE_TAG_SHA,&native_files()).is_err());
+ }
+ assert!(verify_release_proof(&raw,native_expected(),1,NATIVE_TAG_SHA,&native_files()).is_err());
+ assert!(verify_release_proof(&raw,native_expected(),438125342,&"a".repeat(40),&native_files()).is_err());
+ let mut files=native_files(); files.insert("extra.deb".into(),"a".repeat(64));
+ assert!(verify_release_proof(&raw,native_expected(),438125342,NATIVE_TAG_SHA,&files).is_err());
+ let mut files=native_files(); *files.values_mut().next().unwrap()="0".repeat(64);
+ assert!(verify_release_proof(&raw,native_expected(),438125342,NATIVE_TAG_SHA,&files).is_err());
  let value:Value=serde_json::from_slice(&raw).unwrap();
  let mut missing=value.clone();missing["verificationMaterial"]["timestampVerificationData"]["rfc3161Timestamps"]=json!([]);
- assert!(native_fixture_verify(&serde_json::to_vec(&missing).unwrap(),digest,signer,true).is_err());
- for path in ["signature","timestamp"]{
+ assert!(verify_release_proof(&serde_json::to_vec(&missing).unwrap(),native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).is_err());
+ for field in ["signature","timestamp"]{
   let mut changed=value.clone();
-  let field=if path=="signature"{&mut changed["dsseEnvelope"]["signatures"][0]["sig"]}else{&mut changed["verificationMaterial"]["timestampVerificationData"]["rfc3161Timestamps"][0]["signedTimestamp"]};
-  let original=field.as_str().unwrap();let replacement=if original.starts_with('A'){"B"}else{"A"};*field=json!(replacement.to_owned()+&original[1..]);
-  assert!(native_fixture_verify(&serde_json::to_vec(&changed).unwrap(),digest,signer,true).is_err(),"{path}");
+  let slot=if field=="signature"{&mut changed["dsseEnvelope"]["signatures"][0]["sig"]}else{&mut changed["verificationMaterial"]["timestampVerificationData"]["rfc3161Timestamps"][0]["signedTimestamp"]};
+  let original=slot.as_str().unwrap();let first=if original.starts_with('A'){"B"}else{"A"};*slot=json!(first.to_owned()+&original[1..]);
+  assert!(verify_release_proof(&serde_json::to_vec(&changed).unwrap(),native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).is_err());
  }
+ // The reference is a real proof for another repository, never signing evidence for ours.
+ assert!(verify(&fixture("schema-v2-unsigned.json"),&raw,expected(),438125342,NATIVE_TAG_SHA).is_err());
+}
+#[test]
+fn native_statement_rejects_duplicate_subjects_and_identity_changes(){
+ let raw=fixture("native-release-reference.json");
+ let bundle=sigstore_verify::types::Bundle::from_json(std::str::from_utf8(&raw).unwrap()).unwrap();
+ let envelope=match bundle.content {sigstore_verify::types::SignatureContent::DsseEnvelope(v)=>v,_=>panic!("not DSSE")};
+ let statement:Value=serde_json::from_slice(envelope.payload.as_bytes()).unwrap();
+ validate_release_statement(&statement,native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).unwrap();
+ for key in ["databaseId","ownerId","repositoryId","packageId","repository","tag","purl"] {
+  let mut changed=statement.clone();changed["predicate"][key]=json!("wrong");
+  assert!(validate_release_statement(&changed,native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).is_err());
+ }
+ for index in [0,1] {
+  let mut changed=statement.clone();let duplicate=changed["subject"][index].clone();changed["subject"].as_array_mut().unwrap().push(duplicate);
+  assert!(validate_release_statement(&changed,native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).is_err());
+ }
+}
+
+#[test]
+fn native_api_discovery_rejects_ambiguous_missing_and_foreign_proofs(){
+ use rustdesk_update_manifest::native_bundle;
+ let bundle:Value=serde_json::from_slice(&fixture("native-release-reference.json")).unwrap();
+ let row=json!({"initiator":"github","repository_id":1348255159u64,"bundle":bundle});
+ let response=json!({"attestations":[row.clone()]});
+ let raw=native_bundle(&response,"1348255159").unwrap();
+ verify_release_proof(&raw,native_expected(),438125342,NATIVE_TAG_SHA,&native_files()).unwrap();
+ for wrong in [json!({}),json!({"attestations":[]}),json!({"attestations":[row.clone(),row.clone()]}),
+  json!({"attestations":[{"initiator":"actions","repository_id":1348255159u64,"bundle":bundle}]}),
+  json!({"attestations":[{"initiator":"github","repository_id":1348255159u64}]}),
+ ]{assert!(native_bundle(&wrong,"1348255159").is_err());}
+ assert!(native_bundle(&response,"1").is_err());
 }

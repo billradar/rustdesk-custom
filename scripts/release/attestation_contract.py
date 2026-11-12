@@ -43,7 +43,7 @@ class AttestationTests(unittest.TestCase):
                 with patch.object(a,'verify_signature') as signature:
                     with self.assertRaisesRegex(ValueError,'three production-signed'):a.verify_local(root,channel)
                     signature.assert_not_called()
-                files=sorted(root.iterdir());content={i:p.read_bytes() for i,p in enumerate(files,1)}
+                files=sorted(p for p in root.iterdir() if p.name != a.BUNDLE);content={i:p.read_bytes() for i,p in enumerate(files,1)}
                 assets=[dict(id=i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+a.sha(p)) for i,p in enumerate(files,1)]
                 def download(args,**kwargs):kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
                 with patch.object(a.subprocess,'run',side_effect=download),patch.object(a,'verify_signature') as signature:
@@ -61,7 +61,7 @@ class AttestationTests(unittest.TestCase):
     def test_old_nightly_ownership_uses_recorded_signing_but_new_assets_require_current_policy(self):
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='false',clear=True):
             root=Path(td);fixture(root,'nightly',unsigned_android=True)
-            files=sorted(root.iterdir());content={i:p.read_bytes() for i,p in enumerate(files,1)}
+            files=sorted(p for p in root.iterdir() if p.name != a.BUNDLE);content={i:p.read_bytes() for i,p in enumerate(files,1)}
             assets=[dict(id=i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+a.sha(p)) for i,p in enumerate(files,1)]
             def download(args,**kwargs):kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
             with patch.dict(os.environ,REQUIRE_ANDROID_PRODUCTION_SIGNING='true'),patch.object(a.subprocess,'run',side_effect=download),patch.object(a,'verify_signature') as signature:
@@ -132,7 +132,8 @@ class AttestationTests(unittest.TestCase):
                 with patch.object(a,'verify_signature') as signature,patch.dict(os.environ,clear=True):
                     a.attach(Path('assets'),'stable')
                 signature.assert_called_once()
-                self.assertEqual((assets/a.BUNDLE).read_bytes(),(proof/a.BUNDLE).read_bytes())
+                self.assertFalse((assets/a.BUNDLE).exists())
+                self.assertTrue((proof/a.BUNDLE).exists())
             finally:os.chdir(previous)
 
     def test_all_platform_variants_flavors_have_unique_selectors(self):
@@ -177,6 +178,13 @@ class AttestationTests(unittest.TestCase):
             self.assertEqual(args[args.index('--source-ref')+1],'refs/heads/main')
             self.assertEqual(args[args.index('--signer-workflow')+1],a.REPOSITORY+'/.github/workflows/tag.yml')
             self.assertIn(a.PREDICATE,args)
+            with patch.object(a.subprocess,'run') as remote,patch.object(a,'validate_verification_result'):
+                remote.return_value.stdout='[]'
+                a.verify_signature(root/a.MANIFEST,None,v)
+                remote_args=remote.call_args.args[0]
+                self.assertNotIn('--bundle',remote_args)
+                self.assertIn('--source-digest',remote_args)
+                self.assertIn('--deny-self-hosted-runners',remote_args)
             for failure in (subprocess.CalledProcessError(1,args),FileNotFoundError('gh'),subprocess.TimeoutExpired(args,120)):
                 with patch.object(a.subprocess,'run',side_effect=failure),patch.dict(os.environ,clear=True):
                     with self.assertRaises(type(failure)):a.verify_local(root)
@@ -207,20 +215,21 @@ class AttestationTests(unittest.TestCase):
     def test_remote_json_downloads_use_asset_ids_and_require_exact_inventory(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);v=fixture(root)
-            data={i:p.read_bytes() for i,p in enumerate(sorted(root.iterdir()),1)}
+            data={i:p.read_bytes() for i,p in enumerate(sorted(p for p in root.iterdir() if p.name != a.BUNDLE),1)}
             assets=[dict(id=i,name=p.name,size=p.stat().st_size,state='uploaded',digest='sha256:'+a.sha(p))
-                    for i,p in enumerate(sorted(root.iterdir()),1)]
+                    for i,p in enumerate(sorted(p for p in root.iterdir() if p.name != a.BUNDLE),1)]
             def run(args,**kwargs):
                 self.assertEqual(args[:2],['gh','api'])
                 kwargs['stdout'].write(data[int(args[2].rsplit('/',1)[1])])
             with patch.object(a.subprocess,'run',side_effect=run),patch.object(a,'verify_signature') as verify:
                 self.assertTrue(a.verify_remote('v1.5.1-custom.v2.8',assets))
                 verify.assert_called_once()
+                self.assertIsNone(verify.call_args.args[1])
                 with self.assertRaisesRegex(ValueError,'tag/channel'):a.verify_remote('v1.5.1-custom.v2.9',assets)
                 with self.assertRaisesRegex(ValueError,'identity mismatch'):a.verify_remote('v1.5.1-custom.v2.8',assets,{'upstream_sha':'0'*40})
                 bad=copy.deepcopy(assets);next(x for x in bad if x['name'].endswith('.deb'))['digest']='sha256:'+'0'*64
                 with self.assertRaisesRegex(ValueError,'do not match'):a.verify_remote('v1.5.1-custom.v2.8',bad)
-            for changed in (assets+assets[:1],[x for x in assets if x['name']!=a.BUNDLE],
+            for changed in (assets+assets[:1],assets+[dict(id=999,name=a.BUNDLE,size=2,state='uploaded',digest='sha256:'+'0'*64)],[x for x in assets if x['name']!=a.MANIFEST],
                             [dict(x,id=True) for x in assets], [dict(x,size=9*a.LIMIT) for x in assets]):
                 with patch.object(a.subprocess,'run') as run,self.assertRaises(ValueError):
                     a.verify_remote('v1.5.1-custom.v2.8',changed)
@@ -230,7 +239,7 @@ class AttestationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);fixture(root)
             assets=[dict(id=i,name=p.name,size=p.stat().st_size,state='uploaded',digest='sha256:'+a.sha(p))
-                    for i,p in enumerate(sorted(root.iterdir()),1)]
+                    for i,p in enumerate(sorted(p for p in root.iterdir() if p.name != a.BUNDLE),1)]
             with patch.object(a.subprocess,'run',side_effect=subprocess.CalledProcessError(1,['gh'])),patch.object(a,'verify_signature') as signature:
                 with self.assertRaises(subprocess.CalledProcessError):a.verify_remote('v1.5.1-custom.v2.8',assets)
                 signature.assert_not_called()

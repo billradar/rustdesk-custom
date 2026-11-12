@@ -486,7 +486,8 @@ class NightlyDraftTests(unittest.TestCase):
             path=assets/(arch+'.apk');path.write_bytes(b'production package fixture')
             entries.append(a.entry(path,dict(info,architecture=arch)))
         self.verified_manifest=a.write(assets,'nightly',entries,info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
-        (assets/a.BUNDLE).write_text('{}')
+        internal=assets.parent/'build-proof';internal.mkdir()
+        (internal/a.BUNDLE).write_text('{}')
 
     def setUp(self):
         from scripts.release import attestation as a
@@ -494,7 +495,7 @@ class NightlyDraftTests(unittest.TestCase):
         reader.start();self.addCleanup(reader.stop)
         self.verified_manifest={'channel':'nightly'}
         signature=patch.object(a,'verify_signature');signature.start();self.addCleanup(signature.stop)
-        attach=patch.object(a,'attach',side_effect=lambda directory,channel:a.verify_local(directory,channel,Path(directory)/a.BUNDLE))
+        attach=patch.object(a,'attach',side_effect=lambda directory,channel:a.verify_local(directory,channel,Path(directory).parent/'build-proof'/a.BUNDLE))
         attach.start();self.addCleanup(attach.stop)
         self.repo='billradar/rustdesk-custom'
         self.env={'GITHUB_REPOSITORY':self.repo,'GITHUB_REF':'refs/heads/main',
@@ -511,7 +512,7 @@ class NightlyDraftTests(unittest.TestCase):
             root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
             (assets/'client.apk').write_bytes(b'validated package fixture')
             self.make_manifest(assets)
-            if mode == 'missing-proof':(assets/'release-attestation.json').unlink()
+            if mode == 'missing-proof':(assets.parent/'build-proof'/'release-attestation.json').unlink()
             if mode == 'bad-checksum':
                 (assets/'update-manifest.json').write_text('{}')
             if mode == 'forbidden-json':

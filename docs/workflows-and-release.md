@@ -298,12 +298,13 @@ with qualification, Nightly and summary contracts after changing these handoffs.
 
 ## Public release integrity format
 
-New releases use `update-manifest.json` plus a Sigstore `release-attestation.json`
-bundle, replacing public `SHA256SUMS` directly. The main-only aggregate job signs
-the qualified manifest; write jobs revalidate it before Release/tag writes.
-Checksum-only historical Drafts cannot pass the new publication/reuse gate.
-See [Release inventory and Sigstore attestation](release-attestation.md) for the
-trust policy, old-client boundary and internal checksum exceptions.
+New Drafts upload installers and `update-manifest.json` only, without a custom
+proof asset or public `SHA256SUMS`. Main-only aggregate jobs retain internal SLSA
+build evidence for pre-publication qualification. Manual immutable Stable
+publication generates GitHub's native Release proof, which v3.4 clients verify.
+Nightly stays Draft-only. Legacy custom-proof inventories require a fresh Draft;
+historical objects are never silently rewritten. See
+[Release inventory and native attestation](release-attestation.md).
 
 Stable Tag 创建 API 成功后，读取 API 可能短暂返回 404（运行 43146078797
 的 Draft 作业在此失败，事后已确认 Tag 指向正确构建提交，33 个资产仍保留
@@ -315,13 +316,15 @@ Stable Tag 创建 API 成功后，读取 API 可能短暂返回 404（运行 431
 ### Attested JSON and human release notes
 
 New release automation uses schema-v2 `update-manifest.json` for build identity,
-options and installer inventory; `release-attestation.json` binds its exact bytes.
-Stable preflight/promotion and Nightly reuse/ownership/cleanup verify these assets,
+options and installer inventory. Internal registry build evidence binds its exact
+bytes before publication; GitHub native Release evidence binds the published
+manifest and installers. Stable preflight and Nightly reuse/ownership/cleanup
+verify manifest/API digests and registry build evidence,
 not Release body markers. Body contains upstream notes and human customization
 changes only. Detailed patch hashes, audit limitations and compatibility records
 remain in repository records and JSON. Legacy schema-v1/checksum/body-only objects
 fail closed and require explicit review; existing historical Releases are not
-silently rewritten. Current v3.3 clients consume the same attested selectors;
+silently rewritten. Current v3.4 clients verify native Release proofs and typed selectors;
 historical clients need a manual upgrade. See [Client updates](client-updates.md).
 
 Stable 的构建流同样只保留 dry-run/Draft。公开发布由手动触发的 [publish-stable.yml](manual-stable-publication.md) 完成；它核验并发布指定 Draft，不重新构建或上传附件。

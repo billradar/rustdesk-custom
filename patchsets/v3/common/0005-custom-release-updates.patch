@@ -327,10 +327,10 @@ index 0000000..74d8c65
 +{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0", "repository": ""}
 diff --git a/src/custom_update/mod.rs b/src/custom_update/mod.rs
 new file mode 100644
-index 0000000..adfbf98
+index 0000000..9a96383
 --- /dev/null
 +++ b/src/custom_update/mod.rs
-@@ -0,0 +1,644 @@
+@@ -0,0 +1,686 @@
 +//! JSON-only custom updates with offline Sigstore provenance verification.
 +use hbb_common::{anyhow::anyhow, bail, ResultType};
 +use serde_derive::Deserialize;
@@ -344,7 +344,7 @@ index 0000000..adfbf98
 +    time::Duration,
 +};
 +mod policy;
-+use rustdesk_update_manifest::{Expected, Manifest, MANIFEST, PROOF};
++use rustdesk_update_manifest::{Expected, Manifest, MANIFEST};
 +pub const MANUAL_INSTALL_ONLY: bool = true;
 +const MAX_ASSET: u64 = 1024 * 1024 * 1024;
 +
@@ -380,6 +380,7 @@ index 0000000..adfbf98
 +    tag_name: String,
 +    draft: bool,
 +    prerelease: bool,
++    immutable: bool,
 +    html_url: String,
 +    #[serde(skip)]
 +    verified_manifest: Option<Manifest>,
@@ -476,6 +477,40 @@ index 0000000..adfbf98
 +        b.repository
 +    ))
 +}
++fn github_json(url: &str, limit: usize) -> ResultType<Value> {
++    let mut response = client()?.get(url).timeout(Duration::from_secs(30))
++        .header("Accept", "application/vnd.github+json").send()?.error_for_status()?;
++    let mut bytes = Vec::new();
++    response.by_ref().take(limit as u64 + 1).read_to_end(&mut bytes)?;
++    if bytes.len() > limit { bail!("GitHub metadata exceeds size limit"); }
++    Ok(serde_json::from_slice(&bytes)?)
++}
++fn native_proof(b: &Build, manifest: &[u8]) -> ResultType<Vec<u8>> {
++    let url = format!("https://api.github.com/repos/{}/attestations/sha256:{:x}?per_page=2&predicate_type=release&initiator=github",
++        b.repository, Sha256::digest(manifest));
++    let response = github_json(&url, rustdesk_update_manifest::MAX_PROOF)?;
++    rustdesk_update_manifest::native_bundle(&response, b.repository_id.as_deref().unwrap_or(""))
++        .map_err(|e| anyhow!(e))
++}
++fn release_git_object(b: &Build, r: &Release) -> ResultType<(String,String)> {
++    let reference = github_json(&format!("https://api.github.com/repos/{}/git/ref/tags/{}",b.repository,r.tag_name), 65536)?;
++    let mut object = reference["object"].clone();
++    let tag_sha = object["sha"].as_str().unwrap_or("").to_string();
++    for _ in 0..8 {
++        let sha = object["sha"].as_str().unwrap_or("");
++        if !policy::hex(sha,40) { bail!("Invalid Release Git object"); }
++        match object["type"].as_str() {
++            Some("commit") => return Ok((tag_sha,sha.to_string())),
++            Some("tag") => {
++                let tag = github_json(&format!("https://api.github.com/repos/{}/git/tags/{sha}",b.repository),65536)?;
++                object = tag["object"].clone();
++            }
++            _ => bail!("Release tag does not resolve to a commit"),
++        }
++    }
++    bail!("Release annotated tag chain exceeds limit")
++}
++
 +fn get_release(b: &Build) -> ResultType<Release> {
 +    let mut response = client()?
 +        .get(release_api(b)?)
@@ -494,7 +529,8 @@ index 0000000..adfbf98
 +    let mut r: Release = serde_json::from_slice(&bytes)?;
 +    validate_release(&r, b)?;
 +    let manifest = metadata_bytes(&r, b, MANIFEST, rustdesk_update_manifest::MAX_MANIFEST)?;
-+    let proof = metadata_bytes(&r, b, PROOF, rustdesk_update_manifest::MAX_PROOF)?;
++    let proof = native_proof(b, &manifest)?;
++    let (tag_sha, commit_sha) = release_git_object(b, &r)?;
 +    let expected = Expected {
 +        repository: &b.repository,
 +        repository_id: b.repository_id.as_deref().unwrap_or(""),
@@ -502,14 +538,17 @@ index 0000000..adfbf98
 +        tag: &r.tag_name,
 +    };
 +    let verified =
-+        rustdesk_update_manifest::verify(&manifest, &proof, expected).map_err(|e| anyhow!(e))?;
++        rustdesk_update_manifest::verify(&manifest, &proof, expected, r.id, &tag_sha).map_err(|e| anyhow!(e))?;
++    if verified.custom_repository_sha != commit_sha {
++        bail!("Native Release tag differs from manifest source commit");
++    }
 +    // Require the attested inventory to cover exactly the API's installer assets.
 +    let mut names = std::collections::BTreeSet::new();
 +    for a in &r.assets {
 +        if !names.insert(a.name.as_str()) {
 +            bail!("Duplicate Release asset name");
 +        }
-+        if a.name == MANIFEST || a.name == PROOF {
++        if a.name == MANIFEST {
 +            continue;
 +        }
 +        let item = verified
@@ -524,7 +563,7 @@ index 0000000..adfbf98
 +            bail!("Release asset differs from attested manifest");
 +        }
 +    }
-+    if r.assets.len() != verified.assets.len() + 2 {
++    if r.assets.len() != verified.assets.len() + 1 {
 +        bail!("Attested Release asset missing");
 +    }
 +    r.verified_manifest = Some(verified);
@@ -532,7 +571,9 @@ index 0000000..adfbf98
 +}
 +fn validate_release(r: &Release, b: &Build) -> ResultType<()> {
 +    let repository = &b.repository;
-+    if r.draft
++    if r.id == 0
++        || !r.immutable
++        || r.draft
 +        || r.prerelease
 +        || policy::stable_tag(&r.tag_name).is_none()
 +        || r.html_url
@@ -955,6 +996,7 @@ index 0000000..adfbf98
 +            tag_name: "v1.5.3-custom.v3.3".into(),
 +            draft: false,
 +            prerelease: false,
++            immutable: true,
 +            html_url: "https://github.com/owner/repo/releases/tag/v1.5.3-custom.v3.3".into(),
 +            verified_manifest: None,
 +            assets: vec![],
@@ -2860,24 +2902,22 @@ index 0000000..f6f4a45
 +]
 diff --git a/libs/custom_update_manifest/src/lib.rs b/libs/custom_update_manifest/src/lib.rs
 new file mode 100644
-index 0000000..149d165
+index 0000000..7cdca70
 --- /dev/null
 +++ b/libs/custom_update_manifest/src/lib.rs
-@@ -0,0 +1,501 @@
+@@ -0,0 +1,461 @@
 +//! Offline Sigstore verification and typed update selection. No shell or gh dependency.
 +use serde::Deserialize;
 +use serde_json::{json, Value};
 +use sha2::{Digest, Sha256};
 +use sigstore_verify::{
-+    trust_root::{TrustedRoot, SIGSTORE_PRODUCTION_TRUSTED_ROOT},
-+    types::{Bundle, SignatureContent},
++    trust_root::{TrustedRoot, SIGSTORE_GITHUB_TRUSTED_ROOT},
++    types::{Artifact, Bundle, Sha256Hash, SignatureContent},
 +    VerificationPolicy,
 +};
 +use std::collections::{BTreeMap, BTreeSet};
-+use x509_cert::der::{asn1::Utf8StringRef, Decode};
 +
 +pub const MANIFEST: &str = "update-manifest.json";
-+pub const PROOF: &str = "release-attestation.json";
 +pub const SCHEMA: &str = "rustdesk-release-manifest-v2";
 +pub const MAX_MANIFEST: usize = 1024 * 1024;
 +pub const MAX_PROOF: usize = 8 * 1024 * 1024;
@@ -2967,7 +3007,7 @@ index 0000000..149d165
 +        && s.as_bytes()[0].is_ascii_alphanumeric()
 +        && s.bytes()
 +            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
-+        && !matches!(s, MANIFEST | PROOF | "SHA256SUMS")
++        && !matches!(s, MANIFEST | "release-attestation.json" | "SHA256SUMS")
 +}
 +fn require(ok: bool, msg: &str) -> Result<()> {
 +    if ok {
@@ -3188,128 +3228,90 @@ index 0000000..149d165
 +    }
 +}
 +
-+fn extension(cert: &x509_cert::Certificate, number: u8) -> Result<String> {
-+    let oid = format!("1.3.6.1.4.1.57264.1.{number}");
-+    let mut values = cert
-+        .tbs_certificate
-+        .extensions
-+        .as_ref()
-+        .into_iter()
-+        .flatten()
-+        .filter(|x| x.extn_id.to_string() == oid);
-+    let x = values
-+        .next()
-+        .ok_or_else(|| format!("Attestation certificate missing claim {oid}"))?;
-+    require(
-+        values.next().is_none(),
-+        "Duplicate certificate identity claim",
-+    )?;
-+    Utf8StringRef::from_der(x.extn_value.as_bytes())
-+        .map(|s| s.as_str().to_string())
-+        .map_err(|e| format!("Invalid certificate claim: {e}"))
++/// The discovery API is untrusted transport; identity is subsequently checked in the signed proof.
++pub fn native_bundle(response: &Value, repository_id: &str) -> Result<Vec<u8>> {
++    let rows = response["attestations"].as_array().ok_or("Native Release proof missing")?;
++    require(rows.len() == 1, "Native Release proof missing or ambiguous")?;
++    let row = &rows[0];
++    require(row["initiator"] == "github"
++        && row["repository_id"].as_u64().map(|n| n.to_string()).as_deref() == Some(repository_id),
++        "Native proof API repository mismatch")?;
++    let raw = serde_json::to_vec(row.get("bundle").ok_or("Native bundle missing")?).map_err(|e|e.to_string())?;
++    require(raw.len() <= MAX_PROOF, "Native bundle exceeds limit")?;
++    Ok(raw)
 +}
 +
-+pub fn verify_proof(raw: &[u8], proof: &[u8], e: Expected<'_>, sha: &str, run: &str) -> Result<()> {
-+    require(
-+        raw.len() <= MAX_MANIFEST && proof.len() <= MAX_PROOF,
-+        "Update metadata exceeds size limit",
-+    )?;
-+    require(
-+        hex(sha, 40) && positive(run),
-+        "Invalid attestation expected source/run",
-+    )?;
++/// Verify GitHub's native Release service proof, including the entire immutable inventory.
++pub fn verify_release_proof(
++    proof: &[u8], e: Expected<'_>, release_id: u64, tag_sha: &str,
++    files: &BTreeMap<String, String>,
++) -> Result<()> {
++    require(proof.len() <= MAX_PROOF && release_id > 0 && hex(tag_sha, 40)
++        && !files.is_empty() && files.values().all(|v| hex(v,64)), "Invalid native proof inputs")?;
 +    let bundle = Bundle::from_json(std::str::from_utf8(proof).map_err(|e| e.to_string())?)
 +        .map_err(|e| e.to_string())?;
-+    require(
-+        bundle.media_type == "application/vnd.dev.sigstore.bundle.v0.3+json",
-+        "Unsupported Sigstore bundle format",
-+    )?;
-+    let identity = format!(
-+        "https://github.com/{}/.github/workflows/tag.yml@refs/heads/main",
-+        e.repository
-+    );
-+    let root =
-+        TrustedRoot::from_json(SIGSTORE_PRODUCTION_TRUSTED_ROOT).map_err(|e| e.to_string())?;
-+    let policy = VerificationPolicy::default()
-+        .require_identity(identity.clone())
-+        .require_issuer("https://token.actions.githubusercontent.com");
-+    sigstore_verify::verify(raw, &bundle, &policy, &root)
-+        .map_err(|e| format!("Update attestation verification failed: {e}"))?;
-+    let cert = x509_cert::Certificate::from_der(
-+        bundle
-+            .signing_certificate()
-+            .ok_or_else(|| "Attestation certificate missing".to_string())?
-+            .as_bytes(),
-+    )
-+    .map_err(|e| e.to_string())?;
-+    for (oid, expected) in [
-+        (9, identity.clone()),
-+        (10, sha.into()),
-+        (11, "github-hosted".into()),
-+        (12, format!("https://github.com/{}", e.repository)),
-+        (13, sha.into()),
-+        (14, "refs/heads/main".into()),
-+        (15, e.repository_id.into()),
-+        (17, e.owner_id.into()),
-+        (18, identity.clone()),
-+        (19, sha.into()),
-+        (20, "workflow_dispatch".into()),
-+    ] {
-+        require(
-+            extension(&cert, oid)? == expected,
-+            "Attestation certificate workflow/source identity mismatch",
-+        )?;
-+    }
-+    let invocation = extension(&cert, 21)?;
-+    let prefix = format!(
-+        "https://github.com/{}/actions/runs/{run}/attempts/",
-+        e.repository
-+    );
-+    require(
-+        invocation.strip_prefix(&prefix).is_some_and(positive),
-+        "Attestation build run identity mismatch",
-+    )?;
++    require(bundle.media_type == "application/vnd.dev.sigstore.bundle.v0.3+json",
++        "Unsupported native proof format")?;
++    require(!bundle.verification_material.timestamp_verification_data.rfc3161_timestamps.is_empty(),
++        "Native Release proof requires signed GitHub TSA evidence")?;
++    let root = TrustedRoot::from_json(SIGSTORE_GITHUB_TRUSTED_ROOT).map_err(|e| e.to_string())?;
++    // GitHub's release service has a dedicated CA/TSA; it does not use public Rekor/SCT.
++    let policy = VerificationPolicy::default().require_identity("https://dotcom.releases.github.com")
++        .skip_tlog().skip_sct();
++    let (name, sha) = files.iter().next().ok_or("Native inventory missing")?;
++    let hash = Sha256Hash::from_hex(sha).map_err(|e| e.to_string())?;
++    sigstore_verify::verify(Artifact::from_digest(hash.as_bytes()), &bundle, &policy, &root)
++        .map_err(|e| format!("Native Release verification failed: {e}"))?;
 +    let envelope = match &bundle.content {
 +        SignatureContent::DsseEnvelope(v) => v,
-+        _ => return Err("Update requires a DSSE provenance statement".into()),
++        _ => return Err("Native proof requires DSSE".into()),
 +    };
-+    require(
-+        envelope.payload_type == "application/vnd.in-toto+json",
-+        "Unknown attestation payload type",
-+    )?;
-+    let statement: Value =
-+        serde_json::from_slice(envelope.payload.as_bytes()).map_err(|e| e.to_string())?;
-+    require(
-+        statement["_type"] == "https://in-toto.io/Statement/v1"
-+            && statement["predicateType"] == "https://slsa.dev/provenance/v1",
-+        "Unknown attestation statement/predicate",
-+    )?;
-+    let p = &statement["predicate"];
-+    require(
-+        p["runDetails"]["builder"]["id"] == identity
-+            && p["runDetails"]["metadata"]["invocationId"] == invocation,
-+        "Provenance builder/run differs from certificate",
-+    )?;
-+    require(
-+        p["buildDefinition"]["externalParameters"]["workflow"]["ref"] == "refs/heads/main"
-+            && p["buildDefinition"]["externalParameters"]["workflow"]["path"]
-+                == ".github/workflows/tag.yml"
-+            && p["buildDefinition"]["externalParameters"]["workflow"]["repository"]
-+                == format!("https://github.com/{}", e.repository),
-+        "Provenance workflow mismatch",
-+    )?;
++    require(envelope.payload_type == "application/vnd.in-toto+json", "Invalid native payload type")?;
++    let statement: Value = serde_json::from_slice(envelope.payload.as_bytes()).map_err(|e| e.to_string())?;
++    validate_release_statement(&statement, e, release_id, tag_sha, files)?;
++    require(statement["subject"].as_array().is_some_and(|rows| rows.iter().any(|s| s["name"] == name.as_str())),
++        "Verified subject name absent")?;
 +    Ok(())
 +}
 +
-+pub fn verify(raw: &[u8], proof: &[u8], e: Expected<'_>) -> Result<Manifest> {
++pub fn validate_release_statement(
++    statement: &Value, e: Expected<'_>, release_id: u64, tag_sha: &str,
++    files: &BTreeMap<String, String>,
++) -> Result<()> {
++    require(statement["_type"] == "https://in-toto.io/Statement/v1"
++        && statement["predicateType"] == "https://in-toto.io/attestation/release/v0.2",
++        "Not a native Release v0.2 statement")?;
++    let purl = format!("pkg:github/{}@{}", e.repository, e.tag);
++    let predicate = &statement["predicate"];
++    for (key, wanted) in [("databaseId",release_id.to_string()),("ownerId",e.owner_id.into()),
++        ("repositoryId",e.repository_id.into()),("packageId",e.repository_id.into()),
++        ("repository",e.repository.into()),("tag",e.tag.into()),("purl",purl.clone())] {
++        require(predicate[key] == wanted, "Native release/repository/owner/tag identity mismatch")?;
++    }
++    let subjects = statement["subject"].as_array().ok_or("Native subjects missing")?;
++    let mut actual = BTreeMap::new();
++    let mut refs = 0;
++    for subject in subjects {
++        if subject["uri"] == purl {
++            require(subject["digest"] == json!({"sha1":tag_sha}) && subject.get("name").is_none(),
++                "Native Git object mismatch")?;
++            refs += 1;
++        } else {
++            let name = subject["name"].as_str().ok_or("Native subject name missing")?;
++            let sha = subject["digest"]["sha256"].as_str().ok_or("Native asset digest missing")?;
++            require(subject.get("uri").is_none() && subject["digest"] == json!({"sha256":sha})
++                && actual.insert(name.to_string(),sha.to_string()).is_none(),
++                "Duplicate or ambiguous native subject")?;
++        }
++    }
++    require(refs == 1 && &actual == files, "Native proof must cover exact Git object and complete asset inventory")
++}
++
++pub fn verify(raw: &[u8], proof: &[u8], e: Expected<'_>, release_id: u64, tag_sha: &str) -> Result<Manifest> {
 +    let manifest = Manifest::parse(raw, e)?;
-+    verify_proof(
-+        raw,
-+        proof,
-+        e,
-+        &manifest.custom_repository_sha,
-+        &manifest.build_run,
-+    )?;
++    let mut files: BTreeMap<String,String> = manifest.assets.iter().map(|a| (a.name.clone(),a.sha256.clone())).collect();
++    files.insert(MANIFEST.to_string(),digest(raw));
++    verify_release_proof(proof,e,release_id,tag_sha,&files)?;
 +    Ok(manifest)
 +}
 +
