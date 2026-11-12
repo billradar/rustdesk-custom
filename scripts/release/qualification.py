@@ -148,7 +148,7 @@ def aggregate(root,channel,experimental):
                             raise ValueError('PACKAGE: unexpected non-file package entry')
                         if package.suffix.lower() not in allowed_suffixes:
                             raise ValueError('PACKAGE: non-binary release asset is forbidden: '+package.name)
-                        filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name)
+                        filename=native_package_name(info['upstream_version'], info['variant'], e['platform'], e['arch'], package.name, legacy_rpm=info['patchset'] in ('v1','v2'))
                         staged.append((package,filename))
                         asset_infos[filename]=info
             stage_assets(staged,assets)

@@ -40,7 +40,7 @@ class ProfileContract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Stable'):
                 patchsets.patchset_for_version('1.5.3', 'stable')
 
-    def test_formal_153_lock_preflight_and_client_identity_share_v3_revision_1(self):
+    def test_formal_153_lock_preflight_and_client_identity_use_current_revision(self):
         from scripts.source.update_identity import write_identity, ABOUT_PATH
         data = dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
                     upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef')
@@ -48,7 +48,7 @@ class ProfileContract(unittest.TestCase):
             lock = stable_lock.plan(data,'v3')
             with patch.object(channel,'api',side_effect=AssertionError('dry-run must not inspect or write Releases')):
                 result = channel.release_preflight(dict(lock),dry_run=True)
-            self.assertEqual(result['patch_revision'],'v3.1')
+            self.assertEqual(result['patch_revision'],'v3.2')
             self.assertTrue(result['build_needed']);self.assertFalse(result['draft_needed'])
             self.assertFalse(result['publish_existing'])
             with tempfile.TemporaryDirectory() as td:
@@ -56,9 +56,9 @@ class ProfileContract(unittest.TestCase):
                 (tree/'src/custom_update/build.json').write_text('{}')
                 (tree/ABOUT_PATH).parent.mkdir(parents=True);(tree/ABOUT_PATH).write_text('')
                 identity=write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
-                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.1')
-                self.assertEqual(identity['revision'],'v3.1')
-                self.assertEqual(identity['patchset_version'],'v3.1')
+                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.2')
+                self.assertEqual(identity['revision'],'v3.2')
+                self.assertEqual(identity['patchset_version'],'v3.2')
                 with self.assertRaises(ValueError):
                     write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
                                    sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v2.8')
@@ -122,7 +122,7 @@ class ProfileContract(unittest.TestCase):
         new = ROOT / 'patchsets/v3'
         for scope in ('common', 'sos'):
             for source in (old / scope).glob('*.patch'):
-                if source.name != '0004-cm-background-window.patch':
+                if source.name not in ('0004-cm-background-window.patch','0005-custom-release-updates.patch'):
                     self.assertEqual(source.read_bytes(), (new / scope / source.name).read_bytes())
 
     def test_stable_lock_and_preflight_reject_before_external_effects(self):

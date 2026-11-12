@@ -156,6 +156,38 @@ class AggregateTests(unittest.TestCase):
                     canonical=native_package_name('1.5.1',variant,platform,arch,raw)
                     self.assertEqual(native_package_name('1.5.1',variant,platform,arch,canonical),canonical)
 
+    def test_all_rpm_names_have_one_architecture_and_distinct_family_selectors(self):
+        names=set()
+        for variant in ('standard','sos'):
+            for arch in ('x86_64','aarch64'):
+                for suse in (False,True):
+                    tail='-suse.rpm' if suse else '.rpm'
+                    raw=f'{variant}-rustdesk-1.5.3-{arch}-0.{arch}{tail}'
+                    expected=f'rustdesk-1.5.3'+('-sos' if variant=='sos' else '')+f'-linux-{arch}{tail}'
+                    actual=native_package_name('1.5.3',variant,'linux',arch,raw)
+                    self.assertEqual(actual,expected);self.assertEqual(actual.count(arch),1)
+                    self.assertEqual(native_package_name('1.5.3',variant,'linux',arch,actual),expected)
+                    self.assertEqual(native_package_name('1.5.3',variant,'linux',arch,raw,legacy_rpm=True),expected[:-len(tail)]+f'-0.{arch}'+tail)
+                    names.add(actual)
+        self.assertEqual(len(names),8)
+        for bad in ('rustdesk-1.5.3-x86_64-0.aarch64.rpm','rustdesk-1.5.3-x86_64-0.x86_64-debug.rpm'):
+            with self.assertRaisesRegex(ValueError,'Unexpected RPM'):native_package_name('1.5.3','standard','linux','x86_64',bad)
+
+    def test_aggregate_uses_new_rpm_names_only_for_new_patch_generations(self):
+        for generation in ('v2','v3'):
+            with self.subTest(patchset=generation),tempfile.TemporaryDirectory() as td:
+                root=Path(td);folder=root/'inputs/target';packages=folder/'packages';packages.mkdir(parents=True)
+                info=dict(platform='linux',architecture='aarch64',variant='standard',channel='nightly',upstream_version='1.5.3',upstream_sha='a'*40,patchset=generation,common_patch_hash='c'*64,custom_repository_sha='b'*40,build_run='123',prepared_source_identity='d'*64,server_config_fingerprint='e'*64)
+                (folder/'build-info.json').write_text(json.dumps(info))
+                for name in ('standard-rustdesk-1.5.3-aarch64-0.aarch64.rpm','standard-rustdesk-1.5.3-aarch64-0.aarch64-suse.rpm'):(packages/name).write_bytes(name.encode())
+                target=dict(id='linux-aarch64-standard',platform='linux',arch='aarch64',variant='standard',required=True,support_status='SUPPORTED')
+                env=dict(GITHUB_REPOSITORY='billradar/rustdesk-custom',UPSTREAM_EXPECTED_SHA='a'*40,PATCHSET=generation,GITHUB_RUN_ID='123',GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false')
+                with patch.dict(os.environ,env),patch.object(qualification,'ROOT',root),patch.object(qualification,'plan',return_value={'selected':[target]}),patch.object(platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):qualification.aggregate(root/'inputs','nightly',False)
+                assets=root/'.work/qualification-aggregate/assets'
+                suffix='-0.aarch64' if generation=='v2' else ''
+                expected={f'rustdesk-1.5.3-linux-aarch64{suffix}.rpm',f'rustdesk-1.5.3-linux-aarch64{suffix}-suse.rpm','update-manifest.json'}
+                self.assertEqual({p.name for p in assets.iterdir()},expected)
+
     def test_public_name_collision_is_rejected_before_copy(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);first=root/'first';second=root/'second'

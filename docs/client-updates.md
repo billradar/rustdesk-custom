@@ -80,3 +80,14 @@ Install the first client with this logic manually. Existing binaries retain thei
 old update source. Validation includes the client update contract, prepared-source
 contracts, both patch generations/variants, Flutter analysis and affected release
 contracts. Policy/backend tests do not establish real package or device behaviour.
+
+## RPM filename compatibility
+
+Current v3.2 RPM selectors match normalized public names with one OS/architecture
+token, for both Standard/SOS, x86_64/ARM64 and ordinary/SUSE RPM. Only Common
+0005's RPM selector changes; latest-only, revision comparison, download integrity
+and installation confirmation remain unchanged. v1/v2 patches and their legacy
+RPM naming remain immutable. Existing clients with old fixed RPM selectors need
+a manual upgrade to v3.2 or later before consuming the new names; no old-name
+aliases are published. This is not JSON-manifest/Sigstore client consumption.
+See [RPM asset naming](rpm-asset-naming.md).

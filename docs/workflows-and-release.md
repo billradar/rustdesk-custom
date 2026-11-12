@@ -283,8 +283,9 @@ Nightly 维持**最新一份**策略：仅创建/移动 `nightly`，新草稿完
 Public package names are normalized once or repeatedly to the same name by
 `scripts/release/naming.py`. Standard has no variant token; SOS has `-sos`.
 Linux DEB normalization strips an existing OS/architecture prefix even when the
-extension immediately follows it. Existing RPM names retain their architecture
-suffix (including the RPM-native architecture field) for old client selectors.
+extension immediately follows it. v1/v2 RPM names retain their legacy architecture suffix for immutable client
+selectors. v3.2+ emits `.rpm` or `-suse.rpm` after one OS/architecture prefix and
+uses matching client selectors; see [RPM asset naming](rpm-asset-naming.md).
 No historical asset is renamed by this change.
 
 Aggregation reserves every public filename before copying packages into a fresh

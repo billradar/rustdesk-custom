@@ -1,6 +1,7 @@
 """Latest-only client update, identity and executable version-policy regressions."""
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,11 +21,14 @@ def patch_file(generation, name):
     return new_file((ROOT / "patchsets" / generation / PATCH).read_text(encoding='utf-8'), name)
 
 
-def source_contract(tree):
+def source_contract(tree, generation="v2"):
     module = (tree / "src/custom_update/mod.rs").read_text(encoding='utf-8')
-    expected = patch_file("v2", "src/custom_update/mod.rs")
+    expected = patch_file(generation, "src/custom_update/mod.rs")
     if module != expected:
         raise ValueError("Client update implementation differs from reviewed patch")
+    policy = (tree / "src/custom_update/policy.rs").read_text(encoding='utf-8')
+    if policy != patch_file(generation, "src/custom_update/policy.rs"):
+        raise ValueError("Client update package policy differs from selected patchset")
     ffi = (tree / "src/flutter_ffi.rs").read_text(encoding='utf-8')
     home = (tree / "flutter/lib/desktop/pages/desktop_home_page.dart").read_text(encoding='utf-8')
     if "custom_update::response(&key)" not in ffi or "showCustomUpdateDialog();" not in home:
@@ -37,6 +41,47 @@ class ClientUpdateTests(unittest.TestCase):
                      "src/custom_update/stable_release_fixture.txt",
                      "flutter/lib/common/widgets/custom_update.dart"):
             self.assertEqual(patch_file("v1", name), patch_file("v2", name))
+
+    def test_v3_changes_only_the_rpm_package_selector_in_update_policy(self):
+        old=patch_file('v2','src/custom_update/policy.rs')
+        start=old.index('            let rpm_arch =')
+        end=old.index('            let tail =',start)
+        expected=(old[:start]+old[end:]).replace('-linux-{arch}-0.{rpm_arch}{tail}', '-linux-{arch}{tail}')
+        self.assertEqual(patch_file('v3','src/custom_update/policy.rs'),expected)
+        for name in ('src/custom_update/mod.rs','src/custom_update/stable_release_fixture.txt','flutter/lib/common/widgets/custom_update.dart'):
+            self.assertEqual(patch_file('v3',name),patch_file('v2',name))
+
+    def test_publisher_names_match_executed_client_selectors_for_all_packages(self):
+        compiler=RUSTC or shutil.which('rustc')
+        if not compiler:self.skipTest('rustc unavailable; CI runs the package policy')
+        from scripts.release.qualification import plan
+        from scripts.release.naming import native_package_name,windows_installer_name
+        from scripts.platform.wayland import package_name
+        for generation in ('v2','v3'):
+            cases=[]
+            for target in plan('stable')['selected']:
+                os_name=target['platform'];arch=target['arch'];variant=target['variant']
+                formats={'windows':['exe','msi'],'linux':['deb','rpm','suse.rpm'],'macos':['dmg'],'android':['apk']}[os_name]
+                for fmt in formats:
+                    if os_name=='windows':name=windows_installer_name('1.5.3',variant,fmt,arch)
+                    else:
+                        tails={'deb':'.deb','rpm':f'-0.{arch}.rpm','suse.rpm':f'-0.{arch}-suse.rpm','dmg':'-unsigned.dmg','apk':'-signed.apk'}
+                        raw=f'{variant}-rustdesk-1.5.3-{arch}'+tails[fmt]
+                        name=native_package_name('1.5.3',variant,os_name,arch,raw,legacy_rpm=generation=='v2')
+                    cases.append((variant,os_name,arch,False,fmt,name))
+            for variant in ('standard','sos'):
+                for arch in ('x86_64','aarch64'):cases.append((variant,'linux',arch,True,'deb',package_name('1.5.3',variant,arch)))
+            self.assertEqual(len(cases),31)
+            with tempfile.TemporaryDirectory() as td:
+                tree=Path(td);(tree/'policy.rs').write_text(patch_file(generation,'src/custom_update/policy.rs'))
+                assertions=[]
+                for variant,platform,arch,wayland,fmt,name in cases:
+                    args=', '.join(json.dumps(v) for v in ('1.5.3',variant,platform,arch))+', '+str(wayland).lower()+', '+json.dumps(fmt)
+                    assertions.append('assert_eq!(policy::package_name('+args+'), Some('+json.dumps(name)+'.to_string()));')
+                (tree/'driver.rs').write_text('mod policy; fn main() {\n'+'\n'.join(assertions)+'\n}')
+                build=subprocess.run([compiler,'--edition=2021',str(tree/'driver.rs'),'-o',str(tree/'driver')],capture_output=True,text=True)
+                self.assertEqual(build.returncode,0,build.stderr)
+                subprocess.run([str(tree/'driver')],check=True,capture_output=True)
 
     def test_parser_fixture_is_generated_by_the_real_stable_publisher(self):
         actual = build_release_body(
@@ -126,16 +171,18 @@ class ClientUpdateTests(unittest.TestCase):
         compiler = RUSTC or shutil.which("rustc")
         if not compiler:
             self.skipTest("rustc unavailable; CI preflight executes this policy")
-        with tempfile.TemporaryDirectory() as directory:
-            tree = Path(directory)
-            policy = tree / "policy.rs"
-            policy.write_text(patch_file("v2", "src/custom_update/policy.rs"), encoding='utf-8')
-            (tree / "stable_release_fixture.txt").write_text(
-                patch_file("v2", "src/custom_update/stable_release_fixture.txt"), encoding='utf-8')
-            executable = tree / "policy-tests"
-            subprocess.run([compiler, "--edition=2021", "--test", str(policy),
-                            "-o", str(executable)], check=True)
-            subprocess.run([str(executable)], check=True)
+        for generation in ('v2','v3'):
+            with tempfile.TemporaryDirectory() as directory:
+                tree = Path(directory)
+                policy = tree / "policy.rs"
+                policy.write_text(patch_file(generation, "src/custom_update/policy.rs"), encoding='utf-8')
+                (tree / "stable_release_fixture.txt").write_text(
+                    patch_file(generation, "src/custom_update/stable_release_fixture.txt"), encoding='utf-8')
+                executable = tree / "policy-tests"
+                subprocess.run([compiler, "--edition=2021", "--test", str(policy),
+                                "-o", str(executable)], check=True)
+                subprocess.run([str(executable)], check=True)
+
 
 
 RUSTC = None
@@ -146,5 +193,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     RUSTC = args.rustc
     if args.source:
-        source_contract(args.source)
+        source_contract(args.source, os.environ.get("PATCHSET", "v2"))
     unittest.main(argv=[__file__])

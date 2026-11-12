@@ -939,10 +939,10 @@ index 0000000..4d221a8
 +}
 diff --git a/src/custom_update/policy.rs b/src/custom_update/policy.rs
 new file mode 100644
-index 0000000..50e49fc
+index 0000000..a0017e8
 --- /dev/null
 +++ b/src/custom_update/policy.rs
-@@ -0,0 +1,340 @@
+@@ -0,0 +1,335 @@
 +//! Release policy shared by both supported patch generations.
 +pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
 +    let parts: Vec<_> = value.split('.').collect();
@@ -1125,17 +1125,12 @@ index 0000000..50e49fc
 +            format!("rustdesk-{version}{suffix}-linux-{arch}.deb")
 +        }
 +        ("linux", "rpm" | "suse.rpm") if arch != "armv7" => {
-+            let rpm_arch = if arch == "aarch64" {
-+                "aarch64"
-+            } else {
-+                "x86_64"
-+            };
 +            let tail = if format == "suse.rpm" {
 +                "-suse.rpm"
 +            } else {
 +                ".rpm"
 +            };
-+            format!("rustdesk-{version}{suffix}-linux-{arch}-0.{rpm_arch}{tail}")
++            format!("rustdesk-{version}{suffix}-linux-{arch}{tail}")
 +        }
 +        ("android", "apk") if variant == "standard" => {
 +            format!("rustdesk-{version}-android-{arch}-signed.apk")

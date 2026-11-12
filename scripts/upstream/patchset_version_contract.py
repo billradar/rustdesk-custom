@@ -51,6 +51,11 @@ class VersionContract(unittest.TestCase):
         shutil.copytree(version.ROOT / 'patchsets/v3', self.root / 'patchsets/v3')
         target = self.root / 'patchsets/v3/patchset.json'
         data = json.loads(target.read_text())
+        # Reconstruct the original candidate fixture, not live v3's later revisions.
+        shutil.copy2(version.ROOT/'patchsets/v2/common/0005-custom-release-updates.patch', target.parent/'common/0005-custom-release-updates.patch')
+        data['revision'] = 1
+        data['hashes'] = copy.deepcopy(data['versioning']['history'][0]['after'])
+        data['versioning']['history'] = [data['versioning']['history'][0]]
         data['status'] = 'candidate_only'  # This fixture creates a new generation, unlike live v3.
         data['versioning']['migration_base'] = self.base
         data['versioning']['history'][0]['base_sha'] = self.base
