@@ -16,7 +16,7 @@ on that output; they do not treat this JSON itself as a signed proof.
 `native-release-reference.json` is GitHub native Release attestation 65016318
 for VeryBaaad/ZNNext v2.16.0. It binds asset SHA256
 `0915c496189e2130b4cbd754f3de0cefc5b35a74951115d0e0610ce8b89f2534`.
-A separate test policy requires the GitHub service CA, exact service SAN and
+The production v3.4 verifier requires the GitHub service CA, exact service SAN and
 signed TSA evidence. Its certificate-chain/signature/digest/timestamp checks and
-negative cases run offline. This does not weaken the production updater's
-Actions/Rekor policy or claim that an application package was installed.
+negative cases run offline. The production updater accepts native Release proofs only; historical Actions
+proofs are negative fixtures. This does not claim an application package was installed.

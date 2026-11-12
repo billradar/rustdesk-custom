@@ -6,7 +6,7 @@ repository from `GITHUB_REPOSITORY`; fork clients follow their own repository.
 There is no client Nightly channel, embedded token or official-server fallback.
 Nightly-produced clients also check the latest published Stable release.
 
-## Current generation: v3.3
+## Current generation: v3.4
 
 Prepared source embeds repository name, numeric repository/owner IDs, upstream
 version/SHA, Standard/SOS variant, content revision and prepare run before its
@@ -14,15 +14,16 @@ inventory is frozen. Missing identity disables checking. Stable receives its
 reviewed revision from Tag preflight; CI/Nightly cannot invent a Stable revision.
 About labels remain display-only; native package versions are unchanged.
 
-The client downloads the exact `update-manifest.json` and
-`release-attestation.json` assets from the published Stable API record. It checks
-API IDs, canonical URLs, bounded sizes and SHA256, then verifies the manifest's
-Sigstore proof natively with locked `sigstore-verify` 0.11.0. No `gh` executable or
-shell is required on the user's computer. Public Sigstore roots are bundled;
-certificate identity/issuer, certificate transparency and Rekor evidence remain
-mandatory. Certificate claims bind the exact repository and numeric owner IDs,
-main workflow/ref, custom source SHA, hosted runner and build run to SLSA v1
-provenance. The signer must be this repository's `tag.yml` main-branch dispatch.
+The client downloads the exact `update-manifest.json` from the published immutable
+Stable API record, checks its API ID, canonical URL, bounded size and SHA256, then
+queries GitHub's native Release attestations by that digest. No token, `gh` or shell
+is required. The native Sigstore verifier uses the bundled GitHub service CA,
+exact Release-service certificate identity and mandatory signed TSA evidence.
+It requires Release v0.2, the exact numeric Release/repository/owner identity and
+tag, and the complete signed asset inventory including the manifest. The signed
+Git object must match the tag ref; annotated tags resolve to the manifest's custom
+source commit. Missing/ambiguous native proof or a mutable Release stops updates.
+There is no client build-proof or custom `release-attestation.json` fallback.
 
 Only `rustdesk-release-manifest-v2` is accepted. The client compares the complete
 installer API inventory with the verified manifest. Selection uses signed fields:
@@ -63,9 +64,9 @@ establish device upgrade success, desktop signing or remote-session behavior.
 
 ## Direct cutover and validation limits
 
-Historical v1/v2 revision 8 and v3.1/v3.2 patches/releases remain unchanged. Their
-already-installed clients retain their old body/filename logic. Install v3.3 or
-later manually to use the new format; no compatibility aliases or transitional
+Historical v1/v2 revision 8 and v3.1-v3.3 patches/releases remain unchanged. Their
+already-installed clients retain their previous updater/proof logic. Install v3.4 or
+later manually to use native Release proofs; no compatibility aliases or transitional
 fallback are published. A historical schema-v1 Draft cannot be promoted by the
 new verifier. An old Nightly object needs explicit migration review rather than
 automatic deletion based on body markers.
@@ -76,9 +77,10 @@ compatible visible release the client reports unavailability and allows retry.
 
 Run `scripts.validation.client_update_contract` and
 `scripts.validation.update_manifest_native`, prepared-source checks and affected
-release contracts. Native tests verify an actual historical CD Sigstore proof,
-negative identity/tamper cases and all 31 typed selectors on Rust 1.75. The v2
-schema parser fixture is unsigned and explicitly fails against the old proof.
-Fresh schema-v2 hosted signing, full native workspace builds on every target,
-Flutter analysis, device installation and real sessions still require validation.
+release contracts. Native tests verify a genuine GitHub native Release proof with the production
+verifier, signature/digest/TSA tampering, strict Release/repository/tag/subject
+binding, API discovery failures and all 31 typed selectors on Rust 1.75. The
+schema-v2 parser fixture is unsigned and never passes proof verification. A fresh
+immutable schema-v2 publication, full native workspace builds on every target,
+device installation and real sessions still require validation.
 See [Release attestation](release-attestation.md) and [RPM naming](rpm-asset-naming.md).

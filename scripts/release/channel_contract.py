@@ -257,7 +257,7 @@ class ChannelPolicyTests(unittest.TestCase):
                 verify.assert_not_called()
         finally:self._assets.start()
 
-    def test_untagged_draft_verifies_both_json_assets_by_exact_id(self):
+    def test_untagged_draft_verifies_manifest_by_exact_id_and_build_proof_via_api(self):
         from scripts.release import attestation as a
         import hashlib
         self._assets.stop();self._reader.stop()
@@ -271,7 +271,6 @@ class ChannelPolicyTests(unittest.TestCase):
                 info=dict(upstream_version='1.4.9',upstream_sha='a'*40,custom_repository_sha='b'*40,patchset='v1',patch_revision='v1.2',common_patch_hash='c'*64,sos_patch_hash='c'*64)
                 with patch.dict(os.environ,GITHUB_REPOSITORY=a.REPOSITORY,GITHUB_RUN_ID='9'):
                     a.write(root,'stable',entries,info,{'result':'PASS'})
-                (root/a.BUNDLE).write_text('{}')
                 files=sorted(root.iterdir());content={700+i:p.read_bytes() for i,p in enumerate(files)}
                 existing['assets']=[dict(id=700+i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for i,p in enumerate(files)]
                 lines=existing['body'].splitlines()
@@ -287,7 +286,7 @@ class ChannelPolicyTests(unittest.TestCase):
                     kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
                 with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',side_effect=api),patch.object(a.subprocess,'run',side_effect=download) as command,patch.object(a,'verify_signature') as signature:
                     result=channel.release_preflight(self.discovery('v1'))
-                self.assertEqual(command.call_count,2);signature.assert_called_once()
+                self.assertEqual(command.call_count,1);signature.assert_called_once()
                 self.assertEqual(existing['tag_name'],'untagged-123')
                 self.assertFalse(result['build_needed']);self.assertTrue(result['publish_existing'])
         finally:self._assets.start();self._reader.start()

@@ -7,7 +7,7 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 ### Common
 
 - Configured server and client defaults, hidden connection-manager setting, and manual-only connection-manager visibility.
-- Forced hardware rendering policy; latest-only custom repository updates with attested JSON package selection and size/SHA256 verification.
+- Forced hardware rendering policy; latest-only custom repository updates with native immutable Release proofs, typed JSON package selection and size/SHA256 verification.
 - Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.
 - Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.
 
@@ -16,6 +16,44 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common.
 
 ## Revision history
+
+### v3.4 — content-change
+
+Scope: common
+
+Reason: Use GitHub native immutable Release attestations as the sole client update proof and remove the custom public bundle.
+
+#### Added
+
+
+#### Changed
+
+- Verify GitHub native Release v0.2 proofs using the dedicated GitHub CA and signed TSA evidence.
+
+#### Fixed
+
+
+#### Removed
+
+- Remove release-attestation.json from new public Release inventories; retain SLSA build evidence internally for Draft qualification.
+
+#### Security
+
+- Bind numeric repository/owner/Release identity, exact tag Git object, manifest digest and complete installer inventory before matching or download.
+
+#### Compatibility
+
+
+References: https://github.com/billradar/rustdesk-custom/commit/3f9dd6aa54942a23e6249e44ccff0b32582aacec
+
+Upstream compatibility: Official 1.5.3 source and Rust 1.75 verifier; historical v1/v2 and v3.1-v3.3 content is preserved.
+
+Known limitations: Fresh immutable schema-v2 publication, full native package builds and device upgrade validation remain required.
+
+Allocation base: `3f9dd6aa54942a23e6249e44ccff0b32582aacec`
+
+- common: `2fc6754d391c850ecc5e92b6494965684792dadd9ef14e3cfb44280aba3e4269` → `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.3 — content-change
 

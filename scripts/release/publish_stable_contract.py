@@ -18,7 +18,7 @@ ENV=dict(GITHUB_REPOSITORY=p.REPOSITORY,GITHUB_REF='refs/heads/main',GITHUB_EVEN
 
 
 def fixture():
-    assets=[dict(id=i,name=name,size=10,digest='sha256:'+'f'*64,state='uploaded') for i,name in enumerate(('update-manifest.json','release-attestation.json','client.deb'),1)]
+    assets=[dict(id=i,name=name,size=10,digest='sha256:'+'f'*64,state='uploaded') for i,name in enumerate(('update-manifest.json','client.deb'),1)]
     release=dict(id=7,name=TAG,tag_name=TAG,draft=True,prerelease=False,immutable=False,
                  target_commitish='a'*40,updated_at='unchanged',assets=assets)
     value=dict(upstream_version='1.5.3',patchset='v3',patch_revision='v3.3',

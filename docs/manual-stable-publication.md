@@ -62,11 +62,12 @@ recording that the Release is already published. Never rebuild, delete, overwrit
 or republish it to make the job green. Rerunning the workflow with the same inputs
 may verify the already immutable object read-only; it does not publish again.
 
-The native proof supplements the existing pre-publication build proof. The public
-`release-attestation.json` asset and current client SLSA consumer are retained;
-GitHub's separately generated **Release attestation (json)** UI entry is not that
-uploaded asset. `update-manifest.json` remains the typed installer selector. Native
-Release provenance does not replace APK v2/v3 signatures or device testing.
+The native proof is the sole client-facing update proof. `update-manifest.json`
+remains the typed installer selector. Build SLSA evidence stays in the registry and
+internal Actions handoff for pre-publication qualification; the custom
+`release-attestation.json` is not uploaded. v3.4 clients verify GitHub's native
+proof using the service CA/TSA and strict Release/tag/inventory binding. APK v2/v3
+signatures and device testing remain independent.
 
 ## Verification scope
 
