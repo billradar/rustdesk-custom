@@ -65,10 +65,12 @@ Both Common patch generations force `allow-always-software-render=N` via `OVERWR
 `scripts/upstream/patchsets.py` reads `metadata/patch-profiles.json`:
 - explicit versions 1.5.0 and 1.5.1 select their exact profiles, both using unchanged v2 revision 8;
 - versions below 1.5.0 retain the historical v1 policy;
-- source version 1.5.3 selects an isolated candidate-only v3 profile;
-- unadapted versions (including 1.5.2) test the explicitly configured latest maintained profile, currently v3.
+- source version 1.5.3 selects the separately audited formal `rd-1.5.3` Profile using unchanged v3 revision 1; the historical `rd-1.5.3-candidate` entry remains Stable-forbidden;
+- unadapted versions (including 1.5.2) test the explicitly configured latest maintained Profile, currently `rd-1.5.3`/v3; fallback remains Stable-forbidden.
 
 Fallback is compatibility testing only. Candidate/fallback Profiles cannot enter Stable discovery, lock, preflight, revision allocation or client identity. A successful test never changes profile eligibility. Missing metadata/directories, integrity failures or failed patches stop immediately; do not probe another profile. Build/platform adapter approvals remain separate, exact-interface gates. A version in Cargo.toml or a candidate SHA is never evidence of an official release tag.
+
+Formal 1.5.3 admission is documented in `docs/audits/stable-1.5.3-admission/review.json`; official Tag 1.5.3 resolves to `95cca3f661f635b3cc85c04935fe8d96d8f432ef`. Profile eligibility does not replace source locks, exact interface reviews, full build/signing/attestation gates or publication authorization. v3 remains revision 1 with `validation_pending` lifecycle status and immutable candidate-origin history.
 
 v3.1 is derived from v2.8 and changes only Common 0004 context/hooks around upstream Windows DPI-aware CM side-panel bounds. All other Common/SOS patch bytes are identical to v2.8. Keep v2 patches, manifests and history immutable for this migration. New-generation version validation requires a candidate baseline anchored to the integration base and exact parent revision/hashes. Read `docs/patch-profiles.md` and run `python3 -m scripts.upstream.patch_profiles_contract` plus affected release/source contracts.
 

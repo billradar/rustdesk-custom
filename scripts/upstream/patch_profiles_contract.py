@@ -16,15 +16,68 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ProfileContract(unittest.TestCase):
-    def test_exact_baseline_and_candidate_profiles(self):
+    def test_exact_baseline_and_formal_release_profiles(self):
         for version in ('1.5.0', '1.5.1'):
             self.assertEqual(patchsets.patchset_for_version(version, 'stable'), 'v2')
         self.assertEqual(patchsets.patchset_for_version('1.4.9', 'stable'), 'v1')
-        candidate = patchsets.profile_for_version('v1.5.3')
-        self.assertEqual(candidate['selected'], 'v3')
-        self.assertFalse(candidate['fallback'])
-        self.assertTrue(candidate['compatibility_test_only'])
-        self.assertFalse(candidate['stable_allowed'])
+        official = patchsets.profile_for_version('v1.5.3', 'stable')
+        self.assertEqual(official['profile'], 'rd-1.5.3')
+        self.assertEqual(official['selected'], 'v3')
+        self.assertFalse(official['fallback'])
+        self.assertFalse(official['compatibility_test_only'])
+        self.assertTrue(official['stable_allowed'])
+        self.assertEqual(patchsets.mapped('1.5.3'), 'v3')
+
+    def test_historical_candidate_profile_remains_forbidden(self):
+        registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
+        self.assertFalse(registry['profiles']['rd-1.5.3-candidate']['stable_allowed'])
+        registry['exact_versions']['1.5.3'] = 'rd-1.5.3-candidate'
+        original = json.loads
+        with patch.object(patchsets.json, 'loads', side_effect=lambda raw: copy.deepcopy(registry) if 'exact_versions' in raw else original(raw)):
+            candidate = patchsets.profile_for_version('1.5.3', 'nightly')
+            self.assertFalse(candidate['stable_allowed'])
+            self.assertTrue(candidate['compatibility_test_only'])
+            with self.assertRaisesRegex(ValueError, 'Stable'):
+                patchsets.patchset_for_version('1.5.3', 'stable')
+
+    def test_formal_153_lock_preflight_and_client_identity_share_v3_revision_1(self):
+        from scripts.source.update_identity import write_identity, ABOUT_PATH
+        data = dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
+                    upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef')
+        with patch.dict(os.environ,GITHUB_SHA='b'*40,GITHUB_RUN_ID='42',INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'):
+            lock = stable_lock.plan(data,'v3')
+            with patch.object(channel,'api',side_effect=AssertionError('dry-run must not inspect or write Releases')):
+                result = channel.release_preflight(dict(lock),dry_run=True)
+            self.assertEqual(result['patch_revision'],'v3.1')
+            self.assertTrue(result['build_needed']);self.assertFalse(result['draft_needed'])
+            self.assertFalse(result['publish_existing'])
+            with tempfile.TemporaryDirectory() as td:
+                tree=Path(td);(tree/'src/custom_update').mkdir(parents=True)
+                (tree/'src/custom_update/build.json').write_text('{}')
+                (tree/ABOUT_PATH).parent.mkdir(parents=True);(tree/ABOUT_PATH).write_text('')
+                identity=write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
+                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.1')
+                self.assertEqual(identity['revision'],'v3.1')
+                self.assertEqual(identity['patchset_version'],'v3.1')
+                with self.assertRaises(ValueError):
+                    write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
+                                   sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v2.8')
+
+    def test_formal_admission_evidence_is_exact_and_does_not_claim_full_builds(self):
+        audit=json.loads((ROOT/'docs/audits/stable-1.5.3-admission/review.json').read_text())
+        self.assertEqual(audit['official_tag']['ref'],'refs/tags/1.5.3')
+        self.assertEqual(audit['official_tag']['object'],{'type':'commit','sha':'95cca3f661f635b3cc85c04935fe8d96d8f432ef'})
+        self.assertFalse(audit['official_release']['draft']);self.assertFalse(audit['official_release']['prerelease'])
+        self.assertEqual(audit['source_checks']['upstream_sha'],audit['official_tag']['object']['sha'])
+        self.assertEqual(audit['source_checks']['profile'],'rd-1.5.3')
+        self.assertFalse(audit['patch_content_changed']);self.assertEqual(audit['v2_revision'],8)
+        self.assertEqual(len(audit['interfaces']['native']),7)
+        for variant in ('standard','sos'):
+            checks=audit['source_checks']['variants'][variant]
+            self.assertEqual(checks['git_apply_check'],'PASS')
+            self.assertEqual(checks['native_helper_compile'],'PASS')
+            self.assertEqual(checks['upstream_dpi_preservation'],'PASS')
+        self.assertTrue(audit['limitations'])
 
     def test_exact_profile_precedes_legacy_boundary(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -49,7 +102,7 @@ class ProfileContract(unittest.TestCase):
                 self.assertTrue(result['fallback'])
                 self.assertTrue(result['compatibility_test_only'])
                 self.assertFalse(result['stable_allowed'])
-        for version in ('1.5.2', '1.5.3', '2.0.0'):
+        for version in ('1.5.2', '1.5.4', '2.0.0'):
             with self.assertRaisesRegex(ValueError, 'Stable'):
                 patchsets.patchset_for_version(version, 'stable')
             with self.assertRaisesRegex(ValueError, 'Stable'):
@@ -73,7 +126,7 @@ class ProfileContract(unittest.TestCase):
                     self.assertEqual(source.read_bytes(), (new / scope / source.name).read_bytes())
 
     def test_stable_lock_and_preflight_reject_before_external_effects(self):
-        for version in ('1.5.2', '1.5.3', '2.0.0'):
+        for version in ('1.5.2', '1.5.4', '2.0.0'):
             data = dict(channel='stable', version=version, upstream_ref=version,
                         upstream_tag=version, upstream_sha='a'*40, patchset='v3')
             with patch.object(channel, 'release_rows', side_effect=AssertionError('no network')):
