@@ -279,28 +279,11 @@ class ReleaseBodyContractTests(unittest.TestCase):
         official='# 1.5.0\n\n# Changelog\n'
         self.assertEqual(qualification.build_release_body(official),official)
 
-    def test_existing_stable_draft_publish_rechecks_identity_and_asset_inventory(self):
-        import scripts.release.channel as channel
-        upstream='a'*40;custom='b'*40;patchset='v1'
-        common=channel.patch_hash('common',patchset);sos=channel.patch_hash('sos',patchset)
-        identity=channel.build_identity(upstream,patchset,common,sos,custom,False)
-        names=['update-manifest.json','release-attestation.json']
-        body='\n'.join(['automation_state=complete','build_package_checksum_architecture_provenance=PASS',
-            'build_identity='+identity,'upstream_sha='+upstream,'custom_repository_sha='+custom,'patchset='+patchset,
-            'common_patch_hash='+common,'sos_patch_hash='+sos,'wayland_included=false','asset_inventory='+json.dumps(names)])
-        release={'id':7,'draft':True,'prerelease':False,'body':body,
-                 'assets':[{'name':name,'state':'uploaded','size':10,'digest':'sha256:'+'c'*64} for name in names]}
-        env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','RELEASE_TAG':'v1.4.9-custom.v1.1',
-             'BUILD_IDENTITY':identity,'UPSTREAM_SHA':upstream,'CUSTOM_REPOSITORY_SHA':custom,
-             'PATCHSET':patchset,'WAYLAND_INCLUDED':'false','WAYLAND_POLICY_SHA256':''}
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch('scripts.release.attestation.read_release',return_value={}) as read,patch('scripts.release.github.request',return_value={'draft':False}) as write,patch('scripts.release.stable_tag.ensure') as tag_write:
-            qualification.publish_existing_draft()
-            tag_write.assert_called_once_with('billradar/rustdesk-custom','v1.4.9-custom.v1.1',custom)
-            self.assertEqual(read.call_args.args[2]['custom_repository_sha'],custom)
-            self.assertEqual(write.call_args.args[2],{'tag_name':env['RELEASE_TAG'],'target_commitish':custom,'draft':False,'prerelease':False})
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch('scripts.release.attestation.read_release',side_effect=ValueError('identity differs')),patch('scripts.release.github.request') as write:
-            with self.assertRaisesRegex(ValueError,'identity differs'):qualification.publish_existing_draft()
-            write.assert_not_called()
+    def test_legacy_publication_entrypoints_fail_before_any_work(self):
+        with patch('scripts.release.github.request') as write,patch.object(qualification,'aggregate') as aggregate:
+            with self.assertRaisesRegex(ValueError,'publish-stable.yml'):qualification.publish_existing_draft()
+            with self.assertRaisesRegex(ValueError,'publish-stable.yml'):qualification.release(Path('.'))
+            aggregate.assert_not_called();write.assert_not_called()
 
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
@@ -337,10 +320,10 @@ class ParallelGateTests(unittest.TestCase):
         self.assertIn('prepare',tag['android-build']['needs'])
         self.assertIn('android-build',tag['android-sign']['needs'])
         self.assertEqual(tag['draft']['needs'],'aggregate')
-        self.assertEqual(tag['release']['needs'],'aggregate')
-        self.assertEqual(tag['publish-existing']['needs'],['resolve','draft-preflight'])
+        self.assertNotIn('release',tag)
+        self.assertNotIn('publish-existing',tag)
         self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
-        for name in ('publish-existing','release','draft'):
+        for name in ('draft',):
             self.assertIn("github.ref == 'refs/heads/main'",tag[name]['if'])
         self.assertIn('build_needed',tag['aggregate']['outputs'])
         self.assertIn('draft_needed',tag['aggregate']['outputs'])

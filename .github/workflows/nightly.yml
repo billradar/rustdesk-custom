@@ -8,8 +8,8 @@ env:
       release_mode:
         type: choice
         default: draft
-        description: dry-run builds only; draft creates a private prerelease; release publishes a verified Nightly prerelease
-        options: [dry-run, draft, release]
+        description: dry-run builds only; draft creates a private prerelease; public publication is disabled
+        options: [dry-run, draft]
       include_wayland:
         type: boolean
         default: true
@@ -238,7 +238,7 @@ jobs:
       github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' &&
       needs.resolve.outputs.dedup_skip != 'true' &&
-      (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
+      inputs.release_mode == 'draft' &&
       vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' &&
       needs.android-build.result == 'success'
     runs-on:
@@ -387,7 +387,7 @@ jobs:
         if-no-files-found: error
         retention-days: 30
   draft:
-    name: Create qualified Nightly draft or publish prerelease
+    name: Create qualified private Nightly draft
     needs: [resolve, aggregate]
     concurrency:
       group: rustdesk-nightly-release-write
@@ -395,7 +395,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
-      github.event_name == 'workflow_dispatch' && (inputs.release_mode == 'draft' || inputs.release_mode == 'release') &&
+      github.event_name == 'workflow_dispatch' && inputs.release_mode == 'draft' &&
       needs.resolve.outputs.dedup_skip != 'true' &&
       needs.aggregate.result == 'success'
     runs-on: ubuntu-22.04
@@ -453,7 +453,7 @@ jobs:
       with:
         client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
         private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-    - name: Revalidate signed matrix and create draft or public prerelease
+    - name: Revalidate signed matrix and create private Draft
       env:
         GH_TOKEN: ${{ steps.release-app.outputs.token }}
       run: python3 scripts/release/nightly.py draft --discovery .work/discovery/nightly-discovery.json

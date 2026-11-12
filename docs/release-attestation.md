@@ -108,3 +108,12 @@ identity even though dry-run does not access production signing. Schema validati
 permits that unsigned build-only inventory; local proof attachment and remote
 release reuse still require all three production signatures when signing is
 configured. Such dry-run inventories are never attested or published.
+
+## Independent manual publication
+
+Stable and Nightly build workflows now accept only dry-run/Draft. The independent
+`publish-stable.yml` accepts an exact Stable Draft ID, Tag and manifest digest,
+verifies the build proof and immutable policy, publishes once, then verifies the
+GitHub-generated native Release proof. Nightly cannot publish or enter this
+workflow. The existing build proof/client format remains; see
+[Manual Stable publication](manual-stable-publication.md).

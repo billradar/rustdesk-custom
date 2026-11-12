@@ -76,3 +76,11 @@ App configuration and an authorized eligible release workflow.
 References:
 - <https://docs.github.com/en/rest/releases/releases#create-a-release>
 - <https://github.com/actions/create-github-app-token/tree/bcd2ba49218906704ab6c1aa796996da409d3eb1>
+
+The separate manual `publish-stable.yml` requests Contents write and
+Actions/Attestations/Administration read directly from the same installed App.
+Administration read must be granted on the App and approved on its installation
+before use; it is only for checking immutable-release policy, never changing it.
+The shared Draft/build App action is not broadened. Its native-proof verification
+uses a checksum-pinned CLI, installed before minting the token. See
+[Manual publication](manual-stable-publication.md).

@@ -158,7 +158,7 @@ def dedup():
             or os.environ.get('GITHUB_REPOSITORY') != REPOSITORY):
         raise ValueError('Stable Lite admission requires main workflow_dispatch')
     mode = os.environ.get('RELEASE_MODE', 'draft')
-    if mode not in ('draft', 'dry-run', 'release'):
+    if mode not in ('draft', 'dry-run'):
         raise ValueError('Invalid Stable release mode')
     force_retry = requested_force_retry()
     if force_retry and mode == 'dry-run':
@@ -188,8 +188,8 @@ def dedup():
     state = decide(rows, force_retry=force_retry)
     if state == 'REVIEW':
         raise ValueError('Stable Lite uncertain historical run requires manual review')
-    # Release can publish a verified prior draft; it must not rebuild an active one.
-    skip = state in ('ACTIVE', 'COOLDOWN') or (state == 'SUCCESS' and mode != 'release')
+    # Build admission never authorizes publication.
+    skip = state in ('ACTIVE', 'COOLDOWN', 'SUCCESS')
     if skip:
         # The frozen hash is not consumed on skipped workflows: flag the
         # uploaded lock so a skipped workflow success is never reused as output.

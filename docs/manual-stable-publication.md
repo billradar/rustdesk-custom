@@ -1,0 +1,79 @@
+# Manual Stable publication
+
+`tag.yml` and `nightly.yml` build only. Their supported modes are `dry-run` and
+`draft`; script admission rejects `release` even if a caller bypasses the UI.
+Nightly remains a private prerelease Draft with a moving `nightly` tag. Its
+existing build proof remains; it does not enter native immutable publication.
+
+`publish-stable.yml` is a separate workflow dispatched manually by repository owner billradar on main. Owner numeric identity and the rerun actor are checked; Router/bot dispatches cannot publish. There is
+no schedule, workflow_run, router dispatch, signing job, compiler or asset upload.
+It publishes one existing Stable Draft rather than rebuilding or picking latest.
+It neither enables repository immutability nor changes historical Releases.
+
+## Prerequisites
+
+Enable repository immutable releases only after this build-only Nightly policy is
+merged and reviewed. Create a fresh qualified Stable Draft under the intended
+policy; do not retrofit protected historical v1.5.1-custom.v2.8. GitHub's native
+proof appears after immutable publication, not during Draft preparation.
+
+The existing release App must be installed on this repository. The publisher
+requests only Contents write, Actions read, Attestations read and Administration
+read. Administration read is necessary to check `/immutable-releases` BEFORE
+publication; no Administration write is requested. Grant the App this additional
+read permission and approve the updated installation before using the workflow.
+The shared build/Draft token retains its existing permissions. App keys/tokens
+remain isolated from builds and hardware signing and are revoked after the job.
+
+## Manual operation
+
+After reviewing the complete Draft, trigger **Publish verified Stable Draft** on
+`main` with its exact Release ID, canonical custom Stable tag, and SHA256 of its
+`update-manifest.json` asset. Inputs cannot select Nightly, latest or a protected
+historical 1.5.1 v2.8 release.
+
+Before a write, the workflow verifies:
+
+- repository immutability is already enabled and the reviewed CLI is available;
+- the selected object and manually pinned manifest digest agree;
+- both JSON files and all installer API sizes/digests agree with a valid build
+  proof bound to the trusted main Tag workflow and exact source/run;
+- the Profile is Stable-eligible and its patch hashes are in reviewed history;
+- the real tag resolves to the manifest's custom commit, and its build run was a
+  successful main-branch workflow_dispatch of `tag.yml`;
+- a second full verification finds unchanged Draft identity and asset inventory.
+
+It issues exactly one PATCH to publish the existing object. It does not create,
+move or delete tags, rebuild, sign, overwrite attachments or upload a fake native
+proof. GitHub generates the native Release v0.2 proof. The maintained,
+checksum-pinned gh 2.103.3 verifies its GitHub CA/service identity and TSA evidence;
+additional policy binds numeric owner/repository and Release IDs, tag/purl, the
+actual Git object (including annotated tags) and the exact complete asset set.
+
+## Failure and retry semantics
+
+Only reads retry after publication while GitHub's proof becomes available. A
+transport error on the publication request is recorded as **UNKNOWN**; there is
+no automatic retry of a possibly successful write. Inspect the exact Release ID.
+
+The Actions receipt records publication separately from native verification.
+If publication succeeded but proof verification failed, the workflow fails while
+recording that the Release is already published. Never rebuild, delete, overwrite
+or republish it to make the job green. Rerunning the workflow with the same inputs
+may verify the already immutable object read-only; it does not publish again.
+
+The native proof supplements the existing pre-publication build proof. The public
+`release-attestation.json` asset and current client SLSA consumer are retained;
+GitHub's separately generated **Release attestation (json)** UI entry is not that
+uploaded asset. `update-manifest.json` remains the typed installer selector. Native
+Release provenance does not replace APK v2/v3 signatures or device testing.
+
+## Verification scope
+
+Run `scripts.release.publish_stable_contract` plus affected build/release/router
+contracts. Rust 1.75 native tests include a genuine GitHub Release proof with its
+GitHub service trust root and TSA, alongside signature/digest/root/timestamp
+negative cases. No actual repository setting change or Release publication is
+performed by these tests. The first real manual publication still needs explicit
+user authorization, appropriate installation permissions and post-publication
+verification; passing CI is not that authorization.

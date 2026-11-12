@@ -376,7 +376,7 @@ class ReleaseAppContractTests(unittest.TestCase):
     def test_app_credentials_only_reach_gated_release_steps(self):
         import yaml
         root=Path(__file__).resolve().parents[2]
-        allowed={('tag.yml','draft'),('tag.yml','release'),('tag.yml','publish-existing'),('nightly.yml','draft')}
+        allowed={('tag.yml','draft'),('nightly.yml','draft')}
         found=set()
         for path in (root/'.github/workflows').glob('*.yml'):
             workflow=yaml.safe_load(path.read_text())
@@ -396,7 +396,14 @@ class ReleaseAppContractTests(unittest.TestCase):
                     self.assertNotIn('release-app.outputs.token',str(job.get('env',{})))
                 for step in steps:
                     if '${{ secrets.RELEASE_APP_PRIVATE_KEY }}' in str(step):
-                        self.assertEqual(step.get('uses'),'./.github/actions/release-app-token')
+                        if path.name=='publish-stable.yml':
+                            self.assertEqual(name,'publish')
+                            self.assertIn("github.ref == 'refs/heads/main'",job['if'])
+                            self.assertIn('workflow_dispatch',job['if'])
+                            self.assertEqual(step.get('uses'),'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1')
+                            self.assertEqual(step['with']['permission-administration'],'read')
+                            self.assertNotIn('permission-workflows',step['with'])
+                        else:self.assertEqual(step.get('uses'),'./.github/actions/release-app-token')
             if path.name in ('tag.yml','nightly.yml'):
                 steps=workflow['jobs']['resolve']['steps']
                 check=next(x for x in steps if 'app_credentials.py' in x.get('run',''))

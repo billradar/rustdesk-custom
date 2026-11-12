@@ -61,3 +61,33 @@ fn package_format_uses_actual_owner_and_exact_distro_tokens(){
  assert_eq!(linux_package_format(false,true,false,"ID=not-suse\nID_LIKE=notsuse\n").unwrap(),"rpm");
  for (d,r,w,id) in [(false,false,false,"ID=fedora"),(true,true,false,"ID=fedora"),(false,true,true,"ID=suse"),(false,true,false,""),(false,true,false,"ID=fedora\nID=suse")]{assert!(linux_package_format(d,r,w,id).is_err());}
 }
+
+// GitHub native Release service uses its own CA and mandatory signed TSA evidence.
+// This test does not change the production updater's Actions/Rekor verification policy.
+fn native_fixture_verify(raw:&[u8], digest:&str, identity:&str, github_root:bool)->Result<(),String>{
+ use sigstore_verify::{trust_root::{TrustedRoot,SIGSTORE_GITHUB_TRUSTED_ROOT,SIGSTORE_PRODUCTION_TRUSTED_ROOT},types::{Artifact,Bundle,Sha256Hash},VerificationPolicy};
+ let bundle=Bundle::from_json(std::str::from_utf8(raw).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+ if bundle.verification_material.timestamp_verification_data.rfc3161_timestamps.is_empty(){return Err("Native proof requires GitHub TSA evidence".into());}
+ let root=TrustedRoot::from_json(if github_root{SIGSTORE_GITHUB_TRUSTED_ROOT}else{SIGSTORE_PRODUCTION_TRUSTED_ROOT}).map_err(|e|e.to_string())?;
+ let policy=VerificationPolicy::default().require_identity(identity).skip_tlog().skip_sct();
+ let hash=Sha256Hash::from_hex(digest).map_err(|e|e.to_string())?;
+ sigstore_verify::verify(Artifact::from_digest(hash.as_bytes()),&bundle,&policy,&root).map_err(|e|e.to_string())?;
+ Ok(())
+}
+#[test]
+fn actual_native_release_proof_requires_github_chain_signature_digest_and_tsa(){
+ let raw=fixture("native-release-reference.json");let digest="0915c496189e2130b4cbd754f3de0cefc5b35a74951115d0e0610ce8b89f2534";let signer="https://dotcom.releases.github.com";
+ native_fixture_verify(&raw,digest,signer,true).unwrap();
+ assert!(native_fixture_verify(&raw,&"0".repeat(64),signer,true).is_err());
+ assert!(native_fixture_verify(&raw,digest,"https://other.releases.github.com",true).is_err());
+ assert!(native_fixture_verify(&raw,digest,signer,false).is_err());
+ let value:Value=serde_json::from_slice(&raw).unwrap();
+ let mut missing=value.clone();missing["verificationMaterial"]["timestampVerificationData"]["rfc3161Timestamps"]=json!([]);
+ assert!(native_fixture_verify(&serde_json::to_vec(&missing).unwrap(),digest,signer,true).is_err());
+ for path in ["signature","timestamp"]{
+  let mut changed=value.clone();
+  let field=if path=="signature"{&mut changed["dsseEnvelope"]["signatures"][0]["sig"]}else{&mut changed["verificationMaterial"]["timestampVerificationData"]["rfc3161Timestamps"][0]["signedTimestamp"]};
+  let original=field.as_str().unwrap();let replacement=if original.starts_with('A'){"B"}else{"A"};*field=json!(replacement.to_owned()+&original[1..]);
+  assert!(native_fixture_verify(&serde_json::to_vec(&changed).unwrap(),digest,signer,true).is_err(),"{path}");
+ }
+}

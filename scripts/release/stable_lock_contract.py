@@ -98,7 +98,7 @@ class LockTests(unittest.TestCase):
         self.assertEqual(set(workflow['on']['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland', 'force_retry'})
         self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
         self.assertIs(workflow['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
-        for name in ('aggregate', 'publish-existing', 'release', 'draft'):
+        for name in ('aggregate', 'draft'):
             with self.subTest(job=name):
                 job = jobs[name]
                 self.assertEqual(job['env']['STABLE_LOCK_REQUIRED'], 'true')

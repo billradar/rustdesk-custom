@@ -72,11 +72,11 @@ class WorkflowContract(unittest.TestCase):
             self.assertIn('wayland-build',parent['jobs']['aggregate']['needs'])
             self.assertIn("needs.wayland-build.result == 'success'",parent['jobs']['aggregate']['if'])
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
-        for name in ['aggregate','draft','release']:
+        for name in ['aggregate','draft']:
             job=tag['jobs'][name]
             self.assertIn('INCLUDE_WAYLAND',job['env'])
             self.assertTrue(any('wayland-targets' in x.get('with',{}).get('path','') for x in job['steps']))
-        for name in ['draft','release']:
+        for name in ['draft']:
             for key in ['PATCHSET','UPSTREAM_EXPECTED_SHA','UPSTREAM_VERSION','BUILD_CONFIGURATION']:
                 self.assertIn(key,tag['jobs'][name]['env'])
 

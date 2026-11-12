@@ -224,28 +224,10 @@ class StableRouterContract(unittest.TestCase):
             finally:
                 os.chdir(old_dir)
 
-    def test_stable_direct_release_can_publish_existing_success(self):
-        lock = dict(channel='stable', workflow_run='21',
-                    custom_repository_sha='a'*40, upstream_tag='v1.5.1',
-                    upstream_sha='b'*40, common_patch_hash='c'*64, sos_patch_hash='d'*64)
-        import tempfile
-        with tempfile.TemporaryDirectory() as td:
-            old_dir = os.getcwd()
-            try:
-                os.chdir(td)
-                Path('.work').mkdir()
-                Path('.work/stable-lock.json').write_text(json.dumps(lock))
-                env = dict(GITHUB_REPOSITORY=router.REPOSITORY, GITHUB_REF='refs/heads/main',
-                           GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_NUMBER='21',
-                           GITHUB_RUN_ID='21', GITHUB_SHA='a'*40, RELEASE_MODE='release',
-                           GITHUB_OUTPUT=str(Path(td)/'out'))
-                with patch.dict(os.environ, env), patch.object(router, 'workflow_runs',
-                     return_value=[{'status':'completed', 'conclusion':'success'}]):
-                    router.dedup()
-                self.assertIn('skip=false', Path(td, 'out').read_text())
-            finally:
-                os.chdir(old_dir)
-
+    def test_stable_release_dispatch_is_rejected_before_history_lookup(self):
+        with patch.dict(os.environ,GITHUB_REPOSITORY=router.REPOSITORY,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',RELEASE_MODE='release'),patch.object(router,'workflow_runs') as read:
+            with self.assertRaisesRegex(ValueError,'mode'):router.dedup()
+            read.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

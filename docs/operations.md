@@ -61,10 +61,10 @@ python3 scripts/validation/repository_contract.py
 ### Stable
 
 1. 打开 **Stable Release Pipeline**（`.github/workflows/tag.yml`）。
-2. `upstream_ref` 填官方 Stable tag（例如 `1.5.1` 或仓库实际使用的 `v1.5.1` 格式）；留空表示自动解析当前官方 Stable。以工作流解析结果中的版本和 SHA 为准。
+2. `upstream_ref` 填官方 Stable tag（例如当前已准入的 `1.5.3`）；留空表示自动解析当前官方 Stable。以工作流解析结果中的版本和 SHA 为准。
 3. `include_wayland` 默认开启；启用时两个 Wayland DEB 会参与验证并随发布附加。该变体仍是实验性构建。
-4. 初次验证使用 `dry-run`。确认来源 SHA、patchset、revision、必需平台和聚合资格均匹配后，选择 `draft` 创建 GitHub Draft Release；只有明确准备公开发布时才选择 `release`。
-5. 正式发布会重新校验准确身份和远端资产。若已有完整、身份完全匹配的 Draft，流程会复核后发布该 Draft；不匹配或不完整时会停止，不能通过删 Release、改身份字段或手动覆盖资产来绕过。
+4. 初次验证使用 `dry-run`。确认来源 SHA、patchset、revision、必需平台和聚合资格均匹配后，选择 `draft` 创建 GitHub Draft Release；构建流没有 `release` 模式。
+5. 正式发布由你手动触发独立的 `publish-stable.yml`，填写准确 Draft ID、Tag 和 manifest SHA256；它会重新校验准确身份和远端资产。若已有完整、身份完全匹配的 Draft，流程会复核后发布该 Draft；不匹配或不完整时会停止，不能通过删 Release、改身份字段或手动覆盖资产来绕过。
 
 Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方最新 Stable；只有版本高于仓库中最近一个已完成 Stable 版本时，才自动路由到 `main` 上的签名私有 Draft 构建。手动运行默认遵守同一版本门槛；显式勾选 `allow_same_version` 后，可让同版本继续经过发布预检，仍会跳过身份完全相同的已完成构建。路由会核对完整资产清单和摘要，不会公开发布。
 
@@ -74,10 +74,10 @@ Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方�
 2. Nightly 自动 Router 的构建标题展示官方版本、上游 SHA 前 8 位、Patchset 名称与组合 SHA-256 前 8 位、Coordinator Lite Build Identity 前 8 位。它们只用于显示；去重始终使用完整身份。手动直接运行 `nightly.yml` 时 `display_label` 留空，保留 `Nightly latest / 定制仓库 SHA` 形式；若 Router 传来的展示标签与实际解析结果不符，构建会在解析阶段停止。
 
 2. 手动构建时运行 **Nightly Build Pipeline**（`.github/workflows/nightly.yml`），选择 `main` 分支。手动和自动均选择启动时最新成功的官方 `flutter-nightly.yml` 运行，不再提供 `official_run_id`、`expected_sha` 输入。解析阶段记录运行 ID 并锁定完整源码 SHA，后续各阶段共用该 SHA。
-3. `release_mode` 选 `dry-run` 做无发布验证，`draft` 创建私有 prerelease Draft，`release` 仅用于明确公开已验证的 Nightly prerelease。生产模式要求所有平台与 Android 生产签名门禁通过。`include_wayland` 默认开启。
+3. `release_mode` 选 `dry-run` 做无发布验证，`draft` 创建私有 prerelease Draft；Nightly 的公开发布已屏蔽。生产模式要求所有平台与 Android 生产签名门禁通过。`include_wayland` 默认开启。
 4. development 分支只允许 `dry-run`，用于开发验证；不得把 development 的构建结果当作 main 的发布资格。
 5. 上游 SHA、按上游版本选择的 patchset 及 Common/SOS 补丁哈希、模式、Wayland 策略和签名模式都相同时，重复 Nightly 会跳过；自定义提交 SHA 和官方运行 ID 只作来源记录。自动失败最多尝试三次；达到上限后先读日志并定位首个失败步骤，再决定是否修复后重跑。不要为了强制重建而更改历史记录或伪造 SHA。
-6. Nightly `release` 会先要求存在身份和资产均匹配的完整 Draft，再发布为公开 prerelease。Draft 不完整或身份不一致时流程停止；不能手动补造 `automation_state=complete` 或用旧批次产物拼装。
+6. Nightly 只生成私有 Draft，不进入原生证明发布流程。已有公开 Nightly 不会被隐藏、删除或替换。
 
 ### Wayland 变体
 
@@ -113,3 +113,5 @@ Stable router（`.github/workflows/upstream-stable.yml`）每小时发现官方�
 - 仅有明确 SDK 安装下载异常、runner 关闭或容量不足证据的失败构建目标可自动恢复；普通编译错误、未知故障、来源准备/校验任务、签名和发布任务不直接重试。public `release` 模式及整个运行被取消时不自动恢复。已上传有效产物的失败目标也交由人工处理，避免重传冲突。
 - 每次结束最多请求重跑一个受影响的叶子 Job，以及 GitHub 定义的依赖任务；整个运行最多 3 个 attempt（初次 + 2 次恢复）。成功的其他目标、固定源码和来源锁沿用原运行；依赖的签名、聚合和 Draft 仍执行原有保护和校验。多个目标同时故障或次数耗尽时，查看报告并人工决定后续操作。
 - 仓库变量 `BUILD_INFRA_AUTO_RETRY_ENABLED=false` 可关闭自动恢复，继续保留报告。新增 workflow 需合并到 main 后才生效，不会主动重跑历史运行。本次改动不自动派发生产构建、签名或发布。
+
+手动 Stable 发布的权限、精确输入及失败后处理见 [独立发布工作流](manual-stable-publication.md)。

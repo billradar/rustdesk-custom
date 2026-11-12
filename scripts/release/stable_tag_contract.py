@@ -83,7 +83,6 @@ class StableTagTests(unittest.TestCase):
 
     def test_only_stable_paths_create_tags_after_asset_checks(self):
         for file,function,gate in [('qualification.py','_release','uploaded!=expected_assets'),
-                                   ('qualification.py','publish_existing_draft',"read_release(existing,'stable',dict("),
                                    ('channel.py','draft','!=expected:')]:
             source=(ROOT/'scripts/release'/file).read_text()
             tree=ast.parse(source)

@@ -401,6 +401,8 @@ def build_release_body(official_body, patchset=None):
     return body.rstrip()+'\n'
 
 def _release(root, publish, channel='stable', experimental=False):
+    if publish:
+        raise ValueError('Build pipelines create Drafts only; use publish-stable.yml')
     if channel != 'stable':
         raise ValueError('Only Stable supports public release publication; Nightly uses its separate draft path')
     from scripts.upstream.resolve import api
@@ -463,64 +465,20 @@ def _release(root, publish, channel='stable', experimental=False):
     # metadata to the already verified immutable ref without publishing it.
     final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',
                   {'tag_name':tag,'target_commitish':standard['custom_repository_sha'],
-                   'draft':not publish,'prerelease':False,'body':final_body})
-    if (final.get('draft') is not (not publish) or final.get('prerelease') is not False
+                   'draft':True,'prerelease':False,'body':final_body})
+    if (final.get('draft') is not True or final.get('prerelease') is not False
             or final.get('tag_name') != tag):
         raise ValueError('Stable Release state or tag association mismatch')
 
 def publish_existing_draft(channel='stable'):
-    from scripts.release.stable_lock import require
-    require()
-    if channel != 'stable':
-        raise ValueError('Only Stable supports publishing an existing completed draft')
-    from scripts.release.github import request
-    from scripts.upstream.patchsets import patch_hash
-    repo='billradar/rustdesk-custom'
-    if os.environ.get('GITHUB_REPOSITORY') != repo:
-        raise ValueError('Wrong release repository')
-    tag=os.environ.get('RELEASE_TAG','')
-    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}',tag):
-        raise ValueError('Invalid existing Stable release tag')
-    from scripts.release.channel import matching_drafts
-    drafts=matching_drafts(tag)
-    if len(drafts) != 1:
-        raise ValueError('Expected exactly one existing Stable draft')
-    existing=drafts[0]
-    if not existing.get('draft') or existing.get('prerelease'):
-        raise ValueError('Existing release is not a publishable Stable draft')
-    identity=os.environ.get('BUILD_IDENTITY','')
-    upstream_sha=os.environ.get('UPSTREAM_SHA','')
-    custom_sha=os.environ.get('CUSTOM_REPOSITORY_SHA','')
-    patchset=os.environ.get('PATCHSET','')
-    wayland=os.environ.get('WAYLAND_INCLUDED','false').lower()
-    policy=os.environ.get('WAYLAND_POLICY_SHA256','')
-    if (not re.fullmatch(r'[0-9a-f]{64}',identity)
-            or not re.fullmatch(r'[0-9a-f]{40}',upstream_sha)
-            or not re.fullmatch(r'[0-9a-f]{40}',custom_sha)
-            or wayland not in ('true','false')):
-        raise ValueError('Existing Stable publication requires a complete preflight identity')
-    from scripts.release.attestation import read_release
-    read_release(existing,'stable',dict(build_identity=identity,upstream_sha=upstream_sha,
-                 custom_repository_sha=custom_sha,patchset=patchset,wayland_included=wayland=='true',
-                 wayland_policy_sha256=policy,common_patch_hash=patch_hash('common',patchset),
-                 sos_patch_hash=patch_hash('sos',patchset)),tag=tag)
-    from scripts.release.stable_tag import ensure
-    ensure(repo,tag,custom_sha)
-    final=request(
-        'PATCH',
-        f'repos/{repo}/releases/{existing["id"]}',
-        {'tag_name':tag,'target_commitish':custom_sha,'draft':False,'prerelease':False}
-    )
-    if final.get('draft') is not False:
-        raise ValueError('Existing Stable draft publication failed')
-    print(f'Published existing Stable draft: {tag}')
+    raise ValueError('Build pipelines cannot publish; use publish-stable.yml')
 
 def draft(root, channel='stable', experimental=False): _release(root, False, channel, experimental)
 def release(root, channel='stable', experimental=False): _release(root, True, channel, experimental)
 
 if __name__=='__main__':
     a=argparse.ArgumentParser()
-    a.add_argument('mode',choices=['check','plan','aggregate','draft','release','publish-existing','lookup','verify-ci'])
+    a.add_argument('mode',choices=['check','plan','aggregate','draft','lookup','verify-ci'])
     a.add_argument('--channel',choices=['stable','nightly'],default='stable')
     a.add_argument('--experimental',action='store_true')
     a.add_argument('--root',type=Path,default=Path('.work/all-targets'))
@@ -541,8 +499,6 @@ if __name__=='__main__':
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:
                 f.write('matrix='+json.dumps({'include':extra},separators=(',',':'))+'\ncount='+str(len(extra))+'\n')
     elif a.mode=='draft':draft(a.root,a.channel,a.experimental)
-    elif a.mode=='release':release(a.root,a.channel,a.experimental)
-    elif a.mode=='publish-existing':publish_existing_draft(a.channel)
     elif a.mode=='lookup':
         if not all((a.custom_sha,a.upstream_sha,a.upstream_ref,a.patchset)):
             raise SystemExit('lookup requires --custom-sha, --upstream-sha, --upstream-ref and --patchset')

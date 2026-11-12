@@ -340,13 +340,13 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertNotIn('queue', jobs['android-sign'].get('concurrency', {}))
-        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertIn('wayland_included',jobs['draft-preflight']['outputs'])
-        self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
-        self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
+        self.assertNotIn('publish-existing',jobs)
+        self.assertNotIn('release',jobs)
         self.assertIn('inputs.upstream_ref',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
@@ -357,11 +357,10 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertNotIn('windows_only',jobs[name].get('with',{}))
             self.assertNotIn('other_platforms_only',jobs[name].get('with',{}))
             self.assertNotIn('android_only',jobs[name].get('with',{}))
-        self.assertEqual(jobs['release']['needs'],'aggregate')
         self.assertEqual(jobs['draft']['needs'],'aggregate')
         self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
         self.assertIn('--discovery-only',next(s for s in jobs['resolve']['steps'] if s.get('id')=='resolve')['run'])
-        for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
+        for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','draft'):
             self.assertNotIn('qualification',str(jobs[name].get('needs',[])))
 
     def test_windows_validation_receives_preflight_patch_revision(self):

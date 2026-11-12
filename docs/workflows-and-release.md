@@ -185,14 +185,12 @@ v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口
 `nightly-qualification-<run-id>` Actions 产物中；单目标失败不会发布完整批次。
 Nightly 的 `release_mode` 默认 `draft`：仓库变量开启时，主分支的直接签名 job 绑定 Android
 生产签名 Environment 与 YubiKey，全部构建和签名验证通过后创建 prerelease Draft。变量关闭或未设置时，跳过签名并在来源验证后附带未签名 APK。
-普通构建 job 不接触 PIN，Draft job 也不接触 PIN；公开 Nightly 预发布版只能通过明确选择
-`release` 手动触发。
+普通构建 job 不接触 PIN，Draft job 也不接触 PIN；Nightly 公开发布已屏蔽，只保留 dry-run 和 Draft。
 `dry-run` 跳过签名和草稿，汇总原始测试签名 APK，支持在 development 验证。
 所有 Nightly 输出只使用固定的 `nightly` Git tag 和最新一份 Release，不为每天创建独立历史 Tag。
 全矩阵、签名、来源和校验和验证通过后，首次创建 Draft 会明确创建真实的 `refs/tags/nightly`；
 已有该 ref 时使用 GitHub 的 `PATCH force=true` 直接移动到本次自定义仓库提交，绝不采用先删除 Git Tag 再创建的方式。
-之后清除旧 assets，上传并验证新产物；
-替换期间先把 Release 暂设为 Draft，验证完成后按 `release_mode` 保持 Draft 或公开为 prerelease。
+只有经过归属和证明验证的旧私有 Draft 才能刷新；公开 Release 不会被隐藏或替换。新产物上传验证后仍保留 Draft。
 刷新私有 Draft 时 Release ID 及 `untagged-*` 下载 URL 可以变化，不保证固定；构建或验证失败时不会开始替换；身份、tag 所有权或远端
 资产校验不符合预期时停止。相同来源与构建配置仍按去重规则跳过，不重复构建。
 运行时与真实远程连接状态保持未测试，构建成功不能证明锁屏兼容。
@@ -202,15 +200,14 @@ Nightly 的 `release_mode` 默认 `draft`：仓库变量开启时，主分支的
 ### Nightly signing and Draft contract
 
 The user explicitly requested Tag-equivalent signing and Draft stages. The router
-requests `release_mode=draft`; public prerelease requires an explicit manual
-`release_mode=release` dispatch. Signing and release writes are restricted to
+requests `release_mode=draft`; public Nightly publication is disabled. Signing and release writes are restricted to
 repository main, the exact Nightly workflow reference and workflow_dispatch;
 development must use dry-run. The direct Android signing job shares Tag's Environment, runner labels,
 PIV identity, v2/v3 requirements and physical-key concurrency lock. The input APK
 channel must match `SIGNING_CHANNEL`; Nightly receipts also record the channel.
 
 The complete parent aggregate requires all three production-signed Android ABIs
-in Draft and release modes when signing is enabled. If it is disabled, the aggregate
+in Draft mode when signing is enabled. If it is disabled, the aggregate
 uses validated unsigned Android build artifacts instead. A separate contents-write job downloads the exact
 same-run Android packages and optional Wayland pair and revalidates them before any
 write. It scans completed build logs, then refreshes the fixed `nightly` tag and
@@ -218,11 +215,8 @@ Release only after validation succeeds. Refreshing a private Draft first recheck
 workflow ownership, unchanged metadata and Draft state, then deletes it and creates a
 new Release ID; even an exact matching Draft is not reused in draft mode. The moving
 Git tag is retained and moved to the validated custom build commit when needed.
-New packages and SHA256SUMS are uploaded and verified by name, size and digest.
-Draft mode refuses to hide/delete an already public canonical Nightly release;
-explicit release mode retains its existing publication/promotion checks.
-Only then is automation_state marked complete and the Release left as a Draft or
-published prerelease according to the selected mode. A release-write concurrency
+New packages and both attested JSON files are uploaded and verified by name, size and digest.
+Nightly refuses to hide/delete an already public canonical Release. Verified output remains a private Draft, with identity in attested JSON; no public mode or native proof generation is available. A release-write concurrency
 lock prevents overlapping builds from replacing each other's assets. Windows/macOS
 signing status remains the same as Tag (not enabled).
 
@@ -329,3 +323,5 @@ remain in repository records and JSON. Legacy schema-v1/checksum/body-only objec
 fail closed and require explicit review; existing historical Releases are not
 silently rewritten. Current v3.3 clients consume the same attested selectors;
 historical clients need a manual upgrade. See [Client updates](client-updates.md).
+
+Stable 的构建流同样只保留 dry-run/Draft。公开发布由手动触发的 [publish-stable.yml](manual-stable-publication.md) 完成；它核验并发布指定 Draft，不重新构建或上传附件。
