@@ -317,3 +317,15 @@ Stable Tag 创建 API 成功后，读取 API 可能短暂返回 404（运行 431
 “引用暂不可见”，不重复 POST、不移动引用。出现错误 SHA、无效响应、权限
 或其他 API 错误立即失败；超过次数仍不可见也失败，不以 POST 成功代替验证。
 已有 Draft/Tag 不应通过重跑整套 CD、删除或覆盖来恢复，必须先核对实际状态。
+
+### Attested JSON and human release notes
+
+New release automation uses schema-v2 `update-manifest.json` for build identity,
+options and installer inventory; `release-attestation.json` binds its exact bytes.
+Stable preflight/promotion and Nightly reuse/ownership/cleanup verify these assets,
+not Release body markers. Body contains upstream notes and human customization
+changes only. Detailed patch hashes, audit limitations and compatibility records
+remain in repository records and JSON. Legacy schema-v1/checksum/body-only objects
+fail closed and require explicit review; existing historical Releases are not
+silently rewritten. Current v3.3 clients consume the same attested selectors;
+historical clients need a manual upgrade. See [Client updates](client-updates.md).

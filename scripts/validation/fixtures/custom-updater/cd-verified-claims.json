@@ -1,0 +1,99 @@
+[
+  {
+    "verificationResult": {
+      "mediaType": "application/vnd.dev.sigstore.verificationresult+json;version=0.1",
+      "signature": {
+        "certificate": {
+          "buildConfigDigest": "c1d6942ee173979a8d73c393a7ceb12abda20186",
+          "buildConfigURI": "https://github.com/billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main",
+          "buildSignerDigest": "c1d6942ee173979a8d73c393a7ceb12abda20186",
+          "buildSignerURI": "https://github.com/billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main",
+          "buildTrigger": "workflow_dispatch",
+          "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
+          "githubWorkflowName": "Stable Release Pipeline",
+          "githubWorkflowRef": "refs/heads/main",
+          "githubWorkflowRepository": "billradar/rustdesk-custom",
+          "githubWorkflowSHA": "c1d6942ee173979a8d73c393a7ceb12abda20186",
+          "githubWorkflowTrigger": "workflow_dispatch",
+          "issuer": "https://token.actions.githubusercontent.com",
+          "runInvocationURI": "https://github.com/billradar/rustdesk-custom/actions/runs/43146078797/attempts/1",
+          "runnerEnvironment": "github-hosted",
+          "sourceRepositoryDigest": "c1d6942ee173979a8d73c393a7ceb12abda20186",
+          "sourceRepositoryIdentifier": "1399548376",
+          "sourceRepositoryOwnerIdentifier": "56966687",
+          "sourceRepositoryOwnerURI": "https://github.com/billradar",
+          "sourceRepositoryRef": "refs/heads/main",
+          "sourceRepositoryURI": "https://github.com/billradar/rustdesk-custom",
+          "sourceRepositoryVisibilityAtSigning": "public",
+          "subjectAlternativeName": "https://github.com/billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main"
+        }
+      },
+      "statement": {
+        "_type": "https://in-toto.io/Statement/v1",
+        "predicate": {
+          "buildDefinition": {
+            "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+            "externalParameters": {
+              "workflow": {
+                "path": ".github/workflows/tag.yml",
+                "ref": "refs/heads/main",
+                "repository": "https://github.com/billradar/rustdesk-custom"
+              }
+            },
+            "internalParameters": {
+              "github": {
+                "event_name": "workflow_dispatch",
+                "repository_id": "1399548376",
+                "repository_owner_id": "56966687",
+                "runner_environment": "github-hosted"
+              }
+            },
+            "resolvedDependencies": [
+              {
+                "digest": {
+                  "gitCommit": "c1d6942ee173979a8d73c393a7ceb12abda20186"
+                },
+                "uri": "git+https://github.com/billradar/rustdesk-custom@refs/heads/main"
+              }
+            ]
+          },
+          "runDetails": {
+            "builder": {
+              "id": "https://github.com/billradar/rustdesk-custom/.github/workflows/tag.yml@refs/heads/main"
+            },
+            "metadata": {
+              "invocationId": "https://github.com/billradar/rustdesk-custom/actions/runs/43146078797/attempts/1"
+            }
+          }
+        },
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "subject": [
+          {
+            "digest": {
+              "sha256": "b084ce3f5807791cffefe9e34b561f7f76d04c8752458ca252265a284d2a35c4"
+            },
+            "name": "update-manifest.json"
+          }
+        ]
+      },
+      "verifiedIdentity": {
+        "issuer": {
+          "issuer": "",
+          "regexp": ".*"
+        },
+        "runnerEnvironment": "github-hosted",
+        "subjectAlternativeName": {
+          "regexp": "^https://github\\.com/billradar/rustdesk-custom/\\.github/workflows/tag\\.yml(@(refs/.*|[0-9a-fA-F]+))?$",
+          "subjectAlternativeName": ""
+        }
+      },
+      "verifiedTimestamps": [
+        {
+          "timestamp": "2026-11-12T04:31:47Z",
+          "type": "Tlog",
+          "uri": "https://rekor.sigstore.dev"
+        }
+      ]
+    }
+  }
+]

@@ -44,11 +44,11 @@ class ProfileContract(unittest.TestCase):
         from scripts.source.update_identity import write_identity, ABOUT_PATH
         data = dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
                     upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef')
-        with patch.dict(os.environ,GITHUB_SHA='b'*40,GITHUB_RUN_ID='42',INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'):
+        with patch.dict(os.environ,GITHUB_SHA='b'*40,GITHUB_RUN_ID='42',GITHUB_REPOSITORY_ID='1399548376',GITHUB_REPOSITORY_OWNER_ID='56966687',INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'):
             lock = stable_lock.plan(data,'v3')
             with patch.object(channel,'api',side_effect=AssertionError('dry-run must not inspect or write Releases')):
                 result = channel.release_preflight(dict(lock),dry_run=True)
-            self.assertEqual(result['patch_revision'],'v3.2')
+            self.assertEqual(result['patch_revision'],'v3.3')
             self.assertTrue(result['build_needed']);self.assertFalse(result['draft_needed'])
             self.assertFalse(result['publish_existing'])
             with tempfile.TemporaryDirectory() as td:
@@ -56,9 +56,14 @@ class ProfileContract(unittest.TestCase):
                 (tree/'src/custom_update/build.json').write_text('{}')
                 (tree/ABOUT_PATH).parent.mkdir(parents=True);(tree/ABOUT_PATH).write_text('')
                 identity=write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
-                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.2')
-                self.assertEqual(identity['revision'],'v3.2')
-                self.assertEqual(identity['patchset_version'],'v3.2')
+                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.3')
+                self.assertEqual(identity['repository_id'],'1399548376')
+                self.assertEqual(identity['repository_owner_id'],'56966687')
+                with patch.dict(os.environ,GITHUB_REPOSITORY_ID=''):
+                    with self.assertRaisesRegex(ValueError,'numeric GitHub'):
+                        write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.3')
+                self.assertEqual(identity['revision'],'v3.3')
+                self.assertEqual(identity['patchset_version'],'v3.3')
                 with self.assertRaises(ValueError):
                     write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
                                    sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v2.8')

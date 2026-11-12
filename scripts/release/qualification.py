@@ -56,7 +56,7 @@ def stage_assets(packages, directory):
             shutil.copyfileobj(reader,writer)
 
 
-def aggregate(root,channel,experimental):
+def aggregate(root,channel,experimental, *, release_context=None):
     from scripts.platform.platform_package import validate
     from scripts.release.github import validate as windows_validate
     from scripts.release.channel import validate_prepared
@@ -114,6 +114,7 @@ def aggregate(root,channel,experimental):
             'channel':channel,'upstream_sha':os.environ['UPSTREAM_EXPECTED_SHA'],'patchset':os.environ['PATCHSET'],
             'build_run':os.environ['GITHUB_RUN_ID'],'custom_repository_sha':os.environ['GITHUB_SHA'],
             'runtime_ui':'SKIPPED BY USER','real_remote_session':'NOT TESTED','code_signing':'DESKTOP NOT ENABLED; ANDROID '+('PRODUCTION IDENTITY VERIFIED' if android_signed else 'NOT ENABLED')}
+    if release_context:report.update(release_context)
     out=ROOT/'.work/qualification-aggregate';out.mkdir(parents=True,exist_ok=True)
     (out/'aggregate.json').write_text(json.dumps(report,indent=2)+'\n')
     rows=[]
@@ -390,14 +391,14 @@ def release_notes_body(upstream_tag):
     release=api(f'repos/rustdesk/rustdesk/releases/tags/{tag}',missing=True)
     return normalize_release_body(release.get('body') if release else '')
 
-def build_release_body(official_body, metadata, patchset=None):
+def build_release_body(official_body, patchset=None):
     body=normalize_release_body(official_body)
     if not body:
         raise ValueError('Official release body is unavailable')
     if patchset:
         from scripts.release.content import notes
         body += '\n\n' + notes(patchset)
-    return body+'\n\n## Custom release metadata\n\n'+'\n'.join(metadata)+'\n'
+    return body.rstrip()+'\n'
 
 def _release(root, publish, channel='stable', experimental=False):
     if channel != 'stable':
@@ -434,42 +435,7 @@ def _release(root, publish, channel='stable', experimental=False):
     from scripts.release.attestation import attach
     attach(directory, 'stable')
     official_notes=release_notes_body(standard['upstream_tag'] or standard['upstream_version'])
-    from scripts.release.channel import build_identity
-    wayland_included=os.environ.get('INCLUDE_WAYLAND') == 'true'
-    wayland_policy=report.get('wayland',{}).get('policy_sha256','')
-    identity=build_identity(standard['upstream_sha'],standard['patchset'],standard['common_patch_hash'],
-                            sos['sos_patch_hash'],standard['custom_repository_sha'],wayland_included,wayland_policy,
-                            os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING','false').lower()=='true')
-    metadata=[
-        'upstream_repository=rustdesk/rustdesk',
-        f'upstream_tag={standard["upstream_tag"]}',
-        f'upstream_sha={standard["upstream_sha"]}',
-        f'patchset={standard["patchset"]}',
-        f'patchset_version={expected_content_revision}',
-        'version_semantics=patchset-content-v1',
-        f'common_patch_hash={standard["common_patch_hash"]}',
-        f'sos_patch_hash={sos["sos_patch_hash"]}',
-        f'custom_repository_sha={standard["custom_repository_sha"]}',
-        f'wayland_included={str(wayland_included).lower()}',
-        f'build_identity={identity}',
-        f'custom_release_revision={standard["patch_revision"]}',
-        f'prepare_run={standard["prepare_run"]}',
-        f'build_run={standard["build_run"]}',
-        'required_targets='+','.join(sorted(report['targets'])),
-        'asset_inventory='+json.dumps(sorted(p.name for p in directory.iterdir()),separators=(',',':')),
-        'build_package_checksum_architecture_provenance=PASS',
-        'runtime_ui_validation=SKIPPED BY USER',
-        'real_remote_session_validation=NOT TESTED',
-        'desktop_code_signing=NOT ENABLED',
-        'android_signing='+('PRODUCTION SIGNED / IDENTITY VERIFIED' if android_signed else 'NOT ENABLED'),
-        'password_security_v2=DEFERRED',
-        'release_policy='+('PUBLISHED RELEASE' if publish else 'DRAFT ONLY; publication is a manual user decision'),
-        'automation_state=complete',
-    ]
-    if 'wayland' in report:
-        metadata += ['wayland_policy_sha256=' + report['wayland']['policy_sha256'],
-                     'wayland_scope=EXPERIMENTAL BUILD AND PACKAGE ONLY; RUNTIME NOT TESTED']
-    notes=build_release_body(official_notes, metadata, standard['patchset'])
+    notes=build_release_body(official_notes,standard['patchset'])
     result=request('POST',f'repos/{repo}/releases',{'tag_name':tag,'target_commitish':standard['custom_repository_sha'],'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,sorted(directory.iterdir())),'--repo',repo)
     expected_assets={p.name:p.stat().st_size for p in directory.iterdir()}
@@ -493,10 +459,6 @@ def _release(root, publish, channel='stable', experimental=False):
     from scripts.release.stable_tag import ensure
     ensure(repo,tag,standard['custom_repository_sha'])
     final_body=notes
-    if publish:
-        if 'automation_state=complete' not in final_body:
-            raise ValueError('New release body missing automation_state=complete marker')
-        final_body=final_body.replace('automation_state=complete','automation_state=published',1)
     # Draft URLs may remain untagged-* in GitHub's UI. Bind the actual release
     # metadata to the already verified immutable ref without publishing it.
     final=request('PATCH',f'repos/{repo}/releases/{result["id"]}',
@@ -519,21 +481,13 @@ def publish_existing_draft(channel='stable'):
     tag=os.environ.get('RELEASE_TAG','')
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}',tag):
         raise ValueError('Invalid existing Stable release tag')
-    from scripts.release.channel import matching_drafts, verify_release_asset_attestation
+    from scripts.release.channel import matching_drafts
     drafts=matching_drafts(tag)
     if len(drafts) != 1:
         raise ValueError('Expected exactly one existing Stable draft')
     existing=drafts[0]
-    body=existing.get('body') or ''
     if not existing.get('draft') or existing.get('prerelease'):
-        raise ValueError('Existing release is not a publishable draft')
-    if 'Automation-State: complete' not in body and 'automation_state=complete' not in body:
-        raise ValueError('Existing draft is not marked complete')
-    if 'automation_state=complete' in body:
-        if 'build_package_checksum_architecture_provenance=PASS' not in body:
-            raise ValueError('Existing draft missing complete aggregate marker')
-    elif 'Build / Package / Checksum / Architecture / Provenance: PASS' not in body:
-        raise ValueError('Existing draft missing complete aggregate marker')
+        raise ValueError('Existing release is not a publishable Stable draft')
     identity=os.environ.get('BUILD_IDENTITY','')
     upstream_sha=os.environ.get('UPSTREAM_SHA','')
     custom_sha=os.environ.get('CUSTOM_REPOSITORY_SHA','')
@@ -545,38 +499,17 @@ def publish_existing_draft(channel='stable'):
             or not re.fullmatch(r'[0-9a-f]{40}',custom_sha)
             or wayland not in ('true','false')):
         raise ValueError('Existing Stable publication requires a complete preflight identity')
-    required_metadata={
-        'build_identity='+identity,
-        'upstream_sha='+upstream_sha,
-        'custom_repository_sha='+custom_sha,
-        'patchset='+patchset,
-        'common_patch_hash='+patch_hash('common',patchset),
-        'sos_patch_hash='+patch_hash('sos',patchset),
-        'wayland_included='+wayland,
-    }
-    if wayland=='true':
-        if not re.fullmatch(r'[0-9a-f]{64}',policy):
-            raise ValueError('Existing Stable publication missing Wayland policy identity')
-        required_metadata.add('wayland_policy_sha256='+policy)
-    if not required_metadata.issubset(set(body.splitlines())):
-        raise ValueError('Existing Stable draft identity differs from the release preflight')
-    try:
-        inventory_line=next(line for line in body.splitlines() if line.startswith('asset_inventory='))
-        inventory=json.loads(inventory_line.split('=',1)[1])
-    except (StopIteration,IndexError,json.JSONDecodeError):
-        raise ValueError('Existing Stable draft is missing its asset inventory')
-    assets=existing.get('assets',[])
-    uploaded={asset['name'] for asset in assets if asset.get('state')=='uploaded'}
-    if (len(inventory)!=len(set(inventory)) or set(inventory)!=uploaded or len(assets)!=len(uploaded)
-            or any(not re.fullmatch(r'sha256:[0-9a-f]{64}',asset.get('digest','')) or asset.get('size',0)<=0 for asset in assets)):
-        raise ValueError('Existing Stable draft asset inventory/digests are incomplete')
-    verify_release_asset_attestation(tag,assets,dict(upstream_sha=upstream_sha,custom_repository_sha=custom_sha,patchset=patchset,common_patch_hash=patch_hash('common',patchset),sos_patch_hash=patch_hash('sos',patchset)))
+    from scripts.release.attestation import read_release
+    read_release(existing,'stable',dict(build_identity=identity,upstream_sha=upstream_sha,
+                 custom_repository_sha=custom_sha,patchset=patchset,wayland_included=wayland=='true',
+                 wayland_policy_sha256=policy,common_patch_hash=patch_hash('common',patchset),
+                 sos_patch_hash=patch_hash('sos',patchset)),tag=tag)
     from scripts.release.stable_tag import ensure
     ensure(repo,tag,custom_sha)
     final=request(
         'PATCH',
         f'repos/{repo}/releases/{existing["id"]}',
-        {'draft':False,'prerelease':False,'body':(body.replace('automation_state=complete','automation_state=published',1) if 'automation_state=complete' in body else body.rstrip()+'\nAutomation-State: published\n')}
+        {'tag_name':tag,'target_commitish':custom_sha,'draft':False,'prerelease':False}
     )
     if final.get('draft') is not False:
         raise ValueError('Existing Stable draft publication failed')

@@ -29,6 +29,11 @@ def source_contract(tree, generation="v2"):
     policy = (tree / "src/custom_update/policy.rs").read_text(encoding='utf-8')
     if policy != patch_file(generation, "src/custom_update/policy.rs"):
         raise ValueError("Client update package policy differs from selected patchset")
+    if generation == 'v3':
+        for name in ('Cargo.toml','Cargo.lock','src/lib.rs'):
+            relative='libs/custom_update_manifest/'+name
+            if (tree/relative).read_text()!=patch_file(generation,relative):
+                raise ValueError('Native update verifier differs from reviewed patch')
     ffi = (tree / "src/flutter_ffi.rs").read_text(encoding='utf-8')
     home = (tree / "flutter/lib/desktop/pages/desktop_home_page.dart").read_text(encoding='utf-8')
     if "custom_update::response(&key)" not in ffi or "showCustomUpdateDialog();" not in home:
@@ -42,14 +47,14 @@ class ClientUpdateTests(unittest.TestCase):
                      "flutter/lib/common/widgets/custom_update.dart"):
             self.assertEqual(patch_file("v1", name), patch_file("v2", name))
 
-    def test_v3_changes_only_the_rpm_package_selector_in_update_policy(self):
-        old=patch_file('v2','src/custom_update/policy.rs')
-        start=old.index('            let rpm_arch =')
-        end=old.index('            let tail =',start)
-        expected=(old[:start]+old[end:]).replace('-linux-{arch}-0.{rpm_arch}{tail}', '-linux-{arch}{tail}')
-        self.assertEqual(patch_file('v3','src/custom_update/policy.rs'),expected)
-        for name in ('src/custom_update/mod.rs','src/custom_update/stable_release_fixture.txt','flutter/lib/common/widgets/custom_update.dart'):
-            self.assertEqual(patch_file('v3',name),patch_file('v2',name))
+    def test_v3_uses_native_attested_json_without_body_fallback(self):
+        module=patch_file('v3','src/custom_update/mod.rs')
+        self.assertIn('verified_manifest',module)
+        self.assertIn('rustdesk_update_manifest',module)
+        self.assertNotIn('body: String',module)
+        self.assertNotIn('metadata_source',patch_file('v3','src/custom_update/policy.rs'))
+        self.assertIn('sigstore-verify = { version = "=0.11.0"',patch_file('v3','libs/custom_update_manifest/Cargo.toml'))
+        self.assertEqual(patch_file('v3','flutter/lib/common/widgets/custom_update.dart'),patch_file('v2','flutter/lib/common/widgets/custom_update.dart'))
 
     def test_publisher_names_match_executed_client_selectors_for_all_packages(self):
         compiler=RUSTC or shutil.which('rustc')
@@ -83,13 +88,10 @@ class ClientUpdateTests(unittest.TestCase):
                 self.assertEqual(build.returncode,0,build.stderr)
                 subprocess.run([str(tree/'driver')],check=True,capture_output=True)
 
-    def test_parser_fixture_is_generated_by_the_real_stable_publisher(self):
-        actual = build_release_body(
-            "Official release notes used by the producer/consumer regression.", [
-                "upstream_repository=rustdesk/rustdesk", "upstream_tag=1.5.1",
-                "upstream_sha=" + "a" * 40, "patchset=v2",
-                "custom_release_revision=v2.6", "automation_state=complete"])
-        self.assertEqual(actual, patch_file("v2", "src/custom_update/stable_release_fixture.txt"))
+    def test_new_publisher_excludes_legacy_metadata_without_changing_old_fixture(self):
+        official='Official release notes used by the producer/consumer regression.'
+        self.assertEqual(build_release_body(official),official+'\n')
+        self.assertIn('## Custom release metadata',patch_file('v2','src/custom_update/stable_release_fixture.txt'))
 
     def test_latest_only_and_no_beta_ui(self):
         module = patch_file("v2", "src/custom_update/mod.rs")
@@ -176,8 +178,9 @@ class ClientUpdateTests(unittest.TestCase):
                 tree = Path(directory)
                 policy = tree / "policy.rs"
                 policy.write_text(patch_file(generation, "src/custom_update/policy.rs"), encoding='utf-8')
-                (tree / "stable_release_fixture.txt").write_text(
-                    patch_file(generation, "src/custom_update/stable_release_fixture.txt"), encoding='utf-8')
+                if generation == "v2":
+                    (tree / "stable_release_fixture.txt").write_text(
+                        patch_file(generation, "src/custom_update/stable_release_fixture.txt"), encoding="utf-8")
                 executable = tree / "policy-tests"
                 subprocess.run([compiler, "--edition=2021", "--test", str(policy),
                                 "-o", str(executable)], check=True)

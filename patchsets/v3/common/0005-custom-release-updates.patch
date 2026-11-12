@@ -327,12 +327,11 @@ index 0000000..74d8c65
 +{"version": "0.0.0", "revision": null, "upstream_sha": "", "variant": "standard", "build_run": "0", "repository": ""}
 diff --git a/src/custom_update/mod.rs b/src/custom_update/mod.rs
 new file mode 100644
-index 0000000..4d221a8
+index 0000000..a06e0fc
 --- /dev/null
 +++ b/src/custom_update/mod.rs
-@@ -0,0 +1,606 @@
-+//! Custom Release updates: GitHub HTTPS/API integrity only.
-+//! Independent update signatures are explicitly deferred; APK signatures remain unchanged.
+@@ -0,0 +1,632 @@
++//! JSON-only custom updates with offline Sigstore provenance verification.
 +use hbb_common::{anyhow::anyhow, bail, ResultType};
 +use serde_derive::Deserialize;
 +use serde_json::{json, Value};
@@ -345,12 +344,15 @@ index 0000000..4d221a8
 +    time::Duration,
 +};
 +mod policy;
++use rustdesk_update_manifest::{Expected, Manifest, MANIFEST, PROOF};
 +pub const MANUAL_INSTALL_ONLY: bool = true;
 +const MAX_ASSET: u64 = 1024 * 1024 * 1024;
 +
 +#[derive(Deserialize)]
 +struct Build {
 +    repository: String,
++    repository_id: Option<String>,
++    repository_owner_id: Option<String>,
 +    version: String,
 +    revision: Option<String>,
 +    upstream_sha: String,
@@ -379,7 +381,8 @@ index 0000000..4d221a8
 +    draft: bool,
 +    prerelease: bool,
 +    html_url: String,
-+    body: Option<String>,
++    #[serde(skip)]
++    verified_manifest: Option<Manifest>,
 +    assets: Vec<Asset>,
 +}
 +#[derive(Clone)]
@@ -399,8 +402,20 @@ index 0000000..4d221a8
 +}
 +fn build() -> ResultType<Build> {
 +    let b: Build = serde_json::from_str(include_str!("build.json"))?;
-+    if !policy::build_semantics(b.version_semantics.as_deref(), b.patchset_version.as_deref(), b.revision.as_deref(), b.channel.as_deref())
-+        || !policy::repository(&b.repository)
++    if !policy::build_semantics(
++        b.version_semantics.as_deref(),
++        b.patchset_version.as_deref(),
++        b.revision.as_deref(),
++        b.channel.as_deref(),
++    ) || !policy::repository(&b.repository)
++        || !b
++            .repository_id
++            .as_deref()
++            .is_some_and(|s| s.parse::<u64>().is_ok_and(|n| n > 0))
++        || !b
++            .repository_owner_id
++            .as_deref()
++            .is_some_and(|s| s.parse::<u64>().is_ok_and(|n| n > 0))
 +        || policy::numeric::<3>(&b.version).is_none()
 +        || !policy::hex(&b.upstream_sha, 40)
 +        || !matches!(b.variant.as_str(), "standard" | "sos")
@@ -418,7 +433,12 @@ index 0000000..4d221a8
 +        Ok(b) => match b.revision {
 +            Some(r) => format!("{}-custom.{}", b.version, r),
 +            None => match b.patchset_version {
-+                Some(v) => format!("{}-custom.{}-{}", b.version, v, b.channel.as_deref().unwrap_or("ci")),
++                Some(v) => format!(
++                    "{}-custom.{}-{}",
++                    b.version,
++                    v,
++                    b.channel.as_deref().unwrap_or("ci")
++                ),
 +                None => format!("{}-custom.build{}", b.version, b.build_run),
 +            },
 +        },
@@ -471,8 +491,43 @@ index 0000000..4d221a8
 +    if bytes.len() > 4 * 1024 * 1024 {
 +        bail!("Release response too large");
 +    }
-+    let r: Release = serde_json::from_slice(&bytes)?;
++    let mut r: Release = serde_json::from_slice(&bytes)?;
 +    validate_release(&r, b)?;
++    let manifest = metadata_bytes(&r, b, MANIFEST, rustdesk_update_manifest::MAX_MANIFEST)?;
++    let proof = metadata_bytes(&r, b, PROOF, rustdesk_update_manifest::MAX_PROOF)?;
++    let expected = Expected {
++        repository: &b.repository,
++        repository_id: b.repository_id.as_deref().unwrap_or(""),
++        owner_id: b.repository_owner_id.as_deref().unwrap_or(""),
++        tag: &r.tag_name,
++    };
++    let verified =
++        rustdesk_update_manifest::verify(&manifest, &proof, expected).map_err(|e| anyhow!(e))?;
++    // Require the attested inventory to cover exactly the API's installer assets.
++    let mut names = std::collections::BTreeSet::new();
++    for a in &r.assets {
++        if !names.insert(a.name.as_str()) {
++            bail!("Duplicate Release asset name");
++        }
++        if a.name == MANIFEST || a.name == PROOF {
++            continue;
++        }
++        let item = verified
++            .assets
++            .iter()
++            .find(|item| item.name == a.name)
++            .ok_or_else(|| anyhow!("Unattested Release asset"))?;
++        validate_asset(&r, b, a)?;
++        if item.size != a.size
++            || a.digest.as_deref() != Some(format!("sha256:{}", item.sha256).as_str())
++        {
++            bail!("Release asset differs from attested manifest");
++        }
++    }
++    if r.assets.len() != verified.assets.len() + 2 {
++        bail!("Attested Release asset missing");
++    }
++    r.verified_manifest = Some(verified);
 +    Ok(r)
 +}
 +fn validate_release(r: &Release, b: &Build) -> ResultType<()> {
@@ -480,7 +535,6 @@ index 0000000..4d221a8
 +    if r.draft
 +        || r.prerelease
 +        || policy::stable_tag(&r.tag_name).is_none()
-+        || !policy::known_release_semantics(&r.tag_name, r.body.as_deref().unwrap_or(""))
 +        || r.html_url
 +            != format!(
 +                "https://github.com/{repository}/releases/tag/{}",
@@ -492,18 +546,67 @@ index 0000000..4d221a8
 +    Ok(())
 +}
 +fn source(r: &Release) -> ResultType<String> {
-+    policy::metadata_source(r.body.as_deref().unwrap_or(""))
-+        .map(str::to_owned)
-+        .ok_or_else(|| anyhow!("Release source identity missing, ambiguous or incomplete"))
++    r.verified_manifest
++        .as_ref()
++        .map(|m| m.upstream_sha.clone())
++        .ok_or_else(|| anyhow!("Verified update manifest missing"))
++}
++fn validate_asset(r: &Release, b: &Build, a: &Asset) -> ResultType<()> {
++    if a.id == 0
++        || a.size == 0
++        || a.size > MAX_ASSET
++        || a.state != "uploaded"
++        || !a
++            .digest
++            .as_deref()
++            .and_then(|d| d.strip_prefix("sha256:"))
++            .is_some_and(|d| policy::hex(d, 64))
++        || a.browser_download_url
++            != format!(
++                "https://github.com/{}/releases/download/{}/{}",
++                b.repository, r.tag_name, a.name
++            )
++    {
++        bail!("Update asset identity, digest or URL invalid");
++    }
++    Ok(())
++}
++fn metadata_bytes(r: &Release, b: &Build, name: &str, limit: usize) -> ResultType<Vec<u8>> {
++    let matches: Vec<_> = r.assets.iter().filter(|a| a.name == name).collect();
++    if matches.len() != 1 {
++        bail!("Update manifest or attestation missing/duplicated");
++    }
++    let a = matches[0];
++    validate_asset(r, b, a)?;
++    if a.size > limit as u64 {
++        bail!("Update metadata exceeds size limit");
++    }
++    let mut response = client()?
++        .get(&a.browser_download_url)
++        .timeout(Duration::from_secs(30))
++        .send()?
++        .error_for_status()?;
++    let mut bytes = Vec::new();
++    response.by_ref().take(a.size + 1).read_to_end(&mut bytes)?;
++    if bytes.len() as u64 != a.size
++        || a.digest.as_deref() != Some(format!("sha256:{:x}", Sha256::digest(&bytes)).as_str())
++    {
++        bail!("Update metadata size or SHA256 mismatch");
++    }
++    Ok(bytes)
 +}
 +fn package_format() -> ResultType<&'static str> {
 +    #[cfg(target_os = "windows")]
 +    {
-+        return Ok(if crate::platform::is_msi_installed()? {
-+            "msi"
-+        } else {
-+            "exe"
-+        });
++        if !crate::platform::is_cur_exe_the_installed() {
++            return Ok("exe");
++        }
++        return match crate::platform::is_msi_installed() {
++            Ok(true) => Ok("msi"),
++            Ok(false) => Ok("exe"),
++            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok("exe"),
++            Err(e) => Err(e.into()),
++        };
 +    }
 +    #[cfg(target_os = "macos")]
 +    {
@@ -515,31 +618,37 @@ index 0000000..4d221a8
 +    }
 +    #[cfg(target_os = "linux")]
 +    {
-+        if cfg!(feature = "drm") {
-+            return Ok("deb");
-+        }
-+        let installed = std::process::Command::new("dpkg-query")
-+            .args(["-W", "-f=${Status}", "rustdesk"])
++        let executable = fs::canonicalize(std::env::current_exe()?)?;
++        let path = executable
++            .to_str()
++            .ok_or_else(|| anyhow!("Unsupported executable path"))?;
++        let deb_owns = std::process::Command::new("dpkg-query")
++            .args(["-S", "--", path])
 +            .output()
-+            .is_ok_and(|o| o.status.success() && o.stdout == b"install ok installed");
-+        if installed {
-+            return Ok("deb");
-+        }
-+        if std::process::Command::new("rpm")
-+            .args(["-q", "rustdesk"])
++            .is_ok_and(|out| {
++                out.status.success()
++                    && String::from_utf8_lossy(&out.stdout).lines().any(|line| {
++                        line.split_once(": ").is_some_and(|(owner, p)| {
++                            owner.split(':').next() == Some("rustdesk") && p == path
++                        })
++                    })
++            })
++            && std::process::Command::new("dpkg-query")
++                .args(["-W", "-f=${Status}", "rustdesk"])
++                .output()
++                .is_ok_and(|out| out.status.success() && out.stdout == b"install ok installed");
++        let rpm_owns = std::process::Command::new("rpm")
++            .args(["-qf", "--qf", "%{NAME}\n", "--", path])
 +            .output()
-+            .is_ok_and(|o| o.status.success())
-+        {
-+            let os = fs::read_to_string("/etc/os-release")
-+                .unwrap_or_default()
-+                .to_lowercase();
-+            return Ok(if os.contains("suse") {
-+                "suse.rpm"
-+            } else {
-+                "rpm"
-+            });
-+        }
-+        bail!("Package type unavailable; use the matching package on the Release page");
++            .is_ok_and(|out| out.status.success() && out.stdout == b"rustdesk\n");
++        let os = fs::read_to_string("/etc/os-release").unwrap_or_default();
++        return rustdesk_update_manifest::linux_package_format(
++            deb_owns,
++            rpm_owns,
++            cfg!(feature = "drm"),
++            &os,
++        )
++        .map_err(|e| anyhow!(e));
 +    }
 +    #[cfg(not(any(
 +        target_os = "windows",
@@ -572,32 +681,27 @@ index 0000000..4d221a8
 +    wayland: bool,
 +    format: &str,
 +) -> ResultType<Asset> {
-+    let repository = &b.repository;
-+    let (v, _) = policy::stable_tag(&r.tag_name).ok_or_else(|| anyhow!("Invalid Stable tag"))?;
-+    let version = format!("{}.{}.{}", v[0], v[1], v[2]);
-+    let name = policy::package_name(&version, &b.variant, platform, arch, wayland, format)
-+        .ok_or_else(|| anyhow!("Unsupported package type"))?;
-+    let assets: Vec<_> = r.assets.iter().filter(|a| a.name == name).collect();
-+    if assets.len() != 1 {
++    let manifest = r
++        .verified_manifest
++        .as_ref()
++        .ok_or_else(|| anyhow!("Verified update manifest required before package selection"))?;
++    let item = manifest
++        .selected(platform, arch, &b.variant, wayland, format)
++        .map_err(|e| anyhow!(e))?;
++    let matches: Vec<_> = r.assets.iter().filter(|a| a.name == item.name).collect();
++    if matches.len() != 1 {
 +        bail!("Matching update package missing or duplicated");
 +    }
-+    let a = assets[0];
-+    let digest = a.digest.as_deref().and_then(|d| d.strip_prefix("sha256:"));
-+    if a.id == 0
-+        || a.size == 0
-+        || a.size > MAX_ASSET
-+        || a.state != "uploaded"
-+        || !digest.is_some_and(|d| policy::hex(d, 64))
-+        || a.browser_download_url
-+            != format!(
-+                "https://github.com/{repository}/releases/download/{}/{}",
-+                r.tag_name, name
-+            )
++    let a = matches[0];
++    validate_asset(r, b, a)?;
++    if a.size != item.size
++        || a.digest.as_deref() != Some(format!("sha256:{}", item.sha256).as_str())
 +    {
-+        bail!("Update package digest, size or URL invalid");
++        bail!("Update package differs from attested selector");
 +    }
 +    Ok(a.clone())
 +}
++
 +fn clear() {
 +    *CANDIDATE.lock().unwrap() = None;
 +    *super::SOFTWARE_UPDATE_URL.lock().unwrap() = String::new();
@@ -673,7 +777,7 @@ index 0000000..4d221a8
 +    let r = get_release(&b)?;
 +    if r.id != c.release.id
 +        || r.tag_name != c.release.tag_name
-+        || source(&r)? != source(&c.release)?
++        || r.verified_manifest != c.release.verified_manifest
 +        || selected_asset(&r, &b)? != c.asset
 +    {
 +        clear();
@@ -819,116 +923,38 @@ index 0000000..4d221a8
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
-+    const REPOSITORY: &str = "example/source";
-+    fn release() -> Release {
-+        let tag = "v1.5.1-custom.v2.8";
-+        Release { id:1,tag_name:tag.into(),draft:false,prerelease:false,
-+            html_url:format!("https://github.com/{REPOSITORY}/releases/tag/{tag}"),
-+            body:Some(format!("<!-- rustdesk-custom-release-metadata\nUpstream SHA: {}\nautomation_state=complete\nVersion Semantics: patchset-content-v1\nPatchset Version: v2.8\nCommon Patch Hash: {}\nSOS Patch Hash: {}\nBuild Identity: {}\n-->\n","a".repeat(40),"b".repeat(64),"c".repeat(64),"d".repeat(64))),
-+            assets:vec![Asset { id:2,name:"rustdesk-1.5.1-linux-x86_64.deb".into(),size:4,
-+                digest:Some(format!("sha256:{:x}",Sha256::digest(b"test"))),state:"uploaded".into(),
-+                browser_download_url:format!("https://github.com/{REPOSITORY}/releases/download/{tag}/rustdesk-1.5.1-linux-x86_64.deb") }] }
-+    }
-+    fn identity() -> Build {
-+        Build {
-+            repository: REPOSITORY.into(),
-+            version: "1.5.1".into(),
-+            revision: Some("v2.5".into()),
++    #[test]
++    fn requires_published_stable_api_identity() {
++        let b = Build {
++            repository: "owner/repo".into(),
++            repository_id: Some("1".into()),
++            repository_owner_id: Some("2".into()),
++            version: "1.5.3".into(),
++            revision: Some("v3.3".into()),
 +            upstream_sha: "a".repeat(40),
 +            variant: "standard".into(),
 +            build_run: "1".into(),
-+            version_semantics: None, patchset_version: None, channel: None,
-+        }
-+    }
-+    #[test]
-+    fn fork_updates_stay_in_the_embedded_repository() {
-+        let mut fork = identity();
-+        fork.repository = "fork-owner/fork-client".into();
-+        let mut r = release();
-+        assert!(validate_release(&r, &fork).is_err());
-+        r.html_url = r.html_url.replace(REPOSITORY, &fork.repository);
-+        r.assets[0].browser_download_url = r.assets[0]
-+            .browser_download_url
-+            .replace(REPOSITORY, &fork.repository);
-+        assert_eq!(
-+            release_api(&fork).unwrap(),
-+            "https://api.github.com/repos/fork-owner/fork-client/releases/latest"
-+        );
-+        assert!(validate_release(&r, &fork).is_ok());
-+        assert!(asset_for(&r, &fork, "linux", "x86_64", false, "deb").is_ok());
-+        assert!(asset_for(&r, &identity(), "linux", "x86_64", false, "deb").is_err());
-+        fork.repository.clear();
-+        assert!(release_api(&fork).is_err());
-+    }
-+    #[test]
-+    fn reject_nonstable_and_foreign_releases() {
-+        let mut r = release();
-+        assert!(validate_release(&r, &identity()).is_ok());
++            version_semantics: Some("patchset-content-v1".into()),
++            patchset_version: Some("v3.3".into()),
++            channel: Some("stable".into()),
++        };
++        let mut r = Release {
++            id: 1,
++            tag_name: "v1.5.3-custom.v3.3".into(),
++            draft: false,
++            prerelease: false,
++            html_url: "https://github.com/owner/repo/releases/tag/v1.5.3-custom.v3.3".into(),
++            verified_manifest: None,
++            assets: vec![],
++        };
++        validate_release(&r, &b).unwrap();
++        assert!(source(&r).is_err());
++        assert!(asset_for(&r, &b, "linux", "x86_64", false, "rpm").is_err());
 +        r.draft = true;
-+        assert!(validate_release(&r, &identity()).is_err());
++        assert!(validate_release(&r, &b).is_err());
 +        r.draft = false;
 +        r.prerelease = true;
-+        assert!(validate_release(&r, &identity()).is_err());
-+        r.prerelease = false;
-+        r.tag_name = "nightly".into();
-+        assert!(validate_release(&r, &identity()).is_err());
-+        r = release();
-+        r.html_url = r.html_url.replace(REPOSITORY, "other/repo");
-+        assert!(validate_release(&r, &identity()).is_err());
-+    }
-+    #[test]
-+    fn fail_closed_on_metadata_drift() {
-+        let mut r = release();
-+        assert_eq!(source(&r).unwrap(), "a".repeat(40));
-+        r.body = Some(r.body.clone().unwrap().replace("complete", "uploading"));
-+        assert!(source(&r).is_err());
-+        r = release();
-+        r.body = Some(r.body.clone().unwrap().replace(
-+            "automation_state=complete",
-+            "automation_state=complete\nautomation_state=uploading",
-+        ));
-+        assert!(source(&r).is_err());
-+        r = release();
-+        r.body = Some(r.body.clone().unwrap().repeat(2));
-+        assert!(source(&r).is_err());
-+    }
-+    #[test]
-+    fn exact_asset_requires_api_digest_size_and_owner() {
-+        let b = identity();
-+        let good = release();
-+        assert!(asset_for(&good, &b, "linux", "x86_64", false, "deb").is_ok());
-+        assert!(asset_for(&good, &b, "linux", "x86_64", true, "deb").is_err());
-+        assert!(asset_for(&good, &b, "linux", "aarch64", false, "deb").is_err());
-+        let mut r = good.clone();
-+        r.assets[0].digest = None;
-+        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
-+        r = good.clone();
-+        r.assets[0].size = 0;
-+        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
-+        r = good.clone();
-+        r.assets[0].browser_download_url = r.assets[0]
-+            .browser_download_url
-+            .replace(REPOSITORY, "other/repo");
-+        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
-+        r = good;
-+        r.assets.push(r.assets[0].clone());
-+        assert!(asset_for(&r, &b, "linux", "x86_64", false, "deb").is_err());
-+    }
-+    #[test]
-+    fn verify_content_not_just_size() {
-+        let folder =
-+            std::env::temp_dir().join(format!("custom-update-test-{}", std::process::id()));
-+        fs::create_dir(&folder).unwrap();
-+        let path = folder.join("asset");
-+        let a = release().assets.remove(0);
-+        fs::write(&path, b"test").unwrap();
-+        assert!(verify_file(&path, &a).is_ok());
-+        fs::write(&path, b"evil").unwrap();
-+        assert!(verify_file(&path, &a).is_err());
-+        fs::write(&path, b"shorter").unwrap();
-+        assert!(verify_file(&path, &a).is_err());
-+        fs::remove_file(path).unwrap();
-+        fs::remove_dir(folder).unwrap();
++        assert!(validate_release(&r, &b).is_err());
 +    }
 +    #[test]
 +    fn only_known_https_redirect_hosts() {
@@ -939,11 +965,11 @@ index 0000000..4d221a8
 +}
 diff --git a/src/custom_update/policy.rs b/src/custom_update/policy.rs
 new file mode 100644
-index 0000000..a0017e8
+index 0000000..349cd05
 --- /dev/null
 +++ b/src/custom_update/policy.rs
-@@ -0,0 +1,335 @@
-+//! Release policy shared by both supported patch generations.
+@@ -0,0 +1,250 @@
++//! Numeric version and build identity policy; Release provenance is JSON-only.
 +pub fn numeric<const N: usize>(value: &str) -> Option<[u64; N]> {
 +    let parts: Vec<_> = value.split('.').collect();
 +    if parts.len() != N {
@@ -966,13 +992,24 @@ index 0000000..a0017e8
 +    }
 +    Some((numeric(version)?, revision))
 +}
-+pub fn build_semantics(schema: Option<&str>, content: Option<&str>, revision: Option<&str>, channel: Option<&str>) -> bool {
++pub fn build_semantics(
++    schema: Option<&str>,
++    content: Option<&str>,
++    revision: Option<&str>,
++    channel: Option<&str>,
++) -> bool {
 +    match schema {
 +        None => content.is_none() && channel.is_none(), // historical installed build
 +        Some("patchset-content-v1") => {
-+            let Some(version) = content else { return false; };
-+            let Some(numbers) = version.strip_prefix('v').and_then(numeric::<2>) else { return false; };
-+            if numbers.contains(&0) { return false; }
++            let Some(version) = content else {
++                return false;
++            };
++            let Some(numbers) = version.strip_prefix('v').and_then(numeric::<2>) else {
++                return false;
++            };
++            if numbers.contains(&0) {
++                return false;
++            }
 +            match channel {
 +                Some("stable") => revision == Some(version),
 +                Some("nightly" | "ci") => revision.is_none(),
@@ -981,39 +1018,6 @@ index 0000000..a0017e8
 +        }
 +        _ => false,
 +    }
-+}
-+
-+pub fn known_release_semantics(tag: &str, body: &str) -> bool {
-+    if stable_tag(tag).is_none() || metadata_source(body).is_none() { return false; }
-+    let block = if let Some((_, rest)) = body.split_once("\n\n## Custom release metadata\n\n") {
-+        rest
-+    } else if let Some((_, rest)) = body.split_once("<!-- rustdesk-custom-release-metadata\n") {
-+        let Some((block, _)) = rest.split_once("-->") else { return false; };
-+        block
-+    } else { return false; };
-+    let field = |key: &str, human: &str| -> Option<&str> {
-+        let mut values = block.lines().filter_map(|line| line.strip_prefix(key).or_else(|| line.strip_prefix(human)));
-+        let value = values.next()?;
-+        if values.next().is_some() { return None; }
-+        Some(value)
-+    };
-+    let has_marker = block.lines().any(|line| line.starts_with("version_semantics=") || line.starts_with("Version Semantics: "));
-+    let common = field("common_patch_hash=", "Common Patch Hash: ");
-+    let sos = field("sos_patch_hash=", "SOS Patch Hash: ");
-+    if has_marker {
-+        return field("version_semantics=", "Version Semantics: ") == Some("patchset-content-v1")
-+            && field("patchset_version=", "Patchset Version: ") == tag.split_once("-custom.").map(|(_, v)| v)
-+            && common.is_some_and(|h| hex(h, 64)) && sos.is_some_and(|h| hex(h, 64))
-+            && field("build_identity=", "Build Identity: ").is_some_and(|h| hex(h, 64));
-+    }
-+    // Explicit audited legacy records, never a regex-based semantic migration.
-+    let (source, hash) = match tag {
-+        "v1.5.0-custom.v2.6" => ("fada664df7a294d1d1a9ca3e7cd3637069122f17", "c35f6c64abb16565f0018fa068369b2463cfe5067c3dadd0ca1323ac16ad02f6"),
-+        "v1.5.1-custom.v2.1" => ("23e5bb471a040d62f0a6ad52591fb30784265b73", "ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a"),
-+        _ => return false,
-+    };
-+    metadata_source(body) == Some(source) && common == Some(hash)
-+        && sos == Some("076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813")
 +}
 +
 +pub fn newer(
@@ -1040,8 +1044,7 @@ index 0000000..a0017e8
 +            .bytes()
 +            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 +}
-+/// Accept both the current Stable publisher and historical private drafts.
-+/// Metadata-looking strings in upstream notes must never supply source identity.
++/// Validate an embedded repository slug before making requests.
 +pub fn repository(value: &str) -> bool {
 +    let Some((owner, name)) = value.split_once('/') else {
 +        return false;
@@ -1059,38 +1062,6 @@ index 0000000..a0017e8
 +        && name
 +            .bytes()
 +            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
-+}
-+
-+pub fn metadata_source(body: &str) -> Option<&str> {
-+    const STABLE: &str = "\n\n## Custom release metadata\n\n";
-+    const LEGACY: &str = "<!-- rustdesk-custom-release-metadata\n";
-+    let (block, source_prefix) = match (body.matches(STABLE).count(), body.matches(LEGACY).count())
-+    {
-+        (1, 0) => (body.split_once(STABLE)?.1, "upstream_sha="),
-+        (0, 1) => (
-+            body.split_once(LEGACY)?.1.split_once("-->")?.0,
-+            "Upstream SHA: ",
-+        ),
-+        _ => return None,
-+    };
-+    let mut states = block
-+        .lines()
-+        .filter(|line| line.starts_with("automation_state="));
-+    if !matches!(
-+        states.next(),
-+        Some("automation_state=complete" | "automation_state=published")
-+    ) || states.next().is_some()
-+    {
-+        return None;
-+    }
-+    let mut sources = block
-+        .lines()
-+        .filter_map(|line| line.strip_prefix(source_prefix));
-+    let source = sources.next()?;
-+    if sources.next().is_some() || !hex(source, 40) {
-+        return None;
-+    }
-+    Some(source)
 +}
 +
 +pub fn package_name(
@@ -1160,68 +1131,38 @@ index 0000000..a0017e8
 +        }
 +    }
 +    #[test]
-+    fn actual_stable_publisher_metadata() {
-+        let body = include_str!("stable_release_fixture.txt");
-+        assert_eq!(
-+            metadata_source(body),
-+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-+        );
-+        assert!(metadata_source(
-+            &body.replace("automation_state=complete", "automation_state=published")
-+        )
-+        .is_some());
-+        assert!(metadata_source(
-+            &body.replace("automation_state=complete", "automation_state=uploading")
-+        )
-+        .is_none());
-+        assert!(metadata_source(&body.repeat(2)).is_none());
-+        assert!(
-+            metadata_source(&body.replace("upstream_sha=", "upstream_sha=bad\nupstream_sha="))
-+                .is_none()
-+        );
-+        assert!(metadata_source(&format!("{body}automation_state=uploading\n")).is_none());
-+        assert!(metadata_source(
-+            "upstream_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nautomation_state=complete"
-+        )
-+        .is_none());
-+    }
-+    #[test]
-+    fn historical_draft_metadata_is_still_supported() {
-+        let body = "<!-- rustdesk-custom-release-metadata\nUpstream SHA: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nautomation_state=complete\n-->\n";
-+        assert_eq!(
-+            metadata_source(body),
-+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-+        );
-+        assert!(metadata_source(&body.repeat(2)).is_none());
-+        assert!(metadata_source(&format!(
-+            "{}{body}",
-+            include_str!("stable_release_fixture.txt")
-+        ))
-+        .is_none());
-+    }
-+    #[test]
-+    fn explicit_content_semantics_and_legacy_boundary() {
-+        let body = format!("Official\n\n## Custom release metadata\n\nupstream_sha={}\nautomation_state=complete\nversion_semantics=patchset-content-v1\npatchset_version=v2.8\ncommon_patch_hash={}\nsos_patch_hash={}\nbuild_identity={}\n", "a".repeat(40), "b".repeat(64), "c".repeat(64), "d".repeat(64));
-+        assert!(known_release_semantics("v1.5.1-custom.v2.8", &body));
-+        assert!(!known_release_semantics("v1.5.1-custom.v2.9", &body));
-+        assert!(!known_release_semantics("v1.5.1-custom.v2.8", &body.replace("patchset-content-v1", "future-v9")));
-+        assert!(!known_release_semantics("v1.5.1-custom.v2.8", &body.replace("version_semantics=patchset-content-v1\n", "")));
-+        assert!(!known_release_semantics("v1.5.1-custom.v2.8", &(body.clone()+"version_semantics=patchset-content-v1\n")));
-+        let legacy = "Official\n\n## Custom release metadata\n\nupstream_sha=23e5bb471a040d62f0a6ad52591fb30784265b73\nautomation_state=complete\ncommon_patch_hash=ba803951d999a4feacf6d754e263f86ebcabd2f4b53d447abe413259b019416a\nsos_patch_hash=076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813\n";
-+        assert!(known_release_semantics("v1.5.1-custom.v2.1", legacy));
-+        assert!(!known_release_semantics("v1.5.1-custom.v2.2", legacy));
-+        assert!(newer([1,5,0], Some([2,6]), "a", [1,5,1], [2,1], "b"));
-+        assert!(newer([1,5,1], Some([2,1]), "a", [1,5,1], [2,8], "b"));
-+        assert!(!newer([1,5,1], Some([2,8]), "a", [1,5,0], [2,99], "b"));
-+    }
-+    #[test]
 +    fn nightly_content_version_does_not_claim_stable_revision() {
 +        assert!(build_semantics(None, None, Some("v2.1"), None));
-+        assert!(build_semantics(Some("patchset-content-v1"), Some("v2.8"), None, Some("nightly")));
-+        assert!(build_semantics(Some("patchset-content-v1"), Some("v2.8"), Some("v2.8"), Some("stable")));
-+        assert!(!build_semantics(Some("patchset-content-v1"), Some("v2.8"), Some("v2.7"), Some("stable")));
-+        assert!(!build_semantics(Some("patchset-content-v1"), Some("v2.8"), Some("v2.8"), Some("nightly")));
-+        assert!(!build_semantics(Some("future-v9"), Some("v2.8"), None, Some("ci")));
++        assert!(build_semantics(
++            Some("patchset-content-v1"),
++            Some("v2.8"),
++            None,
++            Some("nightly")
++        ));
++        assert!(build_semantics(
++            Some("patchset-content-v1"),
++            Some("v2.8"),
++            Some("v2.8"),
++            Some("stable")
++        ));
++        assert!(!build_semantics(
++            Some("patchset-content-v1"),
++            Some("v2.8"),
++            Some("v2.7"),
++            Some("stable")
++        ));
++        assert!(!build_semantics(
++            Some("patchset-content-v1"),
++            Some("v2.8"),
++            Some("v2.8"),
++            Some("nightly")
++        ));
++        assert!(!build_semantics(
++            Some("future-v9"),
++            Some("v2.8"),
++            None,
++            Some("ci")
++        ));
 +    }
 +    #[test]
 +    fn numeric_revisions() {
@@ -1278,22 +1219,6 @@ index 0000000..a0017e8
 +        assert!(package_name("1.5.1", "standard", "windows", "x86_64", true, "exe").is_none());
 +    }
 +}
-diff --git a/src/custom_update/stable_release_fixture.txt b/src/custom_update/stable_release_fixture.txt
-new file mode 100644
-index 0000000..f0c5bbd
---- /dev/null
-+++ b/src/custom_update/stable_release_fixture.txt
-@@ -0,0 +1,10 @@
-+Official release notes used by the producer/consumer regression.
-+
-+## Custom release metadata
-+
-+upstream_repository=rustdesk/rustdesk
-+upstream_tag=1.5.1
-+upstream_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-+patchset=v2
-+custom_release_revision=v2.6
-+automation_state=complete
 diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
 index 9b47926..452bbd5 100644
 --- a/src/flutter_ffi.rs
@@ -1365,3 +1290,3312 @@ index 0c17840..71014ab 100644
  pub fn check_update_as_root() -> ResultType<bool> {
 +    if crate::common::custom_update::MANUAL_INSTALL_ONLY { return Ok(false); }
      let _update_lock = acquire_mac_update_lock()?;
+diff --git a/libs/custom_update_manifest/Cargo.toml b/libs/custom_update_manifest/Cargo.toml
+new file mode 100644
+index 0000000..dd99a9a
+--- /dev/null
++++ b/libs/custom_update_manifest/Cargo.toml
+@@ -0,0 +1,11 @@
++[package]
++name = "rustdesk-update-manifest"
++version = "0.1.0"
++edition = "2021"
++rust-version = "1.75"
++[dependencies]
++serde = { version = "1.0", features = ["derive"] }
++serde_json = "=1.0.118"
++sha2 = "0.10"
++sigstore-verify = { version = "=0.11.0", default-features = false }
++x509-cert = "=0.2.5"
+diff --git a/libs/custom_update_manifest/Cargo.lock b/libs/custom_update_manifest/Cargo.lock
+new file mode 100644
+index 0000000..f6f4a45
+--- /dev/null
++++ b/libs/custom_update_manifest/Cargo.lock
+@@ -0,0 +1,1516 @@
++# This file is automatically @generated by Cargo.
++# It is not intended for manual editing.
++version = 3
++
++[[package]]
++name = "addr2line"
++version = "0.24.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "dfbe277e56a376000877090da837660b4427aad530e3028d44e0bffe4f89a1c1"
++dependencies = [
++ "gimli",
++]
++
++[[package]]
++name = "adler2"
++version = "2.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
++
++[[package]]
++name = "atomic-waker"
++version = "1.1.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
++
++[[package]]
++name = "aws-lc-rs"
++version = "1.19.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "048006790404103c488e6c5616b3e7e702a71292aadda08e8f7698a9e0d2eb53"
++dependencies = [
++ "aws-lc-sys",
++ "untrusted 0.7.1",
++ "zeroize",
++]
++
++[[package]]
++name = "aws-lc-sys"
++version = "0.47.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8bfbe32ac36b3c428696ce315464181bc4029d689fd58e3f2a4e58c252242f52"
++dependencies = [
++ "cc",
++ "cmake",
++ "dunce",
++ "fs_extra",
++ "pkg-config",
++]
++
++[[package]]
++name = "backtrace"
++version = "0.3.74"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8d82cb332cdfaed17ae235a638438ac4d4839913cc2af585c3c6746e8f8bee1a"
++dependencies = [
++ "addr2line",
++ "cfg-if",
++ "libc",
++ "miniz_oxide",
++ "object",
++ "rustc-demangle",
++ "windows-targets",
++]
++
++[[package]]
++name = "base64"
++version = "0.22.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
++
++[[package]]
++name = "base64ct"
++version = "1.6.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
++
++[[package]]
++name = "bitflags"
++version = "2.9.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967"
++
++[[package]]
++name = "block-buffer"
++version = "0.10.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
++dependencies = [
++ "generic-array",
++]
++
++[[package]]
++name = "bumpalo"
++version = "3.16.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
++
++[[package]]
++name = "bytes"
++version = "1.11.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
++
++[[package]]
++name = "cc"
++version = "1.4.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a3eb0f42d6c360dc3f8a821f6bf2fdea7f72bfd36b3076eb0e6d1e9e0752fff4"
++dependencies = [
++ "find-msvc-tools",
++ "jobserver",
++ "libc",
++ "shlex",
++]
++
++[[package]]
++name = "cfg-if"
++version = "1.0.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
++
++[[package]]
++name = "cmake"
++version = "0.1.58"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
++dependencies = [
++ "cc",
++]
++
++[[package]]
++name = "cmpv2"
++version = "0.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "961b955a666e25ee5a1091d219128d6e6401e3dab84efb1a2bf6b4035d797b39"
++dependencies = [
++ "crmf",
++ "der",
++ "spki",
++ "x509-cert",
++]
++
++[[package]]
++name = "cms"
++version = "0.2.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7b77c319abfd5219629c45c34c89ba945ed3c5e49fcde9d16b6c3885f118a730"
++dependencies = [
++ "const-oid",
++ "der",
++ "spki",
++ "x509-cert",
++]
++
++[[package]]
++name = "const-oid"
++version = "0.9.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
++
++[[package]]
++name = "cpufeatures"
++version = "0.2.12"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "53fe5e26ff1b7aef8bca9c6080520cfb8d9333c7568e1829cef191a9723e5504"
++dependencies = [
++ "libc",
++]
++
++[[package]]
++name = "crmf"
++version = "0.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "36fe21b96d5b87f5de4b5b7202ec41c00110ac817ce6728fe75fb2fe5962ed92"
++dependencies = [
++ "cms",
++ "der",
++ "spki",
++ "x509-cert",
++]
++
++[[package]]
++name = "crypto-common"
++version = "0.1.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
++dependencies = [
++ "generic-array",
++ "typenum",
++]
++
++[[package]]
++name = "der"
++version = "0.7.10"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
++dependencies = [
++ "const-oid",
++ "der_derive",
++ "flagset",
++ "pem-rfc7468",
++ "zeroize",
++]
++
++[[package]]
++name = "der_derive"
++version = "0.7.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8034092389675178f570469e6c3b0465d3d30b4505c294a6550db47f3c17ad18"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++]
++
++[[package]]
++name = "digest"
++version = "0.10.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
++dependencies = [
++ "block-buffer",
++ "crypto-common",
++]
++
++[[package]]
++name = "dunce"
++version = "1.0.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
++
++[[package]]
++name = "find-msvc-tools"
++version = "0.1.15"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
++
++[[package]]
++name = "flagset"
++version = "0.4.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b7ac824320a75a52197e8f2d787f6a38b6718bb6897a35142d749af3c0e8f4fe"
++
++[[package]]
++name = "fnv"
++version = "1.0.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
++
++[[package]]
++name = "form_urlencoded"
++version = "1.2.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
++dependencies = [
++ "percent-encoding",
++]
++
++[[package]]
++name = "fs_extra"
++version = "1.3.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
++
++[[package]]
++name = "futures-channel"
++version = "0.3.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
++dependencies = [
++ "futures-core",
++]
++
++[[package]]
++name = "futures-core"
++version = "0.3.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
++
++[[package]]
++name = "futures-task"
++version = "0.3.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988"
++
++[[package]]
++name = "futures-util"
++version = "0.3.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
++dependencies = [
++ "futures-core",
++ "futures-task",
++ "pin-project-lite",
++ "pin-utils",
++]
++
++[[package]]
++name = "generic-array"
++version = "0.14.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
++dependencies = [
++ "typenum",
++ "version_check",
++]
++
++[[package]]
++name = "getrandom"
++version = "0.2.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
++dependencies = [
++ "cfg-if",
++ "libc",
++ "wasi 0.11.0+wasi-snapshot-preview1",
++]
++
++[[package]]
++name = "getrandom"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "73fea8450eea4bac3940448fb7ae50d91f034f941199fcd9d909a5a07aa455f0"
++dependencies = [
++ "cfg-if",
++ "libc",
++ "r-efi",
++ "wasi 0.14.4+wasi-0.2.4",
++]
++
++[[package]]
++name = "gimli"
++version = "0.31.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
++
++[[package]]
++name = "hex"
++version = "0.4.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
++
++[[package]]
++name = "http"
++version = "1.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f4a85d31aea989eead29a3aaf9e1115a180df8282431156e533de47660892565"
++dependencies = [
++ "bytes",
++ "fnv",
++ "itoa",
++]
++
++[[package]]
++name = "http-body"
++version = "1.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
++dependencies = [
++ "bytes",
++ "http",
++]
++
++[[package]]
++name = "http-body-util"
++version = "0.1.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b021d93e26becf5dc7e1b75b1bed1fd93124b374ceb73f43d4d4eafec896a64a"
++dependencies = [
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "pin-project-lite",
++]
++
++[[package]]
++name = "httparse"
++version = "1.10.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
++
++[[package]]
++name = "hyper"
++version = "1.7.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "eb3aa54a13a0dfe7fbe3a59e0c76093041720fdc77b110cc0fc260fafb4dc51e"
++dependencies = [
++ "atomic-waker",
++ "bytes",
++ "futures-channel",
++ "futures-core",
++ "http",
++ "http-body",
++ "httparse",
++ "itoa",
++ "pin-project-lite",
++ "pin-utils",
++ "smallvec",
++ "tokio",
++ "want",
++]
++
++[[package]]
++name = "hyper-util"
++version = "0.1.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3c6995591a8f1380fcb4ba966a252a4b29188d51d2b89e3a252f5305be65aea8"
++dependencies = [
++ "base64",
++ "bytes",
++ "futures-channel",
++ "futures-core",
++ "futures-util",
++ "http",
++ "http-body",
++ "hyper",
++ "ipnet",
++ "libc",
++ "percent-encoding",
++ "pin-project-lite",
++ "socket2",
++ "tokio",
++ "tower-service",
++ "tracing",
++]
++
++[[package]]
++name = "idna"
++version = "0.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
++dependencies = [
++ "unicode-bidi",
++ "unicode-normalization",
++]
++
++[[package]]
++name = "ipnet"
++version = "2.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
++
++[[package]]
++name = "itoa"
++version = "1.0.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
++
++[[package]]
++name = "jiff"
++version = "0.2.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3590fea8e9e22d449600c9bbd481a8163bef223e4ff938e5f55899f8cf1adb93"
++dependencies = [
++ "jiff-tzdb-platform",
++ "log",
++ "portable-atomic",
++ "portable-atomic-util",
++ "serde",
++ "windows-sys 0.59.0",
++]
++
++[[package]]
++name = "jiff-tzdb"
++version = "0.1.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fa8377070c6bae868759445e5a77f66d84f0b72f3a054bfb00e6d038b8282da7"
++
++[[package]]
++name = "jiff-tzdb-platform"
++version = "0.1.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
++dependencies = [
++ "jiff-tzdb",
++]
++
++[[package]]
++name = "jobserver"
++version = "0.1.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d2b099aaa34a9751c5bf0878add70444e1ed2dd73f347be99003d4577277de6e"
++dependencies = [
++ "libc",
++]
++
++[[package]]
++name = "js-sys"
++version = "0.3.77"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
++dependencies = [
++ "once_cell",
++ "wasm-bindgen",
++]
++
++[[package]]
++name = "libc"
++version = "0.2.171"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
++
++[[package]]
++name = "log"
++version = "0.4.22"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
++
++[[package]]
++name = "memchr"
++version = "2.8.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
++
++[[package]]
++name = "miniz_oxide"
++version = "0.8.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
++dependencies = [
++ "adler2",
++]
++
++[[package]]
++name = "mio"
++version = "1.0.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2886843bf800fba2e3377cff24abf6379b4c4d5c6681eaf9ea5b0d15090450bd"
++dependencies = [
++ "libc",
++ "wasi 0.11.0+wasi-snapshot-preview1",
++ "windows-sys 0.52.0",
++]
++
++[[package]]
++name = "object"
++version = "0.36.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
++dependencies = [
++ "memchr",
++]
++
++[[package]]
++name = "once_cell"
++version = "1.19.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
++
++[[package]]
++name = "pem"
++version = "3.0.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
++dependencies = [
++ "base64",
++ "serde_core",
++]
++
++[[package]]
++name = "pem-rfc7468"
++version = "0.7.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
++dependencies = [
++ "base64ct",
++]
++
++[[package]]
++name = "percent-encoding"
++version = "2.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
++
++[[package]]
++name = "pin-project-lite"
++version = "0.2.14"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "bda66fc9667c18cb2758a2ac84d1167245054bcf85d5d1aaa6923f45801bdd02"
++
++[[package]]
++name = "pin-utils"
++version = "0.1.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "13bee6c73da26345c729282832b60b0363cf3dd9f4bfd81d8551b7a1c889a113"
++
++[[package]]
++name = "pkg-config"
++version = "0.3.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
++
++[[package]]
++name = "portable-atomic"
++version = "1.11.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
++
++[[package]]
++name = "portable-atomic-util"
++version = "0.2.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
++dependencies = [
++ "portable-atomic",
++]
++
++[[package]]
++name = "ppv-lite86"
++version = "0.2.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
++
++[[package]]
++name = "proc-macro2"
++version = "1.0.93"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "60946a68e5f9d28b0dc1c21bb8a97ee7d018a8b322fa57838ba31cc878e22d99"
++dependencies = [
++ "unicode-ident",
++]
++
++[[package]]
++name = "quote"
++version = "1.0.36"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0fa76aaf39101c457836aec0ce2316dbdc3ab723cdda1c6bd4e6ad4208acaca7"
++dependencies = [
++ "proc-macro2",
++]
++
++[[package]]
++name = "r-efi"
++version = "5.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "74765f6d916ee2faa39bc8e68e4f3ed8949b48cccdac59983d287a7cb71ce9c5"
++
++[[package]]
++name = "rand"
++version = "0.9.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41"
++dependencies = [
++ "rand_chacha",
++ "rand_core 0.9.5",
++]
++
++[[package]]
++name = "rand_chacha"
++version = "0.9.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
++dependencies = [
++ "ppv-lite86",
++ "rand_core 0.9.5",
++]
++
++[[package]]
++name = "rand_core"
++version = "0.6.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
++
++[[package]]
++name = "rand_core"
++version = "0.9.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
++dependencies = [
++ "getrandom 0.3.2",
++]
++
++[[package]]
++name = "reqwest"
++version = "0.13.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
++dependencies = [
++ "base64",
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "http-body-util",
++ "hyper",
++ "hyper-util",
++ "js-sys",
++ "log",
++ "percent-encoding",
++ "pin-project-lite",
++ "serde",
++ "serde_json",
++ "serde_urlencoded",
++ "sync_wrapper",
++ "tokio",
++ "tower",
++ "tower-http",
++ "tower-service",
++ "url",
++ "wasm-bindgen",
++ "wasm-bindgen-futures",
++ "web-sys",
++]
++
++[[package]]
++name = "ring"
++version = "0.17.14"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
++dependencies = [
++ "cc",
++ "cfg-if",
++ "getrandom 0.2.17",
++ "libc",
++ "untrusted 0.9.0",
++ "windows-sys 0.52.0",
++]
++
++[[package]]
++name = "rustc-demangle"
++version = "0.1.28"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
++
++[[package]]
++name = "rustdesk-update-manifest"
++version = "0.1.0"
++dependencies = [
++ "serde",
++ "serde_json",
++ "sha2",
++ "sigstore-verify",
++ "x509-cert",
++]
++
++[[package]]
++name = "rustls-pki-types"
++version = "1.15.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96"
++dependencies = [
++ "zeroize",
++]
++
++[[package]]
++name = "rustls-webpki"
++version = "0.103.16"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
++dependencies = [
++ "aws-lc-rs",
++ "ring",
++ "rustls-pki-types",
++ "untrusted 0.9.0",
++]
++
++[[package]]
++name = "rustversion"
++version = "1.0.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
++
++[[package]]
++name = "ryu"
++version = "1.0.18"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
++
++[[package]]
++name = "ryu-js"
++version = "1.0.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
++
++[[package]]
++name = "serde"
++version = "1.0.228"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
++dependencies = [
++ "serde_core",
++ "serde_derive",
++]
++
++[[package]]
++name = "serde_core"
++version = "1.0.228"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
++dependencies = [
++ "serde_derive",
++]
++
++[[package]]
++name = "serde_derive"
++version = "1.0.228"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++]
++
++[[package]]
++name = "serde_json"
++version = "1.0.118"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d947f6b3163d8857ea16c4fa0dd4840d52f3041039a85decd46867eb1abef2e4"
++dependencies = [
++ "itoa",
++ "ryu",
++ "serde",
++]
++
++[[package]]
++name = "serde_json_canonicalizer"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fe52319a927259afbfa5180c5157cd8167edfd3e8c254f9558c7fef44c5649f2"
++dependencies = [
++ "ryu-js",
++ "serde",
++ "serde_json",
++]
++
++[[package]]
++name = "serde_urlencoded"
++version = "0.7.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
++dependencies = [
++ "form_urlencoded",
++ "itoa",
++ "ryu",
++ "serde",
++]
++
++[[package]]
++name = "sha1"
++version = "0.10.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
++dependencies = [
++ "cfg-if",
++ "cpufeatures",
++ "digest",
++]
++
++[[package]]
++name = "sha2"
++version = "0.10.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
++dependencies = [
++ "cfg-if",
++ "cpufeatures",
++ "digest",
++]
++
++[[package]]
++name = "shlex"
++version = "2.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
++
++[[package]]
++name = "signature"
++version = "2.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
++dependencies = [
++ "rand_core 0.6.4",
++]
++
++[[package]]
++name = "sigstore-bundle"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5948e95f63e900fa92936ecf72c7f2251f83d27560a35a4aae560cc745f8b687"
++dependencies = [
++ "base64",
++ "hex",
++ "serde",
++ "serde_json",
++ "sigstore-crypto",
++ "sigstore-rekor",
++ "sigstore-tsa",
++ "sigstore-types",
++ "thiserror",
++]
++
++[[package]]
++name = "sigstore-crypto"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "22f27364b37bec104a904f10a675c8cdf05d5e48a980569368f0cd0c119b2652"
++dependencies = [
++ "aws-lc-rs",
++ "base64",
++ "const-oid",
++ "der",
++ "digest",
++ "pem",
++ "rand_core 0.9.5",
++ "sha2",
++ "signature",
++ "sigstore-types",
++ "spki",
++ "thiserror",
++ "tracing",
++ "x509-cert",
++]
++
++[[package]]
++name = "sigstore-merkle"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0ee85fd9fb550efd7c8a59447cb0ef4eb02f1258f3ffa80c88d38427c3930af3"
++dependencies = [
++ "base64",
++ "hex",
++ "sigstore-crypto",
++ "sigstore-types",
++ "thiserror",
++]
++
++[[package]]
++name = "sigstore-rekor"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9b97c5a866f849a9445ae657bef0caa2db053a82827e6dae3a2b3de9c15a6a1a"
++dependencies = [
++ "base64",
++ "hex",
++ "reqwest",
++ "serde",
++ "serde_json",
++ "sigstore-crypto",
++ "sigstore-merkle",
++ "sigstore-types",
++ "thiserror",
++ "url",
++]
++
++[[package]]
++name = "sigstore-trust-root"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "389b54d1b8ace20ba86fdf90e5e655495f65f1abbc7d5d0eb7494defa9ad32f0"
++dependencies = [
++ "base64",
++ "hex",
++ "jiff",
++ "rustls-pki-types",
++ "serde",
++ "serde_json",
++ "sigstore-crypto",
++ "sigstore-types",
++ "thiserror",
++ "x509-cert",
++]
++
++[[package]]
++name = "sigstore-tsa"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b58fe92d4d8cf4b7215b927b70bc1245b6e0d70d801febdfe0cd265ad97ebf8b"
++dependencies = [
++ "aws-lc-rs",
++ "base64",
++ "cmpv2",
++ "cms",
++ "const-oid",
++ "der",
++ "hex",
++ "jiff",
++ "rand",
++ "reqwest",
++ "rustls-pki-types",
++ "rustls-webpki",
++ "sigstore-crypto",
++ "sigstore-types",
++ "thiserror",
++ "tracing",
++ "x509-cert",
++ "x509-tsp",
++]
++
++[[package]]
++name = "sigstore-types"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "236474c535a3157839926a0ae18f9c0c22b151e49634da6e5b18ad7cac8a3b69"
++dependencies = [
++ "base64",
++ "hex",
++ "pem",
++ "serde",
++ "serde_json",
++ "thiserror",
++]
++
++[[package]]
++name = "sigstore-verify"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "558f71aad0e1c5925d29ae2024f55f0f8898a7ad450c93668f99086624c421e0"
++dependencies = [
++ "base64",
++ "cms",
++ "const-oid",
++ "hex",
++ "jiff",
++ "pem",
++ "rustls-pki-types",
++ "rustls-webpki",
++ "serde",
++ "serde_json",
++ "serde_json_canonicalizer",
++ "sigstore-bundle",
++ "sigstore-crypto",
++ "sigstore-merkle",
++ "sigstore-rekor",
++ "sigstore-trust-root",
++ "sigstore-tsa",
++ "sigstore-types",
++ "thiserror",
++ "tls_codec",
++ "tracing",
++ "x509-cert",
++]
++
++[[package]]
++name = "smallvec"
++version = "1.15.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
++
++[[package]]
++name = "socket2"
++version = "0.5.10"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
++dependencies = [
++ "libc",
++ "windows-sys 0.52.0",
++]
++
++[[package]]
++name = "spki"
++version = "0.7.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
++dependencies = [
++ "base64ct",
++ "der",
++]
++
++[[package]]
++name = "syn"
++version = "2.0.98"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "36147f1a48ae0ec2b5b3bc5b537d267457555a10dc06f3dbc8cb11ba3006d3b1"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "unicode-ident",
++]
++
++[[package]]
++name = "sync_wrapper"
++version = "1.0.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
++dependencies = [
++ "futures-core",
++]
++
++[[package]]
++name = "thiserror"
++version = "2.0.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
++dependencies = [
++ "thiserror-impl",
++]
++
++[[package]]
++name = "thiserror-impl"
++version = "2.0.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++]
++
++[[package]]
++name = "tinyvec"
++version = "1.13.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
++
++[[package]]
++name = "tls_codec"
++version = "0.4.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0de2e01245e2bb89d6f05801c564fa27624dbd7b1846859876c7dad82e90bf6b"
++dependencies = [
++ "tls_codec_derive",
++ "zeroize",
++]
++
++[[package]]
++name = "tls_codec_derive"
++version = "0.4.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2d2e76690929402faae40aebdda620a2c0e25dd6d3b9afe48867dfd95991f4bd"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++]
++
++[[package]]
++name = "tokio"
++version = "1.44.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
++dependencies = [
++ "backtrace",
++ "libc",
++ "mio",
++ "pin-project-lite",
++ "socket2",
++ "windows-sys 0.52.0",
++]
++
++[[package]]
++name = "tower"
++version = "0.5.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
++dependencies = [
++ "futures-core",
++ "futures-util",
++ "pin-project-lite",
++ "sync_wrapper",
++ "tokio",
++ "tower-layer",
++ "tower-service",
++]
++
++[[package]]
++name = "tower-http"
++version = "0.6.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
++dependencies = [
++ "bitflags",
++ "bytes",
++ "futures-util",
++ "http",
++ "http-body",
++ "pin-project-lite",
++ "tower",
++ "tower-layer",
++ "tower-service",
++ "url",
++]
++
++[[package]]
++name = "tower-layer"
++version = "0.3.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
++
++[[package]]
++name = "tower-service"
++version = "0.3.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
++
++[[package]]
++name = "tracing"
++version = "0.1.41"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "784e0ac535deb450455cbfa28a6f0df145ea1bb7ae51b821cf5e7927fdcfbdd0"
++dependencies = [
++ "pin-project-lite",
++ "tracing-attributes",
++ "tracing-core",
++]
++
++[[package]]
++name = "tracing-attributes"
++version = "0.1.29"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1b1ffbcf9c6f6b99d386e7444eb608ba646ae452a36b39737deb9663b610f662"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++]
++
++[[package]]
++name = "tracing-core"
++version = "0.1.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
++dependencies = [
++ "once_cell",
++]
++
++[[package]]
++name = "try-lock"
++version = "0.2.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
++
++[[package]]
++name = "typenum"
++version = "1.17.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
++
++[[package]]
++name = "unicode-bidi"
++version = "0.3.18"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
++
++[[package]]
++name = "unicode-ident"
++version = "1.0.12"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
++
++[[package]]
++name = "unicode-normalization"
++version = "0.1.26"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
++dependencies = [
++ "tinyvec",
++]
++
++[[package]]
++name = "untrusted"
++version = "0.7.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
++
++[[package]]
++name = "untrusted"
++version = "0.9.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
++
++[[package]]
++name = "url"
++version = "2.5.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "22784dbdf76fdde8af1aeda5622b546b422b6fc585325248a2bf9f5e41e94d6c"
++dependencies = [
++ "form_urlencoded",
++ "idna",
++ "percent-encoding",
++]
++
++[[package]]
++name = "version_check"
++version = "0.9.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
++
++[[package]]
++name = "want"
++version = "0.3.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
++dependencies = [
++ "try-lock",
++]
++
++[[package]]
++name = "wasi"
++version = "0.11.0+wasi-snapshot-preview1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
++
++[[package]]
++name = "wasi"
++version = "0.14.4+wasi-0.2.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "88a5f4a424faf49c3c2c344f166f0662341d470ea185e939657aaff130f0ec4a"
++dependencies = [
++ "wit-bindgen",
++]
++
++[[package]]
++name = "wasm-bindgen"
++version = "0.2.100"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1edc8929d7499fc4e8f0be2262a241556cfc54a0bea223790e71446f2aab1ef5"
++dependencies = [
++ "cfg-if",
++ "once_cell",
++ "rustversion",
++ "wasm-bindgen-macro",
++]
++
++[[package]]
++name = "wasm-bindgen-backend"
++version = "0.2.100"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2f0a0651a5c2bc21487bde11ee802ccaf4c51935d0d3d42a6101f98161700bc6"
++dependencies = [
++ "bumpalo",
++ "log",
++ "proc-macro2",
++ "quote",
++ "syn",
++ "wasm-bindgen-shared",
++]
++
++[[package]]
++name = "wasm-bindgen-futures"
++version = "0.4.50"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "555d470ec0bc3bb57890405e5d4322cc9ea83cebb085523ced7be4144dac1e61"
++dependencies = [
++ "cfg-if",
++ "js-sys",
++ "once_cell",
++ "wasm-bindgen",
++ "web-sys",
++]
++
++[[package]]
++name = "wasm-bindgen-macro"
++version = "0.2.100"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7fe63fc6d09ed3792bd0897b314f53de8e16568c2b3f7982f468c0bf9bd0b407"
++dependencies = [
++ "quote",
++ "wasm-bindgen-macro-support",
++]
++
++[[package]]
++name = "wasm-bindgen-macro-support"
++version = "0.2.100"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8ae87ea40c9f689fc23f209965b6fb8a99ad69aeeb0231408be24920604395de"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++ "wasm-bindgen-backend",
++ "wasm-bindgen-shared",
++]
++
++[[package]]
++name = "wasm-bindgen-shared"
++version = "0.2.100"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1a05d73b933a847d6cccdda8f838a22ff101ad9bf93e33684f39c1f5f0eece3d"
++dependencies = [
++ "unicode-ident",
++]
++
++[[package]]
++name = "web-sys"
++version = "0.3.77"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "33b6dd2ef9186f1f2072e409e99cd22a975331a6b3591b12c764e0e55c60d5d2"
++dependencies = [
++ "js-sys",
++ "wasm-bindgen",
++]
++
++[[package]]
++name = "windows-sys"
++version = "0.52.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
++dependencies = [
++ "windows-targets",
++]
++
++[[package]]
++name = "windows-sys"
++version = "0.59.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
++dependencies = [
++ "windows-targets",
++]
++
++[[package]]
++name = "windows-targets"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9b724f72796e036ab90c1021d4780d4d3d648aca59e491e6b98e725b84e99973"
++dependencies = [
++ "windows_aarch64_gnullvm",
++ "windows_aarch64_msvc",
++ "windows_i686_gnu",
++ "windows_i686_gnullvm",
++ "windows_i686_msvc",
++ "windows_x86_64_gnu",
++ "windows_x86_64_gnullvm",
++ "windows_x86_64_msvc",
++]
++
++[[package]]
++name = "windows_aarch64_gnullvm"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "32a4622180e7a0ec044bb555404c800bc9fd9ec262ec147edd5989ccd0c02cd3"
++
++[[package]]
++name = "windows_aarch64_msvc"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "09ec2a7bb152e2252b53fa7803150007879548bc709c039df7627cabbd05d469"
++
++[[package]]
++name = "windows_i686_gnu"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8e9b5ad5ab802e97eb8e295ac6720e509ee4c243f69d781394014ebfe8bbfa0b"
++
++[[package]]
++name = "windows_i686_gnullvm"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0eee52d38c090b3caa76c563b86c3a4bd71ef1a819287c19d586d7334ae8ed66"
++
++[[package]]
++name = "windows_i686_msvc"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "240948bc05c5e7c6dabba28bf89d89ffce3e303022809e73deaefe4f6ec56c66"
++
++[[package]]
++name = "windows_x86_64_gnu"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "147a5c80aabfbf0c7d901cb5895d1de30ef2907eb21fbbab29ca94c5b08b1a78"
++
++[[package]]
++name = "windows_x86_64_gnullvm"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "24d5b23dc417412679681396f2b49f3de8c1473deb516bd34410872eff51ed0d"
++
++[[package]]
++name = "windows_x86_64_msvc"
++version = "0.52.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
++
++[[package]]
++name = "wit-bindgen"
++version = "0.45.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5c573471f125075647d03df72e026074b7203790d41351cd6edc96f46bcccd36"
++
++[[package]]
++name = "x509-cert"
++version = "0.2.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1301e935010a701ae5f8655edc0ad17c44bad3ac5ce8c39185f75453b720ae94"
++dependencies = [
++ "const-oid",
++ "der",
++ "sha1",
++ "signature",
++ "spki",
++ "tls_codec",
++]
++
++[[package]]
++name = "x509-tsp"
++version = "0.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f5ceece934a21607055b7ac5c25adb56a2ff559804b10705dc674d1d838c15e1"
++dependencies = [
++ "cmpv2",
++ "cms",
++ "der",
++]
++
++[[package]]
++name = "zeroize"
++version = "1.8.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
++dependencies = [
++ "zeroize_derive",
++]
++
++[[package]]
++name = "zeroize_derive"
++version = "1.4.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn",
++]
+diff --git a/libs/custom_update_manifest/src/lib.rs b/libs/custom_update_manifest/src/lib.rs
+new file mode 100644
+index 0000000..149d165
+--- /dev/null
++++ b/libs/custom_update_manifest/src/lib.rs
+@@ -0,0 +1,501 @@
++//! Offline Sigstore verification and typed update selection. No shell or gh dependency.
++use serde::Deserialize;
++use serde_json::{json, Value};
++use sha2::{Digest, Sha256};
++use sigstore_verify::{
++    trust_root::{TrustedRoot, SIGSTORE_PRODUCTION_TRUSTED_ROOT},
++    types::{Bundle, SignatureContent},
++    VerificationPolicy,
++};
++use std::collections::{BTreeMap, BTreeSet};
++use x509_cert::der::{asn1::Utf8StringRef, Decode};
++
++pub const MANIFEST: &str = "update-manifest.json";
++pub const PROOF: &str = "release-attestation.json";
++pub const SCHEMA: &str = "rustdesk-release-manifest-v2";
++pub const MAX_MANIFEST: usize = 1024 * 1024;
++pub const MAX_PROOF: usize = 8 * 1024 * 1024;
++pub type Result<T> = std::result::Result<T, String>;
++
++#[derive(Clone, Debug, PartialEq, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct Package {
++    pub name: String,
++    pub size: u64,
++    pub sha256: String,
++    pub os: String,
++    pub arch: String,
++    pub variant: String,
++    pub flavor: String,
++    pub package: String,
++    pub signing_status: String,
++}
++#[derive(Clone, Debug, PartialEq, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct Manifest {
++    pub schema: String,
++    pub repository: String,
++    pub repository_id: String,
++    pub repository_owner_id: String,
++    pub channel: String,
++    pub upstream_repository: String,
++    pub upstream_version: String,
++    pub upstream_tag: Option<String>,
++    pub upstream_sha: String,
++    pub custom_repository_sha: String,
++    pub patchset: String,
++    pub common_patch_hash: String,
++    pub sos_patch_hash: String,
++    pub patch_revision: Option<String>,
++    pub patchset_version: String,
++    pub version_semantics: String,
++    pub prepare_run: String,
++    pub build_run: String,
++    pub build_identity: String,
++    pub wayland_included: bool,
++    pub wayland_policy_sha256: String,
++    pub android_signing_enabled: bool,
++    pub android_production_signed: bool,
++    pub official_run_id: Option<String>,
++    pub official_run_url: Option<String>,
++    pub qualification: String,
++    pub runtime_ui: String,
++    pub real_remote_session: String,
++    pub assets: Vec<Package>,
++}
++#[derive(Clone, Copy)]
++pub struct Expected<'a> {
++    pub repository: &'a str,
++    pub repository_id: &'a str,
++    pub owner_id: &'a str,
++    pub tag: &'a str,
++}
++
++pub fn hex(s: &str, n: usize) -> bool {
++    s.len() == n
++        && s.bytes()
++            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
++}
++fn positive(s: &str) -> bool {
++    !s.starts_with('0') && s.parse::<u64>().is_ok_and(|n| n > 0)
++}
++fn version(s: &str) -> bool {
++    let p: Vec<_> = s.split('.').collect();
++    p.len() == 3
++        && p.iter().all(|p| {
++            !p.is_empty()
++                && p.bytes().all(|x| x.is_ascii_digit())
++                && (p.len() == 1 || !p.starts_with('0'))
++                && p.parse::<u64>().is_ok()
++        })
++}
++fn content(s: &str) -> bool {
++    let Some((p, r)) = s.split_once('.') else {
++        return false;
++    };
++    p.starts_with('v') && positive(&p[1..]) && positive(r)
++}
++fn safe_name(s: &str) -> bool {
++    !s.is_empty()
++        && s.len() <= 255
++        && s.as_bytes()[0].is_ascii_alphanumeric()
++        && s.bytes()
++            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
++        && !matches!(s, MANIFEST | PROOF | "SHA256SUMS")
++}
++fn require(ok: bool, msg: &str) -> Result<()> {
++    if ok {
++        Ok(())
++    } else {
++        Err(msg.to_string())
++    }
++}
++fn digest(raw: &[u8]) -> String {
++    format!("{:x}", Sha256::digest(raw))
++}
++
++impl Manifest {
++    pub fn parse(raw: &[u8], expected: Expected<'_>) -> Result<Self> {
++        require(
++            raw.len() <= MAX_MANIFEST,
++            "Update manifest exceeds size limit",
++        )?;
++        let v: Self =
++            serde_json::from_slice(raw).map_err(|e| format!("Invalid update manifest: {e}"))?;
++        v.validate(expected)?;
++        Ok(v)
++    }
++    pub fn validate(&self, e: Expected<'_>) -> Result<()> {
++        require(self.schema == SCHEMA, "Unsupported update manifest schema")?;
++        require(
++            self.repository == e.repository
++                && self.repository_id == e.repository_id
++                && self.repository_owner_id == e.owner_id
++                && positive(e.repository_id)
++                && positive(e.owner_id),
++            "Update repository identity mismatch",
++        )?;
++        require(
++            self.channel == "stable" && self.qualification == "PASS",
++            "Updates require a qualified Stable manifest",
++        )?;
++        require(
++            self.upstream_repository == "rustdesk/rustdesk" && version(&self.upstream_version),
++            "Invalid upstream version/source",
++        )?;
++        require(
++            self.upstream_tag.as_deref() == Some(&self.upstream_version)
++                || self.upstream_tag.as_deref()
++                    == Some(format!("v{}", self.upstream_version).as_str()),
++            "Official Stable tag missing",
++        )?;
++        require(
++            self.version_semantics == "patchset-content-v1"
++                && content(&self.patchset_version)
++                && self.patch_revision.as_ref() == Some(&self.patchset_version),
++            "Unsupported content revision semantics",
++        )?;
++        require(
++            self.patchset_version
++                .starts_with(&format!("{}.", self.patchset))
++                && e.tag
++                    == format!(
++                        "v{}-custom.{}",
++                        self.upstream_version, self.patchset_version
++                    ),
++            "Release tag/content revision mismatch",
++        )?;
++        for (s, n) in [
++            (&self.upstream_sha, 40),
++            (&self.custom_repository_sha, 40),
++            (&self.common_patch_hash, 64),
++            (&self.sos_patch_hash, 64),
++        ] {
++            require(hex(s, n), "Invalid update source/hash")?;
++        }
++        require(
++            positive(&self.build_run)
++                && self.prepare_run == self.build_run
++                && self.official_run_id.is_none()
++                && self.official_run_url.is_none(),
++            "Invalid Stable build provenance",
++        )?;
++        require(
++            (self.wayland_included && hex(&self.wayland_policy_sha256, 64))
++                || (!self.wayland_included && self.wayland_policy_sha256.is_empty()),
++            "Invalid Wayland build policy",
++        )?;
++        let identity: BTreeMap<&str, Value> = [
++            ("schema", json!("stable-build-identity-v4")),
++            ("upstream_sha", json!(self.upstream_sha)),
++            ("patchset", json!(self.patchset)),
++            ("common_patch_hash", json!(self.common_patch_hash)),
++            ("sos_patch_hash", json!(self.sos_patch_hash)),
++            ("wayland_included", json!(self.wayland_included)),
++            ("wayland_policy_sha256", json!(self.wayland_policy_sha256)),
++            (
++                "android_signing_enabled",
++                json!(self.android_signing_enabled),
++            ),
++        ]
++        .into_iter()
++        .collect();
++        require(
++            self.build_identity
++                == digest(&serde_json::to_vec(&identity).map_err(|e| e.to_string())?),
++            "Update build identity mismatch",
++        )?;
++        require(
++            !self.assets.is_empty() && self.assets.len() <= 256,
++            "Invalid update package count",
++        )?;
++        let mut names = BTreeSet::new();
++        let mut selectors = BTreeSet::new();
++        let mut wayland = BTreeSet::new();
++        let mut android = BTreeSet::new();
++        let mut signed = true;
++        for a in &self.assets {
++            require(
++                safe_name(&a.name)
++                    && a.size > 0
++                    && a.size <= 1024 * 1024 * 1024
++                    && hex(&a.sha256, 64),
++                "Invalid update package name/size/digest",
++            )?;
++            require(
++                matches!(a.variant.as_str(), "standard" | "sos")
++                    && matches!(a.arch.as_str(), "x86_64" | "aarch64" | "armv7"),
++                "Invalid update package variant/architecture",
++            )?;
++            let family = match a.os.as_str() {
++                "windows" => matches!(a.package.as_str(), "exe" | "msi"),
++                "macos" => a.package == "dmg",
++                "linux" => matches!(a.package.as_str(), "deb" | "rpm" | "suse-rpm"),
++                "android" => a.package == "apk" && a.variant == "standard",
++                _ => false,
++            };
++            require(
++                family && (a.arch != "armv7" || a.os == "android"),
++                "Invalid update package OS/family",
++            )?;
++            let ext = if a.package == "suse-rpm" {
++                "rpm"
++            } else {
++                &a.package
++            };
++            require(
++                a.name.ends_with(&format!(".{ext}")),
++                "Update package extension mismatch",
++            )?;
++            require(
++                matches!(a.flavor.as_str(), "ordinary" | "unattended-wayland"),
++                "Unknown update build flavor",
++            )?;
++            if a.flavor == "unattended-wayland" {
++                require(
++                    a.os == "linux" && a.package == "deb",
++                    "Wayland package family mismatch",
++                )?;
++                wayland.insert((a.variant.as_str(), a.arch.as_str()));
++            }
++            require(
++                matches!(
++                    a.signing_status.as_str(),
++                    "NOT ENABLED"
++                        | "TEST SIGNED / NOT PRODUCTION SIGNED"
++                        | "PRODUCTION SIGNED / IDENTITY VERIFIED"
++                ),
++                "Unknown package signing state",
++            )?;
++            if a.os == "android" {
++                android.insert(a.arch.as_str());
++                signed &= a.signing_status == "PRODUCTION SIGNED / IDENTITY VERIFIED";
++            }
++            require(
++                names.insert(a.name.as_str())
++                    && selectors.insert((&a.os, &a.arch, &a.variant, &a.flavor, &a.package)),
++                "Ambiguous update package name/selector",
++            )?;
++        }
++        require(
++            self.wayland_included == !wayland.is_empty(),
++            "Wayland option/inventory mismatch",
++        )?;
++        let prod = android.len() == 3 && signed;
++        require(
++            self.android_production_signed == prod && (!self.android_signing_enabled || prod),
++            "Android production signing requirement unmet",
++        )?;
++        Ok(())
++    }
++    pub fn selected(
++        &self,
++        os: &str,
++        arch: &str,
++        variant: &str,
++        wayland: bool,
++        package: &str,
++    ) -> Result<&Package> {
++        let format = if package == "suse.rpm" {
++            "suse-rpm"
++        } else {
++            package
++        };
++        let flavor = if wayland {
++            "unattended-wayland"
++        } else {
++            "ordinary"
++        };
++        let mut matching = self.assets.iter().filter(|a| {
++            a.os == os
++                && a.arch == arch
++                && a.variant == variant
++                && a.flavor == flavor
++                && a.package == format
++        });
++        let asset=matching.next().ok_or_else(||"No update package matches this OS, architecture, variant, flavor and package format".to_string())?;
++        require(
++            matching.next().is_none(),
++            "Multiple matching update packages",
++        )?;
++        Ok(asset)
++    }
++}
++
++fn extension(cert: &x509_cert::Certificate, number: u8) -> Result<String> {
++    let oid = format!("1.3.6.1.4.1.57264.1.{number}");
++    let mut values = cert
++        .tbs_certificate
++        .extensions
++        .as_ref()
++        .into_iter()
++        .flatten()
++        .filter(|x| x.extn_id.to_string() == oid);
++    let x = values
++        .next()
++        .ok_or_else(|| format!("Attestation certificate missing claim {oid}"))?;
++    require(
++        values.next().is_none(),
++        "Duplicate certificate identity claim",
++    )?;
++    Utf8StringRef::from_der(x.extn_value.as_bytes())
++        .map(|s| s.as_str().to_string())
++        .map_err(|e| format!("Invalid certificate claim: {e}"))
++}
++
++pub fn verify_proof(raw: &[u8], proof: &[u8], e: Expected<'_>, sha: &str, run: &str) -> Result<()> {
++    require(
++        raw.len() <= MAX_MANIFEST && proof.len() <= MAX_PROOF,
++        "Update metadata exceeds size limit",
++    )?;
++    require(
++        hex(sha, 40) && positive(run),
++        "Invalid attestation expected source/run",
++    )?;
++    let bundle = Bundle::from_json(std::str::from_utf8(proof).map_err(|e| e.to_string())?)
++        .map_err(|e| e.to_string())?;
++    require(
++        bundle.media_type == "application/vnd.dev.sigstore.bundle.v0.3+json",
++        "Unsupported Sigstore bundle format",
++    )?;
++    let identity = format!(
++        "https://github.com/{}/.github/workflows/tag.yml@refs/heads/main",
++        e.repository
++    );
++    let root =
++        TrustedRoot::from_json(SIGSTORE_PRODUCTION_TRUSTED_ROOT).map_err(|e| e.to_string())?;
++    let policy = VerificationPolicy::default()
++        .require_identity(identity.clone())
++        .require_issuer("https://token.actions.githubusercontent.com");
++    sigstore_verify::verify(raw, &bundle, &policy, &root)
++        .map_err(|e| format!("Update attestation verification failed: {e}"))?;
++    let cert = x509_cert::Certificate::from_der(
++        bundle
++            .signing_certificate()
++            .ok_or_else(|| "Attestation certificate missing".to_string())?
++            .as_bytes(),
++    )
++    .map_err(|e| e.to_string())?;
++    for (oid, expected) in [
++        (9, identity.clone()),
++        (10, sha.into()),
++        (11, "github-hosted".into()),
++        (12, format!("https://github.com/{}", e.repository)),
++        (13, sha.into()),
++        (14, "refs/heads/main".into()),
++        (15, e.repository_id.into()),
++        (17, e.owner_id.into()),
++        (18, identity.clone()),
++        (19, sha.into()),
++        (20, "workflow_dispatch".into()),
++    ] {
++        require(
++            extension(&cert, oid)? == expected,
++            "Attestation certificate workflow/source identity mismatch",
++        )?;
++    }
++    let invocation = extension(&cert, 21)?;
++    let prefix = format!(
++        "https://github.com/{}/actions/runs/{run}/attempts/",
++        e.repository
++    );
++    require(
++        invocation.strip_prefix(&prefix).is_some_and(positive),
++        "Attestation build run identity mismatch",
++    )?;
++    let envelope = match &bundle.content {
++        SignatureContent::DsseEnvelope(v) => v,
++        _ => return Err("Update requires a DSSE provenance statement".into()),
++    };
++    require(
++        envelope.payload_type == "application/vnd.in-toto+json",
++        "Unknown attestation payload type",
++    )?;
++    let statement: Value =
++        serde_json::from_slice(envelope.payload.as_bytes()).map_err(|e| e.to_string())?;
++    require(
++        statement["_type"] == "https://in-toto.io/Statement/v1"
++            && statement["predicateType"] == "https://slsa.dev/provenance/v1",
++        "Unknown attestation statement/predicate",
++    )?;
++    let p = &statement["predicate"];
++    require(
++        p["runDetails"]["builder"]["id"] == identity
++            && p["runDetails"]["metadata"]["invocationId"] == invocation,
++        "Provenance builder/run differs from certificate",
++    )?;
++    require(
++        p["buildDefinition"]["externalParameters"]["workflow"]["ref"] == "refs/heads/main"
++            && p["buildDefinition"]["externalParameters"]["workflow"]["path"]
++                == ".github/workflows/tag.yml"
++            && p["buildDefinition"]["externalParameters"]["workflow"]["repository"]
++                == format!("https://github.com/{}", e.repository),
++        "Provenance workflow mismatch",
++    )?;
++    Ok(())
++}
++
++pub fn verify(raw: &[u8], proof: &[u8], e: Expected<'_>) -> Result<Manifest> {
++    let manifest = Manifest::parse(raw, e)?;
++    verify_proof(
++        raw,
++        proof,
++        e,
++        &manifest.custom_repository_sha,
++        &manifest.build_run,
++    )?;
++    Ok(manifest)
++}
++
++/// Package-manager presence is insufficient: callers must establish executable ownership.
++pub fn linux_package_format(
++    deb_owns: bool,
++    rpm_owns: bool,
++    wayland: bool,
++    os_release: &str,
++) -> Result<&'static str> {
++    require(
++        deb_owns != rpm_owns,
++        "Current executable has no unique installed DEB/RPM owner; choose a package manually",
++    )?;
++    if deb_owns {
++        return Ok("deb");
++    }
++    require(
++        !wayland,
++        "Wayland unattended builds require a managed DEB installation",
++    )?;
++    let mut id = None;
++    let mut like = String::new();
++    for line in os_release.lines() {
++        if let Some((key, value)) = line.split_once('=') {
++            let value = value.trim().trim_matches('\"').trim_matches('\'');
++            if key == "ID" {
++                require(id.is_none(), "Ambiguous Linux distribution identity")?;
++                id = Some(value.to_ascii_lowercase());
++            }
++            if key == "ID_LIKE" {
++                like = value.to_ascii_lowercase();
++            }
++        }
++    }
++    let id = id.ok_or_else(|| "Linux distribution identity unavailable".to_string())?;
++    require(
++        !id.is_empty()
++            && id
++                .bytes()
++                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_')),
++        "Invalid Linux distribution identity",
++    )?;
++    let suse = |value: &str| {
++        matches!(
++            value,
++            "suse" | "sles" | "sled" | "opensuse" | "opensuse-leap" | "opensuse-tumbleweed"
++        )
++    };
++    Ok(if suse(&id) || like.split_whitespace().any(suse) {
++        "suse.rpm"
++    } else {
++        "rpm"
++    })
++}
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -50,6 +50,9 @@
+ # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+ [dependencies]
++# BEGIN reviewed custom update verifier
++rustdesk-update-manifest = { path = "libs/custom_update_manifest" }
++# END reviewed custom update verifier
+ async-trait = "0.1"
+ scrap = { path = "libs/scrap", features = ["wayland"] }
+ hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
+diff --git a/Cargo.lock b/Cargo.lock
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -24,7 +24,16 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "6e4503c46a5c0c7844e948c9a4d6acd9f50cccb4de1c48eb9e291ea17470c678"
+ dependencies = [
+- "gimli",
++ "gimli 0.29.0",
++]
++
++[[package]]
++name = "addr2line"
++version = "0.24.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "dfbe277e56a376000877090da837660b4427aad530e3028d44e0bffe4f89a1c1"
++dependencies = [
++ "gimli 0.31.1",
+ ]
+
+ [[package]]
+@@ -80,7 +89,7 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
+ dependencies = [
+- "getrandom 0.2.15",
++ "getrandom 0.2.17",
+  "once_cell",
+  "version_check",
+ ]
+@@ -634,18 +643,42 @@
+ checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
+
+ [[package]]
++name = "aws-lc-rs"
++version = "1.19.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "048006790404103c488e6c5616b3e7e702a71292aadda08e8f7698a9e0d2eb53"
++dependencies = [
++ "aws-lc-sys",
++ "untrusted 0.7.1",
++ "zeroize",
++]
++
++[[package]]
++name = "aws-lc-sys"
++version = "0.47.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8bfbe32ac36b3c428696ce315464181bc4029d689fd58e3f2a4e58c252242f52"
++dependencies = [
++ "cc",
++ "cmake",
++ "dunce",
++ "fs_extra",
++ "pkg-config",
++]
++
++[[package]]
+ name = "backtrace"
+-version = "0.3.73"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "5cc23269a4f8976d0a4d2e7109211a419fe30e8d88d677cd60b6bc79c5732e0a"
+-dependencies = [
+- "addr2line",
+- "cc",
++version = "0.3.74"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8d82cb332cdfaed17ae235a638438ac4d4839913cc2af585c3c6746e8f8bee1a"
++dependencies = [
++ "addr2line 0.24.2",
+  "cfg-if 1.0.0",
+  "libc",
+- "miniz_oxide 0.7.4",
++ "miniz_oxide 0.8.9",
+  "object",
+  "rustc-demangle",
++ "windows-targets 0.52.6",
+ ]
+
+ [[package]]
+@@ -730,7 +763,7 @@
+  "quote 1.0.36",
+  "regex",
+  "rustc-hash 1.1.0",
+- "shlex",
++ "shlex 1.3.0",
+  "which",
+ ]
+
+@@ -752,7 +785,7 @@
+  "quote 1.0.36",
+  "regex",
+  "rustc-hash 1.1.0",
+- "shlex",
++ "shlex 1.3.0",
+  "syn 2.0.98",
+  "which",
+ ]
+@@ -773,7 +806,7 @@
+  "quote 1.0.36",
+  "regex",
+  "rustc-hash 1.1.0",
+- "shlex",
++ "shlex 1.3.0",
+  "syn 2.0.98",
+ ]
+
+@@ -793,7 +826,7 @@
+  "quote 1.0.36",
+  "regex",
+  "rustc-hash 2.1.1",
+- "shlex",
++ "shlex 1.3.0",
+  "syn 2.0.98",
+ ]
+
+@@ -1097,13 +1130,14 @@
+
+ [[package]]
+ name = "cc"
+-version = "1.2.13"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c7777341816418c02e033934a09f20dc0ccaf65a5201ef8a450ae0105a573fda"
+-dependencies = [
++version = "1.4.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a3eb0f42d6c360dc3f8a821f6bf2fdea7f72bfd36b3076eb0e6d1e9e0752fff4"
++dependencies = [
++ "find-msvc-tools",
+  "jobserver",
+  "libc",
+- "shlex",
++ "shlex 2.0.1",
+ ]
+
+ [[package]]
+@@ -1339,11 +1373,35 @@
+
+ [[package]]
+ name = "cmake"
+-version = "0.1.50"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
++version = "0.1.58"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
+ dependencies = [
+  "cc",
++]
++
++[[package]]
++name = "cmpv2"
++version = "0.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "961b955a666e25ee5a1091d219128d6e6401e3dab84efb1a2bf6b4035d797b39"
++dependencies = [
++ "crmf",
++ "der",
++ "spki",
++ "x509-cert",
++]
++
++[[package]]
++name = "cms"
++version = "0.2.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7b77c319abfd5219629c45c34c89ba945ed3c5e49fcde9d16b6c3885f118a730"
++dependencies = [
++ "const-oid",
++ "der",
++ "spki",
++ "x509-cert",
+ ]
+
+ [[package]]
+@@ -1518,6 +1576,16 @@
+
+ [[package]]
+ name = "core-foundation"
++version = "0.10.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
++dependencies = [
++ "core-foundation-sys 0.8.7",
++ "libc",
++]
++
++[[package]]
++name = "core-foundation"
+ version = "0.7.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "57d24c7a13c43e870e37c1556b74555437870a04514f7685f5b354e090567171"
+@@ -1540,16 +1608,6 @@
+ version = "0.9.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
+-dependencies = [
+- "core-foundation-sys 0.8.7",
+- "libc",
+-]
+-
+-[[package]]
+-name = "core-foundation"
+-version = "0.10.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
+ dependencies = [
+  "core-foundation-sys 0.8.7",
+  "libc",
+@@ -1768,6 +1826,18 @@
+ checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
+ dependencies = [
+  "cfg-if 1.0.0",
++]
++
++[[package]]
++name = "crmf"
++version = "0.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "36fe21b96d5b87f5de4b5b7202ec41c00110ac817ce6728fe75fb2fe5962ed92"
++dependencies = [
++ "cms",
++ "der",
++ "spki",
++ "x509-cert",
+ ]
+
+ [[package]]
+@@ -2120,6 +2190,8 @@
+ checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
+ dependencies = [
+  "const-oid",
++ "der_derive",
++ "flagset",
+  "pem-rfc7468",
+  "zeroize",
+ ]
+@@ -2136,6 +2208,17 @@
+  "num-bigint",
+  "num-traits 0.2.19",
+  "rusticata-macros",
++]
++
++[[package]]
++name = "der_derive"
++version = "0.7.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8034092389675178f570469e6c3b0465d3d30b4505c294a6550db47f3c17ad18"
++dependencies = [
++ "proc-macro2 1.0.93",
++ "quote 1.0.36",
++ "syn 2.0.98",
+ ]
+
+ [[package]]
+@@ -2579,6 +2662,29 @@
+
+ [[package]]
+ name = "env_logger"
++version = "0.10.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
++dependencies = [
++ "log",
++ "regex",
++]
++
++[[package]]
++name = "env_logger"
++version = "0.11.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "dcaee3d8e3cfc3fd92428d477bc97fc29ec8716d180c0d74c643bb26166660e0"
++dependencies = [
++ "anstream",
++ "anstyle",
++ "env_filter",
++ "humantime",
++ "log",
++]
++
++[[package]]
++name = "env_logger"
+ version = "0.9.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
+@@ -2588,29 +2694,6 @@
+  "log",
+  "regex",
+  "termcolor",
+-]
+-
+-[[package]]
+-name = "env_logger"
+-version = "0.10.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
+-dependencies = [
+- "log",
+- "regex",
+-]
+-
+-[[package]]
+-name = "env_logger"
+-version = "0.11.6"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "dcaee3d8e3cfc3fd92428d477bc97fc29ec8716d180c0d74c643bb26166660e0"
+-dependencies = [
+- "anstream",
+- "anstyle",
+- "env_filter",
+- "humantime",
+- "log",
+ ]
+
+ [[package]]
+@@ -2782,10 +2865,22 @@
+ ]
+
+ [[package]]
++name = "find-msvc-tools"
++version = "0.1.15"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
++
++[[package]]
+ name = "fixedbitset"
+ version = "0.4.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
++
++[[package]]
++name = "flagset"
++version = "0.4.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b7ac824320a75a52197e8f2d787f6a38b6718bb6897a35142d749af3c0e8f4fe"
+
+ [[package]]
+ name = "flate2"
+@@ -2962,6 +3057,12 @@
+ ]
+
+ [[package]]
++name = "fs_extra"
++version = "1.3.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
++
++[[package]]
+ name = "fsevent"
+ version = "2.1.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -3241,28 +3342,26 @@
+
+ [[package]]
+ name = "getrandom"
+-version = "0.2.15"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7"
++version = "0.2.17"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
++dependencies = [
++ "cfg-if 1.0.0",
++ "libc",
++ "wasi 0.11.0+wasi-snapshot-preview1",
++]
++
++[[package]]
++name = "getrandom"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "73fea8450eea4bac3940448fb7ae50d91f034f941199fcd9d909a5a07aa455f0"
+ dependencies = [
+  "cfg-if 1.0.0",
+  "js-sys",
+  "libc",
+- "wasi 0.11.0+wasi-snapshot-preview1",
+- "wasm-bindgen",
+-]
+-
+-[[package]]
+-name = "getrandom"
+-version = "0.3.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "73fea8450eea4bac3940448fb7ae50d91f034f941199fcd9d909a5a07aa455f0"
+-dependencies = [
+- "cfg-if 1.0.0",
+- "js-sys",
+- "libc",
+  "r-efi",
+- "wasi 0.14.2+wasi-0.2.4",
++ "wasi 0.14.4+wasi-0.2.4",
+  "wasm-bindgen",
+ ]
+
+@@ -3291,6 +3390,12 @@
+ version = "0.29.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
++
++[[package]]
++name = "gimli"
++version = "0.31.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
+
+ [[package]]
+ name = "gio"
+@@ -4188,18 +4293,18 @@
+
+ [[package]]
+ name = "itertools"
++version = "0.12.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
++dependencies = [
++ "either",
++]
++
++[[package]]
++name = "itertools"
+ version = "0.9.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
+-dependencies = [
+- "either",
+-]
+-
+-[[package]]
+-name = "itertools"
+-version = "0.12.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+ dependencies = [
+  "either",
+ ]
+@@ -4215,6 +4320,35 @@
+ version = "1.0.11"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
++
++[[package]]
++name = "jiff"
++version = "0.2.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3590fea8e9e22d449600c9bbd481a8163bef223e4ff938e5f55899f8cf1adb93"
++dependencies = [
++ "jiff-tzdb-platform",
++ "log",
++ "portable-atomic",
++ "portable-atomic-util",
++ "serde 1.0.228",
++ "windows-sys 0.59.0",
++]
++
++[[package]]
++name = "jiff-tzdb"
++version = "0.1.9"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fa8377070c6bae868759445e5a77f66d84f0b72f3a054bfb00e6d038b8282da7"
++
++[[package]]
++name = "jiff-tzdb-platform"
++version = "0.1.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
++dependencies = [
++ "jiff-tzdb",
++]
+
+ [[package]]
+ name = "jni"
+@@ -4542,6 +4676,12 @@
+
+ [[package]]
+ name = "linux-raw-sys"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
++
++[[package]]
++name = "linux-raw-sys"
+ version = "0.3.8"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
+@@ -4557,12 +4697,6 @@
+ version = "0.6.5"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "2a385b1be4e5c3e362ad2ffa73c392e53f031eaa5b7d648e64cd87f27f6063d7"
+-
+-[[package]]
+-name = "linux-raw-sys"
+-version = "0.11.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
+
+ [[package]]
+ name = "lock_api"
+@@ -4664,9 +4798,9 @@
+
+ [[package]]
+ name = "memchr"
+-version = "2.7.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
++version = "2.8.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+ [[package]]
+ name = "memmap2"
+@@ -4826,7 +4960,7 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
+ dependencies = [
+- "getrandom 0.2.15",
++ "getrandom 0.2.17",
+ ]
+
+ [[package]]
+@@ -5618,9 +5752,9 @@
+
+ [[package]]
+ name = "object"
+-version = "0.36.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "081b846d1d56ddfc18fdf1a922e4f6e07a11768ea1b92dec44e42b72712ccfce"
++version = "0.36.7"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
+ dependencies = [
+  "memchr",
+ ]
+@@ -5961,6 +6095,15 @@
+
+ [[package]]
+ name = "phf"
++version = "0.11.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
++dependencies = [
++ "phf_shared 0.11.3",
++]
++
++[[package]]
++name = "phf"
+ version = "0.7.24"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "b3da44b85f8e8dfaec21adae67f95d93244b2ecf6ad2a692320598dcc8e6dd18"
+@@ -5969,11 +6112,12 @@
+ ]
+
+ [[package]]
+-name = "phf"
++name = "phf_codegen"
+ version = "0.11.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
+-dependencies = [
++checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
++dependencies = [
++ "phf_generator 0.11.3",
+  "phf_shared 0.11.3",
+ ]
+
+@@ -5988,13 +6132,13 @@
+ ]
+
+ [[package]]
+-name = "phf_codegen"
++name = "phf_generator"
+ version = "0.11.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
+-dependencies = [
+- "phf_generator 0.11.3",
++checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
++dependencies = [
+  "phf_shared 0.11.3",
++ "rand 0.8.5",
+ ]
+
+ [[package]]
+@@ -6008,13 +6152,12 @@
+ ]
+
+ [[package]]
+-name = "phf_generator"
++name = "phf_shared"
+ version = "0.11.3"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
+-dependencies = [
+- "phf_shared 0.11.3",
+- "rand 0.8.5",
++checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
++dependencies = [
++ "siphasher 1.0.1",
+ ]
+
+ [[package]]
+@@ -6024,15 +6167,6 @@
+ checksum = "234f71a15de2288bcb7e3b6515828d22af7ec8598ee6d24c3b526fa0a80b67a0"
+ dependencies = [
+  "siphasher 0.2.3",
+-]
+-
+-[[package]]
+-name = "phf_shared"
+-version = "0.11.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
+-dependencies = [
+- "siphasher 1.0.1",
+ ]
+
+ [[package]]
+@@ -6088,9 +6222,9 @@
+
+ [[package]]
+ name = "pin-utils"
+-version = "0.1.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
++version = "0.1.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "13bee6c73da26345c729282832b60b0363cf3dd9f4bfd81d8551b7a1c889a113"
+
+ [[package]]
+ name = "piper"
+@@ -6115,9 +6249,9 @@
+
+ [[package]]
+ name = "pkg-config"
+-version = "0.3.30"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
++version = "0.3.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
+
+ [[package]]
+ name = "plist"
+@@ -6207,6 +6341,15 @@
+ version = "1.11.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
++
++[[package]]
++name = "portable-atomic-util"
++version = "0.2.8"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
++dependencies = [
++ "portable-atomic",
++]
+
+ [[package]]
+ name = "portable-pty"
+@@ -6492,7 +6635,7 @@
+  "bytes",
+  "getrandom 0.3.2",
+  "lru-slab",
+- "rand 0.9.2",
++ "rand 0.9.5",
+  "ring",
+  "rustc-hash 2.1.1",
+  "rustls",
+@@ -6580,12 +6723,12 @@
+
+ [[package]]
+ name = "rand"
+-version = "0.9.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "6db2770f06117d490610c7488547d543617b21bfa07796d7a12f6f1bd53850d1"
++version = "0.9.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41"
+ dependencies = [
+  "rand_chacha 0.9.0",
+- "rand_core 0.9.3",
++ "rand_core 0.9.5",
+ ]
+
+ [[package]]
+@@ -6615,7 +6758,7 @@
+ checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
+ dependencies = [
+  "ppv-lite86",
+- "rand_core 0.9.3",
++ "rand_core 0.9.5",
+ ]
+
+ [[package]]
+@@ -6639,14 +6782,14 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+ dependencies = [
+- "getrandom 0.2.15",
++ "getrandom 0.2.17",
+ ]
+
+ [[package]]
+ name = "rand_core"
+-version = "0.9.3"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
++version = "0.9.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
+ dependencies = [
+  "getrandom 0.3.2",
+ ]
+@@ -6825,7 +6968,7 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "bd283d9651eeda4b2a83a43c1c91b266c40fd76ecd39a50a8c630ae69dc72891"
+ dependencies = [
+- "getrandom 0.2.15",
++ "getrandom 0.2.17",
+  "libredox",
+  "thiserror 1.0.61",
+ ]
+@@ -6836,7 +6979,7 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
+ dependencies = [
+- "getrandom 0.2.15",
++ "getrandom 0.2.17",
+  "libredox",
+  "thiserror 2.0.17",
+ ]
+@@ -6934,6 +7077,38 @@
+ ]
+
+ [[package]]
++name = "reqwest"
++version = "0.13.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
++dependencies = [
++ "base64 0.22.1",
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "http-body-util",
++ "hyper",
++ "hyper-util",
++ "js-sys",
++ "log",
++ "percent-encoding",
++ "pin-project-lite",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "serde_urlencoded",
++ "sync_wrapper",
++ "tokio",
++ "tower",
++ "tower-http",
++ "tower-service",
++ "url",
++ "wasm-bindgen",
++ "wasm-bindgen-futures",
++ "web-sys",
++]
++
++[[package]]
+ name = "rfc6979"
+ version = "0.4.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -6960,9 +7135,9 @@
+ dependencies = [
+  "cc",
+  "cfg-if 1.0.0",
+- "getrandom 0.2.15",
+- "libc",
+- "untrusted",
++ "getrandom 0.2.17",
++ "libc",
++ "untrusted 0.9.0",
+  "windows-sys 0.52.0",
+ ]
+
+@@ -7048,9 +7223,9 @@
+
+ [[package]]
+ name = "rustc-demangle"
+-version = "0.1.24"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "719b953e2095829ee67db738b3bfa9fa368c94900df327b3f07fe6e794d2fe1f"
++version = "0.1.28"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
+
+ [[package]]
+ name = "rustc-hash"
+@@ -7144,10 +7319,11 @@
+  "rdev",
+  "remote_printer",
+  "repng",
+- "reqwest",
++ "reqwest 0.12.28",
+  "ringbuf",
+  "rubato",
+  "rust-pulsectl",
++ "rustdesk-update-manifest",
+  "samplerate",
+  "sciter-rs",
+  "scrap",
+@@ -7204,6 +7380,17 @@
+ ]
+
+ [[package]]
++name = "rustdesk-update-manifest"
++version = "0.1.0"
++dependencies = [
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "sha2",
++ "sigstore-verify",
++ "x509-cert",
++]
++
++[[package]]
+ name = "rustfft"
+ version = "6.2.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -7337,9 +7524,10 @@
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
+ dependencies = [
++ "aws-lc-rs",
+  "ring",
+  "rustls-pki-types",
+- "untrusted",
++ "untrusted 0.9.0",
+ ]
+
+ [[package]]
+@@ -7353,6 +7541,12 @@
+ version = "1.0.18"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
++
++[[package]]
++name = "ryu-js"
++version = "1.0.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
+
+ [[package]]
+ name = "same-file"
+@@ -7579,6 +7773,17 @@
+ ]
+
+ [[package]]
++name = "serde_json_canonicalizer"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fe52319a927259afbfa5180c5157cd8167edfd3e8c254f9558c7fef44c5649f2"
++dependencies = [
++ "ryu-js",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++]
++
++[[package]]
+ name = "serde_repr"
+ version = "0.1.19"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -7723,6 +7928,12 @@
+ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+ [[package]]
++name = "shlex"
++version = "2.0.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
++
++[[package]]
+ name = "shutdown_hooks"
+ version = "0.1.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -7751,6 +7962,164 @@
+ dependencies = [
+  "digest",
+  "rand_core 0.6.4",
++]
++
++[[package]]
++name = "sigstore-bundle"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5948e95f63e900fa92936ecf72c7f2251f83d27560a35a4aae560cc745f8b687"
++dependencies = [
++ "base64 0.22.1",
++ "hex",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "sigstore-crypto",
++ "sigstore-rekor",
++ "sigstore-tsa",
++ "sigstore-types",
++ "thiserror 2.0.17",
++]
++
++[[package]]
++name = "sigstore-crypto"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "22f27364b37bec104a904f10a675c8cdf05d5e48a980569368f0cd0c119b2652"
++dependencies = [
++ "aws-lc-rs",
++ "base64 0.22.1",
++ "const-oid",
++ "der",
++ "digest",
++ "pem",
++ "rand_core 0.9.5",
++ "sha2",
++ "signature 2.2.0",
++ "sigstore-types",
++ "spki",
++ "thiserror 2.0.17",
++ "tracing",
++ "x509-cert",
++]
++
++[[package]]
++name = "sigstore-merkle"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0ee85fd9fb550efd7c8a59447cb0ef4eb02f1258f3ffa80c88d38427c3930af3"
++dependencies = [
++ "base64 0.22.1",
++ "hex",
++ "sigstore-crypto",
++ "sigstore-types",
++ "thiserror 2.0.17",
++]
++
++[[package]]
++name = "sigstore-rekor"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9b97c5a866f849a9445ae657bef0caa2db053a82827e6dae3a2b3de9c15a6a1a"
++dependencies = [
++ "base64 0.22.1",
++ "hex",
++ "reqwest 0.13.3",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "sigstore-crypto",
++ "sigstore-merkle",
++ "sigstore-types",
++ "thiserror 2.0.17",
++ "url",
++]
++
++[[package]]
++name = "sigstore-trust-root"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "389b54d1b8ace20ba86fdf90e5e655495f65f1abbc7d5d0eb7494defa9ad32f0"
++dependencies = [
++ "base64 0.22.1",
++ "hex",
++ "jiff",
++ "rustls-pki-types",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "sigstore-crypto",
++ "sigstore-types",
++ "thiserror 2.0.17",
++ "x509-cert",
++]
++
++[[package]]
++name = "sigstore-tsa"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b58fe92d4d8cf4b7215b927b70bc1245b6e0d70d801febdfe0cd265ad97ebf8b"
++dependencies = [
++ "aws-lc-rs",
++ "base64 0.22.1",
++ "cmpv2",
++ "cms",
++ "const-oid",
++ "der",
++ "hex",
++ "jiff",
++ "rand 0.9.5",
++ "reqwest 0.13.3",
++ "rustls-pki-types",
++ "rustls-webpki",
++ "sigstore-crypto",
++ "sigstore-types",
++ "thiserror 2.0.17",
++ "tracing",
++ "x509-cert",
++ "x509-tsp",
++]
++
++[[package]]
++name = "sigstore-types"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "236474c535a3157839926a0ae18f9c0c22b151e49634da6e5b18ad7cac8a3b69"
++dependencies = [
++ "base64 0.22.1",
++ "hex",
++ "pem",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "thiserror 2.0.17",
++]
++
++[[package]]
++name = "sigstore-verify"
++version = "0.11.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "558f71aad0e1c5925d29ae2024f55f0f8898a7ad450c93668f99086624c421e0"
++dependencies = [
++ "base64 0.22.1",
++ "cms",
++ "const-oid",
++ "hex",
++ "jiff",
++ "pem",
++ "rustls-pki-types",
++ "rustls-webpki",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "serde_json_canonicalizer",
++ "sigstore-bundle",
++ "sigstore-crypto",
++ "sigstore-merkle",
++ "sigstore-rekor",
++ "sigstore-trust-root",
++ "sigstore-tsa",
++ "sigstore-types",
++ "thiserror 2.0.17",
++ "tls_codec",
++ "tracing",
++ "x509-cert",
+ ]
+
+ [[package]]
+@@ -7971,12 +8340,6 @@
+
+ [[package]]
+ name = "strsim"
+-version = "0.8.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
+-
+-[[package]]
+-name = "strsim"
+ version = "0.10.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+@@ -7986,6 +8349,12 @@
+ version = "0.11.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
++
++[[package]]
++name = "strsim"
++version = "0.8.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
+
+ [[package]]
+ name = "strum"
+@@ -8520,18 +8889,36 @@
+
+ [[package]]
+ name = "tinyvec"
+-version = "1.6.1"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "c55115c6fbe2d2bef26eb09ad74bde02d8255476fc0c7b515ef09fbb35742d82"
+-dependencies = [
+- "tinyvec_macros",
+-]
++version = "1.13.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+ [[package]]
+ name = "tinyvec_macros"
+ version = "0.1.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
++
++[[package]]
++name = "tls_codec"
++version = "0.4.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0de2e01245e2bb89d6f05801c564fa27624dbd7b1846859876c7dad82e90bf6b"
++dependencies = [
++ "tls_codec_derive",
++ "zeroize",
++]
++
++[[package]]
++name = "tls_codec_derive"
++version = "0.4.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2d2e76690929402faae40aebdda620a2c0e25dd6d3b9afe48867dfd95991f4bd"
++dependencies = [
++ "proc-macro2 1.0.93",
++ "quote 1.0.36",
++ "syn 2.0.98",
++]
+
+ [[package]]
+ name = "tokio"
+@@ -8899,7 +9286,7 @@
+  "httparse",
+  "log",
+  "native-tls",
+- "rand 0.9.2",
++ "rand 0.9.5",
+  "rustls",
+  "rustls-native-certs",
+  "rustls-pki-types",
+@@ -9047,9 +9434,9 @@
+
+ [[package]]
+ name = "unicode-bidi"
+-version = "0.3.15"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "08f95100a766bf4f8f28f90d77e0a5461bbdb219042e7679bebe79004fed8d75"
++version = "0.3.18"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
+
+ [[package]]
+ name = "unicode-ident"
+@@ -9059,9 +9446,9 @@
+
+ [[package]]
+ name = "unicode-normalization"
+-version = "0.1.23"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "a56d1686db2308d901306f92a263857ef59ea39678a5458e7cb17f01415101f5"
++version = "0.1.26"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
+ dependencies = [
+  "tinyvec",
+ ]
+@@ -9099,6 +9486,12 @@
+  "crypto-common",
+  "subtle",
+ ]
++
++[[package]]
++name = "untrusted"
++version = "0.7.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
+
+ [[package]]
+ name = "untrusted"
+@@ -9283,11 +9676,11 @@
+
+ [[package]]
+ name = "wasi"
+-version = "0.14.2+wasi-0.2.4"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "9683f9a5a998d873c0d21fcbe3c083009670149a8fab228644b8bd36b2c48cb3"
+-dependencies = [
+- "wit-bindgen-rt",
++version = "0.14.4+wasi-0.2.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "88a5f4a424faf49c3c2c344f166f0662341d470ea185e939657aaff130f0ec4a"
++dependencies = [
++ "wit-bindgen",
+ ]
+
+ [[package]]
+@@ -10168,6 +10561,15 @@
+
+ [[package]]
+ name = "windows-sys"
++version = "0.59.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
++dependencies = [
++ "windows-targets 0.52.6",
++]
++
++[[package]]
++name = "windows-sys"
+ version = "0.60.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb"
+@@ -10595,6 +10997,12 @@
+ ]
+
+ [[package]]
++name = "wit-bindgen"
++version = "0.45.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5c573471f125075647d03df72e026074b7203790d41351cd6edc96f46bcccd36"
++
++[[package]]
+ name = "wit-bindgen-rt"
+ version = "0.39.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -10737,6 +11145,20 @@
+  "rand_core 0.6.4",
+  "serde 1.0.228",
+  "zeroize",
++]
++
++[[package]]
++name = "x509-cert"
++version = "0.2.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1301e935010a701ae5f8655edc0ad17c44bad3ac5ce8c39185f75453b720ae94"
++dependencies = [
++ "const-oid",
++ "der",
++ "sha1",
++ "signature 2.2.0",
++ "spki",
++ "tls_codec",
+ ]
+
+ [[package]]
+@@ -10755,6 +11177,17 @@
+  "rusticata-macros",
+  "thiserror 1.0.61",
+  "time 0.3.36",
++]
++
++[[package]]
++name = "x509-tsp"
++version = "0.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f5ceece934a21607055b7ac5c25adb56a2ff559804b10705dc674d1d838c15e1"
++dependencies = [
++ "cmpv2",
++ "cms",
++ "der",
+ ]
+
+ [[package]]

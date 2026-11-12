@@ -132,6 +132,7 @@ jobs:
         python3 scripts/upstream/interface_review_contract.py
         python3 -m scripts.upstream.patch_profiles_contract
         python3 scripts/build/build_adapter_contract.py
+        python3 -m scripts.build.updater_dependencies_contract
         python3 -m scripts.platform.runner_migrations_contract
         python3 -m scripts.build.macos_arm64_contract
         python3 scripts/platform/wayland_contract.py
@@ -157,6 +158,20 @@ jobs:
         python3 scripts/validation/native_config_contract.py
         python3 scripts/validation/cm_window_contract.py
         python3 scripts/signing/android_signing_contract.py
+  update-verifier:
+    name: Verify native updater on Rust 1.75
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: '1.75.0'
+    - run: python3 -m pip install -r requirements.txt
+    - name: Verify locked Sigstore implementation and update selectors
+      run: python3 -m scripts.validation.update_manifest_native
   preflight:
     name: Validate patch and API compatibility
     needs: resolve

@@ -21,7 +21,7 @@ def fixture(directory, channel='stable'):
               patch_revision='v2.8' if channel=='stable' else None,
               common_patch_hash='c'*64,sos_patch_hash='d'*64)
     with patch.dict(os.environ,GITHUB_REPOSITORY=a.REPOSITORY,GITHUB_RUN_ID='42'):
-        value=a.write(directory,channel,[a.entry(p,info)],info,{'result':'PASS'})
+        value=a.write(directory,channel,[a.entry(p,info)],info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
     (directory/a.BUNDLE).write_text('{"fixture":"signature verification is mocked only in tests"}')
     return value
 
@@ -107,7 +107,9 @@ class AttestationTests(unittest.TestCase):
                 for variant in ('standard','sos'):
                     path=root/f'wayland-{variant}-{arch}.deb';path.write_bytes(b'package')
                     assets.append(a.entry(path,dict(platform='linux',architecture=arch,variant=variant,build_flavor='unattended-wayland')))
-            a.validate(dict(v,assets=assets))
+            full=dict(v,assets=assets,wayland_included=True,wayland_policy_sha256='f'*64)
+            full['build_identity']=a.build_identity(full)
+            a.validate(full)
             self.assertEqual(len(assets),31)
             self.assertEqual(sum(x['package']=='suse-rpm' for x in assets),4)
             self.assertEqual(sum(x['flavor']=='unattended-wayland' for x in assets),4)
@@ -120,7 +122,8 @@ class AttestationTests(unittest.TestCase):
     def test_signature_policy_and_failure_are_enforced(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);v=fixture(root)
-            with patch.object(a.subprocess,'run') as run:
+            with patch.object(a.subprocess,'run') as run,patch.object(a,'validate_verification_result') as policy:
+                run.return_value.stdout='[]'
                 a.verify_signature(root/a.MANIFEST,root/a.BUNDLE,v)
             args=run.call_args.args[0]
             self.assertIn('--bundle',args);self.assertIn('--deny-self-hosted-runners',args)
@@ -131,6 +134,29 @@ class AttestationTests(unittest.TestCase):
             for failure in (subprocess.CalledProcessError(1,args),FileNotFoundError('gh'),subprocess.TimeoutExpired(args,120)):
                 with patch.object(a.subprocess,'run',side_effect=failure),patch.dict(os.environ,clear=True):
                     with self.assertRaises(type(failure)):a.verify_local(root)
+
+    def test_verified_certificate_claims_are_bound_to_numeric_identity_and_run(self):
+        fixtures=ROOT/'scripts/validation/fixtures/custom-updater'
+        result=json.loads((fixtures/'cd-verified-claims.json').read_text())
+        value=json.loads((fixtures/'schema-v2-unsigned.json').read_text())
+        a.validate_verification_result(result,value)
+        cert=result[0]['verificationResult']['signature']['certificate']
+        for key in ('issuer','subjectAlternativeName','buildSignerURI','buildSignerDigest','runnerEnvironment','sourceRepositoryURI','sourceRepositoryDigest','sourceRepositoryRef','sourceRepositoryIdentifier','sourceRepositoryOwnerIdentifier','buildConfigURI','buildConfigDigest','buildTrigger','runInvocationURI'):
+            changed=copy.deepcopy(result)
+            changed[0]['verificationResult']['signature']['certificate'][key]='untrusted'
+            with self.subTest(claim=key),self.assertRaises(ValueError):a.validate_verification_result(changed,value)
+        for key in ('builder','metadata'):
+            changed=copy.deepcopy(result);changed[0]['verificationResult']['statement']['predicate']['runDetails'][key]={}
+            with self.assertRaises(ValueError):a.validate_verification_result(changed,value)
+
+    def test_release_body_cannot_grant_identity_or_override_verified_json(self):
+        release=dict(id=7,draft=True,prerelease=False,target_commitish='b'*40,assets=[],body='automation_state=complete')
+        with patch.object(a,'read_remote',side_effect=ValueError('missing proof')):
+            with self.assertRaisesRegex(ValueError,'missing proof'):a.read_release(release,tag='v1.5.1-custom.v2.8')
+        with patch.object(a,'read_remote',return_value={'custom_repository_sha':'b'*40}):
+            for body in ('', 'upstream_sha='+'d'*40, 'automation_state=incomplete'):
+                self.assertEqual(a.read_release(dict(release,body=body),tag='v1.5.1-custom.v2.8')['custom_repository_sha'],'b'*40)
+            with self.assertRaises(ValueError):a.read_release(dict(release,target_commitish='c'*40),tag='v1.5.1-custom.v2.8')
 
     def test_remote_json_downloads_use_asset_ids_and_require_exact_inventory(self):
         with tempfile.TemporaryDirectory() as td:

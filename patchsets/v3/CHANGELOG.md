@@ -7,7 +7,7 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 ### Common
 
 - Configured server and client defaults, hidden connection-manager setting, and manual-only connection-manager visibility.
-- Forced hardware rendering policy; latest-only custom repository updates with exact package and API size/SHA256 checks.
+- Forced hardware rendering policy; latest-only custom repository updates with attested JSON package selection and size/SHA256 verification.
 - Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.
 - Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.
 
@@ -16,6 +16,45 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common.
 
 ## Revision history
+
+### v3.3 — content-change
+
+Scope: common
+
+Reason: Move current-generation client updates and release reuse to one attested JSON inventory so human release notes no longer carry machine identity.
+
+#### Added
+
+
+#### Changed
+
+- Select updates by signed OS, architecture, Standard/SOS variant, ordinary/Wayland flavor and installer format instead of predicting filenames.
+
+#### Fixed
+
+- Detect the package manager owning the running Linux executable and distinguish installed Windows MSI clients from portable clients.
+
+#### Removed
+
+
+#### Security
+
+- Verify the manifest using offline Sigstore certificate, transparency-log and provenance checks before selecting or downloading an installer.
+
+#### Compatibility
+
+- Manual upgrade is required for older clients; this generation requires the new attested JSON release format.
+
+References: 19783a6fd5d3fa02a676532b5ec4aa056d937cbc
+
+Upstream compatibility: Targets official 1.5.3 with a local path verifier crate; preserves historical v1/v2 patches and v3.1/v3.2 content histories. Complete native workspace builds require hosted CI.
+
+Known limitations: Native builds on all targets, generated bridge, Flutter analysis, device upgrades, runtime UI and remote sessions require fresh validation; existing clients need a manual upgrade.
+
+Allocation base: `19783a6fd5d3fa02a676532b5ec4aa056d937cbc`
+
+- common: `8fdc855986c8c21e9b4a42f269d4e57fa9eca0d12d6fe4b60be154d1b7a859e3` → `722c4847b6f2037722c62458e8c1e5b9489028d7a19fe40eb502958d71da401c`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.2 — content-change
 

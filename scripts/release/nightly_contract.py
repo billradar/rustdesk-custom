@@ -480,11 +480,19 @@ class NightlyDraftTests(unittest.TestCase):
         info=dict(platform='android',architecture='aarch64',variant='standard',upstream_version='1.5.1',
                   upstream_sha='b'*40,custom_repository_sha='a'*40,patchset='v2',patch_revision=None,
                   common_patch_hash=nightly.patch_hash('common','v2'),sos_patch_hash=nightly.patch_hash('sos','v2'))
-        a.write(assets,'nightly',[a.entry(assets/'client.apk',info)],info,{'result':'PASS'})
+        info['signed_status']='PRODUCTION SIGNED / IDENTITY VERIFIED'
+        entries=[a.entry(assets/'client.apk',info)]
+        for arch in ('armv7','x86_64'):
+            path=assets/(arch+'.apk');path.write_bytes(b'production package fixture')
+            entries.append(a.entry(path,dict(info,architecture=arch)))
+        self.verified_manifest=a.write(assets,'nightly',entries,info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
         (assets/a.BUNDLE).write_text('{}')
 
     def setUp(self):
         from scripts.release import attestation as a
+        reader=patch.object(a,'read_release',side_effect=lambda *args,**kw:self.verified_manifest)
+        reader.start();self.addCleanup(reader.stop)
+        self.verified_manifest={'channel':'nightly'}
         signature=patch.object(a,'verify_signature');signature.start();self.addCleanup(signature.stop)
         attach=patch.object(a,'attach',side_effect=lambda directory,channel:a.verify_local(directory,channel,Path(directory)/a.BUNDLE))
         attach.start();self.addCleanup(attach.stop)
@@ -558,20 +566,13 @@ class NightlyDraftTests(unittest.TestCase):
                         self.assertEqual(write.call_count,2)
                     for call in release_calls:
                         self.assertTrue(call.args[2]['draft']);self.assertTrue(call.args[2]['prerelease'])
-                    self.assertIn('automation_state=complete',write.call_args.args[2]['body'])
-                    self.assertIn('<!-- rustdesk-custom-release-metadata',write.call_args.args[2]['body'])
-                    self.assertTrue(write.call_args.args[2]['body'].startswith(self.upstream_notes+'\n\n<!-- rustdesk-custom-release-metadata'))
-                    self.assertEqual(write.call_args.args[2]['name'],'nightly')
-                    self.assertIn('asset_inventory=',write.call_args.args[2]['body'])
                     body=write.call_args.args[2]['body']
-                    self.assertIn('patchset_version=v2.8',body)
-                    self.assertIn('version_semantics=patchset-content-v1',body)
+                    self.assertTrue(body.startswith(self.upstream_notes+'\n\n'))
+                    self.assertEqual(write.call_args.args[2]['name'],'nightly')
                     self.assertIn('## Patchset v2.8',body)
                     self.assertIn('Current included customizations',body)
-                    self.assertIn('Recorded Patchset revision delta',body)
-                    self.assertIn('these are not claims of new changes in this build',body)
-                    self.assertIn('Known limitations:',body)
-                    self.assertLess(body.index('<!-- rustdesk-custom-release-metadata'),body.index('## Patchset v2.8'))
+                    for noise in ('automation_state=', 'asset_inventory=', 'version_semantics=', 'Common Patch Hash:', 'Known limitations:', '<!-- rustdesk-custom-release-metadata'):
+                        self.assertNotIn(noise,body)
                     self.assertRegex(write.call_args.args[2]['body'],r'Latest packages verified \(UTC\): `[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z`')
                     self.assertIn(f'https://github.com/{self.repo}/actions/runs/9',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)
@@ -683,7 +684,7 @@ class NightlyDraftTests(unittest.TestCase):
     def test_draft_delete_rejects_public_foreign_immutable_and_changed_records(self):
         old=dict(id=7,name='nightly',tag_name='nightly',draft=True,prerelease=True,
                  body='channel=nightly',target_commitish='a'*40,updated_at='original')
-        for change in ({'draft':False},{'prerelease':False},{'immutable':True},{'body':'channel=stable'}):
+        for change in ({'draft':False},{'prerelease':False},{'immutable':True}):
             with self.subTest(change=change),patch.dict(os.environ,self.env),patch.object(nightly,'api') as api,patch('scripts.release.github.gh') as gh:
                 with self.assertRaises(ValueError):nightly.delete_refresh_draft(dict(old,**change))
                 api.assert_not_called();gh.assert_not_called()
@@ -691,6 +692,12 @@ class NightlyDraftTests(unittest.TestCase):
             with self.subTest(fresh=fresh),patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=fresh),patch('scripts.release.github.gh') as gh:
                 with self.assertRaises(ValueError):nightly.delete_refresh_draft(old)
                 gh.assert_not_called()
+
+    def test_draft_delete_requires_fresh_attested_json_even_with_ownership_body(self):
+        old=dict(id=7,tag_name='nightly',draft=True,prerelease=True,body='channel=nightly')
+        with patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=old),patch('scripts.release.attestation.read_release',side_effect=ValueError('invalid proof')),patch('scripts.release.github.gh') as gh:
+            with self.assertRaisesRegex(ValueError,'invalid proof'):nightly.delete_refresh_draft(old)
+            gh.assert_not_called()
 
     def test_failed_delete_blocks_creation_and_never_deletes_tag(self):
         old=dict(id=7,tag_name='nightly',draft=True,prerelease=True,body='channel=nightly')
@@ -700,11 +707,11 @@ class NightlyDraftTests(unittest.TestCase):
 
 
     def test_superseded_cleanup_uses_gh_without_touching_other_channels(self):
-        stale=dict(id=6,prerelease=True,body='channel=nightly',tag_name='nightly-old')
+        stale=dict(id=6,prerelease=True,body='Human notes',name='nightly',tag_name='nightly-old')
         stable=dict(id=5,prerelease=False,body='channel=stable')
         foreign=dict(id=4,prerelease=True,body='channel=other')
         current=dict(stale,id=8,tag_name='nightly')
-        with patch.dict(os.environ,self.env),patch.object(nightly,'api',side_effect=[[stale,stable,foreign,current],None]),patch('scripts.release.github.gh') as gh:
+        with patch.dict(os.environ,self.env),patch.object(nightly,'api',side_effect=[[stale,stable,foreign,current],stale,None]),patch('scripts.release.github.gh') as gh:
             nightly.cleanup_superseded_nightly_releases(8,'nightly')
         gh.assert_called_once_with('api','--method','DELETE',f'repos/{self.repo}/releases/6')
 
@@ -778,7 +785,7 @@ class NightlyDraftTests(unittest.TestCase):
             self.assertFalse(calls[1][1]['draft'])
             self.assertTrue(calls[1][1]['prerelease'])
             self.assertFalse(result['draft'])
-            self.assertIn('automation_state=complete',calls[1][1]['body'])
+            self.assertNotIn('automation_state=',calls[1][1]['body'])
     def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
     def test_existing_release_never_overwritten(self):self.perform('existing')
     def test_draft_refresh_does_not_hide_a_published_release(self):self.perform('published')
