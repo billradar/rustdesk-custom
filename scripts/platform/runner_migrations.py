@@ -25,12 +25,12 @@ def migrations():
 
 
 def effective_runner(platform, architecture, source_runner):
-    """Map only the reviewed legacy/current upstream labels; reject future drift."""
+    """Accept the supported image directly or map reviewed legacy labels to it."""
     rows=[m for m in migrations() if m['platform']==platform and m['architecture']==architecture]
     if not rows:
         return source_runner
     migration=rows[0]
-    if source_runner not in (migration['source_runner'],migration['upstream_runner']):
+    if source_runner not in (migration['source_runner'],migration['upstream_runner'],migration['runner']):
         raise ValueError('BUILD_COMPAT: unreviewed official runner migration source: '+str(source_runner))
     return migration['runner']
 

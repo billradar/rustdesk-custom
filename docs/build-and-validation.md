@@ -15,6 +15,19 @@
 
 ## 2. 构建分层
 
+macOS runner 识别直接接受 Intel 的 `macos-26-intel` 和 ARM64 的
+`macos-26`。旧上游标签仍按 `metadata/platform/runner-migrations.json`
+映射到对应的 26 镜像，以保留旧版重建兼容性。跨架构、预览版和未知未来标签
+继续拒绝；runner 标签识别不替代完整上游接口签名审核。
+
+对上游 `3ccb4c4b5b5a8422276dd5f6f211b42e05ec9534` 的静态接口审核
+见 [审核记录](audits/nightly-interfaces-3ccb4c4b/review.json)。Linux 配方只为
+`inputs.upload-artifact` 提供固定的 `false` 值，执行上游 x86_64 CI 测试分支；
+这不启用上游上传，也不接受其他未知输入。普通 Linux 和 Wayland 共用该规则。
+Android 在依赖阶段先执行已审核配方中的 JNI 检查；检查失败即停止，旧配方
+没有该步骤时保持原行为。macOS ARM64 的新签名、来源 runner 与完整工作流哈希
+另行登记，历史策略继续保留。本次审核不代表原生编译、签名或运行验证通过。
+
 1. `scripts/release/qualification.py` 根据矩阵生成目标计划。
 2. `scripts/build/` 的平台脚本负责调用对应工具链。
 3. `scripts/platform/` 执行构建、采集脱敏诊断信息并处理打包。

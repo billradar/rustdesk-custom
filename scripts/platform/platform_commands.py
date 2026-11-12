@@ -6,6 +6,8 @@ from scripts.platform.platform_adapter import check,render
 root,platform,arch,phase=sys.argv[1:];root=Path(root).resolve();profile,job=check(root,platform,arch)
 names={('macos','setup'):['Install build runtime','Install NASM','Patch flutter','Workaround for flutter issue'],('macos','build'):['Build rustdesk'],('android','deps'):['Install vcpkg dependencies'],('android','native'):['Build rustdesk lib'],('android','package'):['Build rustdesk']}
 selected=names[(platform,phase)]
+if platform=='android' and phase=='deps' and any(s.get('name')=='Check JNI natives are in ffi.FFI' for s in job['steps']):
+ selected=['Check JNI natives are in ffi.FFI']+selected
 if platform=='macos' and arch=='aarch64' and phase=='setup' and profile.get('macos_flutter344'):
  selected=[n for n in selected if n!='Patch flutter']
  selected.insert(0,'Keep CocoaPods for Flutter 3.44 (arm64)')

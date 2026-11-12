@@ -47,6 +47,9 @@ def render(text,profile):
    v=row.get(key[11:])
   elif key.startswith('env.'):v=env.get(key[4:])
   elif key=='github.workspace':v='/workspace'
+  # Custom recipes never inherit upstream artifact publication. Keep its
+  # credential-free CI test branch active on x86_64, including Wayland builds.
+  elif key=='inputs.upload-artifact' and profile.get('platform')=='linux':v='false'
   else:raise ValueError('BUILD_COMPAT: unhandled official expression '+key)
   if v is None:raise ValueError('BUILD_COMPAT: missing official expression '+key)
   return str(v)
