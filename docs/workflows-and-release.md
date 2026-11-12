@@ -309,3 +309,10 @@ the qualified manifest; write jobs revalidate it before Release/tag writes.
 Checksum-only historical Drafts cannot pass the new publication/reuse gate.
 See [Release inventory and Sigstore attestation](release-attestation.md) for the
 trust policy, old-client boundary and internal checksum exceptions.
+
+Stable Tag 创建 API 成功后，读取 API 可能短暂返回 404（运行 43146078797
+的 Draft 作业在此失败，事后已确认 Tag 指向正确构建提交，33 个资产仍保留
+在私有 Draft）。创建后的回读最多尝试 5 次，间隔 1、2、4、8 秒；只重试
+“引用暂不可见”，不重复 POST、不移动引用。出现错误 SHA、无效响应、权限
+或其他 API 错误立即失败；超过次数仍不可见也失败，不以 POST 成功代替验证。
+已有 Draft/Tag 不应通过重跑整套 CD、删除或覆盖来恢复，必须先核对实际状态。
