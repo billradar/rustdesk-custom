@@ -1,6 +1,6 @@
 {
   "id": "v3",
-  "status": "candidate_only",
+  "status": "validation_pending",
   "revision": 1,
   "baseline": {
     "upstream_sha": "05b9f2d8919b5cdfaa0bb3280601a02881556a42",

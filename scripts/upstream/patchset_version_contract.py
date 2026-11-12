@@ -51,6 +51,7 @@ class VersionContract(unittest.TestCase):
         shutil.copytree(version.ROOT / 'patchsets/v3', self.root / 'patchsets/v3')
         target = self.root / 'patchsets/v3/patchset.json'
         data = json.loads(target.read_text())
+        data['status'] = 'candidate_only'  # This fixture creates a new generation, unlike live v3.
         data['versioning']['migration_base'] = self.base
         data['versioning']['history'][0]['base_sha'] = self.base
         def write():
@@ -58,6 +59,11 @@ class VersionContract(unittest.TestCase):
             (target.parent / 'CHANGELOG.md').write_text(version.render(data))
         write()
         self.assertEqual(version.verify('v3', self.base, self.root)['result'], 'PASS')
+        data['status'] = 'validation_pending'
+        write()
+        with self.assertRaisesRegex(ValueError, 'isolated candidate baseline'):
+            version.verify('v3', self.base, self.root)
+        data['status'] = 'candidate_only'
         data['derived_from']['revision'] += 1
         write()
         with self.assertRaisesRegex(ValueError, 'isolated candidate baseline'):

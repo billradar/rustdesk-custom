@@ -50,3 +50,46 @@ The [exact-source static review](audits/nightly-interfaces-43062159481/review.js
 Only the three exact native-interface fingerprints and the matching macOS ARM64 full-workflow identity are added. Existing reviewed identities remain intact. Wayland still matches its existing DRM job, packaging source and libdrmtap pin. v2 revision 8 and candidate/fallback Stable rejection remain unchanged. Local preflight validation is separate from a successful Nightly build on a future committed head; native packages, production signatures and runtime behavior remain unverified.
 
 Local validation on the uncommitted repair: all seven native preflight pairs and both Wayland architectures pass. Independent Standard/SOS copies pass patch checks, structural contracts and upstream DPI preservation. Critical-file/toolchain drift and the independent Mac ARM workflow-hash drift remain rejected. Repository architecture passes with umask 022; seven affected contract suites ran 116 tests (114 passed, two missing-snapshot fixtures skipped). Native helper compilation was not run because rustc is unavailable. No workflow was dispatched and no production signing or release API was invoked.
+
+## Formal 1.5.3 Stable admission — 2026-11-12
+
+The official non-draft, non-prerelease release `1.5.3` (ID 438952638, published
+2026-11-09) and its Git tag both resolve to exact source
+`95cca3f661f635b3cc85c04935fe8d96d8f432ef`. This is the same source as the earlier
+reviewed Nightly interface packet above, not the original candidate baseline.
+The source checkout and its locked hbb_common submodule
+`fae47e024dd83cef6aaecde0aa7d11731df11649` were clean and verified before each run.
+
+Fresh independent Standard/SOS copies passed all six Common patches and the
+three additional SOS patches in order, structural/CM/update/branding contracts,
+upstream DPI preservation and actual native configuration-helper compilation
+using isolated Rust 1.85.1. Windows x64/bridge, Windows ARM64, all seven native
+platform/architecture interface preflights, and ordinary Wayland x86_64/ARM64
+recipe preflights pass using existing approvals; no fingerprints were added.
+The same source checks passed again with the new formal Stable selection.
+
+A new `rd-1.5.3` Profile selects unchanged v3 revision 1 for official 1.5.3. The
+historical candidate entry stays Stable-forbidden. Unknown versions still use
+test-only fallback and cannot enter Stable. The v3 current lifecycle marker is
+`validation_pending`, matching the existing v1/v2 convention without claiming a
+full native build. Its candidate-origin baseline/history, all patch bytes and
+hashes, and all v1/v2 metadata/history remain unchanged. No revision is allocated.
+
+Regression contracts cover formal Profile selection, candidate/fallback rejection,
+Stable lock/preflight dry-run, exact v3.1 client identity and rejection of v2.8 for
+1.5.3, plus preservation of 1.5.0/1.5.1 v2.8. The complete immutable local evidence
+and limitations are in [review.json](audits/stable-1.5.3-admission/review.json).
+
+Nightly run 43093485901 attempt 2 was still in progress when inspected. No complete
+application build, bridge generation, Flutter analysis, production signing,
+Sigstore issuance, installation, UI or real remote session was established by
+this audit. Existing full build, signing, attestation and publication gates remain
+mandatory; admission is not a Release authorization. No remote writes or build
+dispatch occurred for this audit.
+
+Final local validation: repository architecture and all 28 domain commands passed
+with umask 022 and isolated Rust 1.85.1 on PATH. The domain runners reported 428
+tests (426 passed, two missing-snapshot fixtures skipped). Real Rust update-policy
+and MIR helper contracts ran; pure-Dart policy execution remains NOT RUN because
+Dart is unavailable. v1/v2/v3 content-version verification passes with no content
+change or revision allocation.

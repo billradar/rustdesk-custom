@@ -1,0 +1,213 @@
+{
+  "schema": "patch-profile-admission-audit-v1",
+  "observed_at": "2026-11-12T00:41:13.296978+00:00",
+  "custom_base_sha": "71c86e1a0d0e790cad6d03ba9f5b97463572e7db",
+  "official_release": {
+    "id": 438952638,
+    "tag_name": "1.5.3",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-11-09T09:43:52Z",
+    "html_url": "https://github.com/rustdesk/rustdesk/releases/tag/1.5.3"
+  },
+  "official_tag": {
+    "ref": "refs/tags/1.5.3",
+    "object": {
+      "type": "commit",
+      "sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef"
+    }
+  },
+  "hbb_common_sha": "fae47e024dd83cef6aaecde0aa7d11731df11649",
+  "selection": {
+    "profile": "rd-1.5.3",
+    "patchset": "v3",
+    "revision": 1,
+    "candidate_profile_preserved": "rd-1.5.3-candidate",
+    "candidate_stable_allowed": false,
+    "fallback_stable_allowed": false
+  },
+  "source_checks": {
+    "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+    "upstream_version": "1.5.3",
+    "profile": "rd-1.5.3",
+    "selected": "v3",
+    "fallback": false,
+    "compatibility_test_only": false,
+    "stable_allowed": true,
+    "variants": {
+      "standard": {
+        "patch_order": [
+          "0001-hbb-server-defaults.patch",
+          "0002-client-defaults.patch",
+          "0003-hide-cm-setting.patch",
+          "0004-cm-background-window.patch",
+          "0005-custom-release-updates.patch",
+          "0006-public-branding.patch"
+        ],
+        "git_apply_check": "PASS",
+        "contracts": {
+          "Config API": "PASS",
+          "Rust API structure": "PASS",
+          "Flutter API structure": "PASS",
+          "SOS UI structure": "N/A"
+        },
+        "native_helper_compile": "PASS",
+        "upstream_dpi_preservation": "PASS"
+      },
+      "sos": {
+        "patch_order": [
+          "0001-hbb-server-defaults.patch",
+          "0002-client-defaults.patch",
+          "0003-hide-cm-setting.patch",
+          "0004-cm-background-window.patch",
+          "0005-custom-release-updates.patch",
+          "0006-public-branding.patch",
+          "0001-sos-mode.patch",
+          "0002-sos-home.patch",
+          "0003-sos-settings.patch"
+        ],
+        "git_apply_check": "PASS",
+        "contracts": {
+          "Config API": "PASS",
+          "Rust API structure": "PASS",
+          "Flutter API structure": "PASS",
+          "SOS UI structure": "PASS"
+        },
+        "native_helper_compile": "PASS",
+        "upstream_dpi_preservation": "PASS"
+      }
+    },
+    "wayland_standard_preflight": [
+      {
+        "architecture": "x86_64",
+        "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+        "result": "PASS"
+      },
+      {
+        "architecture": "aarch64",
+        "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+        "result": "PASS"
+      }
+    ]
+  },
+  "interfaces": {
+    "windows_x64_bridge": {
+      "signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+      "runner": "windows-2022",
+      "rust": "1.75",
+      "flutter": "3.24.5",
+      "bridge_flutter": "3.22.3",
+      "reviewed_profile": "reviewed-151-6aec30"
+    },
+    "windows_arm64": {
+      "signature": "f13aa9d4edd1afa76be5803dd3c28cf01785c359bd393e3d2b090312797308a6",
+      "runner": "windows-11-arm",
+      "rust": "1.75",
+      "flutter": "3.44.9",
+      "bridge_flutter": "3.44.8",
+      "reviewed_profile": "reviewed-151-6aec30"
+    },
+    "native": [
+      {
+        "platform": "linux",
+        "architecture": "x86_64",
+        "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+        "runner": "ubuntu-22.04",
+        "upstream_runner": "ubuntu-22.04",
+        "rust": "1.75",
+        "flutter": "3.24.5"
+      },
+      {
+        "platform": "linux",
+        "architecture": "aarch64",
+        "signature": "466782869a9a8e8cda71f28e8917a21f7293b038a51d05a612955d76d1bcde17",
+        "runner": "ubuntu-22.04-arm",
+        "upstream_runner": "ubuntu-22.04-arm",
+        "rust": "1.75",
+        "flutter": "3.24.5"
+      },
+      {
+        "platform": "macos",
+        "architecture": "x86_64",
+        "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+        "runner": "macos-26-intel",
+        "upstream_runner": "macos-15-intel",
+        "rust": "1.81",
+        "flutter": "3.24.5"
+      },
+      {
+        "platform": "macos",
+        "architecture": "aarch64",
+        "signature": "7d76ec9e32c7fcae7a7d9d51e623e6db43078061c1cb671cbb00455a58a7bb47",
+        "runner": "macos-26",
+        "upstream_runner": "macos-15",
+        "rust": "1.81",
+        "flutter": "3.44.9"
+      },
+      {
+        "platform": "android",
+        "architecture": "aarch64",
+        "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+        "runner": "ubuntu-24.04",
+        "upstream_runner": "ubuntu-24.04",
+        "rust": "1.75",
+        "flutter": "3.24.5"
+      },
+      {
+        "platform": "android",
+        "architecture": "armv7",
+        "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+        "runner": "ubuntu-24.04",
+        "upstream_runner": "ubuntu-24.04",
+        "rust": "1.75",
+        "flutter": "3.24.5"
+      },
+      {
+        "platform": "android",
+        "architecture": "x86_64",
+        "signature": "124cd14726ae4ce1956a287371c65bd9bef3c5f8e34225afdd11579d866f625f",
+        "runner": "ubuntu-24.04",
+        "upstream_runner": "ubuntu-24.04",
+        "rust": "1.75",
+        "flutter": "3.24.5"
+      }
+    ]
+  },
+  "patch_content_changed": false,
+  "v2_revision": 8,
+  "limitations": [
+    "Source/structural/preflight admission evidence only; not a qualification record.",
+    "Native configuration helper compiled with isolated Rust 1.85.1; not a RustDesk application build.",
+    "No complete native package matrix, bridge generation, Flutter analysis, production signature, attestation, device update, runtime UI or real remote session was validated locally.",
+    "Nightly run 43093485901 attempt 2 was still in progress when inspected; it is not treated as successful qualification.",
+    "No build dispatch, release API write or branch push was performed for this admission audit."
+  ],
+  "patchsets": {
+    "v2": {
+      "revision": 8,
+      "hashes": {
+        "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
+        "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+      },
+      "status": "validation_pending"
+    },
+    "v3": {
+      "revision": 1,
+      "hashes": {
+        "common": "5ea2ba8cc9c55e7e85dde4c6a79dd1e6a934e5d80583e26283a635f74e323f93",
+        "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+      },
+      "status": "validation_pending"
+    }
+  },
+  "local_validation": {
+    "architecture": "PASS",
+    "domain_commands": 28,
+    "reported_tests": 428,
+    "skipped_tests": 2,
+    "skip_reason": "Exact platform-adapter snapshot fixtures unavailable in unit-test harness.",
+    "rust_toolchain": "rustc 1.85.1 (4eb161250 2025-03-15)",
+    "dart_policy_execution": "NOT RUN (Dart unavailable)",
+    "patchset_content_history": "PASS / v1, v2, v3 unchanged content revisions"
+  }
+}
