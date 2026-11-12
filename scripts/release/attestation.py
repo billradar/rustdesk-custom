@@ -134,9 +134,15 @@ def validate(value):
         raise ValueError('Manifest Wayland option/inventory mismatch')
     android=[a for a in assets if a['os']=='android']
     signed=len(android)==3 and all(a.get('signing_status')=='PRODUCTION SIGNED / IDENTITY VERIFIED' for a in android)
-    if value['android_production_signed'] != signed or (value['android_signing_enabled'] and not signed):
+    if value['android_production_signed'] != signed:
         raise ValueError('Manifest Android signing inventory mismatch')
     return value
+
+
+def require_production_signing(value):
+    """Publication/reuse gate; build-only dry-run inventories remain representable."""
+    if (value['android_signing_enabled'] or os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true') and not value['android_production_signed']:
+        raise ValueError('Manifest requires three production-signed Android packages')
 
 
 def build_identity(value):
@@ -250,8 +256,7 @@ def verify_local(directory, channel=None, bundle=None):
     actual = {p.name: (p.stat().st_size, sha(p)) for p in paths if p.name not in (MANIFEST, BUNDLE)}
     if actual != expected:
         raise ValueError('Release manifest differs from package bytes')
-    if os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true' and not value['android_production_signed']:
-        raise ValueError('Manifest requires three production-signed Android packages')
+    require_production_signing(value)
     bundle = Path(bundle) if bundle is not None else directory / BUNDLE
     if bundle.is_symlink() or not bundle.is_file() or bundle.stat().st_size > 8*LIMIT:
         raise ValueError('Release attestation bundle missing or unsafe')
@@ -294,6 +299,7 @@ def read_remote(tag, assets, expected_identity=None, repo=REPOSITORY, channel="s
             if target.stat().st_size != a['size'] or sha(target) != a['digest'][7:]:
                 raise ValueError('Remote release JSON does not match GitHub size/digest')
         value = loads((root / MANIFEST).read_bytes())
+        require_production_signing(value)
         expected_tag='nightly' if channel=='nightly' else 'v'+value['upstream_version']+'-custom.'+value.get('patch_revision', '')
         if value['channel'] != channel or tag != expected_tag:
             raise ValueError('Release manifest tag/channel mismatch')

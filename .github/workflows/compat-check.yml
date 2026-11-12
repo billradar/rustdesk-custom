@@ -220,6 +220,24 @@ jobs:
         python3 -m scripts.validation.windows_printer_contract
 
         '
+    - name: Capture Cargo lock resolver diagnostics after a failed locked check
+      if: failure() && matrix.variant == 'standard'
+      timeout-minutes: 15
+      run: |
+        python3 - <<'PYCODE'
+        from pathlib import Path
+        import shutil, subprocess
+        root=Path('.work/validation')
+        log=root/'standard.log'
+        if log.is_file() and 'needs to be updated but --locked was passed' in log.read_text():
+            # The required --locked check has already failed. This only records
+            # Cargo's proposed lock for review; it cannot make the failed gate pass.
+            with (root/'cargo-lock-resolver.log').open('w') as output:
+                result=subprocess.run(['cargo','metadata','--format-version','1'],cwd=root/'standard',stdout=subprocess.DEVNULL,stderr=output,timeout=840)
+            if result.returncode:
+                raise SystemExit('Cargo diagnostic resolution failed; see preserved log')
+            shutil.copyfile(root/'standard/Cargo.lock',root/'cargo-lock-resolved.lock')
+        PYCODE
     - name: Preserve diagnostics even on conflict
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -230,6 +248,8 @@ jobs:
           .work/validation/*.md
 
           .work/validation/*.log
+
+          .work/validation/*.lock
 
           '
         if-no-files-found: warn

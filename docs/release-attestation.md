@@ -102,3 +102,9 @@ does not convert that historical manifest or grant it schema-v2 admission. New
 release bodies have no hidden machine block. Editing a private GitHub Draft can
 regenerate `untagged-*` download aliases; verified asset IDs/digests and the real
 Git tag remain the identity, and write operations explicitly carry tag/source.
+
+The configured Android signing toggle remains part of a dry-run manifest's build
+identity even though dry-run does not access production signing. Schema validation
+permits that unsigned build-only inventory; local proof attachment and remote
+release reuse still require all three production signatures when signing is
+configured. Such dry-run inventories are never attested or published.

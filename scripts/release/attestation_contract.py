@@ -27,6 +27,24 @@ def fixture(directory, channel='stable'):
 
 
 class AttestationTests(unittest.TestCase):
+    def test_configured_signing_allows_dry_run_inventory_but_blocks_publication_and_reuse(self):
+        for channel in ('stable','nightly'):
+            with self.subTest(channel=channel),tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='true',REQUIRE_ANDROID_PRODUCTION_SIGNING='false',RELEASE_MODE='dry-run'):
+                root=Path(td);value=fixture(root,channel)
+                self.assertTrue(value['android_signing_enabled'])
+                self.assertFalse(value['android_production_signed'])
+                self.assertEqual(a.loads((root/a.MANIFEST).read_bytes()),value)
+                with patch.object(a,'verify_signature') as signature:
+                    with self.assertRaisesRegex(ValueError,'three production-signed'):a.verify_local(root,channel)
+                    signature.assert_not_called()
+                files=sorted(root.iterdir());content={i:p.read_bytes() for i,p in enumerate(files,1)}
+                assets=[dict(id=i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+a.sha(p)) for i,p in enumerate(files,1)]
+                def download(args,**kwargs):kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
+                with patch.object(a.subprocess,'run',side_effect=download),patch.object(a,'verify_signature') as signature:
+                    with self.assertRaisesRegex(ValueError,'three production-signed'):
+                        a.read_remote('nightly' if channel=='nightly' else 'v1.5.1-custom.v2.8',assets,channel=channel)
+                    signature.assert_not_called()
+
     def test_manifest_generation_and_exact_coverage(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);v=fixture(root)
