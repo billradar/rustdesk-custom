@@ -504,7 +504,7 @@ def delete_refresh_draft(existing):
     if not fresh or any(fresh.get(key)!=existing.get(key) for key in fields):
         raise ValueError('Nightly Draft changed before deletion; refusing to delete')
     from scripts.release.attestation import read_release
-    read_release(fresh,'nightly',tag='nightly')
+    read_release(fresh,'nightly',tag='nightly',enforce_current_signing=False)
     gh('api','--method','DELETE',path)
     if api(path,missing=True) is not None:
         raise ValueError('Old Nightly Draft still exists; refusing duplicate creation')
@@ -595,7 +595,7 @@ def draft(root, discovery):
         raise ValueError('The nightly release is immutable and cannot be refreshed')
     if existing:
         from scripts.release.attestation import read_release
-        read_release(existing,'nightly',tag='nightly')
+        read_release(existing,'nightly',tag='nightly',enforce_current_signing=False)
     if existing and existing.get('draft') is True:
         # Restore a missing canonical ref before discarding the old Release identity.
         # Creating its replacement as a private Draft does not create a Git tag.

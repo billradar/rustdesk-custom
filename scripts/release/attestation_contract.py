@@ -58,6 +58,21 @@ class AttestationTests(unittest.TestCase):
                     self.assertEqual(a.verify_local(root,channel),value)
                     signature.assert_called_once()
 
+    def test_old_nightly_ownership_uses_recorded_signing_but_new_assets_require_current_policy(self):
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='false',clear=True):
+            root=Path(td);fixture(root,'nightly',unsigned_android=True)
+            files=sorted(root.iterdir());content={i:p.read_bytes() for i,p in enumerate(files,1)}
+            assets=[dict(id=i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+a.sha(p)) for i,p in enumerate(files,1)]
+            def download(args,**kwargs):kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
+            with patch.dict(os.environ,REQUIRE_ANDROID_PRODUCTION_SIGNING='true'),patch.object(a.subprocess,'run',side_effect=download),patch.object(a,'verify_signature') as signature:
+                with self.assertRaisesRegex(ValueError,'production-signed'):a.read_remote('nightly',assets,channel='nightly')
+                old=a.read_remote('nightly',assets,channel='nightly',enforce_current_signing=False)
+                self.assertFalse(old['android_signing_enabled']);signature.assert_called_once()
+                with self.assertRaisesRegex(ValueError,'production-signed'):a.verify_local(root,'nightly')
+            # A recorded enabled policy is never exempt, even for ownership reads.
+            with self.assertRaisesRegex(ValueError,'production-signed'):
+                a.require_production_signing(dict(old,android_signing_enabled=True),enforce_current=False)
+
     def test_manifest_generation_and_exact_coverage(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);v=fixture(root)

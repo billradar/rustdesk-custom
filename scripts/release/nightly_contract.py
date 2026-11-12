@@ -699,6 +699,13 @@ class NightlyDraftTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'invalid proof'):nightly.delete_refresh_draft(old)
             gh.assert_not_called()
 
+    def test_old_draft_recheck_does_not_inherit_new_signing_requirement(self):
+        from scripts.release import attestation
+        old=dict(id=7,tag_name='nightly',draft=True,prerelease=True)
+        with patch.dict(os.environ,dict(self.env,REQUIRE_ANDROID_PRODUCTION_SIGNING='true')),patch.object(nightly,'api',side_effect=[old,None]),patch.object(attestation,'read_release',return_value={}) as reader,patch('scripts.release.github.gh'):
+            nightly.delete_refresh_draft(old)
+        self.assertIs(reader.call_args.kwargs['enforce_current_signing'],False)
+
     def test_failed_delete_blocks_creation_and_never_deletes_tag(self):
         old=dict(id=7,tag_name='nightly',draft=True,prerelease=True,body='channel=nightly')
         with patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=old),patch('scripts.release.github.gh') as gh:

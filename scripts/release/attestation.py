@@ -139,9 +139,9 @@ def validate(value):
     return value
 
 
-def require_production_signing(value):
+def require_production_signing(value, *, enforce_current=True):
     """Publication/reuse gate; build-only dry-run inventories remain representable."""
-    if (value['android_signing_enabled'] or os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true') and not value['android_production_signed']:
+    if (value['android_signing_enabled'] or (enforce_current and os.environ.get('REQUIRE_ANDROID_PRODUCTION_SIGNING')=='true')) and not value['android_production_signed']:
         raise ValueError('Manifest requires three production-signed Android packages')
 
 
@@ -273,7 +273,7 @@ def attach(directory, channel):
     return value
 
 
-def read_remote(tag, assets, expected_identity=None, repo=REPOSITORY, channel="stable"):
+def read_remote(tag, assets, expected_identity=None, repo=REPOSITORY, channel="stable", *, enforce_current_signing=True):
     import tempfile
     if repo != REPOSITORY:
         raise ValueError('Unexpected release attestation repository')
@@ -299,7 +299,7 @@ def read_remote(tag, assets, expected_identity=None, repo=REPOSITORY, channel="s
             if target.stat().st_size != a['size'] or sha(target) != a['digest'][7:]:
                 raise ValueError('Remote release JSON does not match GitHub size/digest')
         value = loads((root / MANIFEST).read_bytes())
-        require_production_signing(value)
+        require_production_signing(value,enforce_current=enforce_current_signing)
         expected_tag='nightly' if channel=='nightly' else 'v'+value['upstream_version']+'-custom.'+value.get('patch_revision', '')
         if value['channel'] != channel or tag != expected_tag:
             raise ValueError('Release manifest tag/channel mismatch')
@@ -319,13 +319,13 @@ def verify_remote(tag, assets, expected_identity=None, repo=REPOSITORY):
     return True
 
 
-def read_release(release, channel='stable', expected_identity=None, tag=None):
+def read_release(release, channel='stable', expected_identity=None, tag=None, *, enforce_current_signing=True):
     if (type(release.get('id')) is not int or release['id']<=0
             or type(release.get('draft')) is not bool
             or release.get('prerelease') is not (channel=='nightly')):
         raise ValueError('Invalid Release API identity/state')
     canonical=tag or release.get('tag_name','')
-    value=read_remote(canonical,release.get('assets',[]),expected_identity,channel=channel)
+    value=read_remote(canonical,release.get('assets',[]),expected_identity,channel=channel,enforce_current_signing=enforce_current_signing)
     if release.get('target_commitish')!=value['custom_repository_sha']:
         raise ValueError('Release target commit differs from attested source')
     return value

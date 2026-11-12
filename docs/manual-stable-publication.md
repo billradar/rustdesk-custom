@@ -8,7 +8,7 @@ existing build proof remains; it does not enter native immutable publication.
 `publish-stable.yml` is a separate workflow dispatched manually by repository owner billradar on main. Owner numeric identity and the rerun actor are checked; Router/bot dispatches cannot publish. There is
 no schedule, workflow_run, router dispatch, signing job, compiler or asset upload.
 It publishes one existing Stable Draft rather than rebuilding or picking latest.
-It neither enables repository immutability nor changes historical Releases.
+It neither enables repository immutability nor changes historical Releases. This is not a per-release exemption in GitHub: manually publishing a Nightly Draft outside these workflows would still invoke the repository-wide immutable policy.
 
 ## Prerequisites
 
