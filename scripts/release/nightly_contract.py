@@ -313,7 +313,7 @@ class NightlyTests(unittest.TestCase):
 
     def test_nightly_cannot_enter_stable_publication(self):
         with patch.object(qualification,'aggregate') as gate:
-            with self.assertRaisesRegex(ValueError,'Only Stable'):
+            with self.assertRaisesRegex(ValueError,'publish-stable.yml'):
                 qualification._release(Path('.'),True,'nightly')
             gate.assert_not_called()
 
@@ -333,9 +333,9 @@ class NightlyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):nightly.aggregate(root,d)
                 gate.assert_not_called()
 
-    def test_release_mode_requires_signed_android_aggregate(self):
+    def test_draft_mode_requires_signed_android_aggregate(self):
         env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.1',PATCHSET='v2',
-                 GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='release',
+                 GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='draft',
                  ANDROID_PRODUCTION_SIGNING_ENABLED='true')
         discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
@@ -357,7 +357,7 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(w['permissions'],{'contents':'read','actions':'read'})
         self.assertEqual(set(w['on']),{'workflow_dispatch'})
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['default'],'draft')
-        self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['options'],['dry-run','draft','release'])
+        self.assertEqual(w['on']['workflow_dispatch']['inputs']['release_mode']['options'],['dry-run','draft'])
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['resolve']['if'])
         self.assertNotIn('billradar/rustdesk-custom',w['jobs']['resolve']['if'])
         self.assertTrue(w['run-name'].startswith('Nightly ${{ inputs.display_label'))
@@ -404,7 +404,7 @@ class NightlyTests(unittest.TestCase):
         for key in ['runs-on','environment','concurrency']:self.assertEqual(signer[key],tag[key])
         for name in ['android-sign','draft']:
             guard=w['jobs'][name]['if']
-            for token in ["github.ref == 'refs/heads/main'","github.event_name == 'workflow_dispatch'","inputs.release_mode == 'draft'", "inputs.release_mode == 'release'","format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository)"]:
+            for token in ["github.ref == 'refs/heads/main'","github.event_name == 'workflow_dispatch'","inputs.release_mode == 'draft'","format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository)"]:
                 self.assertIn(token,guard)
         action=next(x for x in signer['steps'] if x.get('uses')=='./.github/actions/android-yubikey-sign')
         self.assertEqual(action['with']['channel'],'nightly')
@@ -480,11 +480,19 @@ class NightlyDraftTests(unittest.TestCase):
         info=dict(platform='android',architecture='aarch64',variant='standard',upstream_version='1.5.1',
                   upstream_sha='b'*40,custom_repository_sha='a'*40,patchset='v2',patch_revision=None,
                   common_patch_hash=nightly.patch_hash('common','v2'),sos_patch_hash=nightly.patch_hash('sos','v2'))
-        a.write(assets,'nightly',[a.entry(assets/'client.apk',info)],info,{'result':'PASS'})
+        info['signed_status']='PRODUCTION SIGNED / IDENTITY VERIFIED'
+        entries=[a.entry(assets/'client.apk',info)]
+        for arch in ('armv7','x86_64'):
+            path=assets/(arch+'.apk');path.write_bytes(b'production package fixture')
+            entries.append(a.entry(path,dict(info,architecture=arch)))
+        self.verified_manifest=a.write(assets,'nightly',entries,info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
         (assets/a.BUNDLE).write_text('{}')
 
     def setUp(self):
         from scripts.release import attestation as a
+        reader=patch.object(a,'read_release',side_effect=lambda *args,**kw:self.verified_manifest)
+        reader.start();self.addCleanup(reader.stop)
+        self.verified_manifest={'channel':'nightly'}
         signature=patch.object(a,'verify_signature');signature.start();self.addCleanup(signature.stop)
         attach=patch.object(a,'attach',side_effect=lambda directory,channel:a.verify_local(directory,channel,Path(directory)/a.BUNDLE))
         attach.start();self.addCleanup(attach.stop)
@@ -558,20 +566,13 @@ class NightlyDraftTests(unittest.TestCase):
                         self.assertEqual(write.call_count,2)
                     for call in release_calls:
                         self.assertTrue(call.args[2]['draft']);self.assertTrue(call.args[2]['prerelease'])
-                    self.assertIn('automation_state=complete',write.call_args.args[2]['body'])
-                    self.assertIn('<!-- rustdesk-custom-release-metadata',write.call_args.args[2]['body'])
-                    self.assertTrue(write.call_args.args[2]['body'].startswith(self.upstream_notes+'\n\n<!-- rustdesk-custom-release-metadata'))
-                    self.assertEqual(write.call_args.args[2]['name'],'nightly')
-                    self.assertIn('asset_inventory=',write.call_args.args[2]['body'])
                     body=write.call_args.args[2]['body']
-                    self.assertIn('patchset_version=v2.8',body)
-                    self.assertIn('version_semantics=patchset-content-v1',body)
+                    self.assertTrue(body.startswith(self.upstream_notes+'\n\n'))
+                    self.assertEqual(write.call_args.args[2]['name'],'nightly')
                     self.assertIn('## Patchset v2.8',body)
                     self.assertIn('Current included customizations',body)
-                    self.assertIn('Recorded Patchset revision delta',body)
-                    self.assertIn('these are not claims of new changes in this build',body)
-                    self.assertIn('Known limitations:',body)
-                    self.assertLess(body.index('<!-- rustdesk-custom-release-metadata'),body.index('## Patchset v2.8'))
+                    for noise in ('automation_state=', 'asset_inventory=', 'version_semantics=', 'Common Patch Hash:', 'Known limitations:', '<!-- rustdesk-custom-release-metadata'):
+                        self.assertNotIn(noise,body)
                     self.assertRegex(write.call_args.args[2]['body'],r'Latest packages verified \(UTC\): `[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z`')
                     self.assertIn(f'https://github.com/{self.repo}/actions/runs/9',write.call_args.args[2]['body'])
                     self.assertNotIn('--clobber',upload.call_args.args)
@@ -683,7 +684,7 @@ class NightlyDraftTests(unittest.TestCase):
     def test_draft_delete_rejects_public_foreign_immutable_and_changed_records(self):
         old=dict(id=7,name='nightly',tag_name='nightly',draft=True,prerelease=True,
                  body='channel=nightly',target_commitish='a'*40,updated_at='original')
-        for change in ({'draft':False},{'prerelease':False},{'immutable':True},{'body':'channel=stable'}):
+        for change in ({'draft':False},{'prerelease':False},{'immutable':True}):
             with self.subTest(change=change),patch.dict(os.environ,self.env),patch.object(nightly,'api') as api,patch('scripts.release.github.gh') as gh:
                 with self.assertRaises(ValueError):nightly.delete_refresh_draft(dict(old,**change))
                 api.assert_not_called();gh.assert_not_called()
@@ -692,6 +693,19 @@ class NightlyDraftTests(unittest.TestCase):
                 with self.assertRaises(ValueError):nightly.delete_refresh_draft(old)
                 gh.assert_not_called()
 
+    def test_draft_delete_requires_fresh_attested_json_even_with_ownership_body(self):
+        old=dict(id=7,tag_name='nightly',draft=True,prerelease=True,body='channel=nightly')
+        with patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=old),patch('scripts.release.attestation.read_release',side_effect=ValueError('invalid proof')),patch('scripts.release.github.gh') as gh:
+            with self.assertRaisesRegex(ValueError,'invalid proof'):nightly.delete_refresh_draft(old)
+            gh.assert_not_called()
+
+    def test_old_draft_recheck_does_not_inherit_new_signing_requirement(self):
+        from scripts.release import attestation
+        old=dict(id=7,tag_name='nightly',draft=True,prerelease=True)
+        with patch.dict(os.environ,dict(self.env,REQUIRE_ANDROID_PRODUCTION_SIGNING='true')),patch.object(nightly,'api',side_effect=[old,None]),patch.object(attestation,'read_release',return_value={}) as reader,patch('scripts.release.github.gh'):
+            nightly.delete_refresh_draft(old)
+        self.assertIs(reader.call_args.kwargs['enforce_current_signing'],False)
+
     def test_failed_delete_blocks_creation_and_never_deletes_tag(self):
         old=dict(id=7,tag_name='nightly',draft=True,prerelease=True,body='channel=nightly')
         with patch.dict(os.environ,self.env),patch.object(nightly,'api',return_value=old),patch('scripts.release.github.gh') as gh:
@@ -699,86 +713,21 @@ class NightlyDraftTests(unittest.TestCase):
             gh.assert_called_once_with('api','--method','DELETE',f'repos/{self.repo}/releases/7')
 
 
-    def test_superseded_cleanup_uses_gh_without_touching_other_channels(self):
-        stale=dict(id=6,prerelease=True,body='channel=nightly',tag_name='nightly-old')
-        stable=dict(id=5,prerelease=False,body='channel=stable')
-        foreign=dict(id=4,prerelease=True,body='channel=other')
-        current=dict(stale,id=8,tag_name='nightly')
-        with patch.dict(os.environ,self.env),patch.object(nightly,'api',side_effect=[[stale,stable,foreign,current],None]),patch('scripts.release.github.gh') as gh:
-            nightly.cleanup_superseded_nightly_releases(8,'nightly')
-        gh.assert_called_once_with('api','--method','DELETE',f'repos/{self.repo}/releases/6')
+    def test_legacy_public_cleanup_cannot_delete_any_channel(self):
+        with patch('scripts.release.github.gh') as write:
+            with self.assertRaises(ValueError):nightly.cleanup_superseded_nightly_releases(7,'nightly')
+            write.assert_not_called()
 
-    def test_release_mode_promotes_only_a_complete_matching_draft(self):
-        import hashlib
-        env=dict(self.env)
-        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
-            root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
-            (assets/'client.apk').write_bytes(b'validated package fixture')
-            digest=hashlib.sha256((assets/'client.apk').read_bytes()).hexdigest()
-            self.make_manifest(assets)
-            discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
-            remote=[dict(name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()) for p in assets.iterdir()]
-            create_payload={}
-            def first_request(method,path,payload):
-                if method=='POST':create_payload.update(payload);return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
-                if method=='PATCH':create_payload['body']=payload['body']
-                return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly'}
-            def first_api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
-                if '/releases?' in path:return []
-                if '/releases/tags/' in path:return None
-                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
-                if '/actions/runs/' in path:return {'jobs':[]}
-                if '/assets?' in path:return remote
-                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
-                raise AssertionError(path)
-            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=first_api),patch.object(nightly.time,'sleep'),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=first_request):
-                nightly.draft(root,discovery)
-            def reused_api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','tag_name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path:return {'id':7,'name':'nightly','tag_name':'nightly','draft':True,'prerelease':True,'body':create_payload['body']}
-                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
-                if '/releases?' in path:return []
-                if '/actions/runs/' in path:return {'jobs':[]}
-                if '/assets?' in path:return remote
-                return None
-            with patch.dict(os.environ,RELEASE_MODE='release'),patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value=dict(result='PASS',android_production_signing=True)),patch.object(nightly,'api',side_effect=reused_api),patch('scripts.release.github.request',return_value={'draft':False,'prerelease':True,'tag_name':'nightly'}) as write:
-                result=nightly.draft(root,discovery)
-                self.assertTrue(result['reused'])
-                self.assertFalse(result['draft'])
-                write.assert_called_once()
-                self.assertEqual(write.call_args.args[0],'PATCH')
+    def test_release_mode_is_rejected_before_any_nightly_work(self):
+        with patch.dict(os.environ,dict(self.env,RELEASE_MODE='release')),patch.object(nightly,'aggregate') as gate,patch('scripts.release.github.request') as write:
+            with self.assertRaises(ValueError):nightly.draft(Path('.'),Path('.'))
+            gate.assert_not_called();write.assert_not_called()
 
-    def test_release_mode_publishes_only_after_verified_upload(self):
-        import hashlib
-        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,dict(self.env,RELEASE_MODE='release')):
-            root=Path(td);assets=root/'.work/qualification-aggregate/assets';assets.mkdir(parents=True)
-            (assets/'client.apk').write_bytes(b'validated package fixture')
-            self.make_manifest(assets)
-            discovery=root/'discovery.json';discovery.write_text(json.dumps(self.data))
-            uploaded=[dict(name=x.name,state='uploaded',size=x.stat().st_size,digest='sha256:'+hashlib.sha256(x.read_bytes()).hexdigest()) for x in assets.iterdir()]
-            def api(path,missing=False):
-                if path==f'repos/{nightly.OFFICIAL}/releases/tags/nightly':return {'name':'nightly','body':self.upstream_notes}
-                if '/releases/tags/' in path:return None
-                if '/git/ref/tags/' in path:return {'object':{'sha':'a'*40}}
-                if '/releases?' in path:return []
-                if '/actions/runs/' in path:return {'jobs':[]}
-                if '/assets?' in path:return uploaded
-                if path.endswith('/releases/7'):return {'id':7,'tag_name':'nightly','draft':True}
-                raise AssertionError(path)
-            calls=[]
-            def request(method,path,payload):
-                calls.append((method,payload))
-                if method=='POST':return {'id':7,'draft':True,'prerelease':True,'tag_name':'nightly','target_commitish':'a'*40}
-                return {'id':7,**payload}
-            with patch.object(nightly,'ROOT',root),patch.object(nightly,'ASSETS',assets),patch.object(nightly,'aggregate',return_value={'result':'PASS','android_production_signing':True}),patch.object(nightly,'api',side_effect=api),patch('scripts.release.github.gh'),patch('scripts.release.github.request',side_effect=request):
-                result=nightly.draft(root,discovery)
-            self.assertEqual([x[0] for x in calls],['POST','PATCH'])
-            self.assertTrue(calls[0][1]['draft'])
-            self.assertFalse(calls[1][1]['draft'])
-            self.assertTrue(calls[1][1]['prerelease'])
-            self.assertFalse(result['draft'])
-            self.assertIn('automation_state=complete',calls[1][1]['body'])
+    def test_public_nightly_cleanup_is_disabled(self):
+        with patch('scripts.release.github.gh') as write,patch.object(nightly,'api') as read:
+            with self.assertRaisesRegex(ValueError,'disabled'):nightly.cleanup_superseded_nightly_releases(7,'nightly')
+            write.assert_not_called();read.assert_not_called()
+
     def test_unsigned_matrix_blocks_all_writes(self):self.perform('unsigned')
     def test_existing_release_never_overwritten(self):self.perform('existing')
     def test_draft_refresh_does_not_hide_a_published_release(self):self.perform('published')

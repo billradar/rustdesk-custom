@@ -1,7 +1,7 @@
 {
   "id": "v3",
   "status": "validation_pending",
-  "revision": 2,
+  "revision": 3,
   "baseline": {
     "upstream_sha": "05b9f2d8919b5cdfaa0bb3280601a02881556a42",
     "upstream_version": "1.5.3",
@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "8fdc855986c8c21e9b4a42f269d4e57fa9eca0d12d6fe4b60be154d1b7a859e3",
+    "common": "2fc6754d391c850ecc5e92b6494965684792dadd9ef14e3cfb44280aba3e4269",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -108,12 +108,51 @@
         "compatibility": "Official RustDesk 1.5.3 source 95cca3f661f635b3cc85c04935fe8d96d8f432ef uses v3.2. v1/v2 retain their legacy public RPM naming and immutable patch bytes. Existing v3.1 Draft assets remain unchanged.",
         "limitations": "Old RPM clients with fixed legacy filename selectors require manual upgrade to v3.2 or later before consuming normalized RPM names. Native RPM installation and device upgrades are not tested. Client consumption of the attested JSON manifest remains separate.",
         "review_status": "reviewed"
+      },
+      {
+        "revision": 3,
+        "kind": "content-change",
+        "base_sha": "19783a6fd5d3fa02a676532b5ec4aa056d937cbc",
+        "before": {
+          "common": "8fdc855986c8c21e9b4a42f269d4e57fa9eca0d12d6fe4b60be154d1b7a859e3",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "after": {
+          "common": "2fc6754d391c850ecc5e92b6494965684792dadd9ef14e3cfb44280aba3e4269",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "scopes": [
+          "common"
+        ],
+        "categories": {
+          "Added": [],
+          "Changed": [
+            "Select updates by signed OS, architecture, Standard/SOS variant, ordinary/Wayland flavor and installer format instead of predicting filenames."
+          ],
+          "Fixed": [
+            "Detect the package manager owning the running executable, using the unattended Wayland Debian identity for that flavor, and distinguish installed Windows MSI clients from portable clients."
+          ],
+          "Removed": [],
+          "Security": [
+            "Verify the manifest using offline Sigstore certificate, transparency-log and provenance checks before selecting or downloading an installer."
+          ],
+          "Compatibility": [
+            "Manual upgrade is required for older clients; this generation requires the new attested JSON release format."
+          ]
+        },
+        "reason": "Move current-generation client updates and release reuse to one attested JSON inventory so human release notes no longer carry machine identity.",
+        "references": [
+          "19783a6fd5d3fa02a676532b5ec4aa056d937cbc"
+        ],
+        "compatibility": "Targets official 1.5.3 with a local path verifier crate; preserves historical v1/v2 patches and v3.1/v3.2 content histories. Complete native workspace builds require hosted CI.",
+        "limitations": "Native builds on all targets, generated bridge, Flutter analysis, device upgrades, runtime UI and remote sessions require fresh validation; existing clients need a manual upgrade.",
+        "review_status": "reviewed"
       }
     ],
     "features": {
       "common": [
         "Configured server and client defaults, hidden connection-manager setting, and manual-only connection-manager visibility.",
-        "Forced hardware rendering policy; latest-only custom repository updates with exact package and API size/SHA256 checks.",
+        "Forced hardware rendering policy; latest-only custom repository updates with attested JSON package selection and size/SHA256 verification.",
         "Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.",
         "Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention."
       ],

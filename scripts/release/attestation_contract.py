@@ -14,19 +14,65 @@ from scripts.release import attestation as a
 ROOT=Path(__file__).resolve().parents[2]
 
 
-def fixture(directory, channel='stable'):
+def fixture(directory, channel='stable', *, unsigned_android=False):
     p=directory/'rustdesk-1.5.1-linux-aarch64.deb';p.write_bytes(b'package')
     info=dict(platform='linux',architecture='aarch64',variant='standard',upstream_version='1.5.1',
               upstream_sha='a'*40,custom_repository_sha='b'*40,patchset='v2',
               patch_revision='v2.8' if channel=='stable' else None,
               common_patch_hash='c'*64,sos_patch_hash='d'*64)
+    entries=[a.entry(p,info)]
+    if unsigned_android:
+        for arch in ('aarch64','armv7','x86_64'):
+            apk=directory/f'client-{arch}.apk';apk.write_bytes(b'test-signed APK fixture')
+            entries.append(a.entry(apk,dict(info,platform='android',architecture=arch,signed_status='TEST SIGNED / NOT PRODUCTION SIGNED')))
     with patch.dict(os.environ,GITHUB_REPOSITORY=a.REPOSITORY,GITHUB_RUN_ID='42'):
-        value=a.write(directory,channel,[a.entry(p,info)],info,{'result':'PASS'})
+        value=a.write(directory,channel,entries,info,{'result':'PASS','official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
     (directory/a.BUNDLE).write_text('{"fixture":"signature verification is mocked only in tests"}')
     return value
 
 
 class AttestationTests(unittest.TestCase):
+    def test_configured_signing_allows_dry_run_inventory_but_blocks_publication_and_reuse(self):
+        for channel in ('stable','nightly'):
+            with self.subTest(channel=channel),tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='true',REQUIRE_ANDROID_PRODUCTION_SIGNING='false',RELEASE_MODE='dry-run',clear=True):
+                root=Path(td);value=fixture(root,channel,unsigned_android=True)
+                self.assertEqual(len([x for x in value['assets'] if x['os']=='android']),3)
+                self.assertTrue(value['android_signing_enabled'])
+                self.assertFalse(value['android_production_signed'])
+                self.assertEqual(a.loads((root/a.MANIFEST).read_bytes()),value)
+                with patch.object(a,'verify_signature') as signature:
+                    with self.assertRaisesRegex(ValueError,'three production-signed'):a.verify_local(root,channel)
+                    signature.assert_not_called()
+                files=sorted(root.iterdir());content={i:p.read_bytes() for i,p in enumerate(files,1)}
+                assets=[dict(id=i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+a.sha(p)) for i,p in enumerate(files,1)]
+                def download(args,**kwargs):kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
+                with patch.object(a.subprocess,'run',side_effect=download),patch.object(a,'verify_signature') as signature:
+                    with self.assertRaisesRegex(ValueError,'three production-signed'):
+                        a.read_remote('nightly' if channel=='nightly' else 'v1.5.1-custom.v2.8',assets,channel=channel)
+                    signature.assert_not_called()
+                for asset in value['assets']:
+                    if asset['os']=='android':asset['signing_status']='PRODUCTION SIGNED / IDENTITY VERIFIED'
+                value['android_production_signed']=True
+                (root/a.MANIFEST).write_text(json.dumps(value))
+                with patch.object(a,'verify_signature') as signature:
+                    self.assertEqual(a.verify_local(root,channel),value)
+                    signature.assert_called_once()
+
+    def test_old_nightly_ownership_uses_recorded_signing_but_new_assets_require_current_policy(self):
+        with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ANDROID_PRODUCTION_SIGNING_ENABLED='false',clear=True):
+            root=Path(td);fixture(root,'nightly',unsigned_android=True)
+            files=sorted(root.iterdir());content={i:p.read_bytes() for i,p in enumerate(files,1)}
+            assets=[dict(id=i,name=p.name,state='uploaded',size=p.stat().st_size,digest='sha256:'+a.sha(p)) for i,p in enumerate(files,1)]
+            def download(args,**kwargs):kwargs['stdout'].write(content[int(args[2].rsplit('/',1)[1])])
+            with patch.dict(os.environ,REQUIRE_ANDROID_PRODUCTION_SIGNING='true'),patch.object(a.subprocess,'run',side_effect=download),patch.object(a,'verify_signature') as signature:
+                with self.assertRaisesRegex(ValueError,'production-signed'):a.read_remote('nightly',assets,channel='nightly')
+                old=a.read_remote('nightly',assets,channel='nightly',enforce_current_signing=False)
+                self.assertFalse(old['android_signing_enabled']);signature.assert_called_once()
+                with self.assertRaisesRegex(ValueError,'production-signed'):a.verify_local(root,'nightly')
+            # A recorded enabled policy is never exempt, even for ownership reads.
+            with self.assertRaisesRegex(ValueError,'production-signed'):
+                a.require_production_signing(dict(old,android_signing_enabled=True),enforce_current=False)
+
     def test_manifest_generation_and_exact_coverage(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);v=fixture(root)
@@ -107,7 +153,9 @@ class AttestationTests(unittest.TestCase):
                 for variant in ('standard','sos'):
                     path=root/f'wayland-{variant}-{arch}.deb';path.write_bytes(b'package')
                     assets.append(a.entry(path,dict(platform='linux',architecture=arch,variant=variant,build_flavor='unattended-wayland')))
-            a.validate(dict(v,assets=assets))
+            full=dict(v,assets=assets,wayland_included=True,wayland_policy_sha256='f'*64)
+            full['build_identity']=a.build_identity(full)
+            a.validate(full)
             self.assertEqual(len(assets),31)
             self.assertEqual(sum(x['package']=='suse-rpm' for x in assets),4)
             self.assertEqual(sum(x['flavor']=='unattended-wayland' for x in assets),4)
@@ -120,7 +168,8 @@ class AttestationTests(unittest.TestCase):
     def test_signature_policy_and_failure_are_enforced(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);v=fixture(root)
-            with patch.object(a.subprocess,'run') as run:
+            with patch.object(a.subprocess,'run') as run,patch.object(a,'validate_verification_result') as policy:
+                run.return_value.stdout='[]'
                 a.verify_signature(root/a.MANIFEST,root/a.BUNDLE,v)
             args=run.call_args.args[0]
             self.assertIn('--bundle',args);self.assertIn('--deny-self-hosted-runners',args)
@@ -131,6 +180,29 @@ class AttestationTests(unittest.TestCase):
             for failure in (subprocess.CalledProcessError(1,args),FileNotFoundError('gh'),subprocess.TimeoutExpired(args,120)):
                 with patch.object(a.subprocess,'run',side_effect=failure),patch.dict(os.environ,clear=True):
                     with self.assertRaises(type(failure)):a.verify_local(root)
+
+    def test_verified_certificate_claims_are_bound_to_numeric_identity_and_run(self):
+        fixtures=ROOT/'scripts/validation/fixtures/custom-updater'
+        result=json.loads((fixtures/'cd-verified-claims.json').read_text())
+        value=json.loads((fixtures/'schema-v2-unsigned.json').read_text())
+        a.validate_verification_result(result,value)
+        cert=result[0]['verificationResult']['signature']['certificate']
+        for key in ('issuer','subjectAlternativeName','buildSignerURI','buildSignerDigest','runnerEnvironment','sourceRepositoryURI','sourceRepositoryDigest','sourceRepositoryRef','sourceRepositoryIdentifier','sourceRepositoryOwnerIdentifier','buildConfigURI','buildConfigDigest','buildTrigger','runInvocationURI'):
+            changed=copy.deepcopy(result)
+            changed[0]['verificationResult']['signature']['certificate'][key]='untrusted'
+            with self.subTest(claim=key),self.assertRaises(ValueError):a.validate_verification_result(changed,value)
+        for key in ('builder','metadata'):
+            changed=copy.deepcopy(result);changed[0]['verificationResult']['statement']['predicate']['runDetails'][key]={}
+            with self.assertRaises(ValueError):a.validate_verification_result(changed,value)
+
+    def test_release_body_cannot_grant_identity_or_override_verified_json(self):
+        release=dict(id=7,draft=True,prerelease=False,target_commitish='b'*40,assets=[],body='automation_state=complete')
+        with patch.object(a,'read_remote',side_effect=ValueError('missing proof')):
+            with self.assertRaisesRegex(ValueError,'missing proof'):a.read_release(release,tag='v1.5.1-custom.v2.8')
+        with patch.object(a,'read_remote',return_value={'custom_repository_sha':'b'*40}):
+            for body in ('', 'upstream_sha='+'d'*40, 'automation_state=incomplete'):
+                self.assertEqual(a.read_release(dict(release,body=body),tag='v1.5.1-custom.v2.8')['custom_repository_sha'],'b'*40)
+            with self.assertRaises(ValueError):a.read_release(dict(release,target_commitish='c'*40),tag='v1.5.1-custom.v2.8')
 
     def test_remote_json_downloads_use_asset_ids_and_require_exact_inventory(self):
         with tempfile.TemporaryDirectory() as td:

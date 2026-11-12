@@ -18,7 +18,9 @@ def inspect(tree,platform,arch):
  # YAML 1.1 parses the official matrix field "on" as boolean True. Normalize keys.
  normalized=json.loads(json.dumps(job));identity={'job':normalized,'env':env,'files':{}}
  for p in FILES:
-  identity['files'][p]=hashlib.sha256((tree/p).read_bytes().replace(b'\r\n',b'\n')).hexdigest()
+  from scripts.build.updater_dependencies import cargo_for_adapter
+  raw=cargo_for_adapter(tree) if p=='Cargo.toml' else (tree/p).read_bytes().replace(b'\r\n',b'\n')
+  identity['files'][p]=hashlib.sha256(raw).hexdigest()
  if platform=='android':
   for p in ['flutter/build_android_deps.sh','flutter/ndk_arm64.sh','flutter/ndk_arm.sh','flutter/ndk_x64.sh','flutter/android/app/build.gradle']:
    identity['files'][p]=hashlib.sha256((tree/p).read_bytes().replace(b'\r\n',b'\n')).hexdigest()

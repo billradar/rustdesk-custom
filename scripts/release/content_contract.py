@@ -26,9 +26,9 @@ class ContentContract(unittest.TestCase):
         stable = content.notes('v2')
         self.assertEqual(stable, content.notes('v2'))
         self.assertIn('Current included customizations', stable)
-        self.assertIn('Recorded Patchset revision delta', stable)
-        self.assertIn('Kind: content-change', stable)
-        self.assertIn('not claims of new changes', content.notes('v2', nightly=True))
+        self.assertIn('Changes in this custom revision', stable)
+        self.assertNotIn('Kind:', stable)
+        self.assertNotIn('Common Patch Hash:', content.notes('v2', nightly=True))
 
     def test_policy_hash_changes_for_toolchain_but_not_docs(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -105,7 +105,8 @@ class ContentContract(unittest.TestCase):
                   upstream_sha='a'*40,patchset='v2')
         with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'),\
              patch.object(channel,'api',return_value=existing),\
-             patch.object(channel,'verify_release_asset_attestation') as checks:
+             patch('scripts.release.stable_tag.commit_of',return_value='b'*40),\
+             patch('scripts.release.attestation.read_release',return_value={'custom_repository_sha':'b'*40}) as checks:
             result=channel.release_preflight(data)
             self.assertFalse(result['build_needed'])
             self.assertTrue(result['publish_existing'])
@@ -115,8 +116,8 @@ class ContentContract(unittest.TestCase):
         existing=self.fixture();existing['body']=existing['body'].replace('Build Identity: ', 'Build Identity: '+'e'*64+'\nold=')
         data=dict(channel='stable',version='1.5.1',upstream_tag='1.5.1',upstream_ref='1.5.1',
                   upstream_sha='a'*40,patchset='v2')
-        with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false'),patch.object(channel,'api',return_value=existing):
-            with self.assertRaisesRegex(ValueError,'IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION'):
+        with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false'),patch.object(channel,'api',return_value=existing),patch('scripts.release.attestation.read_release',side_effect=ValueError('Attested JSON identity mismatch')):
+            with self.assertRaisesRegex(ValueError,'Attested JSON identity mismatch'):
                 channel.release_preflight(data)
 
 

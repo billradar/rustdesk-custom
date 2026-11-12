@@ -46,3 +46,5 @@
 - [Release inventory and Sigstore attestation](release-attestation.md) — direct JSON integrity format, trusted workflows and client boundary.
 
 - [Public RPM asset names](rpm-asset-naming.md) — all eight RPM names, matching client selectors and historical compatibility.
+
+- [Manual Stable Draft publication and native Release proof](manual-stable-publication.md).

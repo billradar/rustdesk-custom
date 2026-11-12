@@ -182,7 +182,7 @@ class AggregateTests(unittest.TestCase):
                 for name in ('standard-rustdesk-1.5.3-aarch64-0.aarch64.rpm','standard-rustdesk-1.5.3-aarch64-0.aarch64-suse.rpm'):(packages/name).write_bytes(name.encode())
                 target=dict(id='linux-aarch64-standard',platform='linux',arch='aarch64',variant='standard',required=True,support_status='SUPPORTED')
                 env=dict(GITHUB_REPOSITORY='billradar/rustdesk-custom',UPSTREAM_EXPECTED_SHA='a'*40,PATCHSET=generation,GITHUB_RUN_ID='123',GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false')
-                with patch.dict(os.environ,env),patch.object(qualification,'ROOT',root),patch.object(qualification,'plan',return_value={'selected':[target]}),patch.object(platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):qualification.aggregate(root/'inputs','nightly',False)
+                with patch.dict(os.environ,env),patch.object(qualification,'ROOT',root),patch.object(qualification,'plan',return_value={'selected':[target]}),patch.object(platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):qualification.aggregate(root/'inputs','nightly',False,release_context={'official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
                 assets=root/'.work/qualification-aggregate/assets'
                 suffix='-0.aarch64' if generation=='v2' else ''
                 expected={f'rustdesk-1.5.3-linux-aarch64{suffix}.rpm',f'rustdesk-1.5.3-linux-aarch64{suffix}-suse.rpm','update-manifest.json'}
@@ -217,7 +217,7 @@ class AggregateTests(unittest.TestCase):
                     qualification,'plan',return_value={'selected':[entry]}),patch.object(
                     platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(ValueError,'name collision'):
-                    qualification.aggregate(root/'inputs','nightly',False)
+                    qualification.aggregate(root/'inputs','nightly',False,release_context={'official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
             report=json.loads((root/'.work/qualification-aggregate/aggregate.json').read_text())
             self.assertEqual(report['result'],'FAIL');self.assertEqual(report['required_gate'],'FAIL')
             self.assertFalse((root/'.work/qualification-aggregate/assets').exists())
@@ -235,7 +235,7 @@ class AggregateTests(unittest.TestCase):
             target=dict(id='linux-x86_64-standard',platform='linux',arch='x86_64',variant='standard',required=True,support_status='SUPPORTED')
             env=dict(GITHUB_REPOSITORY='billradar/rustdesk-custom',UPSTREAM_EXPECTED_SHA='a'*40,PATCHSET='v2',GITHUB_RUN_ID='123',GITHUB_SHA='b'*40,INCLUDE_WAYLAND='false')
             with patch.dict(os.environ,env),patch.object(qualification,'ROOT',root),patch.object(qualification,'plan',return_value={'selected':[target]}),patch.object(platform_package,'validate'),contextlib.redirect_stdout(io.StringIO()):
-                report=qualification.aggregate(root/'inputs','nightly',False)
+                report=qualification.aggregate(root/'inputs','nightly',False,release_context={'official_run_id':'17','official_run_url':'https://github.com/rustdesk/rustdesk/actions/runs/17'})
             self.assertEqual(report['result'],'PASS')
             assets=root/'.work/qualification-aggregate/assets'
             self.assertEqual({p.name for p in assets.iterdir()},{'update-manifest.json','rustdesk-1.5.1-linux-x86_64.deb'})
@@ -249,37 +249,12 @@ class AggregateTests(unittest.TestCase):
             with self.assertRaises(ValueError):qualification.aggregate(Path(tmp),'stable',False)
             self.assertEqual(json.loads((Path(tmp)/'.work/qualification-aggregate/aggregate.json').read_text())['required_gate'],'FAIL')
     def test_untagged_draft_is_handled_by_release_preflight(self):
-        import scripts.release.channel as channel
-        sha='6c578292e8ebbbec708b76986ba8c4bc7c509747'
-        patchset='v999999'
-        custom='b'*40
-        identity=channel.build_identity(sha,patchset,'c'*64,'d'*64,custom,False)
-        name='v1.4.9-custom.v999999.1'
-        assets=['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
-        draft={'draft':True,'name':name,'prerelease':False,'tag_name':'untagged-example',
-               'body':'\n'.join(['Patch Set: '+patchset,'Upstream SHA: '+sha,'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'d'*64,
-                   'Custom Repository SHA: '+custom,'Wayland Included: false','Patch Revision: v999999.1','Build Identity: '+identity,
-                   'version_semantics=patchset-content-v1','Automation-State: complete','Asset Inventory: '+json.dumps(assets)]),
-               'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in assets]}
-        def api(path,**kwargs):
-            if path.startswith('repos/'+channel.REPOSITORY+'/releases/tags/'): return None
-            if path.endswith('releases?per_page=100&page=1'): return [draft]
-            return None
-        with patch.object(channel, 'require_selection', return_value={}),patch.dict(os.environ,GITHUB_SHA=custom,INCLUDE_WAYLAND='false'),patch.object(channel,'current',return_value={'id':'v999999','revision':1}),patch.object(channel,'api',side_effect=api),patch.object(channel,'patch_hash',side_effect=lambda folder,name: 'c'*64 if folder=='common' else 'd'*64),patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'verify'),patch.object(channel,'verify_release_asset_attestation',return_value=True),patch.object(channel,'matching_drafts',return_value=[draft]):
-            data=channel.release_preflight({'channel':'stable','version':'1.4.9','upstream_sha':sha,'upstream_tag':'1.4.9','upstream_ref':'1.4.9','patchset':patchset})
-            self.assertFalse(data['build_needed'])
-            self.assertFalse(data['draft_needed'])
-            self.assertEqual(data['release_tag'],name)
-            self.assertEqual(data['patch_revision'],'v999999.1')
+        from scripts.release import attestation
+        release=dict(id=7,draft=True,prerelease=False,tag_name='untagged-example',target_commitish='b'*40,assets=[])
+        with patch.object(attestation,'read_remote',return_value={'custom_repository_sha':'b'*40}) as read:
+            attestation.read_release(release,tag='v1.4.9-custom.v1.2')
+        self.assertEqual(read.call_args.args[0],'v1.4.9-custom.v1.2')
 
-
-"""Release qualification and workflow dependency contracts."""
-from pathlib import Path
-import unittest
-import yaml
-ROOT = Path(__file__).resolve().parents[2]
-
-class NamingContractTests(unittest.TestCase):
     def test_standard_has_no_variant_token_and_sos_does(self):
         self.assertEqual(windows_installer_name('1.4.9','standard','exe'), 'rustdesk-1.4.9-windows-x86_64.exe')
         self.assertEqual(windows_installer_name('1.4.9','sos','exe'), 'rustdesk-1.4.9-sos-windows-x86_64.exe')
@@ -300,49 +275,23 @@ class ReleaseBodyContractTests(unittest.TestCase):
         self.assertNotIn('RustDesk Server Pro',normalized)
         self.assertIn('# Changelog',normalized)
 
-    def test_custom_metadata_is_last_and_uses_key_value_contract(self):
+    def test_release_body_is_human_only(self):
         official='# 1.5.0\n\n# Changelog\n'
-        metadata=['upstream_sha='+'a'*40,'patchset=v2','release_policy=DRAFT ONLY; publication is a manual user decision','automation_state=complete']
-        body=qualification.build_release_body(official,metadata)
-        self.assertTrue(body.startswith(official.rstrip()))
-        self.assertNotIn('RustDesk Server Pro',body)
-        self.assertLess(body.index('# Changelog'),body.index('## Custom release metadata'))
-        self.assertEqual(body.rstrip().splitlines()[-1],'automation_state=complete')
-        self.assertIn('release_policy=DRAFT ONLY; publication is a manual user decision',body)
-        self.assertIn('upstream_sha='+'a'*40,body)
+        self.assertEqual(qualification.build_release_body(official),official)
 
-    def test_existing_stable_draft_publish_rechecks_identity_and_asset_inventory(self):
-        import scripts.release.channel as channel
-        upstream='a'*40;custom='b'*40;patchset='v1'
-        common=channel.patch_hash('common',patchset);sos=channel.patch_hash('sos',patchset)
-        identity=channel.build_identity(upstream,patchset,common,sos,custom,False)
-        names=['update-manifest.json','release-attestation.json']
-        body='\n'.join(['automation_state=complete','build_package_checksum_architecture_provenance=PASS',
-            'build_identity='+identity,'upstream_sha='+upstream,'custom_repository_sha='+custom,'patchset='+patchset,
-            'common_patch_hash='+common,'sos_patch_hash='+sos,'wayland_included=false','asset_inventory='+json.dumps(names)])
-        release={'id':7,'draft':True,'prerelease':False,'body':body,
-                 'assets':[{'name':name,'state':'uploaded','size':10,'digest':'sha256:'+'c'*64} for name in names]}
-        env={'GITHUB_REPOSITORY':'billradar/rustdesk-custom','RELEASE_TAG':'v1.4.9-custom.v1.1',
-             'BUILD_IDENTITY':identity,'UPSTREAM_SHA':upstream,'CUSTOM_REPOSITORY_SHA':custom,
-             'PATCHSET':patchset,'WAYLAND_INCLUDED':'false','WAYLAND_POLICY_SHA256':''}
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[release]),patch.object(channel,'verify_release_asset_attestation',return_value=True),patch('scripts.release.github.request',return_value={'draft':False}) as write,patch('scripts.release.stable_tag.ensure') as tag_write:
-            qualification.publish_existing_draft()
-            tag_write.assert_called_once_with('billradar/rustdesk-custom','v1.4.9-custom.v1.1',custom)
-            write.assert_called_once()
-        mismatch=dict(release,body=body.replace('custom_repository_sha='+custom,'custom_repository_sha='+'d'*40))
-        with patch.dict(os.environ,env),patch.object(channel,'matching_drafts',return_value=[mismatch]),patch.object(channel,'verify_release_asset_attestation',return_value=True),patch('scripts.release.github.request') as write:
-            with self.assertRaisesRegex(ValueError,'identity differs'):
-                qualification.publish_existing_draft()
-            write.assert_not_called()
+    def test_legacy_publication_entrypoints_fail_before_any_work(self):
+        with patch('scripts.release.github.request') as write,patch.object(qualification,'aggregate') as aggregate:
+            with self.assertRaisesRegex(ValueError,'publish-stable.yml'):qualification.publish_existing_draft()
+            with self.assertRaisesRegex(ValueError,'publish-stable.yml'):qualification.release(Path('.'))
+            aggregate.assert_not_called();write.assert_not_called()
 
 class QualificationSerializationTests(unittest.TestCase):
     def test_release_qualification_writes_real_newlines(self):
         body=qualification.build_release_body(
             '# 1.5.0'+chr(10)+chr(10)+'# Changelog'+chr(10),
-            ['upstream_sha='+'a'*40,'patchset=v2','automation_state=complete'],
         )
-        self.assertIn(chr(10)+chr(10)+'## Custom release metadata'+chr(10)+chr(10), body)
-        self.assertEqual(body.rstrip().splitlines()[-1], 'automation_state=complete')
+        self.assertEqual(body,'# 1.5.0\n\n# Changelog\n')
+        self.assertNotIn('automation_state',body)
         self.assertNotIn('\\n', body)
 
 class ParallelGateTests(unittest.TestCase):
@@ -371,10 +320,10 @@ class ParallelGateTests(unittest.TestCase):
         self.assertIn('prepare',tag['android-build']['needs'])
         self.assertIn('android-build',tag['android-sign']['needs'])
         self.assertEqual(tag['draft']['needs'],'aggregate')
-        self.assertEqual(tag['release']['needs'],'aggregate')
-        self.assertEqual(tag['publish-existing']['needs'],['resolve','draft-preflight'])
+        self.assertNotIn('release',tag)
+        self.assertNotIn('publish-existing',tag)
         self.assertEqual(tag['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
-        for name in ('publish-existing','release','draft'):
+        for name in ('draft',):
             self.assertIn("github.ref == 'refs/heads/main'",tag[name]['if'])
         self.assertIn('build_needed',tag['aggregate']['outputs'])
         self.assertIn('draft_needed',tag['aggregate']['outputs'])

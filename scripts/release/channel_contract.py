@@ -57,17 +57,17 @@ class StablePatchsetNotesContract(unittest.TestCase):
                  patch.object(channel,'request',side_effect=fake_request), \
                  patch.object(channel,'gh'), \
                  patch('scripts.release.stable_tag.ensure'), \
+                 patch('scripts.release.attestation.attach'), \
                  patch('scripts.release.content.policy_digest',side_effect=AssertionError('Policy hash must not allocate notes')):
                 channel.draft(destination)
             body=captured[0][1]['body']
             self.assertTrue(body.startswith('# Official upstream notes'))
             self.assertIn('## Patchset v2.8',body)
             self.assertIn('Current included customizations',body)
-            self.assertIn('Recorded Patchset revision delta',body)
-            self.assertIn('Known limitations:',body)
-            self.assertIn('Patchset Version: v2.8',body)
+            self.assertNotIn('Known limitations:',body)
+            self.assertNotIn('Patchset Version:',body)
             self.assertIn(patchset_notes('v2'),body)
-            self.assertLess(body.index('## Patchset v2.8'),body.index('<!-- rustdesk-custom-release-metadata'))
+            self.assertNotIn('<!-- rustdesk-custom-release-metadata',body)
             self.assertEqual(body,captured[-1][1]['body'])
             self.assertEqual(captured[-1][1]['tag_name'],'v1.5.1-custom.v2.8')
             self.assertEqual(captured[-1][1]['target_commitish'],'b'*40)
@@ -113,6 +113,10 @@ class ChannelPolicyTests(unittest.TestCase):
     def setUp(self):
         # Synthetic patchsets in these contracts are stand-ins for the
         # reviewed content manifest; production uses current() validation.
+        self._reader=patch('scripts.release.attestation.read_release',side_effect=self.read_verified)
+        self._reader.start();self.addCleanup(self._reader.stop)
+        self._commit=patch('scripts.release.stable_tag.commit_of',side_effect=lambda repo,ref:ref.get('target_commitish','b'*40))
+        self._commit.start();self.addCleanup(self._commit.stop)
         self._selection=patch.object(channel, 'require_selection', return_value={})
         self._selection.start();self.addCleanup(self._selection.stop)
         self._content=patch.object(channel, 'current', side_effect=lambda name: {
@@ -126,35 +130,36 @@ class ChannelPolicyTests(unittest.TestCase):
     def discovery(self, patchset='v999999'):
         return dict(channel='stable',version='1.4.9',upstream_tag='1.4.9',upstream_ref='1.4.9',upstream_sha='a'*40,patchset=patchset)
 
+    def read_verified(self, release, channel_name, expected_identity=None, tag=None):
+        value=release.get('_verified')
+        if not value:raise ValueError('No attested JSON manifest; body has no authority')
+        for key,wanted in (expected_identity or {}).items():
+            if value.get(key)!=wanted:raise ValueError('Attested JSON identity mismatch: '+key)
+        if any(not a.get('digest') for a in release['assets']):raise ValueError('Incomplete asset digest')
+        return value
+
     def draft_fixture(self, patchset='v999999', revision='1'):
         tag=f'v1.4.9-custom.{patchset}.{revision}'
         included,policy=channel.wayland_identity()
-        identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,'b'*40,included,policy)
-        assets=['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
-        if included:
-            from scripts.platform.wayland import asset_names
-            assets += sorted(asset_names('1.4.9'))
-        lines=['version_semantics=patchset-content-v1','Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: '+patchset,'Patch Revision: v'+patchset[1:]+'.'+revision,
-               'Common Patch Hash: '+'c'*64,'SOS Patch Hash: '+'c'*64,'Custom Repository SHA: '+'b'*40,
-               'Wayland Included: '+str(included).lower(),'Build Identity: '+identity,'Asset Inventory: '+json.dumps(assets)]
-        if policy:lines.append('Wayland Policy SHA256: '+policy)
-        return dict(name=tag,tag_name='untagged-123',draft=True,prerelease=False,
-            body='\n'.join(lines),assets=[dict(name=n,state='uploaded',size=1,digest='sha256:'+'a'*64) for n in assets])
+        value=dict(upstream_version='1.4.9',upstream_tag='1.4.9',upstream_sha='a'*40,
+                   custom_repository_sha='b'*40,patchset=patchset,patch_revision=f'{patchset}.{revision}',
+                   patchset_version=f'{patchset}.{revision}',common_patch_hash='c'*64,sos_patch_hash='c'*64,
+                   wayland_included=included,wayland_policy_sha256=policy,android_signing_enabled=False,
+                   build_identity=channel.build_identity('a'*40,patchset,'c'*64,'c'*64,None,included,policy))
+        return dict(id=7,name=tag,tag_name='untagged-123',draft=True,prerelease=False,
+                    target_commitish='b'*40,body='Human notes only',_verified=value,
+                    assets=[dict(name='update-manifest.json',digest='sha256:'+'a'*64)])
 
     def test_existing_release_cannot_gain_wayland_without_new_identity(self):
-        existing=self.draft_fixture()
-        with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
-            with self.assertRaisesRegex(ValueError,'IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION'):
+        old=self.draft_fixture()
+        with patch.dict(os.environ,INCLUDE_WAYLAND='true'),patch.object(channel,'api',return_value=old):
+            with self.assertRaisesRegex(ValueError,'identity mismatch'):
                 channel.release_preflight(self.discovery())
 
-    def test_two_old_wayland_assets_cannot_satisfy_four_target_release(self):
-        with patch.dict(os.environ,INCLUDE_WAYLAND='true'):
-            existing=self.draft_fixture()
-            names=['unattended-wayland-rustdesk-unattended-wayland-1.4.9-'+a+'.deb' for a in ('x86_64','aarch64')]
-            existing['assets']=[dict(name=n,state='uploaded',size=1) for n in names]
-            with patch.object(channel,'same_identity_release',return_value=existing),patch.object(channel,'api',return_value=existing):
-                with self.assertRaisesRegex(ValueError,'immutable revision lacks matching Wayland'):
-                    channel.release_preflight(self.discovery())
+    def test_missing_attested_json_cannot_be_replaced_by_body_markers(self):
+        old=self.draft_fixture();old.pop('_verified');old['body']='automation_state=complete\nwayland_included=true'
+        with patch.object(channel,'api',return_value=old),self.assertRaisesRegex(ValueError,'body has no authority'):
+            channel.release_preflight(self.discovery())
 
     def test_discovery_only_does_not_query_drafts_or_resolve_sha_again(self):
         with patch.object(channel,'choose_stable',return_value={'version':'1.4.9','upstream_tag':'1.4.9','upstream_sha':'a'*40}),patch.object(channel,'api') as api,patch.object(channel,'outputs') as out:
@@ -196,19 +201,14 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v1.2')
 
     def test_legacy_same_shaped_tag_is_never_reinterpreted(self):
-        old=self.draft_fixture()
-        old['body']=old['body'].replace('version_semantics=patchset-content-v1\n','')
-        with patch.object(channel,'api',return_value=old):
-            with self.assertRaisesRegex(ValueError,'Legacy release semantics'):
-                channel.release_preflight(self.discovery())
+        old=self.draft_fixture();old.pop('_verified')
+        with patch.object(channel,'api',return_value=old),self.assertRaises(ValueError):
+            channel.release_preflight(self.discovery())
 
     def test_same_tag_different_content_is_immutable_collision(self):
-        old=self.draft_fixture()
-        old['body']=old['body'].replace('Common Patch Hash: '+'c'*64,
-                                        'Common Patch Hash: '+'d'*64)
-        with patch.object(channel,'api',return_value=old):
-            with self.assertRaisesRegex(ValueError,'Existing revision tag has a different Build Identity'):
-                channel.release_preflight(self.discovery())
+        old=self.draft_fixture();old['_verified']['common_patch_hash']='d'*64
+        with patch.object(channel,'api',return_value=old),self.assertRaisesRegex(ValueError,'identity mismatch'):
+            channel.release_preflight(self.discovery())
 
     def test_preflight_rejects_stale_locked_content_revision(self):
         data=self.discovery('v2')
@@ -216,19 +216,15 @@ class ChannelPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Locked Patchset content revision drift'):
             channel.release_preflight(data)
 
-    def test_legacy_key_value_metadata_is_normalized(self):
-        fields = channel.release_metadata(
-            'upstream_sha=' + 'a' * 40 + '\npatchset=v1\ncustom_repository_sha=' + 'b' * 40
-            + '\nbuild_identity=' + 'c' * 64)
-        self.assertEqual(fields['Upstream SHA'], 'a' * 40)
-        self.assertEqual(fields['Patch Set'], 'v1')
-        self.assertEqual(fields['Custom Repository SHA'], 'b' * 40)
-        self.assertEqual(fields['Build Identity'], 'c' * 64)
+    def test_body_cannot_override_attested_identity(self):
+        old=self.draft_fixture();old['body']='upstream_sha='+'d'*40+'\nautomation_state=incomplete'
+        with patch.object(channel,'api',return_value=old):
+            self.assertFalse(channel.release_preflight(self.discovery())['build_needed'])
 
     def test_reused_draft_keeps_recorded_custom_commit_provenance(self):
         existing=self.draft_fixture('v1','2')
-        existing['body']=existing['body'].replace('Custom Repository SHA: '+'b'*40,
-                                                  'Custom Repository SHA: '+'c'*40)
+        existing['_verified']['custom_repository_sha']='c'*40
+        existing['target_commitish']='c'*40
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
             data=channel.release_preflight(self.discovery('v1'))
         self.assertEqual(data['custom_repository_sha'], 'c' * 40)
@@ -237,7 +233,7 @@ class ChannelPolicyTests(unittest.TestCase):
         existing=self.draft_fixture('v1','2')
         existing['assets'][0]['digest']=''
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
-            with self.assertRaisesRegex(ValueError,'Existing release incomplete'):
+            with self.assertRaisesRegex(ValueError,'Incomplete asset digest'):
                 channel.release_preflight(self.discovery('v1'))
 
     def test_published_same_identity_is_idempotently_skipped(self):
@@ -264,7 +260,7 @@ class ChannelPolicyTests(unittest.TestCase):
     def test_untagged_draft_verifies_both_json_assets_by_exact_id(self):
         from scripts.release import attestation as a
         import hashlib
-        self._assets.stop()
+        self._assets.stop();self._reader.stop()
         try:
             with tempfile.TemporaryDirectory() as td:
                 root=Path(td);existing=self.draft_fixture('v1','2');entries=[]
@@ -283,6 +279,7 @@ class ChannelPolicyTests(unittest.TestCase):
                 def api(path,missing=False):
                     if '/releases/tags/' in path:return None
                     if '/releases?per_page=' in path:return [existing]
+                    if '/git/ref/tags/' in path:return {'target_commitish':'b'*40}
                     self.fail('Unexpected API '+path)
                 def download(args,**kwargs):
                     self.assertEqual(args[:2],['gh','api'])
@@ -293,11 +290,12 @@ class ChannelPolicyTests(unittest.TestCase):
                 self.assertEqual(command.call_count,2);signature.assert_called_once()
                 self.assertEqual(existing['tag_name'],'untagged-123')
                 self.assertFalse(result['build_needed']);self.assertTrue(result['publish_existing'])
-        finally:self._assets.start()
+        finally:self._assets.start();self._reader.start()
 
     def test_legacy_checksum_only_release_cannot_be_reused(self):
         existing=self.draft_fixture('v1','2')
         existing['body']=existing['body'].replace('update-manifest.json','SHA256SUMS').replace(', "release-attestation.json"','')
+        existing.pop('_verified')
         existing['assets']=[dict(a,name='SHA256SUMS') if a['name']=='update-manifest.json' else a for a in existing['assets'] if a['name']!='release-attestation.json']
         with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
             with self.assertRaises(ValueError):channel.release_preflight(self.discovery('v1'))
@@ -329,29 +327,26 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertEqual(data['patch_revision'],'v2.8')
             self.assertEqual(data['release_tag'],'v1.4.9-custom.v2.8')
 
-    def test_legacy_draft_without_automation_marker_is_rejected(self):
-        draft=self.draft_fixture()
-        draft['body']=draft['body'].replace('Automation-State: complete\n','')
-        with patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'api',return_value=draft):
-            with self.assertRaisesRegex(ValueError,'missing its automation completion marker'):
-                channel.release_preflight(self.discovery())
+    def test_missing_body_completion_marker_does_not_block_verified_json(self):
+        old=self.draft_fixture();old['body']=''
+        with patch.object(channel,'api',return_value=old):
+            self.assertTrue(channel.release_preflight(self.discovery())['publish_existing'])
 
     def test_incomplete_or_mismatched_draft_blocks_before_build(self):
-        draft=self.draft_fixture()
-        draft['body']=draft['body'].replace('Automation-State: complete','Automation-State: incomplete')
-        with patch.object(channel,'release_rows',return_value=[draft]),patch.object(channel,'api',return_value=draft),self.assertRaisesRegex(ValueError,'incomplete or incompatible'):
+        old=self.draft_fixture();old['_verified']['build_identity']='0'*64
+        with patch.object(channel,'api',return_value=old),self.assertRaises(ValueError):
             channel.release_preflight(self.discovery())
 
     def test_release_preflight_workflow_permissions_and_gate(self):
         jobs=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['jobs']
         self.assertNotIn('queue', jobs['android-sign'].get('concurrency', {}))
-        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft','release','publish-existing'})
+        self.assertEqual({n for n,j in jobs.items() if j.get('permissions',{}).get('contents')=='write'},{'draft-preflight','draft'})
         self.assertNotIn('qualification',jobs)
         self.assertNotIn('stable-ci-qualification',jobs)
         self.assertEqual(jobs['draft-preflight']['needs'],'resolve')
         self.assertIn('wayland_included',jobs['draft-preflight']['outputs'])
-        self.assertIn('needs.draft-preflight.outputs.custom_repository_sha',jobs['publish-existing']['env']['CUSTOM_REPOSITORY_SHA'])
-        self.assertIn('build_identity',jobs['publish-existing']['env']['BUILD_IDENTITY'])
+        self.assertNotIn('publish-existing',jobs)
+        self.assertNotIn('release',jobs)
         self.assertIn('inputs.upstream_ref',yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())['concurrency']['group'])
         self.assertEqual(set(jobs['prepare']['needs']),{'resolve','draft-preflight'})
         self.assertIn('needs.aggregate.outputs.draft_needed',jobs['draft']['if'])
@@ -362,11 +357,10 @@ class ChannelPolicyTests(unittest.TestCase):
             self.assertNotIn('windows_only',jobs[name].get('with',{}))
             self.assertNotIn('other_platforms_only',jobs[name].get('with',{}))
             self.assertNotIn('android_only',jobs[name].get('with',{}))
-        self.assertEqual(jobs['release']['needs'],'aggregate')
         self.assertEqual(jobs['draft']['needs'],'aggregate')
         self.assertEqual(jobs['aggregate']['needs'],['resolve','draft-preflight','windows-build','platforms-build','android-build','android-sign','wayland-build'])
         self.assertIn('--discovery-only',next(s for s in jobs['resolve']['steps'] if s.get('id')=='resolve')['run'])
-        for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','release','draft'):
+        for name in ('windows-build','platforms-build','android-build','android-sign','aggregate','draft'):
             self.assertNotIn('qualification',str(jobs[name].get('needs',[])))
 
     def test_windows_validation_receives_preflight_patch_revision(self):
@@ -508,21 +502,10 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertEqual(native_package_name('1.4.9','sos','linux','x86_64','sos-rustdesk-1.4.9-x86_64.deb'), 'rustdesk-1.4.9-sos-linux-x86_64.deb')
         self.assertEqual(native_package_name('1.4.9','standard','macos','aarch64','standard-rustdesk-1.4.9-aarch64-unsigned.dmg'), 'rustdesk-1.4.9-macos-aarch64-unsigned.dmg')
 
-    def test_new_metadata_automation_state_is_accepted(self):
-        sha='a'*40; common='c'*64
-        identity=channel.build_identity(sha,'v999999',common,common,'b'*40,False)
-        existing={
-            'name':'v1.4.9-custom.v999999.1','tag_name':'v1.4.9-custom.v999999.1','draft':True,'prerelease':False,
-            'body':chr(10).join(['Patch Set: v999999',f'Upstream SHA: {sha}',f'Common Patch Hash: {common}',f'SOS Patch Hash: {common}',
-                'Custom Repository SHA: '+'b'*40,'Wayland Included: false','Patch Revision: v999999.1',
-                'Build Identity: '+identity,'Asset Inventory: '+json.dumps(['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']),
-                'version_semantics=patchset-content-v1','automation_state=complete']),
-            'assets':[{'name':n,'state':'uploaded','size':1,'digest':'sha256:'+'a'*64} for n in ['update-manifest.json','release-attestation.json','rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']]
-        }
-        with patch.object(channel,'release_rows',return_value=[existing]),patch.object(channel,'api',return_value=existing):
-            data=channel.release_preflight(self.discovery())
-            self.assertFalse(data['build_needed'])
-            self.assertTrue(data['publish_existing'])
+    def test_body_free_release_is_accepted(self):
+        old=self.draft_fixture();old.pop('body')
+        with patch.object(channel,'api',return_value=old):
+            self.assertTrue(channel.release_preflight(self.discovery())['publish_existing'])
 
     def test_changed_patch_allocates_new_scoped_revision(self):
         sha='a'*40

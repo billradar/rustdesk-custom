@@ -1,5 +1,7 @@
 """Shared Patchset content-version inputs and build-policy provenance."""
 import hashlib
+import os
+import re
 from pathlib import Path
 from scripts.upstream.patchset_version import current, SCHEMA
 
@@ -45,22 +47,29 @@ def inputs(patchset):
 
 def notes(patchset, *, nightly=False):
     data = current(patchset)
+    return render_notes(data,nightly=nightly)
+
+
+def render_notes(data, *, nightly=False, repository=None, source_ref=None):
+    patchset=data['id']
     entry = data['versioning']['history'][-1]
     lines = [f'## Patchset {patchset}.{data["revision"]}', '',
              'RustDesk upstream version changes and Patchset content revisions are independent.', '',
              '### Current included customizations', '']
     for folder, features in data['versioning']['features'].items():
         lines += [f'- {folder.title()}: ' + feature for feature in features]
-    lines += ['', '### Recorded Patchset revision delta', '',
-              ('This Nightly records the current revision; these are not claims of new changes in this build.' if nightly else
-               'This is the recorded revision delta, not a claim that every feature was added in this release.'), '',
-              'Kind: ' + entry['kind'], '', 'Reason: ' + entry['reason'], '']
-    for category, items in entry['categories'].items():
-        lines += [f'- {category}: {item}' for item in items]
-    lines += ['', 'References: ' + ', '.join(entry['references']), '',
-              'Upstream compatibility: ' + entry['compatibility'], '',
-              'Known limitations: ' + entry['limitations'], '']
-    for folder in ('common', 'sos'):
-        lines += [f'- {folder.title()} Patch Hash: `{data["hashes"][folder]}`',
-                  f'- {folder.title()} before: `{entry["before"][folder]}`; after: `{entry["after"][folder]}`']
-    return '\n'.join(lines) + '\n'
+    lines += ['', '### Changes in this custom revision', '']
+    if entry['kind']=='content-change':
+        for category,items in entry['categories'].items():
+            if category not in ('Compatibility',):
+                lines += [f'- {category}: {item}' for item in items]
+    else:
+        lines += ['The existing customizations above are included in this build.']
+    if entry['kind']=='content-change':
+        for item in entry['categories'].get('Compatibility',[]):
+            lines += ['- Compatibility: '+item]
+    repository=repository or os.environ.get('GITHUB_REPOSITORY','billradar/rustdesk-custom')
+    source_ref=source_ref or os.environ.get('GITHUB_SHA','')
+    if re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repository) and re.fullmatch(r'[0-9a-f]{40}',source_ref):
+        lines += ['',f'[Full patch history](https://github.com/{repository}/blob/{source_ref}/patchsets/{patchset}/CHANGELOG.md)']
+    return '\n'.join(lines)+'\n'

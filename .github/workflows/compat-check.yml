@@ -132,6 +132,7 @@ jobs:
         python3 scripts/upstream/interface_review_contract.py
         python3 -m scripts.upstream.patch_profiles_contract
         python3 scripts/build/build_adapter_contract.py
+        python3 -m scripts.build.updater_dependencies_contract
         python3 -m scripts.platform.runner_migrations_contract
         python3 -m scripts.build.macos_arm64_contract
         python3 scripts/platform/wayland_contract.py
@@ -139,6 +140,7 @@ jobs:
         python3 scripts/release/qualification_contract.py
         python3 -m scripts.release.artifacts_contract
         python3 -m scripts.release.attestation_contract
+        python3 -m scripts.release.publish_stable_contract
         python3 scripts/release/channel_contract.py
         python3 -m scripts.release.content_contract
         python3 scripts/release/nightly_contract.py
@@ -157,6 +159,61 @@ jobs:
         python3 scripts/validation/native_config_contract.py
         python3 scripts/validation/cm_window_contract.py
         python3 scripts/signing/android_signing_contract.py
+  update-verifier:
+    name: Verify native updater on Rust 1.75
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: '1.75.0'
+    - run: python3 -m pip install -r requirements.txt
+    - name: Verify locked Sigstore implementation and update selectors
+      run: python3 -m scripts.validation.update_manifest_native
+  stable-update-source:
+    name: Verify pinned 1.5.3 updater source and Cargo lock
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      PATCHSET: v3
+      BUILD_CHANNEL: stable
+      UPSTREAM_EXPECTED_SHA: 95cca3f661f635b3cc85c04935fe8d96d8f432ef
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.work/stable-updater-target
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: '1.75.0'
+    - name: Install configuration probe prerequisites
+      run: |
+        python3 -m pip install -r requirements.txt
+        sudo apt-get update
+        sudo apt-get install -y libssl-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev pkg-config protobuf-compiler
+    - name: Check both Stable variants without unlocking dependencies
+      run: |
+        set -euo pipefail
+        source scripts/validation/test_config.sh
+        bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/stable-updater/base
+        for variant in standard sos; do
+          tree=".work/stable-updater/$variant"
+          cp -a .work/stable-updater/base "$tree"
+          bash scripts/source/apply_patches.sh "$tree" "$variant"
+          python3 scripts/source/verify_source.py "$tree" "$variant" --automation
+          python3 - "$tree" "$variant" <<'PYCODE'
+        from pathlib import Path
+        import sys
+        from scripts.validation.compatibility import contracts, rust_probe
+        tree=Path(sys.argv[1])
+        contracts(tree,sys.argv[2],'v3')
+        rust_probe(tree)
+        PYCODE
+          cargo check --locked --manifest-path "$tree/Cargo.toml" -p base --bin custom_patch_config
+        done
   preflight:
     name: Validate patch and API compatibility
     needs: resolve

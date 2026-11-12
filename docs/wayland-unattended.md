@@ -60,8 +60,7 @@ new patch identity through the existing revision mechanism.
 Nightly includes all four DEBs in its aggregated Actions package artifact and, in
 protected-main draft mode, its prerelease Draft. Android signing in that mode uses
 the same separately protected direct YubiKey job as Tag. Wayland itself never
-receives a PIN or signing-host access; public Nightly publication requires its
-separate explicit release mode and verified-draft gates.
+receives a PIN or signing-host access; public Nightly publication is disabled; only private Drafts are produced.
 
 Per-target artifacts remain `rustdesk-wayland-<version>-<upstream-sha>-<variant>-<arch>`;
 `wayland-qualification-<run-id>` records all four targets, with `stable`/`nightly` channel

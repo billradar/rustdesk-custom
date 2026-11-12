@@ -111,7 +111,7 @@ def require(infos=None):
 def preflight():
     lock = current()
     mode = os.environ.get('RELEASE_MODE', 'draft')
-    if mode not in ('dry-run', 'draft', 'release'):
+    if mode not in ('dry-run', 'draft'):
         raise ValueError('Invalid Stable preflight mode')
     if mode == 'dry-run':
         result = channel.release_preflight(dict(lock), dry_run=True)

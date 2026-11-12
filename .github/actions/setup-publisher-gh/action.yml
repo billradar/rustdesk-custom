@@ -1,0 +1,19 @@
+name: Install reviewed publisher GitHub CLI
+description: Install checksum-pinned gh 2.103.3 for native Release verification
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        [[ "$RUNNER_OS" == Linux && "$RUNNER_ARCH" == X64 ]]
+        directory="$RUNNER_TEMP/publisher-gh"
+        mkdir -p "$directory"
+        curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
+          https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_linux_amd64.tar.gz \
+          --output "$directory/gh.tar.gz"
+        printf '%s  %s\n' 4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d "$directory/gh.tar.gz" | sha256sum --check --status
+        tar --extract --gzip --file "$directory/gh.tar.gz" --directory "$directory" \
+          --strip-components=2 --no-same-owner gh_2.103.3_linux_amd64/bin/gh
+        echo "$directory" >> "$GITHUB_PATH"
+        "$directory/gh" --version

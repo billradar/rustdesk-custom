@@ -106,60 +106,6 @@ def parse_patch_revision(tag, version):
         raise ValueError('Invalid custom patch revision')
     return f'v{match.group("patch")}.{match.group("revision")}'
 
-def same_identity_release(version, identity):
-    for row in release_rows(version):
-        body=row.get('body') or ''
-        match=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
-        if match and match.group(1)==identity: return row
-    return None
-
-
-def release_metadata(body):
-    """Normalize current human-readable and legacy key=value release metadata."""
-    fields = dict(re.findall(r'^([^:\n]+): (.*)$', body, re.M))
-    names = {
-        'upstream_sha': 'Upstream SHA', 'patchset': 'Patch Set',
-        'common_patch_hash': 'Common Patch Hash', 'sos_patch_hash': 'SOS Patch Hash',
-        'custom_repository_sha': 'Custom Repository SHA',
-        'wayland_included': 'Wayland Included',
-        'wayland_policy_sha256': 'Wayland Policy SHA256',
-        'build_identity': 'Build Identity',
-    }
-    for line in body.splitlines():
-        key, separator, value = line.partition('=')
-        if separator and key in names:
-            fields[names[key]] = value
-    return fields
-
-
-def same_legacy_identity_release(data, common_hash, sos_hash, wayland_included,
-                                 wayland_policy_sha256, android_signing_enabled):
-    """Find a complete v3 release whose only obsolete identity input was repo commit SHA."""
-    expected = {
-        'Upstream SHA': data['upstream_sha'],
-        'Patch Set': data['patchset'],
-        'Common Patch Hash': common_hash,
-        'SOS Patch Hash': sos_hash,
-        'Wayland Included': str(wayland_included).lower(),
-    }
-    if wayland_policy_sha256:
-        expected['Wayland Policy SHA256'] = wayland_policy_sha256
-    for row in release_rows(data['version']):
-        body = row.get('body') or ''
-        fields = release_metadata(body)
-        if any(fields.get(key) != value for key, value in expected.items()):
-            continue
-        custom_sha = fields.get('Custom Repository SHA', '')
-        if not re.fullmatch(r'[0-9a-f]{40}', custom_sha):
-            continue
-        recorded = re.search(r'^Build Identity: ([0-9a-f]{64})$', body, re.M)
-        expected_legacy = legacy_build_identity(data['upstream_sha'], data['patchset'], common_hash,
-                                               sos_hash, custom_sha, wayland_included,
-                                               wayland_policy_sha256, android_signing_enabled)
-        if recorded and recorded.group(1) == expected_legacy:
-            return row, expected_legacy
-    return None, None
-
 def matching_drafts(tag):
     drafts=[]
     for page in range(1,101):
@@ -213,73 +159,24 @@ def release_preflight(data, *, dry_run=False):
         if api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True): raise ValueError('Existing tag without completed release; review revision')
         data['build_needed']=True;data['draft_needed']=True;data['publish_existing']=False;data['build_identity']=current_identity;data['rebuild_reason']='NEW_CONTENT_VERSION_TARGET'
         return data
-    body=existing.get('body') or ''
-    if (f'version_semantics={VERSION_SEMANTICS}' not in body.splitlines()
-            and f'Version Semantics: {VERSION_SEMANTICS}' not in body.splitlines()):
-        raise ValueError('Legacy release semantics cannot be reinterpreted as Patchset content revision')
-    recorded_identity = release_metadata(body).get('Build Identity', '')
-    if recorded_identity != current_identity:
-        raise ValueError('IMMUTABLE_TAG_BUILD_IDENTITY_COLLISION: current content tag has a different Build Identity')
-    recorded_custom_sha=release_metadata(body).get('Custom Repository SHA', '')
-    if re.fullmatch(r'[0-9a-f]{40}', recorded_custom_sha):
-        # Reused artifacts retain their original commit as provenance. This SHA
-        # is validated by the publication gate but does not define build identity.
-        data['custom_repository_sha']=recorded_custom_sha
-    if wayland_included:
-        from scripts.platform.wayland import POLICY
-        expected_policy = wayland_policy_sha256
-        from scripts.platform.wayland import asset_names
-        required_wayland = asset_names(data['version'])
-        uploaded_wayland = {a['name'] for a in existing.get('assets', []) if a.get('state') == 'uploaded'}
-        if (('wayland_policy_sha256=' + expected_policy not in body and 'Wayland Policy SHA256: ' + expected_policy not in body)
-                or not required_wayland <= uploaded_wayland):
-            raise ValueError('Existing immutable revision lacks matching Wayland evidence; disable include_wayland to reuse it or create a new patch identity')
-    generation=re.search(r'^Patch Set: (v[1-9][0-9]*)$',body,re.M) or re.search(r'^patchset=(v[1-9][0-9]*)$',body,re.M)
-    if generation is None: raise ValueError('Existing release missing generation identity')
-    name=generation.group(1);verify(name)
-    expected_identity=[(f'Upstream SHA: {data["upstream_sha"]}',f'upstream_sha={data["upstream_sha"]}'),
-                       (f'Patch Set: {name}',f'patchset={name}'),
-                       (f'Common Patch Hash: {patch_hash("common",name)}',f'common_patch_hash={patch_hash("common",name)}'),
-                       (f'SOS Patch Hash: {patch_hash("sos",name)}',f'sos_patch_hash={patch_hash("sos",name)}'),
-                       (f'Patch Revision: {data["patch_revision"]}',f'custom_release_revision={data["patch_revision"]}'),
-                       (f'Wayland Included: {str(wayland_included).lower()}',f'wayland_included={str(wayland_included).lower()}')]
-    if wayland_policy_sha256:
-        expected_identity.append(('Wayland Policy SHA256: '+wayland_policy_sha256,'wayland_policy_sha256='+wayland_policy_sha256))
-    automation_marker='Automation-State: complete'
-    legacy_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('Automation-State:')]
-    metadata_lines=[x.strip() for x in body.splitlines() if x.strip().startswith('automation_state=')]
-    if legacy_lines and legacy_lines != [automation_marker]: raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-    if metadata_lines and metadata_lines not in (['automation_state=complete'],['automation_state=published']): raise ValueError('Existing release incomplete or incompatible (invalid automation state)')
-    if legacy_lines and metadata_lines: raise ValueError('Existing release has duplicate automation state markers')
-    if not legacy_lines and not metadata_lines: raise ValueError('Existing release missing its automation completion marker')
-    required={'update-manifest.json','release-attestation.json',windows_installer_name(data['version'],'standard','exe'),windows_installer_name(data['version'],'standard','msi'),windows_installer_name(data['version'],'sos','exe'),windows_installer_name(data['version'],'sos','msi')}
-    legacy_required={'update-manifest.json','release-attestation.json',f'rustdesk-{data["version"]}-standard-windows-x86_64.zip',f'rustdesk-{data["version"]}-sos-windows-x86_64.zip'}
-    inventory=re.search(r'^Asset Inventory: (.+)$',body,re.M) or re.search(r'^asset_inventory=(.+)$',body,re.M)
-    has_inventory=bool(inventory)
-    if inventory:
-        supplied=json.loads(inventory.group(1))
-        if not required.issubset(set(supplied)) and not legacy_required.issubset(set(supplied)): raise ValueError('Invalid historical asset inventory')
-        if len(set(supplied))!=len(supplied): raise ValueError('Invalid historical asset inventory')
-        required=set(supplied)
-    all_assets=existing.get('assets',[])
-    uploaded={x['name'] for x in all_assets if x.get('state')=='uploaded'}
-    metadata_lines_set=set(body.splitlines())
-    missing_identity=[values for values in expected_identity if not any(value in metadata_lines_set for value in values)]
-    recorded=re.search(r'^Build Identity: ([0-9a-f]{64})$',body,re.M) or re.search(r'^build_identity=([0-9a-f]{64})$',body,re.M)
-    identity_ok=not missing_identity and recorded is not None and recorded.group(1)==accepted_build_identity
-    if identity_ok and not has_inventory:
-        raise ValueError('Existing Stable release missing its exact asset inventory')
-    if has_inventory:
-        assets_ok=(required==uploaded and len(all_assets)==len(uploaded)
-                   and all(re.fullmatch(r'sha256:[0-9a-f]{64}',x.get('digest','')) and x.get('size',0)>0 for x in all_assets))
-    else:
-        assets_ok=required.issubset(uploaded) or legacy_required.issubset(uploaded)
-    if existing.get('prerelease') or not assets_ok: raise ValueError('Existing release incomplete or incompatible; never overwrite')
-    if identity_ok:
-        verify_release_asset_attestation(data['release_tag'],all_assets,dict(upstream_sha=data['upstream_sha'],patchset=name,common_patch_hash=common_hash,sos_patch_hash=sos_hash,custom_repository_sha=recorded_custom_sha))
-        data['build_needed']=False;data['draft_needed']=False;data['publish_existing']=bool(existing.get('draft'));data['build_identity']=current_identity
-        return data
-    raise ValueError('Existing revision tag has a different Build Identity; immutable revision collision')
+    if existing.get('prerelease') is not False:
+        raise ValueError('Existing release is not Stable; never overwrite')
+    from scripts.release.attestation import read_release
+    expected=dict(upstream_version=data['version'],upstream_tag=data['upstream_tag'],upstream_sha=data['upstream_sha'],
+                  patchset=data['patchset'],patchset_version=revision,patch_revision=revision,
+                  common_patch_hash=common_hash,sos_patch_hash=sos_hash,wayland_included=wayland_included,
+                  wayland_policy_sha256=wayland_policy_sha256,android_signing_enabled=signing_enabled,
+                  build_identity=current_identity)
+    value=read_release(existing,'stable',expected_identity=expected,tag=data['release_tag'])
+    reference=api(f'repos/{REPOSITORY}/git/ref/tags/{data["release_tag"]}',missing=True)
+    from scripts.release.stable_tag import commit_of
+    if not reference or commit_of(REPOSITORY,reference)!=value['custom_repository_sha']:
+        raise ValueError('Existing Stable tag differs from attested custom commit')
+    if signing_enabled and not value['android_production_signed']:
+        raise ValueError('Existing Stable release lacks required Android production signatures')
+    data.update(build_needed=False,draft_needed=False,publish_existing=existing['draft'],
+                build_identity=current_identity,custom_repository_sha=value['custom_repository_sha'])
+    return data
 
 def resolve(channel,ref='',discovery_only=False):
     if channel not in ('ci','stable'):
@@ -344,35 +241,17 @@ def draft(root):
     if api(f'repos/{REPOSITORY}/releases/tags/{tag}',missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}',missing=True):raise ValueError('No overwrite')
     if any(r.get('draft') and r.get('name')==tag for r in (api(f'repos/{REPOSITORY}/releases?per_page=100') or [])):
         raise ValueError('Existing unpublished revision draft; never replace it')
-    release_files=sorted(p for p in directory.iterdir() if p.suffix.lower() != '.json')
-    inventory=json.dumps([p.name for p in release_files],separators=(', ',': '))
     changelog=(info.get('upstream_changelog') or '').strip()
     if not changelog:
         upstream_release=api(f'repos/rustdesk/rustdesk/releases/tags/{info["upstream_tag"]}',missing=True)
         changelog=((upstream_release or {}).get('body') or '').strip()
     if not changelog:raise ValueError('Official upstream release changelog is empty')
     wayland_included,wayland_policy_sha256=wayland_identity()
-    metadata='\n'.join([
-        '<!-- rustdesk-custom-release-metadata',
-        f'Upstream SHA: {info["upstream_sha"]}',
-        f'Patch Set: {info["patchset"]}',
-        f'Common Patch Hash: {info["common_patch_hash"]}',
-        f'SOS Patch Hash: {infos["sos"]["sos_patch_hash"]}',
-        f'Custom Repository SHA: {info["custom_repository_sha"]}',
-        f'Wayland Included: {str(wayland_included).lower()}',
-        *(('Wayland Policy SHA256: '+wayland_policy_sha256,) if wayland_policy_sha256 else ()),
-        f'Patch Revision: {info["patch_revision"]}',
-        f'Version Semantics: {VERSION_SEMANTICS}',
-        f'Patchset Version: {expected_version}',
-        f'Build Identity: {build_identity(info["upstream_sha"],info["patchset"],info["common_patch_hash"],infos["sos"]["sos_patch_hash"],None,wayland_included,wayland_policy_sha256,os.environ.get("REQUIRE_ANDROID_PRODUCTION_SIGNING", "false").lower()=="true")}',
-        f'Asset Inventory: {inventory}',
-        'automation_state=complete',
-        '-->'
-    ])
-    # Keep the upstream changelog distinct from the reviewed Patchset delta.
-    # Patchset notes are informational; creating a draft never allocates a new revision.
     from scripts.release.content import notes as patchset_notes
-    notes=changelog+'\n\n'+patchset_notes(info['patchset'])+'\n'+metadata+'\n'
+    from scripts.release.attestation import attach
+    attach(directory,'stable')
+    release_files=sorted(directory.iterdir())
+    notes=changelog+'\n\n'+patchset_notes(info['patchset'])
     result=request('POST',f'repos/{REPOSITORY}/releases',{'tag_name':tag,'target_commitish':info['custom_repository_sha'],
                     'name':tag,'body':notes,'draft':True,'prerelease':False})
     gh('release','upload',tag,*map(str,release_files),'--repo',REPOSITORY)

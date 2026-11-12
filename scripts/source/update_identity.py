@@ -1,5 +1,6 @@
 """Embed a non-secret client identity before prepared-source inventory is frozen."""
 import json
+import os
 import re
 from pathlib import Path
 
@@ -25,6 +26,11 @@ def write_identity(tree, *, repository, version, sha, variant, run, channel, rev
         raise ValueError('Stable revision differs from version-controlled Patchset content')
     data = dict(repository=repository, version=version, revision=revision or None, upstream_sha=sha,
                 variant=variant, build_run=str(run), channel=channel, **content)
+    data.update(repository_id=os.environ.get('GITHUB_REPOSITORY_ID'),repository_owner_id=os.environ.get('GITHUB_REPOSITORY_OWNER_ID'))
+    if content['patchset_version'].startswith('v3.') and any(
+            not re.fullmatch(r'[1-9][0-9]*',str(data[key] or ''))
+            for key in ('repository_id','repository_owner_id')):
+        raise ValueError('Current updater requires numeric GitHub repository and owner IDs')
     destination = Path(tree) / "src/custom_update/build.json"
     if not destination.is_file() or destination.is_symlink():
         raise ValueError("Client update patch must be applied before identity injection")

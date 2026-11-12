@@ -1,0 +1,61 @@
+name: Publish verified Stable Draft
+run-name: Publish Stable Draft ${{ inputs.release_id }} / ${{ inputs.tag }}
+'on':
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Exact private Stable Draft Release ID; never latest
+        required: true
+        type: string
+      tag:
+        description: Exact custom Stable tag already bound to the Draft
+        required: true
+        type: string
+      manifest_sha256:
+        description: Expected SHA256 of that Draft's update-manifest.json
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stable-manual-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - uses: ./.github/actions/setup-publisher-gh
+    - name: Mint publisher-only repository App token
+      id: publisher
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+      with:
+        client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+        private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-contents: write
+        permission-actions: read
+        permission-administration: read
+        permission-attestations: read
+    - name: Verify Draft, publish once, and verify GitHub native proof
+      env:
+        GH_TOKEN: ${{ steps.publisher.outputs.token }}
+        DRAFT_RELEASE_ID: ${{ inputs.release_id }}
+        REQUIRE_ANDROID_PRODUCTION_SIGNING: ${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED == 'true' && 'true' || 'false' }}
+        EXPECTED_TAG: ${{ inputs.tag }}
+        EXPECTED_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      run: python3 -m scripts.release.publish_stable --release-id "$DRAFT_RELEASE_ID" --tag "$EXPECTED_TAG" --manifest-sha256 "$EXPECTED_MANIFEST_SHA256"
+    - name: Preserve publication outcome even if native verification fails
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: stable-publication-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+        path: .work/stable-publication.json
+        if-no-files-found: warn
