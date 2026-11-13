@@ -7,7 +7,8 @@ existing build proof remains; it does not enter native immutable publication.
 
 `publish-stable.yml` is a separate workflow dispatched manually by repository owner billradar on main. Owner numeric identity and the rerun actor are checked; Router/bot dispatches cannot publish. There is
 no schedule, workflow_run, router dispatch, signing job, compiler or asset upload.
-It publishes one existing Stable Draft rather than rebuilding or picking latest.
+It publishes one verified existing Stable Draft, selected by explicit inputs or
+by its exact link to the latest successful Stable build.
 It neither enables repository immutability nor changes historical Releases. This is not a per-release exemption in GitHub: manually publishing a Nightly Draft outside these workflows would still invoke the repository-wide immutable policy.
 
 ## Prerequisites
@@ -27,16 +28,33 @@ remain isolated from builds and hardware signing and are revoked after the job.
 
 ## Manual operation
 
-After reviewing the complete Draft, trigger **Publish verified Stable Draft** on
-`main` with its exact Release ID, canonical custom Stable tag, and SHA256 of its
-`update-manifest.json` asset. Inputs cannot select Nightly, latest or a protected
-historical 1.5.1 v2.8 release.
+Trigger **Publish verified Stable Draft** on `main` in either mode:
+
+- Leave all three fields blank: query the latest successful main-branch manual
+  `tag.yml` run, then find its unique private Stable Draft. The manifest's verified
+  `build_run` must match that exact run; a matching source commit alone is
+  insufficient. Read the canonical tag and manifest SHA256 from that Draft.
+- Fill all three fields: use the exact Release ID, canonical custom Stable tag
+  and manifest SHA256 (without a `sha256:` prefix).
+
+Partial inputs fail before discovery or publication. Automatic discovery follows
+all Release pages, excludes Nightly, published objects and protected 1.5.1 v2.8,
+and never sorts by Release creation time. No match, duplicates, invalid evidence
+or incomplete inventory stop publication. If the latest successful run is a
+dry-run or no-op without its own Draft, automatic selection stops; it never falls
+back to an older build. Explicit inputs remain available for a reviewed Draft.
+
+Discovery runs once. The selected ID, tag, manifest digest and verified build run
+are recorded in logs and the publication receipt. Later checks operate on those
+locked values even if another build completes. An automatic rerun does not select
+an already published object: to reverify a published result, fill its exact three
+values from the previous receipt.
 
 Before a write, the workflow verifies:
 
 - repository immutability is already enabled and the reviewed CLI is available;
-- the selected object and manually pinned manifest digest agree;
-- both JSON files and all installer API sizes/digests agree with a valid build
+- the selected object and locked manifest digest agree;
+- the manifest and all installer API sizes/digests agree with a valid registry build
   proof bound to the trusted main Tag workflow and exact source/run;
 - the Profile is Stable-eligible and its patch hashes are in reviewed history;
 - the real tag resolves to the manifest's custom commit, and its build run was a

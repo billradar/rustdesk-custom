@@ -359,7 +359,7 @@ Never reuse a qualification record for a different commit, upstream SHA, patchse
 Stable mode semantics:
 - `dry-run`: exercise resolution/preflight/build/validation without claiming publication;
 - `draft`: create/update only according to the workflow's explicit existing-draft/preflight rules;
-- Public publication is absent from the build pipeline. `publish-stable.yml` manually verifies an exact existing Stable Draft and its pinned manifest digest, publishes once and verifies the GitHub native proof. Read `docs/manual-stable-publication.md`.
+- Public publication is absent from the build pipeline. `publish-stable.yml` accepts either all three exact identity inputs or all blank to discover the unique private Stable Draft bound to the latest successful main Tag dispatch. Partial inputs, missing/ambiguous evidence and an unmatched latest run stop; never fall back to older builds. Resolve once, record and lock the Release ID/tag/manifest digest, reverify before publishing once, then verify the native proof. Read `docs/manual-stable-publication.md`.
 
 Before any release action, inspect the live `tag.yml` inputs, conditions, existing draft/release state, and qualification record. Never silently delete/overwrite an existing release, fabricate a revision, bypass preflight, or infer permission to publish from a scheduled router run.
 

@@ -47,6 +47,9 @@ class PublisherTests(unittest.TestCase):
 
     def api(self,path,missing=False):
         if path.endswith('/immutable-releases'):return dict(enabled=True)
+        if '/actions/workflows/tag.yml/runs?' in path:
+            return {'workflow_runs':[dict(id=42,status='completed',conclusion='success',head_branch='main',event='workflow_dispatch',path='.github/workflows/tag.yml',head_sha='a'*40)]}
+        if '/releases?per_page=' in path:return [copy.deepcopy(self.release)]
         if '/git/ref/' in path:return dict(object=dict(type='commit',sha='a'*40))
         if '/actions/runs/' in path:return dict(status='completed',conclusion='success',head_branch='main',event='workflow_dispatch',path='.github/workflows/tag.yml',head_sha='a'*40)
         if path.endswith('/releases/7'):
@@ -79,6 +82,70 @@ class PublisherTests(unittest.TestCase):
         write.assert_called_once()
         self.assertEqual(run.call_args.args[0],['gh','release','verify',TAG,'--repo',p.REPOSITORY,'--format','json'])
         self.assertEqual(json.loads(self.output.read_text())['publication'],'PUBLISHED')
+
+    def test_blank_inputs_select_once_then_publish_the_exact_verified_draft(self):
+        with patch.object(p,'api',side_effect=self.api) as read,patch.object(p,'request',side_effect=self.write) as write,patch.object(p.subprocess,'run',return_value=SimpleNamespace(stdout=json.dumps(self.verified))):
+            result=p.publish(output=self.output)
+        self.assertEqual((result['release_id'],result['tag'],result['manifest_sha256']), (7,TAG,'f'*64))
+        self.assertEqual(result['selection'],'latest-successful-stable-build')
+        self.assertEqual(result['build_run'],'42')
+        write.assert_called_once()
+        discovery=[call for call in read.call_args_list if '/actions/workflows/tag.yml/runs?' in call.args[0]]
+        self.assertEqual(len(discovery),1)
+        self.assertIn('branch=main&event=workflow_dispatch&status=success',discovery[0].args[0])
+
+    def test_partial_inputs_fail_without_discovery_or_publication(self):
+        for mask in range(1,7):
+            args=[v if mask & (1 << i) else '' for i,v in enumerate(('7',TAG,'f'*64))]
+            with self.subTest(mask=mask),patch.object(p,'api') as read,patch.object(p,'request') as write:
+                with self.assertRaisesRegex(ValueError,'all three'):p.publish(*args,output=self.output)
+                read.assert_not_called();write.assert_not_called()
+        with patch.object(p,'api') as read:
+            self.assertEqual(p.select_inputs(' 7 ',TAG,'f'*64),('7',TAG,'f'*64))
+            read.assert_not_called()
+
+    def test_automatic_selection_requires_the_latest_successful_main_stable_run(self):
+        for edit in ({'status':'in_progress'},{'conclusion':'failure'},{'event':'push'},
+                     {'head_branch':'development'},{'path':'.github/workflows/nightly.yml'},
+                     {'id':True},{'head_sha':'bad'}):
+            def api(path,missing=False):
+                result=self.api(path,missing)
+                if 'workflow_runs' in result:result['workflow_runs'][0].update(edit)
+                return result
+            with self.subTest(edit=edit),patch.object(p,'api',side_effect=api),patch.object(p,'request') as write:
+                with self.assertRaises(ValueError):p.publish(output=self.output)
+                write.assert_not_called()
+        with patch.object(p,'api',return_value={'workflow_runs':[]}),self.assertRaises(ValueError):p.select_inputs()
+
+    def test_automatic_selection_never_falls_back_to_an_older_build_or_published_release(self):
+        for release_edit,value_edit in [({}, {'build_run':'41'}),({'draft':False},{}),
+                ({'prerelease':True},{}),({'target_commitish':'b'*40},{}),
+                ({'tag_name':'v1.5.1-custom.v2.8','name':'v1.5.1-custom.v2.8'},{}),
+                ({'assets':[]},{})]:
+            self.release,self.value,self.verified=fixture()
+            self.release.update(release_edit);self.value.update(value_edit)
+            with self.subTest(release_edit=release_edit,value_edit=value_edit),patch.object(p,'api',side_effect=self.api),patch.object(p,'request') as write:
+                with self.assertRaises(ValueError):p.publish(output=self.output)
+                write.assert_not_called()
+
+    def test_automatic_selection_paginates_and_rejects_ambiguity(self):
+        def paginated(path,missing=False):
+            if '/releases?per_page=100&page=1' in path:return [dict(id=100+i,draft=False) for i in range(100)]
+            if '/releases?per_page=100&page=2' in path:return [dict(self.release,created_at='2000-01-01T00:00:00Z')]
+            return self.api(path,missing)
+        with patch.object(p,'api',side_effect=paginated):
+            self.assertEqual(p.select_inputs(),('7',TAG,'f'*64))
+        for duplicate in (dict(self.release,id=8),dict(self.release)):
+            def ambiguous(path,missing=False):
+                if '/releases?per_page=' in path:return [self.release,duplicate]
+                return self.api(path,missing)
+            with patch.object(p,'api',side_effect=ambiguous),self.assertRaisesRegex(ValueError,'[Aa]mbiguous|unique'):
+                p.select_inputs()
+
+    def test_discovery_proof_failure_stops_before_publication(self):
+        with patch.object(p.attestation,'read_release',side_effect=ValueError('invalid discovery proof')),patch.object(p,'api',side_effect=self.api),patch.object(p,'request') as write:
+            with self.assertRaisesRegex(ValueError,'invalid discovery proof'):p.publish(output=self.output)
+            write.assert_not_called()
 
     def test_rerun_only_verifies_the_same_already_immutable_release(self):
         self.published=True
@@ -170,6 +237,8 @@ class PublisherTests(unittest.TestCase):
     def test_workflow_is_manual_main_only_and_build_pipelines_have_no_release_mode(self):
         workflow=yaml.safe_load((ROOT/'.github/workflows/publish-stable.yml').read_text())
         self.assertEqual(set(workflow['on']),{'workflow_dispatch'})
+        for value in workflow['on']['workflow_dispatch']['inputs'].values():
+            self.assertFalse(value['required'])
         job=workflow['jobs']['publish'];self.assertIn("github.ref == 'refs/heads/main'",job['if'])
         self.assertIn('github.actor == github.repository_owner',job['if'])
         verify=next(x for x in job['steps'] if 'publish_stable' in x.get('run',''))

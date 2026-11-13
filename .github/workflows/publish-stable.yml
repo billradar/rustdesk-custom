@@ -1,19 +1,19 @@
 name: Publish verified Stable Draft
-run-name: Publish Stable Draft ${{ inputs.release_id }} / ${{ inputs.tag }}
+run-name: Publish Stable Draft ${{ inputs.release_id || 'auto' }} / ${{ inputs.tag || 'latest successful Stable build' }}
 'on':
   workflow_dispatch:
     inputs:
       release_id:
-        description: Exact private Stable Draft Release ID; never latest
-        required: true
+        description: Exact Stable Draft ID; leave all three fields blank to select the latest successful Stable build
+        required: false
         type: string
       tag:
-        description: Exact custom Stable tag already bound to the Draft
-        required: true
+        description: Exact custom Stable tag; supply all three fields together or leave all blank
+        required: false
         type: string
       manifest_sha256:
-        description: Expected SHA256 of that Draft's update-manifest.json
-        required: true
+        description: Manifest SHA256 without prefix; supply all three fields together or leave all blank
+        required: false
         type: string
 permissions:
   contents: read

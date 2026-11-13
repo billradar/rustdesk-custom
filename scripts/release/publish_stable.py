@@ -33,6 +33,62 @@ def identity_inputs(release_id, tag, manifest_sha256):
         raise ValueError('Protected historical 1.5.1 v2 revision 8 cannot be published by this workflow')
 
 
+def select_inputs(release_id='', tag='', digest=''):
+    """Resolve once; never change the selected object during publication checks."""
+    inputs = tuple(value.strip() for value in (release_id, tag, digest))
+    if any(inputs):
+        if not all(inputs):
+            raise ValueError('Supply all three publication inputs or leave all three blank')
+        identity_inputs(*inputs)
+        return inputs
+
+    result = api(f'repos/{REPOSITORY}/actions/workflows/tag.yml/runs?branch=main&event=workflow_dispatch&status=success&per_page=1')
+    runs = result.get('workflow_runs', [])
+    if len(runs) != 1:
+        raise ValueError('No unique latest successful Stable build is available')
+    run = runs[0]
+    if (type(run.get('id')) is not int or run['id'] <= 0
+            or run.get('status') != 'completed' or run.get('conclusion') != 'success'
+            or run.get('head_branch') != 'main' or run.get('event') != 'workflow_dispatch'
+            or run.get('path') != '.github/workflows/tag.yml'
+            or not re.fullmatch('[0-9a-f]{40}', str(run.get('head_sha', '')))):
+        raise ValueError('Latest build is not a successful protected-main Stable dispatch')
+
+    matches = []
+    seen = set()
+    for page in range(1, 101):
+        rows = api(f'repos/{REPOSITORY}/releases?per_page=100&page={page}')
+        for release in rows:
+            if (release.get('draft') is not True or release.get('prerelease') is not False
+                    or release.get('target_commitish') != run['head_sha']):
+                continue
+            tags = {release.get(key, '') for key in ('tag_name', 'name')
+                    if re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-custom\.v[1-9][0-9]*\.[1-9][0-9]{0,5}', release.get(key) or '')}
+            if not tags or tags == {'v1.5.1-custom.v2.8'}:
+                continue
+            if len(tags) != 1 or release.get('id') in seen:
+                raise ValueError('Ambiguous Stable Draft identity during automatic selection')
+            seen.add(release.get('id'))
+            selected_tag = next(iter(tags))
+            manifests = [a for a in release.get('assets', []) if a.get('name') == attestation.MANIFEST]
+            if len(manifests) != 1 or not re.fullmatch('sha256:[0-9a-f]{64}', manifests[0].get('digest', '')):
+                raise ValueError('Latest-build Draft manifest is missing or ambiguous')
+            selected = (str(release.get('id')), selected_tag, manifests[0]['digest'][7:])
+            identity_inputs(*selected)
+            # Verify the manifest before trusting its build_run link. A matching
+            # source commit alone cannot distinguish reruns or dry-run builds.
+            value = attestation.read_release(release, 'stable', tag=selected_tag)
+            if str(value.get('build_run')) == str(run['id']):
+                matches.append(selected)
+        if len(rows) < 100:
+            break
+    else:
+        raise ValueError('Automatic Draft discovery exceeded its pagination limit')
+    if len(matches) != 1:
+        raise ValueError('Latest successful Stable build has no unique verified private Draft; no older-build fallback')
+    return matches[0]
+
+
 def snapshot(release):
     return {k:release.get(k) for k in ('id','name','tag_name','target_commitish','draft',
                                       'prerelease','immutable','updated_at','assets')}
@@ -106,11 +162,13 @@ def native_statement(result,release,value,tag):
     return statement
 
 
-def publish(release_id,tag,digest,output=Path('.work/stable-publication.json')):
-    context();identity_inputs(release_id,tag,digest)
+def publish(release_id='',tag='',digest='',output=Path('.work/stable-publication.json')):
+    context()
+    selection = 'explicit' if any((release_id.strip(), tag.strip(), digest.strip())) else 'latest-successful-stable-build'
+    release_id,tag,digest = select_inputs(release_id,tag,digest)
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
     receipt=dict(release_id=int(release_id),tag=tag,manifest_sha256=digest,
-                 publication='NOT ATTEMPTED',native_attestation='NOT VERIFIED')
+                 selection=selection,publication='NOT ATTEMPTED',native_attestation='NOT VERIFIED')
     def record():output.write_text(json.dumps(receipt,indent=2)+'\n')
     record()
     # Read-only administration permission; this workflow never enables the setting.
@@ -120,6 +178,8 @@ def publish(release_id,tag,digest,output=Path('.work/stable-publication.json')):
     for args in (['gh','release','verify','--help'],['gh','attestation','verify','--help']):
         subprocess.run(args,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=30)
     release,value=check_draft(release_id,tag,digest,allow_published=True)
+    receipt['build_run'] = value['build_run'];record()
+    print(f'Selected Stable Release ID={release_id}, tag={tag}, manifest_sha256={digest}, build_run={value["build_run"]}', flush=True)
     # A second complete proof/inventory check rejects changes during preflight.
     fresh,fresh_value=check_draft(release_id,tag,digest,allow_published=True)
     if snapshot(fresh)!=snapshot(release) or fresh_value!=value:
@@ -173,7 +233,7 @@ def publish(release_id,tag,digest,output=Path('.work/stable-publication.json')):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--release-id',required=True)
-    p.add_argument('--tag',required=True)
-    p.add_argument('--manifest-sha256',required=True)
+    p.add_argument('--release-id',default='')
+    p.add_argument('--tag',default='')
+    p.add_argument('--manifest-sha256',default='')
     args=p.parse_args();publish(args.release_id,args.tag,args.manifest_sha256)
