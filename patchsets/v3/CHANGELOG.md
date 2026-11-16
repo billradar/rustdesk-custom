@@ -56,7 +56,7 @@ Known limitations: Native ID/Relay dual-stack behavior is intentionally unchange
 
 Allocation base: `7e346edef8914045d07bfbf0762f9bc0a445c06a`
 
-- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `0b6d32ff8c4756fac865eacad4a1349cef58428ac0a6fab84b7ab78826ba21bf`
+- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `df13adc38c7ebbf24e5d87ac919cf32eb5f0bf44145cddf0513e9530dbb8a50f`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.4 — content-change

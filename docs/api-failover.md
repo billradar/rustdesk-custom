@@ -39,7 +39,7 @@ python3 -m scripts.upstream.patch_profiles_contract
 python3 -m scripts.upstream.patchset_version verify --base origin/main --check
 ```
 
-TLS harness 从已准备源码复制实际 selector，与上游锁定的 reqwest/Tokio 版本一起编译；代理 helper 使用无代理测试替身，不能将其通过视为真实用户代理验证。OpenSSL 在临时目录生成测试 CA 和服务器密钥，以 `SSL_CERT_FILE` 加载本机临时信任，不改变系统信任或 production TLS 代码。测试不会访问生产主备域名。单个顺序集成测试覆盖多种故障，另有 origin/重写边界测试。
+TLS harness 从已准备源码复制实际 selector，与上游锁定的 reqwest/Tokio 版本一起编译；hbb_common 测试 facade 仅重导出 Tokio/log，根测试 crate 不直接依赖 Tokio，以匹配上游正常依赖边界。代理 helper 使用无代理测试替身，不能将其通过视为完整真实 hbb_common 或用户代理验证。OpenSSL 在临时目录生成测试 CA 和服务器密钥，以 `SSL_CERT_FILE` 加载本机临时信任，不改变系统信任或 production TLS 代码。测试不会访问生产主备域名。单个顺序集成测试覆盖多种故障，另有 origin/重写边界测试。
 
 桌面 CI 矩阵仅验证实际 Rust 传输模块及本地 TLS 场景，不是完整客户端跨平台构建。Android 真机 TLS 根证书、Dart 分析、完整 native 编译、OIDC 回调域名、Token 共用后端以及真实 FRP/IPv4-only/IPv6-only/双栈会话仍需相应环境证据。
 

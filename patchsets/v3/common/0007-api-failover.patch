@@ -279,11 +279,12 @@ index 634c953..40bc82c 100644
  
 diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
 new file mode 100644
-index 0000000..203a1fd
+index 0000000..c69fc16
 --- /dev/null
 +++ b/src/hbbs_http/api_failover.rs
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,267 @@
 +//! v3 only. Logical API identity stays primary; only the transport URL changes.
++use hbb_common::tokio;
 +use reqwest::{header::HeaderMap, Client, Method, Response, Url};
 +use std::{
 +    sync::{Mutex, OnceLock},

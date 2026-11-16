@@ -29,11 +29,13 @@
 | --- | --- |
 | 全领域契约 | compat-check.yml 列出的全部领域命令通过，逐项结果见 domain-results.json；包括策略 3 项、退休 3 项、Profile 10 项、内容版本 11 项、发布/签名/来源/工作流隔离 |
 | 实际 Rust selector | Rust 1.75 上 2 项测试通过（一项含完整顺序 TLS 故障场景），Clippy `-D warnings` 通过；源/夹具哈希见 transport-msrv-results.json |
-| v3 Standard/SOS | 当前补丁应用、结构契约、配置辅助编译及上游 DPI 保留检查通过，见 source-results-final.json |
+| v3 Standard/SOS | 官方 1.5.3 当前补丁应用、结构契约、配置辅助编译及上游 DPI 保留检查通过，见 source-results-final.json；已知成功 Nightly 源 7949eca16c15b3eb86d89a9d4f5ac223026dd215 的两变体同类检查也通过，见 nightly-source-results.json；不代表未来 Nightly 自动兼容 |
 | 归档保护 | 原提交 `7e346edef8914045d07bfbf0762f9bc0a445c06a` 的 v1/v2 全文件逐字节一致，当前退休契约通过；无历史 Tag/Release/签名产物操作 |
 | 静态检查 | 新 selector Rust 1.75 rustfmt 通过；变更工作流 actionlint 1.7.12 通过；repository architecture contract 通过 |
 | 完整产品编译 | 已尝试 Rust 1.75 cargo check，rust-webm 的 libwebm 子模块下载被代理 HTTP 403 阻止，未完成完整集成类型检查 |
 | Dart/Flutter、设备与生产网络 | 未测试。固定 Dart 3.5.4 SDK 下载被 HTTP 403 阻止；不能宣称 analyze、真机或生产主备认证通过 |
+
+额外核对上游 Cargo.toml 后补齐 `use hbb_common::tokio`：上游根 crate 仅将 Tokio 列为 dev-dependency，正式代码须经 hbb_common 使用。测试现以单独 facade 重导出 Tokio/log，根测试 crate 不直接依赖 Tokio，避免测试编译掩盖正式依赖缺失。
 
 已修复 Codex 对 `9f9064f` 的 P2 review：IPv6 literal 不再用带方括号的主机名做 DNS，而是直接构造 IPv6 socket；主 origin 比较兼容压缩/展开写法，保持 IP SAN 证书验证。新的 Flutter HTTP 服务和生成策略文件已加入现有 Flutter analyze 文件清单，关闭功能时不额外调用原生 API getter。测试覆盖 literal 主连接及恢复、私有 polling fragment 不发往服务器。
 
