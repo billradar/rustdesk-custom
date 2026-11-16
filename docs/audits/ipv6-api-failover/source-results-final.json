@@ -1,0 +1,54 @@
+{
+  "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+  "upstream_version": "1.5.3",
+  "profile": "rd-1.5.3",
+  "selected": "v3",
+  "fallback": false,
+  "compatibility_test_only": false,
+  "stable_allowed": true,
+  "variants": {
+    "standard": {
+      "patch_order": [
+        "0001-hbb-server-defaults.patch",
+        "0002-client-defaults.patch",
+        "0003-hide-cm-setting.patch",
+        "0004-cm-background-window.patch",
+        "0005-custom-release-updates.patch",
+        "0006-public-branding.patch",
+        "0007-api-failover.patch"
+      ],
+      "git_apply_check": "PASS",
+      "contracts": {
+        "Config API": "PASS",
+        "Rust API structure": "PASS",
+        "Flutter API structure": "PASS",
+        "SOS UI structure": "N/A"
+      },
+      "native_helper_compile": "PASS",
+      "upstream_dpi_preservation": "PASS"
+    },
+    "sos": {
+      "patch_order": [
+        "0001-hbb-server-defaults.patch",
+        "0002-client-defaults.patch",
+        "0003-hide-cm-setting.patch",
+        "0004-cm-background-window.patch",
+        "0005-custom-release-updates.patch",
+        "0006-public-branding.patch",
+        "0007-api-failover.patch",
+        "0001-sos-mode.patch",
+        "0002-sos-home.patch",
+        "0003-sos-settings.patch"
+      ],
+      "git_apply_check": "PASS",
+      "contracts": {
+        "Config API": "PASS",
+        "Rust API structure": "PASS",
+        "Flutter API structure": "PASS",
+        "SOS UI structure": "PASS"
+      },
+      "native_helper_compile": "PASS",
+      "upstream_dpi_preservation": "PASS"
+    }
+  }
+}

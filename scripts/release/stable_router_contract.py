@@ -141,11 +141,11 @@ class StableRouterContract(unittest.TestCase):
     def test_historical_lock_reads_latest_attempt_and_checks_run_binding(self):
         from scripts.release.stable_lock import SCHEMA
         data = dict(schema=SCHEMA, channel='stable', workflow_run='123',
-                    custom_repository_sha='a'*40, upstream_sha='b'*40, version='1.5.1',
-                    patchset='v2', common_patch_hash='c'*64, sos_patch_hash='d'*64,
+                    custom_repository_sha='a'*40, upstream_sha='b'*40, version='1.5.3',
+                    patchset='v3', common_patch_hash='c'*64, sos_patch_hash='d'*64,
                     wayland_included=True, wayland_policy_sha256='f'*64,
                     android_signing_enabled=False)
-        data['build_identity'] = router.build_identity(data['upstream_sha'], 'v2', 'c'*64, 'd'*64,
+        data['build_identity'] = router.build_identity(data['upstream_sha'], 'v3', 'c'*64, 'd'*64,
             wayland_included=True, wayland_policy_sha256='f'*64, android_signing_enabled=False)
         def download(args, **kwargs):
             root = Path(args[args.index('--dir')+1])

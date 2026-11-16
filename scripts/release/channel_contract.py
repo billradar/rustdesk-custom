@@ -12,10 +12,11 @@ import yaml
 
 class RealPatchsetRevisionContract(unittest.TestCase):
     def test_reviewed_manifest_controls_current_custom_revision(self):
-        self.assertEqual(channel.next_patch_revision('1.5.1','v2'),'v2.8')
+        self.assertEqual(channel.next_patch_revision('1.5.3','v3'),'v3.' + str(channel.current('v3')['revision']))
         with self.assertRaisesRegex(ValueError, 'Stable'):
             channel.next_patch_revision('1.5.2','v2')
-        self.assertEqual(channel.next_patch_revision('1.4.9','v1'),'v1.2')
+        with self.assertRaisesRegex(ValueError, 'Retired'):
+            channel.next_patch_revision('1.4.9','v1')
         with self.assertRaises(ValueError):
             channel.next_patch_revision('1.5.1','v999999')
 
@@ -28,13 +29,13 @@ class StablePatchsetNotesContract(unittest.TestCase):
             destination=Path(directory)
             asset=destination/'client.apk'
             asset.write_bytes(b'validated test asset')
-            info=dict(channel='stable',upstream_tag='v1.5.1',
-                      upstream_version='1.5.1',upstream_sha='a'*40,
-                      patchset='v2',patch_revision='v2.8',
-                      common_patch_hash=channel.patch_hash('common','v2'),
+            info=dict(channel='stable',upstream_tag='v1.5.3',
+                      upstream_version='1.5.3',upstream_sha='a'*40,
+                      patchset='v3',patch_revision='v3.5',
+                      common_patch_hash=channel.patch_hash('common','v3'),
                       custom_repository_sha='b'*40,
                       upstream_changelog='# Official upstream notes')
-            sos=dict(info,variant='sos',sos_patch_hash=channel.patch_hash('sos','v2'))
+            sos=dict(info,variant='sos',sos_patch_hash=channel.patch_hash('sos','v3'))
             captured=[]
             def fake_api(path,missing=False):
                 if '/releases/tags/' in path or '/git/ref/tags/' in path:
@@ -62,14 +63,14 @@ class StablePatchsetNotesContract(unittest.TestCase):
                 channel.draft(destination)
             body=captured[0][1]['body']
             self.assertTrue(body.startswith('# Official upstream notes'))
-            self.assertIn('## Patchset v2.8',body)
+            self.assertIn('## Patchset v3.5',body)
             self.assertIn('Current included customizations',body)
             self.assertNotIn('Known limitations:',body)
             self.assertNotIn('Patchset Version:',body)
-            self.assertIn(patchset_notes('v2'),body)
+            self.assertIn(patchset_notes('v3'),body)
             self.assertNotIn('<!-- rustdesk-custom-release-metadata',body)
             self.assertEqual(body,captured[-1][1]['body'])
-            self.assertEqual(captured[-1][1]['tag_name'],'v1.5.1-custom.v2.8')
+            self.assertEqual(captured[-1][1]['tag_name'],'v1.5.3-custom.v3.5')
             self.assertEqual(captured[-1][1]['target_commitish'],'b'*40)
             self.assertIs(captured[-1][1]['draft'],True)
             self.assertIs(captured[-1][1]['prerelease'],False)

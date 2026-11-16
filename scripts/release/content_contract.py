@@ -11,16 +11,18 @@ from scripts.release import content, channel, nightly
 
 class ContentContract(unittest.TestCase):
     def test_content_inputs_are_bound_to_reviewed_manifest(self):
-        before = (content.ROOT / 'patchsets/v2/patchset.json').read_bytes()
+        before = (content.ROOT / 'archive/abandoned-patchsets/v2/patchset.json').read_bytes()
         info = content.inputs('v2')
         manifest = json.loads(before)
         self.assertEqual(info['patchset_version'], 'v2.' + str(manifest['revision']))
         self.assertEqual(info['version_semantics'], 'patchset-content-v1')
         self.assertEqual(len(info['build_policy_sha256']), 64)
-        self.assertEqual(before, (content.ROOT / 'patchsets/v2/patchset.json').read_bytes())
+        self.assertEqual(before, (content.ROOT / 'archive/abandoned-patchsets/v2/patchset.json').read_bytes())
 
     def test_upstream_version_does_not_allocate_revision(self):
-        self.assertEqual(channel.next_patch_revision('1.5.0','v2'), channel.next_patch_revision('1.5.1','v2'))
+        for version in ('1.5.0', '1.5.1'):
+            with self.assertRaisesRegex(ValueError, 'Retired'):
+                channel.next_patch_revision(version, 'v2')
 
     def test_notes_are_deterministic_and_separate_inventory_from_delta(self):
         stable = content.notes('v2')
@@ -87,12 +89,12 @@ class ContentContract(unittest.TestCase):
             self.assertNotEqual(content.policy_digest(lf), content.policy_digest(crlf))
 
     def fixture(self):
-        inputs=content.inputs('v2')
-        common=channel.patch_hash('common','v2');sos=channel.patch_hash('sos','v2')
-        identity=channel.build_identity('a'*40,'v2',common,sos,wayland_included=False)
-        tag='v1.5.1-custom.'+inputs['patchset_version']
-        names=['update-manifest.json','release-attestation.json','rustdesk-1.5.1-standard-windows-x86_64.zip','rustdesk-1.5.1-sos-windows-x86_64.zip']
-        body='\n'.join(['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: v2',
+        inputs=content.inputs('v3')
+        common=channel.patch_hash('common','v3');sos=channel.patch_hash('sos','v3')
+        identity=channel.build_identity('a'*40,'v3',common,sos,wayland_included=False)
+        tag='v1.5.3-custom.'+inputs['patchset_version']
+        names=['update-manifest.json','release-attestation.json','rustdesk-1.5.3-standard-windows-x86_64.zip','rustdesk-1.5.3-sos-windows-x86_64.zip']
+        body='\n'.join(['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: v3',
             'Common Patch Hash: '+common,'SOS Patch Hash: '+sos,'Patch Revision: '+inputs['patchset_version'],
             'Build Identity: '+identity,'Wayland Included: false','version_semantics=patchset-content-v1',
             'Asset Inventory: '+json.dumps(names)])
@@ -101,8 +103,8 @@ class ContentContract(unittest.TestCase):
 
     def test_same_tag_identity_reuses_existing_asset_gates(self):
         existing=self.fixture()
-        data=dict(channel='stable',version='1.5.1',upstream_tag='1.5.1',upstream_ref='1.5.1',
-                  upstream_sha='a'*40,patchset='v2')
+        data=dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
+                  upstream_sha='a'*40,patchset='v3')
         with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'),\
              patch.object(channel,'api',return_value=existing),\
              patch('scripts.release.stable_tag.commit_of',return_value='b'*40),\
@@ -114,8 +116,8 @@ class ContentContract(unittest.TestCase):
 
     def test_same_tag_different_identity_rejects_without_bump(self):
         existing=self.fixture();existing['body']=existing['body'].replace('Build Identity: ', 'Build Identity: '+'e'*64+'\nold=')
-        data=dict(channel='stable',version='1.5.1',upstream_tag='1.5.1',upstream_ref='1.5.1',
-                  upstream_sha='a'*40,patchset='v2')
+        data=dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
+                  upstream_sha='a'*40,patchset='v3')
         with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false'),patch.object(channel,'api',return_value=existing),patch('scripts.release.attestation.read_release',side_effect=ValueError('Attested JSON identity mismatch')):
             with self.assertRaisesRegex(ValueError,'Attested JSON identity mismatch'):
                 channel.release_preflight(data)

@@ -32,9 +32,9 @@ A green compile is only one stage. It does not by itself prove a valid artifact,
 - Do not assume SOS exists for every platform. The platform matrix, not the variant name or README table alone, determines enabled/required targets.
 
 Current patchset layout:
-- `patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`, `0004-cm-background-window.patch`, `0005-custom-release-updates.patch`, `0006-public-branding.patch`.
-- `patchsets/v1/sos/`: `0001-sos-mode.patch`, `0002-sos-home.patch`, `0003-sos-settings.patch`.
-- `patchsets/v2/` contains the corresponding common and SOS customization generation for the newer upstream API boundary.
+- `archive/abandoned-patchsets/v1/common/`: `0001-hbb-server-defaults.patch`, `0002-client-defaults.patch`, `0003-hide-cm-setting.patch`, `0004-cm-background-window.patch`, `0005-custom-release-updates.patch`, `0006-public-branding.patch`.
+- `archive/abandoned-patchsets/v1/sos/`: `0001-sos-mode.patch`, `0002-sos-home.patch`, `0003-sos-settings.patch`.
+- `archive/abandoned-patchsets/v2/` contains the corresponding common and SOS customization generation for the newer upstream API boundary.
 
 Common `0004` gives the Flutter CM a hidden native startup, serialized manual-only visibility policy and a local tray “Current connections” command. It keeps the main window on upstream logic. Manual requests are latched in CM Rust state and polled through the existing bridge; no bridge API regeneration is needed. `scripts/validation/cm_window_contract.py` guards prepared-source wiring and executes the pure-Dart policy when Dart is available. Native UI/real remote sessions remain unverified until exact-package testing.
 
@@ -60,19 +60,13 @@ Windows x64 packaging stages checksum-pinned official printer driver and adapter
 
 Both Common patch generations force `allow-always-software-render=N` via `OVERWRITE_SETTINGS`, overriding saved/custom settings in all variants and platforms. Keep the structural, native-helper and compiled-MIR gates aligned; do not reduce this to a default that persisted `Y` can override.
 
-### Patch Profile selection
+### Patch Profile selection and abandoned generations
 
-`scripts/upstream/patchsets.py` reads `metadata/patch-profiles.json`:
-- explicit versions 1.5.0 and 1.5.1 select their exact profiles, both using unchanged v2 revision 8;
-- versions below 1.5.0 retain the historical v1 policy;
-- source version 1.5.3 selects the separately audited formal `rd-1.5.3` Profile using current v3 revision 4 (native Release attestation updates); the historical `rd-1.5.3-candidate` entry remains Stable-forbidden;
-- unadapted versions (including 1.5.2) test the explicitly configured latest maintained Profile, currently `rd-1.5.3`/v3; fallback remains Stable-forbidden.
+Only v3 is maintained. v1 and v2 have been abandoned at the user's explicit request and moved byte-for-byte to `archive/abandoned-patchsets/`. Do not edit, fix, adapt or allocate revisions for them. `metadata/abandoned-patchsets.json` freezes their complete byte inventory. Their former version mappings remain historical information in `metadata/patch-profiles.json`, but its `retired_patchsets` list blocks all CI/Nightly/Stable selection, including 1.5.0/1.5.1. There is no fallback from a retired version to v3. Historical Tags, Releases and signed artifacts are immutable and untouched. This supersedes the earlier requirement to preserve 1.5.1 rebuild availability.
 
-Fallback is compatibility testing only. Candidate/fallback Profiles cannot enter Stable discovery, lock, preflight, revision allocation or client identity. A successful test never changes profile eligibility. Missing metadata/directories, integrity failures or failed patches stop immediately; do not probe another profile. Build/platform adapter approvals remain separate, exact-interface gates. A version in Cargo.toml or a candidate SHA is never evidence of an official release tag.
+Official 1.5.3 selects `rd-1.5.3` / v3; v3 currently uses revision 5 with `validation_pending` lifecycle status. Other unadapted versions (including 1.5.2) retain latest-maintained compatibility testing and cannot enter Stable. Existing v3 history remains append-only; run Profile, content-version and retirement contracts. Read `docs/patch-profiles.md` and `archive/abandoned-patchsets/README.md`.
 
-Formal 1.5.3 admission is documented in `docs/audits/stable-1.5.3-admission/review.json`; official Tag 1.5.3 resolves to `95cca3f661f635b3cc85c04935fe8d96d8f432ef`. Profile eligibility does not replace source locks, exact interface reviews, full build/signing/attestation gates or publication authorization. v3 currently uses revision 4 with `validation_pending` lifecycle status; revision 1 and the candidate-origin history remain immutable.
-
-v3.1 is derived from v2.8 and changes only Common 0004 context/hooks around upstream Windows DPI-aware CM side-panel bounds. v3.2 additionally changes only Common 0005’s RPM package selector to match normalized public names. v3.3 replaces Common 0005 body/filename matching with attested JSON and adds a locked native verifier crate. v3.4 changes Common 0005 to use native GitHub Release proofs; v3.3 and earlier history stays immutable. Other Common/SOS patch bytes remain identical to v2.8. Keep v2 patches, manifests and history immutable. RPM normalization is selected by patch generation: v1/v2 retain legacy suffixes, while v3.2+ uses one architecture token; see `docs/rpm-asset-naming.md`. New-generation version validation requires a candidate baseline anchored to the integration base and exact parent revision/hashes. Read `docs/patch-profiles.md` and run `python3 -m scripts.upstream.patch_profiles_contract` plus affected release/source contracts.
+v3.5 adds `0007-api-failover.patch`. Actions `prepare-source.yml` reads public `RUSTDESK_API_SERVER` and optional `RUSTDESK_API_FALLBACK_SERVER` only for v3, freezes a validated HTTPS origin pair, renders Rust/Dart policy, and binds its snapshot digest plus rendered files to the prepared-source inventory. Missing fallback disables failover; do not hardcode production endpoints or silently reuse mutable build-stage values. Account identity stays primary; strict TLS, conservative pre-send-only replay and cooldown recovery apply. Native ID/Relay dual-stack behavior is intentionally unchanged: user scope is Web/API only. Read `docs/api-failover.md`; run policy, actual-selector TLS and source/retirement contracts. Current follow-up remains serial (2s shared DNS/connect budget, 15s cooldown); 250ms connection racing, retained pooling and nonblocking recovery are blocked/pending as documented in `docs/audits/ipv6-api-failover/race-audit.md`. TLS InvalidData is terminal, and primary body-read failures affect only later requests. Desktop transport CI does not prove full clients, Android or production network availability.
 
 ## 3. Repository map: where to look first
 

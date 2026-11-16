@@ -1,0 +1,16 @@
+{
+  "base": "7e346edef8914045d07bfbf0762f9bc0a445c06a",
+  "protected_changed_paths": [],
+  "v2": {
+    "patchset": "v2",
+    "patchset_version": "v2.8",
+    "base_sha": "7e346edef8914045d07bfbf0762f9bc0a445c06a",
+    "content_changed": false,
+    "hashes": {
+      "common": "a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0",
+      "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+    },
+    "result": "PASS"
+  },
+  "qualification": "source/build/signing contracts preserved; no new signed artifact or runtime claim"
+}

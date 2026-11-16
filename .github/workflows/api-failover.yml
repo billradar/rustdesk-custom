@@ -1,0 +1,61 @@
+name: API failover transport compatibility
+'on':
+  pull_request:
+    paths:
+    - patchsets/v3/**
+    - scripts/source/api_policy.py
+    - .github/workflows/prepare-source.yml
+    - scripts/validation/api_failover_transport.py
+    - scripts/validation/fixtures/api-failover/**
+    - .github/workflows/api-failover.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transport:
+    name: Strict TLS failover (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, windows-2022, macos-26]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONPATH: .
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.work/api-failover-target
+    steps:
+    - name: Preserve canonical LF patch bytes on Windows
+      run: git config --global core.autocrlf false
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: '1.75.0'
+        components: rustfmt, clippy
+    - name: Prepare immutable source with v3 patches
+      run: |
+        set -euo pipefail
+        python3 -m pip install -r requirements.txt
+        git clone --depth 1 --branch 1.5.3 https://github.com/rustdesk/rustdesk.git .work/api-source
+        test "$(git -C .work/api-source rev-parse HEAD)" = 95cca3f661f635b3cc85c04935fe8d96d8f432ef
+        git -C .work/api-source submodule update --init --depth 1 libs/hbb_common
+        test "$(git -C .work/api-source/libs/hbb_common rev-parse HEAD)" = "$(git -C .work/api-source rev-parse HEAD:libs/hbb_common)"
+        PATCHSET=v3 BUILD_CHANNEL=ci bash scripts/source/apply_patches.sh .work/api-source standard
+    - name: Check formatting and local TLS failure scenarios
+      run: |
+        set -euo pipefail
+        rustfmt --edition 2021 --check .work/api-source/src/hbbs_http/api_failover.rs
+        python3 scripts/validation/api_failover_transport.py --source .work/api-source --output .work/api-transport.json
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always()
+      with:
+        name: api-transport-${{ matrix.runner }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: .work/api-transport.json
+        if-no-files-found: warn

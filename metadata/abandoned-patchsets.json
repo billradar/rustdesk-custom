@@ -1,0 +1,32 @@
+{
+  "schema": "abandoned-patchsets-v1",
+  "historical_base": "7e346edef8914045d07bfbf0762f9bc0a445c06a",
+  "files": {
+    "v1": {
+      "CHANGELOG.md": "61e2167779318200a129c842946522e281bc19b600dbbcbf9a957fdd57e66f1a",
+      "common/0001-hbb-server-defaults.patch": "fe5c80e7442509eca7f39e233728f6b68708414caa33f112b3b70fad5cd32f79",
+      "common/0002-client-defaults.patch": "04acb813da9af2bfe82e3048f6d944fcbc4e219b025d0509cc83b2e0b0093eff",
+      "common/0003-hide-cm-setting.patch": "c65b864f158cd1eaf9da990458965cd3d26eb1a5abbf6129e92e781bbac438e7",
+      "common/0004-cm-background-window.patch": "910594c80dc65a70f11ca47377613747dbd6bcc883b099070906828d78ae613b",
+      "common/0005-custom-release-updates.patch": "05f03c4aa5f32e24c630747afaf3b0ffbd826c35ab6e552082baecf6206e0273",
+      "common/0006-public-branding.patch": "b87a5693ad9b0bbe4ef92adf08e801a3ba9ea6c8a8b8f276c413af553ffc241c",
+      "patchset.json": "245ba680443ccd01c058e0acf8dd58457087bc39d7ecd2d2b294a291a9829c96",
+      "sos/0001-sos-mode.patch": "3cc7ca02503296fa54b37547effa6e5f5f9bf0329256c1cf96efc8c61aa8d26d",
+      "sos/0002-sos-home.patch": "daf22a979cdc7de9f989e8150d3be5b4ea3841359446d99e311ca579c7daddca",
+      "sos/0003-sos-settings.patch": "f40b693502f51b6632b587ba59862c9102fa76fd7702f756cb4696f33f0eb621"
+    },
+    "v2": {
+      "CHANGELOG.md": "d5279fcaaadfe96c3940cddde3e9b217c80017adbfd6cee1d1b2eb1e465aec74",
+      "common/0001-hbb-server-defaults.patch": "fe5c80e7442509eca7f39e233728f6b68708414caa33f112b3b70fad5cd32f79",
+      "common/0002-client-defaults.patch": "2c32a9e39eb74c1d7e95a124f670ac3fa54d5143dd4dcd5eaf4e2973c0dffa0b",
+      "common/0003-hide-cm-setting.patch": "c65b864f158cd1eaf9da990458965cd3d26eb1a5abbf6129e92e781bbac438e7",
+      "common/0004-cm-background-window.patch": "ac9efa427f5764805367aff442ace5765c8c4c630702c1c49f0e3b1d6e90e701",
+      "common/0005-custom-release-updates.patch": "71a9e804a511d49301023206777ec5798325ef001529f0e23b01206769edcdc9",
+      "common/0006-public-branding.patch": "cbb135980d80486a787d87b4e626e52ad32e99e45d2233a6c994f365cb477cf2",
+      "patchset.json": "ac1069d780ca8bf7466af4b40fa8c75dd5b6234a3f9eee02ff7ecfa8cee7e5bd",
+      "sos/0001-sos-mode.patch": "3cc7ca02503296fa54b37547effa6e5f5f9bf0329256c1cf96efc8c61aa8d26d",
+      "sos/0002-sos-home.patch": "505999106465ec6e3a085cd3d7887a0576e698134eceeab9bab12e2e58a54cd0",
+      "sos/0003-sos-settings.patch": "b205cad4a002f25f7093ef8508c53923538c75aec1eafbdd99ca5240920ff95e"
+    }
+  }
+}

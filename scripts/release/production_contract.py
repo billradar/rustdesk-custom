@@ -51,12 +51,12 @@ class PreparedSourceCredentialTests(unittest.TestCase):
 
 class DiscoveryTests(unittest.TestCase):
     def test_official_release_metadata_controls_stability(self):
-        rows = [dict(id=1, tag_name='1.4.9', draft=False, prerelease=False, body='# Changelog\n\n- test change'),
+        rows = [dict(id=1, tag_name='1.5.3', draft=False, prerelease=False, body='# Changelog\n\n- test change'),
                 dict(id=2, tag_name='1.5.0', draft=False, prerelease=True, body='# Changelog\n\n- prerelease'),
                 dict(id=3, tag_name='nightly', draft=False, prerelease=False, body='# Changelog'),
                 dict(id=4, tag_name='1.6.0', draft=True, prerelease=False, body='# Changelog')]
         with patch.object(upstream, 'api', return_value=rows), patch.object(upstream, 'resolve_ref', return_value='a'*40):
-            self.assertEqual(upstream.choose_stable()['upstream_tag'], '1.4.9')
+            self.assertEqual(upstream.choose_stable()['upstream_tag'], '1.5.3')
             with self.assertRaises(ValueError): upstream.choose_stable('1.5.0')
             with self.assertRaises(ValueError): upstream.choose_stable('a'*40)
 
@@ -66,11 +66,11 @@ class DiscoveryTests(unittest.TestCase):
                 if not completed: return None
                 sos = '-sos-' in path
                 return dict(prerelease=True, draft=False,
-                    body=f'Patch Set: v1\nUpstream SHA: {"a"*40}\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos") if sos else "N/A"}\nAutomation-State: complete',
+                    body=f'Patch Set: v3\nUpstream SHA: {"a"*40}\nCommon Patch Hash: {upstream.patch_hash("common", "v3")}\nSOS Patch Hash: {upstream.patch_hash("sos", "v3") if sos else "N/A"}\nAutomation-State: complete',
                     assets=[{'name': n} for n in ('client.zip','build-info.json','SHA256SUMS')])
             raise AssertionError(path)
-        with tempfile.TemporaryDirectory() as tmp, patch.object(upstream, 'api', side_effect=api), patch.object(upstream, 'mapped', return_value='v1'), \
-             patch.object(upstream, 'choose_stable', return_value=dict(upstream_tag='1.4.9', version='1.4.9', upstream_sha='a'*40, official_release_id=1)), \
+        with tempfile.TemporaryDirectory() as tmp, patch.object(upstream, 'api', side_effect=api), patch.object(upstream, 'mapped', return_value='v3'), \
+             patch.object(upstream, 'choose_stable', return_value=dict(upstream_tag='1.5.3', version='1.5.3', upstream_sha='a'*40, official_release_id=1)), \
              patch.object(sys, 'argv', ['upstream.py', 'stable'] + (['--force'] if force else [])), \
              patch.dict(os.environ, {'GITHUB_OUTPUT': ''}), contextlib.redirect_stdout(io.StringIO()):
             previous=Path.cwd()
@@ -99,11 +99,11 @@ class ReleaseGateTests(unittest.TestCase):
         (folder/'rustdesk/printer_driver_adapter.dll').write_bytes(pe)
         packages = folder / 'packages'
         packages.mkdir(parents=True)
-        (packages / f'rustdesk-1.4.9{("-sos" if variant == "sos" else "")}-windows-x86_64.exe').write_bytes(pe)
-        (packages / f'rustdesk-1.4.9{("-sos" if variant == "sos" else "")}-windows-x86_64.msi').write_bytes(bytes.fromhex('D0CF11E0A1B11AE1'))
-        info=dict(patchset='v1',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.4.9',
-                  custom_repository_sha='b'*40, common_patch_hash=upstream.patch_hash('common'),
-                  sos_patch_hash=upstream.patch_hash('sos') if variant=='sos' else None,
+        (packages / f'rustdesk-1.5.3{("-sos" if variant == "sos" else "")}-windows-x86_64.exe').write_bytes(pe)
+        (packages / f'rustdesk-1.5.3{("-sos" if variant == "sos" else "")}-windows-x86_64.msi').write_bytes(bytes.fromhex('D0CF11E0A1B11AE1'))
+        info=dict(patchset='v3',variant=variant, platform='windows-x86_64', upstream_sha='a'*40, upstream_tag='1.5.3',
+                  custom_repository_sha='b'*40, common_patch_hash=upstream.patch_hash('common', 'v3'),
+                  sos_patch_hash=upstream.patch_hash('sos', 'v3') if variant=='sos' else None,
                   workflow_run='42', patch_revision='1', signed=False, configuration='TEST ONLY',
                   runtime_ui_validation='SKIPPED BY USER',real_remote_session_validation='NOT TESTED')
         (folder/'build-info.json').write_text(json.dumps(info))
@@ -111,14 +111,14 @@ class ReleaseGateTests(unittest.TestCase):
     def sums(self, folder):
         (folder/'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(folder).as_posix()+'\n' for p in sorted(folder.rglob('*')) if p.is_file() and p.name!='SHA256SUMS'))
     def test_pair_requires_matching_source_and_both_variants(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v1','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v3','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
             root=Path(tmp); self.payload(root/'standard','standard')
             with self.assertRaises(ValueError): release.collect(root)
             info=self.payload(root/'sos','sos'); release.collect(root)
             info['upstream_sha']='c'*40; (root/'sos/build-info.json').write_text(json.dumps(info)); self.sums(root/'sos')
             with self.assertRaises(ValueError): release.collect(root)
     def test_checksum_architecture_and_runtime_lies_block(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v1','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'PATCHSET':'v3','GITHUB_RUN_ID':'','UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}):
             folder=Path(tmp); info=self.payload(folder,'standard'); release.validate(folder)
             exe=folder/'rustdesk/rustdesk.exe'; data=bytearray(exe.read_bytes()); data[68:70]=b'\x4c\x01'; exe.write_bytes(data)
             with self.assertRaises(ValueError): release.validate(folder)
@@ -131,10 +131,10 @@ class ReleaseGateTests(unittest.TestCase):
 class GenerationTests(unittest.TestCase):
     def test_static_version_boundary_selection(self):
         from scripts.upstream.patchsets import patchset_for_version
-        self.assertEqual(patchset_for_version('1.4.9'), 'v1')
-        self.assertEqual(patchset_for_version('1.4.99'), 'v1')
-        self.assertEqual(patchset_for_version('1.5.0'), 'v2')
-        self.assertEqual(patchset_for_version('1.5.1'), 'v2')
+        self.assertEqual(patchset_for_version('1.5.3'), 'v3')
+        self.assertEqual(patchset_for_version('1.5.39'), 'v3')
+        with self.assertRaisesRegex(ValueError, 'Retired'): patchset_for_version('1.5.0')
+        with self.assertRaisesRegex(ValueError, 'Retired'): patchset_for_version('1.5.1')
         self.assertEqual(patchset_for_version('2.0.0'), 'v3')
 
     def test_selection_uses_directories_and_ignores_sha_and_hashes(self):
@@ -142,8 +142,8 @@ class GenerationTests(unittest.TestCase):
         with patch.object(patchsets, 'patch_hash', side_effect=AssertionError('hash must not be used for selection')), \
              patch.object(patchsets, 'verify', side_effect=AssertionError('verify must not be used for selection')):
             self.assertEqual(
-                patchsets.select('0' * 40, Path('/nonexistent/source'), upstream_ref='1.5.0'),
-                'v2',
+                patchsets.select('0' * 40, Path('/nonexistent/source'), upstream_ref='1.5.3'),
+                'v3',
             )
 
     def test_missing_selected_directory_fails_closed(self):
@@ -152,12 +152,12 @@ class GenerationTests(unittest.TestCase):
             import shutil
             (Path(tmp) / 'metadata').mkdir()
             shutil.copyfile(Path(__file__).resolve().parents[2] / 'metadata/patch-profiles.json', Path(tmp) / 'metadata/patch-profiles.json')
-            (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
-            (Path(tmp) / 'patchsets' / 'v2' / 'sos').mkdir(parents=True)
-            self.assertEqual(patchsets.patchset_for_version('1.5.0'), 'v2')
-            (Path(tmp) / 'patchsets' / 'v2' / 'sos').rmdir()
+            (Path(tmp) / 'patchsets' / 'v3' / 'common').mkdir(parents=True)
+            (Path(tmp) / 'patchsets' / 'v3' / 'sos').mkdir(parents=True)
+            self.assertEqual(patchsets.patchset_for_version('1.5.3'), 'v3')
+            (Path(tmp) / 'patchsets' / 'v3' / 'sos').rmdir()
             with self.assertRaisesRegex(RuntimeError, 'incomplete'):
-                patchsets.patchset_for_version('1.5.0')
+                patchsets.patchset_for_version('1.5.3')
 
     def test_non_numeric_version_is_rejected(self):
         from scripts.upstream.patchsets import patchset_for_version
@@ -251,7 +251,7 @@ class ProductionGateTests(ReleaseGateTests):
         return info
 
     def test_production_payload_and_shared_server_gate(self):
-        env = {'BUILD_CONFIGURATION':'PRODUCTION','PATCHSET':'v1','GITHUB_RUN_ID':'',
+        env = {'BUILD_CONFIGURATION':'PRODUCTION','PATCHSET':'v3','GITHUB_RUN_ID':'',
                'UPSTREAM_EXPECTED_SHA':'','UPSTREAM_TAG':'','GITHUB_SHA':''}
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, env):
             root=Path(tmp); self.payload(root/'standard','standard'); info=self.payload(root/'sos','sos')
@@ -274,16 +274,16 @@ class ProductionDiscoveryTests(unittest.TestCase):
             if '/git/ref/' in path: return None
             if not existing:return None
             names=['SHA256SUMS',
-                   'rustdesk-1.4.9-standard-windows-x86_64.zip','rustdesk-1.4.9-sos-windows-x86_64.zip']
+                   'rustdesk-1.5.3-standard-windows-x86_64.zip','rustdesk-1.5.3-sos-windows-x86_64.zip']
             if partial:names.pop()
-            return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v1\nCommon Patch Hash: {upstream.patch_hash("common")}\nSOS Patch Hash: {upstream.patch_hash("sos")}\nAutomation-State: complete',
+            return {'draft':False,'prerelease':False,'body':f'Upstream SHA: {sha}\nPatch Set: v3\nCommon Patch Hash: {upstream.patch_hash("common", "v3")}\nSOS Patch Hash: {upstream.patch_hash("sos", "v3")}\nAutomation-State: complete',
                     'assets':[{'name':x,'state':'uploaded'} for x in names]}
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{'GITHUB_REPOSITORY':production.REPOSITORY,'GITHUB_OUTPUT':''}), \
-             patch.object(production,'choose_stable',return_value={'upstream_tag':'1.4.9','version':'1.4.9','upstream_sha':sha}), \
+             patch.object(production,'choose_stable',return_value={'upstream_tag':'1.5.3','version':'1.5.3','upstream_sha':sha}), \
              patch.object(production,'api',side_effect=api),contextlib.redirect_stdout(io.StringIO()):
             prev=Path.cwd()
             try:
-                os.chdir(tmp);return production.discover('1.4.9',force,dry_run)
+                os.chdir(tmp);return production.discover('1.5.3',force,dry_run)
             finally:os.chdir(prev)
 
     def test_new_stable_dryrun_cannot_publish(self):
@@ -294,8 +294,8 @@ class ProductionDiscoveryTests(unittest.TestCase):
         self.assertNotIn("source-",source)
         self.assertIn("p.suffix.lower() != '.json'",source)
         public_assets=['SHA256SUMS',
-                       'rustdesk-1.4.9-standard-windows-x86_64.zip',
-                       'rustdesk-1.4.9-sos-windows-x86_64.zip']
+                       'rustdesk-1.5.3-standard-windows-x86_64.zip',
+                       'rustdesk-1.5.3-sos-windows-x86_64.zip']
         self.assertFalse(any(name.lower().endswith('.json') or name.startswith('source-') or name.startswith('build-info-')
                              for name in public_assets))
 
@@ -326,7 +326,7 @@ class ProductionDiscoveryTests(unittest.TestCase):
         def api(path, **kwargs):
             if '/actions/runs/' in path:
                 return {'jobs':[{'id':12,'status':'completed','conclusion':'success'}]}
-            return [{'draft':False,'prerelease':False,'tag_name':'v1.4.9-custom.1',
+            return [{'draft':False,'prerelease':False,'tag_name':'v1.5.3-custom.1',
                      'body':'Automation-State: complete'}]
         with patch.dict(os.environ,{'GITHUB_REPOSITORY':production.REPOSITORY,'GITHUB_RUN_ID':'43'}), \
              patch.object(production,'api',side_effect=api),patch.object(production,'gh',return_value='ghp_'+'a'*36), \
@@ -417,15 +417,15 @@ if __name__ == "__main__": unittest.main()
 class StaticPatchsetSelectionTests(unittest.TestCase):
     def test_version_boundary_is_the_only_selection_rule(self):
         from scripts.upstream.patchsets import patchset_for_version, select
-        self.assertEqual(patchset_for_version('1.4.9'), 'v1')
-        self.assertEqual(patchset_for_version('1.5.0'), 'v2')
+        self.assertEqual(patchset_for_version('1.5.3'), 'v3')
+        with self.assertRaisesRegex(ValueError, 'Retired'): patchset_for_version('1.5.0')
         self.assertEqual(patchset_for_version('1.6.0'), 'v3')
-        self.assertEqual(select('0' * 40, Path('/does/not/exist'), upstream_ref='1.5.0'), 'v2')
+        self.assertEqual(select('0' * 40, Path('/does/not/exist'), upstream_ref='1.5.3'), 'v3')
 
     def test_selection_does_not_call_hash_or_verify(self):
         from scripts.upstream import patchsets
         with patch.object(patchsets, 'patch_hash', side_effect=AssertionError('hash must not select patchset')), patch.object(patchsets, 'verify', side_effect=AssertionError('verify must not select patchset')):
-            self.assertEqual(patchsets.select('f' * 40, Path('/missing'), upstream_ref='1.5.0'), 'v2')
+            self.assertEqual(patchsets.select('f' * 40, Path('/missing'), upstream_ref='1.5.3'), 'v3')
 
     def test_missing_selected_directory_fails_closed(self):
         from scripts.upstream import patchsets
@@ -433,6 +433,6 @@ class StaticPatchsetSelectionTests(unittest.TestCase):
             import shutil
             (Path(tmp) / 'metadata').mkdir()
             shutil.copyfile(Path(__file__).resolve().parents[2] / 'metadata/patch-profiles.json', Path(tmp) / 'metadata/patch-profiles.json')
-            (Path(tmp) / 'patchsets' / 'v2' / 'common').mkdir(parents=True)
+            (Path(tmp) / 'patchsets' / 'v3' / 'common').mkdir(parents=True)
             with self.assertRaisesRegex(RuntimeError, 'incomplete'):
-                patchsets.patchset_for_version('1.5.0')
+                patchsets.patchset_for_version('1.5.3')

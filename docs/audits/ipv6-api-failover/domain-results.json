@@ -1,0 +1,134 @@
+[
+  {
+    "command": "python3 scripts/upstream/interface_review_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.upstream.retired_patchsets_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.validation.api_policy_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.upstream.patch_profiles_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/build/build_adapter_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.build.updater_dependencies_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.platform.runner_migrations_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.platform.platform_adapter_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.build.macos_arm64_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/platform/wayland_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/release/production_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/release/qualification_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.artifacts_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.attestation_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.publish_stable_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/release/channel_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.content_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/release/nightly_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.stable_lock_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.upstream.patchset_version_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.validation.client_update_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.validation.branding_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.coordinator_lite_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.router_retry_policy_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.nightly_router_regression_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.stable_router_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.release.stable_tag_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.validation.build_reliability_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 -m scripts.validation.summary_contract",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/build/config_mir_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/validation/native_config_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/validation/cm_window_contract.py",
+    "returncode": 0
+  },
+  {
+    "command": "python3 scripts/signing/android_signing_contract.py",
+    "returncode": 0
+  }
+]

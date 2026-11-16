@@ -1,5 +1,7 @@
 # 上游源码与补丁实现原理
 
+> 当前维护策略：v1/v2 已抛弃并按原字节归档到 `archive/abandoned-patchsets/`，禁止所有新构建（包括 1.5.1）。只维护 v3；历史 Tag/Release/签名产物不动。下文历史版本说明不再授权构建归档补丁。详见归档 README 和 `metadata/patch-profiles.json` 的 `retired_patchsets`。
+
 ## 1. 为什么不直接维护完整上游副本
 
 仓库把自定义修改放入 `patchsets/`，把上游 RustDesk 当作独立来源。这样可以明确回答三个问题：构建基于哪个上游提交、应用了哪一代补丁、补丁内容是否与资格验证时一致。

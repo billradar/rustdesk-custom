@@ -1,5 +1,7 @@
 # Patch Profiles and candidate isolation
 
+> 当前维护策略：v1/v2 已抛弃并按原字节归档到 `archive/abandoned-patchsets/`，禁止所有新构建（包括 1.5.1）。只维护 v3；历史 Tag/Release/签名产物不动。下文历史版本说明不再授权构建归档补丁。详见归档 README 和 `metadata/patch-profiles.json` 的 `retired_patchsets`。
+
 `metadata/patch-profiles.json` is the routing policy. Numeric source version chooses a Profile; applicability, SHA, build success and patch hashes do not influence selection. Source identity remains separately locked to an exact upstream SHA.
 
 | Source version | Profile | Patchset | Stable eligibility |

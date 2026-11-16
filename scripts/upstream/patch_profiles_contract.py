@@ -17,9 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ProfileContract(unittest.TestCase):
     def test_exact_baseline_and_formal_release_profiles(self):
-        for version in ('1.5.0', '1.5.1'):
-            self.assertEqual(patchsets.patchset_for_version(version, 'stable'), 'v2')
-        self.assertEqual(patchsets.patchset_for_version('1.4.9', 'stable'), 'v1')
+        for version in ('1.4.9', '1.5.0', '1.5.1'):
+            for lane in ('ci', 'nightly', 'stable'):
+                with self.assertRaisesRegex(ValueError, 'Retired'):
+                    patchsets.patchset_for_version(version, lane)
         official = patchsets.profile_for_version('v1.5.3', 'stable')
         self.assertEqual(official['profile'], 'rd-1.5.3')
         self.assertEqual(official['selected'], 'v3')
@@ -41,6 +42,7 @@ class ProfileContract(unittest.TestCase):
                 patchsets.patchset_for_version('1.5.3', 'stable')
 
     def test_formal_153_lock_preflight_and_client_identity_use_current_revision(self):
+        revision = 'v3.' + str(patchsets.metadata('v3')['revision'])
         from scripts.source.update_identity import write_identity, ABOUT_PATH
         data = dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
                     upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef')
@@ -48,7 +50,7 @@ class ProfileContract(unittest.TestCase):
             lock = stable_lock.plan(data,'v3')
             with patch.object(channel,'api',side_effect=AssertionError('dry-run must not inspect or write Releases')):
                 result = channel.release_preflight(dict(lock),dry_run=True)
-            self.assertEqual(result['patch_revision'],'v3.4')
+            self.assertEqual(result['patch_revision'],revision)
             self.assertTrue(result['build_needed']);self.assertFalse(result['draft_needed'])
             self.assertFalse(result['publish_existing'])
             with tempfile.TemporaryDirectory() as td:
@@ -56,14 +58,14 @@ class ProfileContract(unittest.TestCase):
                 (tree/'src/custom_update/build.json').write_text('{}')
                 (tree/ABOUT_PATH).parent.mkdir(parents=True);(tree/ABOUT_PATH).write_text('')
                 identity=write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
-                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.4')
+                                        sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision=revision)
                 self.assertEqual(identity['repository_id'],'1399548376')
                 self.assertEqual(identity['repository_owner_id'],'56966687')
                 with patch.dict(os.environ,GITHUB_REPOSITORY_ID=''):
                     with self.assertRaisesRegex(ValueError,'numeric GitHub'):
-                        write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v3.4')
-                self.assertEqual(identity['revision'],'v3.4')
-                self.assertEqual(identity['patchset_version'],'v3.4')
+                        write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision=revision)
+                self.assertEqual(identity['revision'],revision)
+                self.assertEqual(identity['patchset_version'],revision)
                 with self.assertRaises(ValueError):
                     write_identity(tree,repository='billradar/rustdesk-custom',version='1.5.3',
                                    sha=data['upstream_sha'],variant='standard',run='42',channel='stable',revision='v2.8')
@@ -89,14 +91,14 @@ class ProfileContract(unittest.TestCase):
             root = Path(temp)
             (root / 'metadata').mkdir()
             registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
-            registry['exact_versions']['1.4.9'] = 'rd-1.5.1'
+            registry['exact_versions']['1.4.9'] = 'rd-1.5.3'
             (root / 'metadata/patch-profiles.json').write_text(json.dumps(registry))
             for scope in ('common', 'sos'):
-                (root / 'patchsets/v2' / scope).mkdir(parents=True)
+                (root / 'patchsets/v3' / scope).mkdir(parents=True)
             with patch.object(patchsets, 'ROOT', root):
                 result = patchsets.profile_for_version('1.4.9')
-            self.assertEqual(result['profile'], 'rd-1.5.1')
-            self.assertEqual(result['selected'], 'v2')
+            self.assertEqual(result['profile'], 'rd-1.5.3')
+            self.assertEqual(result['selected'], 'v3')
             self.assertFalse(result['fallback'])
 
     def test_unknown_versions_test_latest_but_never_gain_stable(self):
@@ -115,15 +117,17 @@ class ProfileContract(unittest.TestCase):
 
     def test_profile_isolation_rejects_manually_supplied_generation(self):
         for version, selected in (('1.5.1', 'v3'), ('1.5.3', 'v2')):
-            with self.assertRaisesRegex(ValueError, 'differs'):
+            with self.assertRaisesRegex(ValueError, 'differs|Retired'):
                 patchsets.require_selection(version, selected)
-        for name in ('v1', 'v2', 'v3'):
-            patchsets.verify(name)
+        for name in ('v1', 'v2'):
+            with self.assertRaisesRegex(ValueError, 'Retired'):
+                patchsets.verify(name)
+        patchsets.verify('v3')
         self.assertEqual(patchsets.metadata('v2')['revision'], 8)
         self.assertEqual(patchsets.patch_hash('common', 'v2'),
                          'a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0')
         self.assertEqual(patchsets.patch_hash('sos', 'v2'), patchsets.patch_hash('sos', 'v3'))
-        old = ROOT / 'patchsets/v2'
+        old = ROOT / 'archive/abandoned-patchsets/v2'
         new = ROOT / 'patchsets/v3'
         for scope in ('common', 'sos'):
             for source in (old / scope).glob('*.patch'):
@@ -145,7 +149,7 @@ class ProfileContract(unittest.TestCase):
             root = Path(temp)
             (root / 'metadata').mkdir()
             shutil.copy(ROOT / 'metadata/patch-profiles.json', root / 'metadata/patch-profiles.json')
-            shutil.copytree(ROOT / 'patchsets/v2', root / 'patchsets/v2')
+            shutil.copytree(ROOT / 'archive/abandoned-patchsets/v2', root / 'patchsets/v2')
             with patch.object(patchsets, 'ROOT', root):
                 with self.assertRaisesRegex(RuntimeError, 'missing'):
                     patchsets.profile_for_version('2.0.0')

@@ -1,5 +1,7 @@
 # RustDesk Custom
 
+> **Patchset lifecycle:** v1 and v2 are abandoned, immutable historical archives under `archive/abandoned-patchsets/`. New CI, Nightly and Stable builds using them are forbidden, including RustDesk 1.5.1. Only v3 is maintained. Existing Tags, Releases and signed artifacts remain untouched.
+
 English · [中文](README.zh-CN.md)
 
 [![Stable Release](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/tag.yml?branch=main&style=flat-square&label=Stable%20Release)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)

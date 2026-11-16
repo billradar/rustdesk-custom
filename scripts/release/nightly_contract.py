@@ -25,7 +25,7 @@ class NightlyTests(unittest.TestCase):
                 return {'default_branch':'master'}
             if '/contents/' in path:
                 self.assertIn('?ref='+'b'*40,path)
-                return {'content':base64.b64encode(b'[package]\nversion="1.5.1"\n').decode()}
+                return {'content':base64.b64encode(b'[package]\nversion="1.5.3"\n').decode()}
             if '/workflows/' in path:
                 return {'workflow_runs':[run]}
             return run
@@ -37,7 +37,7 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(d['upstream_sha'],'b'*40)
         self.assertEqual(d['upstream_ref'],d['upstream_sha'])
         self.assertEqual(d['upstream_tag'],'')
-        self.assertEqual(d['patchset'],'v2')
+        self.assertEqual(d['patchset'],'v3')
 
     def test_failed_running_foreign_or_wrong_workflow_is_blocked(self):
         for k,v in [('status','in_progress'),('conclusion','failure'),('head_branch','other'),
@@ -47,7 +47,7 @@ class NightlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.discover(r)
 
     def test_dedup_and_bounded_retries(self):
-        data=dict(upstream_sha='b'*40,patchset='v2',common_patch_hash='c'*64,
+        data=dict(upstream_sha='b'*40,patchset='v3',common_patch_hash='c'*64,
                   sos_patch_hash='d'*64,wayland_policy_sha256='e'*64)
         identity=nightly.nightly_identity(data,'draft')
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
@@ -138,7 +138,7 @@ class NightlyTests(unittest.TestCase):
     def test_manual_dedup_skips_active_or_successful_batch(self):
         env=dict(GITHUB_REPOSITORY='example/rustdesk-custom',GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='workflow_dispatch',
                  GITHUB_RUN_ID='99',GITHUB_SHA='a'*40,UPSTREAM_EXPECTED_SHA='b'*40,
-                 UPSTREAM_VERSION='1.5.1',PATCHSET='v2',RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
+                 UPSTREAM_VERSION='1.5.3',PATCHSET='v3',RELEASE_MODE='draft',INCLUDE_WAYLAND='true')
         row=dict(display_title='Nightly '+'b'*40+' / '+'a'*40+' / draft / wayland=true / android-signing=false',
                  _upstream_sha='b'*40,head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                  status='completed',conclusion='success',id=21)
@@ -146,8 +146,8 @@ class NightlyTests(unittest.TestCase):
                      head_sha='a'*40,event='workflow_dispatch',head_branch='main',
                      status='in_progress',conclusion='',id=99,run_number=12)
         row['run_number']=11
-        artifact=dict(upstream_sha='b'*40,patchset='v2',common_patch_hash=nightly.patch_hash('common','v2'),
-                      sos_patch_hash=nightly.patch_hash('sos','v2'),
+        artifact=dict(upstream_sha='b'*40,patchset='v3',common_patch_hash=nightly.patch_hash('common','v3'),
+                      sos_patch_hash=nightly.patch_hash('sos','v3'),
                       wayland_policy_sha256=nightly.wayland_policy_hash(True))
         with tempfile.TemporaryDirectory() as td, patch.dict(os.environ,dict(env,GITHUB_OUTPUT=str(Path(td)/'out'))), \
              patch.object(nightly,'api',return_value={'workflow_runs':[row,current]}), \
@@ -164,7 +164,7 @@ class NightlyTests(unittest.TestCase):
                 self.assertEqual(route.call_count, int(mode == 'route'))
 
     def test_resolve_uses_router_pinned_official_run_and_sha(self):
-        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='c'*64, sos_patch_hash='d'*64)
         env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
                    NIGHTLY_DISPLAY_LABEL=nightly.display_label(fixture),
@@ -186,7 +186,7 @@ class NightlyTests(unittest.TestCase):
         save.assert_not_called()
 
     def test_resolve_rejects_router_sha_mismatch(self):
-        fixture = dict(upstream_sha='c'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='c'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='c'*64, sos_patch_hash='d'*64)
         env = dict(OFFICIAL_RUN_ID='17', UPSTREAM_EXPECTED_SHA='b'*40,
                    NIGHTLY_DISPLAY_LABEL='', GITHUB_EVENT_NAME='workflow_dispatch',
@@ -209,8 +209,8 @@ class NightlyTests(unittest.TestCase):
         clone='example/rustdesk-custom'
         env=dict(GITHUB_REPOSITORY=clone,GITHUB_REF='refs/heads/main',GITHUB_EVENT_NAME='schedule',GITHUB_SHA='a'*40)
         with patch.dict(os.environ,env),patch.object(nightly,'api',return_value={'workflow_runs':[]}),patch.object(nightly.subprocess,'run') as dispatch:
-            nightly.route({'official_run_id':'17','upstream_version':'1.5.1',
-                           'upstream_sha':'b'*40,'patchset':'v2',
+            nightly.route({'official_run_id':'17','upstream_version':'1.5.3',
+                           'upstream_sha':'b'*40,'patchset':'v3',
                            'common_patch_hash':'c'*64,'sos_patch_hash':'d'*64})
             args=dispatch.call_args.args[0]
             self.assertIn('official_run_id=17', args)
@@ -218,7 +218,7 @@ class NightlyTests(unittest.TestCase):
             self.assertIn('release_mode=draft',args)
             self.assertIn('force_retry=false',args)
             self.assertIn('display_label=' + nightly.display_label(
-                dict(upstream_version='1.5.1', upstream_sha='b'*40, patchset='v2',
+                dict(upstream_version='1.5.3', upstream_sha='b'*40, patchset='v3',
                      common_patch_hash='c'*64, sos_patch_hash='d'*64)), args)
             self.assertEqual(args[args.index('--repo')+1],clone)
             self.assertEqual(args[args.index('--ref')+1],'main')
@@ -226,10 +226,10 @@ class NightlyTests(unittest.TestCase):
 
     def test_nightly_display_label_and_verification(self):
         from scripts.release.coordinator_lite import patchset_sha256
-        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='b'*64, sos_patch_hash='c'*64)
         rendered = nightly.display_label(fixture)
-        self.assertEqual(rendered, ('1.5.1 / upstream=aaaaaaaa / patchset=v2@' +
+        self.assertEqual(rendered, ('1.5.3 / upstream=aaaaaaaa / patchset=v3@' +
                          patchset_sha256('b'*64, 'c'*64)[:8] + ' / build=' +
                          nightly.nightly_identity(fixture)[:8]))
         nightly.verify_display_label(fixture, rendered)
@@ -239,7 +239,7 @@ class NightlyTests(unittest.TestCase):
         self.assertNotEqual(rendered, nightly.display_label(dict(fixture, common_patch_hash='d'*64)))
 
     def test_new_title_history_and_dry_run_compatibility(self):
-        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='b'*64, sos_patch_hash='c'*64)
         title = ('Nightly ' + nightly.display_label(fixture) +
                  ' / draft / wayland=true / android-signing=false')
@@ -268,7 +268,7 @@ class NightlyTests(unittest.TestCase):
     def test_new_title_full_sha_is_sourced_from_artifact(self):
         import json
         from pathlib import Path
-        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='b'*64, sos_patch_hash='c'*64)
         title = ('Nightly ' + nightly.display_label(fixture) +
                  ' / draft / wayland=true / android-signing=false')
@@ -283,7 +283,7 @@ class NightlyTests(unittest.TestCase):
                              fixture['upstream_sha'])
 
     def test_mismatched_manual_display_fails_before_save(self):
-        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='a'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='b'*64, sos_patch_hash='c'*64)
         with patch.dict(os.environ, {'NIGHTLY_DISPLAY_LABEL': 'invalid'}), \
              patch.object(nightly, 'discover', return_value=fixture), \
@@ -294,7 +294,7 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(save.call_args.args[0]['dedup_state'], 'DISPLAY_MISMATCH')
 
     def test_display_mismatch_is_not_a_failed_build_attempt(self):
-        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.1', patchset='v2',
+        fixture = dict(upstream_sha='b'*40, upstream_version='1.5.3', patchset='v3',
                        common_patch_hash='c'*64, sos_patch_hash='d'*64,
                        dedup_state='DISPLAY_MISMATCH')
         old = dict(fixture, upstream_sha='a'*40)
@@ -323,29 +323,29 @@ class NightlyTests(unittest.TestCase):
         self.assertFalse(any('wayland' in r['id'] for r in qualification.plan('nightly')['selected']))
 
     def test_aggregate_rejects_stale_channel_and_run_before_qualification(self):
-        env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.1',PATCHSET='v2',GITHUB_SHA='a'*40,GITHUB_RUN_ID='9')
-        discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL)
-        info=dict(discovery,custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='')
+        env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.3',PATCHSET='v3',GITHUB_SHA='a'*40,GITHUB_RUN_ID='9')
+        discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.3',patchset='v3',upstream_repository=nightly.OFFICIAL)
+        info=dict(discovery,custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v3'),build_run='9',upstream_tag='')
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env),patch.object(qualification,'aggregate') as gate:
             root=Path(td);d=root/'discovery.json';d.write_text(json.dumps(discovery))
-            for edit in [dict(channel='stable'),dict(build_run='8'),dict(custom_repository_sha='c'*40),dict(upstream_sha='c'*40),dict(upstream_tag='1.5.1')]:
+            for edit in [dict(channel='stable'),dict(build_run='8'),dict(custom_repository_sha='c'*40),dict(upstream_sha='c'*40),dict(upstream_tag='1.5.3')]:
                 (root/'build-info.json').write_text(json.dumps(dict(info,**edit)))
                 with self.assertRaises(ValueError):nightly.aggregate(root,d)
                 gate.assert_not_called()
 
     def test_draft_mode_requires_signed_android_aggregate(self):
-        env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.1',PATCHSET='v2',
+        env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.3',PATCHSET='v3',
                  GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='draft',
                  ANDROID_PRODUCTION_SIGNING_ENABLED='true')
-        discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',upstream_repository=nightly.OFFICIAL,
+        discovery=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.3',patchset='v3',upstream_repository=nightly.OFFICIAL,
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,env):
             root=Path(td);(root/'.work/qualification-aggregate').mkdir(parents=True)
             (root/'discovery.json').write_text(json.dumps(discovery))
             for arch in ('aarch64','armv7','x86_64'):
                 folder=root/arch;folder.mkdir()
-                (folder/'build-info.json').write_text(json.dumps(dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
-                    custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v2'),build_run='9',upstream_tag='',platform='android',
+                (folder/'build-info.json').write_text(json.dumps(dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.3',patchset='v3',
+                    custom_repository_sha='a'*40,common_patch_hash=nightly.patch_hash('common','v3'),build_run='9',upstream_tag='',platform='android',
                     signed_status='PRODUCTION SIGNED / IDENTITY VERIFIED',signing_identity_verified=True,signing_schemes=[2,3])))
             with patch.object(nightly,'ROOT',root),patch.object(qualification,'aggregate',return_value=dict(result='PASS')):
                 report=nightly.aggregate(root,root/'discovery.json')
@@ -477,9 +477,9 @@ class NightlyTests(unittest.TestCase):
 class NightlyDraftTests(unittest.TestCase):
     def make_manifest(self, assets):
         from scripts.release import attestation as a
-        info=dict(platform='android',architecture='aarch64',variant='standard',upstream_version='1.5.1',
-                  upstream_sha='b'*40,custom_repository_sha='a'*40,patchset='v2',patch_revision=None,
-                  common_patch_hash=nightly.patch_hash('common','v2'),sos_patch_hash=nightly.patch_hash('sos','v2'))
+        info=dict(platform='android',architecture='aarch64',variant='standard',upstream_version='1.5.3',
+                  upstream_sha='b'*40,custom_repository_sha='a'*40,patchset='v3',patch_revision=None,
+                  common_patch_hash=nightly.patch_hash('common','v3'),sos_patch_hash=nightly.patch_hash('sos','v3'))
         info['signed_status']='PRODUCTION SIGNED / IDENTITY VERIFIED'
         entries=[a.entry(assets/'client.apk',info)]
         for arch in ('armv7','x86_64'):
@@ -502,7 +502,7 @@ class NightlyDraftTests(unittest.TestCase):
                   'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_WORKFLOW_REF':self.repo+'/.github/workflows/nightly.yml@refs/heads/main',
                   'RELEASE_MODE':'draft','GITHUB_SHA':'a'*40,'GITHUB_RUN_ID':'9',
                   'REQUIRE_ANDROID_PRODUCTION_SIGNING':'true'}
-        self.data=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.1',patchset='v2',
+        self.data=dict(channel='nightly',upstream_sha='b'*40,upstream_version='1.5.3',patchset='v3',
                        official_run_id='17',official_run_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
         self.upstream_notes='# This is a nightly build, which is built every day with the latest code.\n\nChangelog\n\n# Added\n\n- [Example change #123](https://github.com/rustdesk/rustdesk/pull/123)'
 
@@ -570,7 +570,7 @@ class NightlyDraftTests(unittest.TestCase):
                     body=write.call_args.args[2]['body']
                     self.assertTrue(body.startswith(self.upstream_notes+'\n\n'))
                     self.assertEqual(write.call_args.args[2]['name'],'nightly')
-                    self.assertIn('## Patchset v2.8',body)
+                    self.assertIn('## Patchset v3.5',body)
                     self.assertIn('Current included customizations',body)
                     for noise in ('automation_state=', 'asset_inventory=', 'version_semantics=', 'Common Patch Hash:', 'Known limitations:', '<!-- rustdesk-custom-release-metadata'):
                         self.assertNotIn(noise,body)

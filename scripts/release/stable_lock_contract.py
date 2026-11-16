@@ -20,11 +20,11 @@ class LockTests(unittest.TestCase):
             ANDROID_PRODUCTION_SIGNING_ENABLED='false', STABLE_LOCK_REQUIRED='true'), clear=True)
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.data = dict(channel='stable', version='1.5.0', upstream_sha='b'*40,
-                         upstream_tag='1.5.0', upstream_ref='1.5.0')
+        self.data = dict(channel='stable', version='1.5.3', upstream_sha='b'*40,
+                         upstream_tag='1.5.3', upstream_ref='1.5.3')
 
     def create(self):
-        result = lock.create(self.data, 'v2', self.path)
+        result = lock.create(self.data, 'v3', self.path)
         os.environ.update(STABLE_LOCK_PATH=str(self.path), STABLE_LOCK_SHA256=result['lock_sha256'],
                           EXPECTED_BUILD_IDENTITY=result['build_identity'])
         return result
@@ -66,13 +66,13 @@ class LockTests(unittest.TestCase):
         self.assertTrue(result['build_needed'])
         self.assertFalse(result['draft_needed'])
         self.assertFalse(result['publish_existing'])
-        self.assertEqual(result['patch_revision'],'v2.8')
+        self.assertEqual(result['patch_revision'],'v3.5')
         self.assertEqual(result['rebuild_reason'],'DRY_RUN_VALIDATION_ONLY')
 
     def test_artifact_source_and_both_variants_required(self):
         result = self.create()
         infos = [dict(variant=v, upstream_sha=result['upstream_sha'], upstream_version=result['version'],
-                      patchset='v2', common_patch_hash=result['common_patch_hash'],
+                      patchset='v3', common_patch_hash=result['common_patch_hash'],
                       sos_patch_hash=result['sos_patch_hash'] if v == 'sos' else None,
                       custom_repository_sha='a'*40, build_run='123') for v in ('standard', 'sos')]
         lock.require(infos)
@@ -87,7 +87,7 @@ class LockTests(unittest.TestCase):
         first = self.create()
         with patch.dict(os.environ, GITHUB_RUN_ATTEMPT='2'):
             lock.current()
-            second = lock.create(self.data, 'v2', self.path)
+            second = lock.create(self.data, 'v3', self.path)
         self.assertNotEqual(first['lock_artifact'], second['lock_artifact'])
         self.assertEqual(first['lock_sha256'], second['lock_sha256'])
 

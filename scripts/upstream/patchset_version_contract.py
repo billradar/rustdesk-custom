@@ -14,7 +14,7 @@ class VersionContract(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        shutil.copytree(version.ROOT / 'patchsets/v2', self.root / 'patchsets/v2')
+        shutil.copytree(version.ROOT / 'archive/abandoned-patchsets/v2', self.root / 'patchsets/v2')
         self.run_git('init', '-q')
         self.run_git('config', 'user.name', 'Contract')
         self.run_git('config', 'user.email', 'contract@example.invalid')
@@ -52,7 +52,8 @@ class VersionContract(unittest.TestCase):
         target = self.root / 'patchsets/v3/patchset.json'
         data = json.loads(target.read_text())
         # Reconstruct the original candidate fixture, not live v3's later revisions.
-        shutil.copy2(version.ROOT/'patchsets/v2/common/0005-custom-release-updates.patch', target.parent/'common/0005-custom-release-updates.patch')
+        shutil.copy2(version.ROOT/'archive/abandoned-patchsets/v2/common/0005-custom-release-updates.patch', target.parent/'common/0005-custom-release-updates.patch')
+        (target.parent / 'common/0007-api-failover.patch').unlink()
         data['revision'] = 1
         data['hashes'] = copy.deepcopy(data['versioning']['history'][0]['after'])
         data['versioning']['history'] = [data['versioning']['history'][0]]
@@ -79,7 +80,7 @@ class VersionContract(unittest.TestCase):
             with self.subTest(folders=folders):
                 # Restore bytes without rewriting any shared repository refs.
                 shutil.rmtree(self.root / 'patchsets/v2')
-                shutil.copytree(version.ROOT / 'patchsets/v2', self.root / 'patchsets/v2')
+                shutil.copytree(version.ROOT / 'archive/abandoned-patchsets/v2', self.root / 'patchsets/v2')
                 self.change(*folders)
                 first = version.bump('v2', self.base, root=self.root)
                 version.bump('v2', self.base, root=self.root)
@@ -135,7 +136,7 @@ class VersionContract(unittest.TestCase):
         self.reviewed()
         self.save_commit()
         newer = version.commit('HEAD', self.root)
-        for path in (version.ROOT / 'patchsets/v2/common').glob('*.patch'):
+        for path in (version.ROOT / 'archive/abandoned-patchsets/v2/common').glob('*.patch'):
             shutil.copyfile(path, self.root / 'patchsets/v2/common' / path.name)
         version.bump('v2', newer, root=self.root)
         data = self.reviewed()
@@ -175,7 +176,7 @@ class VersionContract(unittest.TestCase):
         self.save_commit()
         old_sha = version.commit('HEAD', self.root)
         shutil.rmtree(self.root / 'patchsets/v2')
-        shutil.copytree(version.ROOT / 'patchsets/v2', self.root / 'patchsets/v2')
+        shutil.copytree(version.ROOT / 'archive/abandoned-patchsets/v2', self.root / 'patchsets/v2')
         with self.assertRaisesRegex(ValueError, 'Unversioned Patchset base is retired'):
             version.verify('v2', old_sha, self.root)
 
