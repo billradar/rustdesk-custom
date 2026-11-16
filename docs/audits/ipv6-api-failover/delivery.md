@@ -35,6 +35,8 @@
 | 完整产品编译 | 已尝试 Rust 1.75 cargo check，rust-webm 的 libwebm 子模块下载被代理 HTTP 403 阻止，未完成完整集成类型检查 |
 | Dart/Flutter、设备与生产网络 | 未测试。固定 Dart 3.5.4 SDK 下载被 HTTP 403 阻止；不能宣称 analyze、真机或生产主备认证通过 |
 
+已修复 Codex 对 `9f9064f` 的 P2 review：IPv6 literal 不再用带方括号的主机名做 DNS，而是直接构造 IPv6 socket；主 origin 比较兼容压缩/展开写法，保持 IP SAN 证书验证。新的 Flutter HTTP 服务和生成策略文件已加入现有 Flutter analyze 文件清单，关闭功能时不额外调用原生 API getter。测试覆盖 literal 主连接及恢复、私有 polling fragment 不发往服务器。
+
 本地 TLS 场景包括：双栈 localhost 的实际 IPv6 peer；无 IPv6 地址、DNS 错误、TCP 拒绝、TLS 错误、TLS 黑洞超时的预发送回退；401/403/500/503 不切换；备用 503；POST 已发送后断线/超时不重放；认证头/body/Host 保留；无凭据 HEAD 恢复、冷却与并发、取消探测租约回收；备用 TCP 不可达明确失败。均为本地模拟，不是线上 FRP 或真实登录/Token 测试。
 
 ## CI 和限制

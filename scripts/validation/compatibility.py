@@ -11,6 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ['flutter/lib/main.dart', 'flutter/lib/common.dart',
+         'flutter/lib/utils/http_service.dart', 'flutter/lib/utils/api_failover_policy.dart',
          'flutter/lib/models/cm_window_policy.dart', 'flutter/lib/common/widgets/custom_update.dart',
          'flutter/lib/mobile/pages/settings_page.dart', 'flutter/lib/models/server_model.dart',
          'flutter/lib/common/branding.dart', 'flutter/lib/common/branding_values.dart',

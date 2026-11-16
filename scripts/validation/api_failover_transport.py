@@ -51,7 +51,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         status = int(self.path.rsplit('/', 1)[-1]) if '/status/' in self.path else 302
         result = json.dumps(dict(authorization=self.headers.get('Authorization'),
-                                 host=self.headers.get('Host'), body=body)).encode()
+                                 host=self.headers.get('Host'), path=self.path, body=body)).encode()
         self.send_response(status)
         self.send_header('Content-Length', str(len(result)))
         if status == 302:

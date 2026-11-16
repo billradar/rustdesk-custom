@@ -32,6 +32,7 @@ mod scenarios {
         for u in ["https://elsewhere.invalid/api/login", "https://api.test.invalid.evil.invalid/api/login", "http://api.test.invalid/api/login", "https://user@api.test.invalid/api/login", "https://api.test.invalid/download"] {
             assert!(!handles(u));
         }
+        assert_eq!(origin("https://[0:0:0:0:0:0:0:1]").unwrap().origin(), origin("https://[::1]").unwrap().origin());
         let rewritten = rewrite("https://api.test.invalid/api/devices?page=2", &origin("https://backup.test.invalid").unwrap()).unwrap();
         assert_eq!(rewritten.as_str(), "https://backup.test.invalid/api/devices?page=2");
     }
@@ -40,12 +41,23 @@ mod scenarios {
     async fn transport_and_recovery() {
         reset();
         let p = pair();
-        let response = request(p.clone(), "/api/status/200", Method::POST).await.unwrap();
+        let response = request(p.clone(), "/api/status/200#rd-api-request-local", Method::POST).await.unwrap();
         assert!(response.remote_addr().unwrap().is_ipv6());
         let body: Value = response.json().await.unwrap();
         assert_eq!(body["authorization"], "Bearer fixture-only");
         assert_eq!(body["body"], "fixture-body");
+        assert_eq!(body["path"], "/api/status/200", "private polling fragment must not be transmitted");
         assert_eq!(body["host"], format!("localhost:{}", p.0.port().unwrap()));
+        // Accepted IPv6-literal policies bypass DNS, preserve IP certificate
+        // validation, and recover to the literal primary after cooldown.
+        reset();
+        let literal = Url::parse(&format!("https://[::1]:{}", p.0.port().unwrap())).unwrap();
+        let response = request((literal.clone(), p.1.clone()), "/api/status/200", Method::POST).await.unwrap();
+        assert!(response.remote_addr().unwrap().is_ipv6());
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["host"], format!("[::1]:{}", p.0.port().unwrap()));
+        unavailable(); expire();
+        assert!(use_primary(&literal).await);
         for code in [401, 403, 500, 503] {
             reset();
             let before = stats(&p.1).await;

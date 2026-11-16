@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "da0c85d1334a7e9b50e03c05a241e3437698187bf7a286a19316b0f5487cc1f9",
+    "common": "0b6d32ff8c4756fac865eacad4a1349cef58428ac0a6fab84b7ab78826ba21bf",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -194,7 +194,7 @@
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "after": {
-          "common": "da0c85d1334a7e9b50e03c05a241e3437698187bf7a286a19316b0f5487cc1f9",
+          "common": "0b6d32ff8c4756fac865eacad4a1349cef58428ac0a6fab84b7ab78826ba21bf",
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "scopes": [
@@ -208,7 +208,8 @@
             "Route managed Flutter API, background synchronization, OIDC and recording transport through one endpoint policy; keep logical account identity at the primary origin."
           ],
           "Fixed": [
-            "Use unique non-transmitted polling fragments for concurrent managed Flutter HTTP requests and consume their terminal responses."
+            "Use unique non-transmitted polling fragments for concurrent managed Flutter HTTP requests and consume their terminal responses.",
+            "Handle HTTPS IPv6-literal origins directly as IPv6 socket addresses, preserving strict IP certificate verification and recovery instead of attempting bracketed-name DNS."
           ],
           "Removed": [],
           "Security": [
@@ -220,7 +221,7 @@
         },
         "reason": "Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS fallback without changing historical builds.",
         "references": [
-          "7e346edef8914045d07bfbf0762f9bc0a445c06a"
+          "https://github.com/billradar/rustdesk-custom/pull/261"
         ],
         "compatibility": "v3 only; official 1.5.3 and compatibility-test-only later sources retain active Profile routing. Legacy v1/v2 bytes are preserved in archives, but all new builds using them are forbidden. Production signing requirements and existing server fingerprint fields remain unchanged.",
         "limitations": "Native ID/Relay dual-stack behavior is intentionally unchanged; user-scoped redundancy applies only to Web/API. Production login, OIDC, shared Token backend, full native client compilation and real-device sessions require validation.",

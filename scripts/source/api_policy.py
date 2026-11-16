@@ -25,7 +25,9 @@ def origin(value):
     port = parsed.port
     host = parsed.hostname.lower()
     if ':' in host:
-        ipaddress.IPv6Address(host)
+        if '%' in host:
+            raise ValueError('Scoped IPv6 addresses are not public API origins')
+        host = ipaddress.IPv6Address(host).compressed
     elif len(host) > 253 or not all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in host.split('.')):
         raise ValueError('API endpoint has an invalid DNS hostname (value withheld)')
     if ':' in host:

@@ -14,6 +14,7 @@ class PolicyContract(unittest.TestCase):
 
     def test_optional_configuration_and_strict_origin_validation(self):
         self.assertFalse(policy.resolve('', '')['enabled'])
+        self.assertEqual(policy.resolve('https://[0:0:0:0:0:0:0:1]/', 'https://backup.test.invalid')['primary'], 'https://[::1]')
         for value in ['http://api.test.invalid', 'https://user:pw@api.test.invalid', 'https://api.test.invalid/api',
                       'https://api.test.invalid?q=x', 'https://api.test.invalid/#x', 'https://api.test.invalid:99999',
                       'https://api.test.invalid\n', 'https://api.test.invalid/$(x)']:

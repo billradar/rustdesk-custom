@@ -8,7 +8,7 @@ index 0000000..6159a12
 +const customApiPrimaryOrigin = "";
 +const customApiFallbackOrigin = "";
 diff --git a/flutter/lib/utils/http_service.dart b/flutter/lib/utils/http_service.dart
-index 9c9624b..4846820 100644
+index 9c9624b..a7526b6 100644
 --- a/flutter/lib/utils/http_service.dart
 +++ b/flutter/lib/utils/http_service.dart
 @@ -1,4 +1,6 @@
@@ -18,21 +18,44 @@ index 9c9624b..4846820 100644
  import 'package:flutter/foundation.dart';
  import 'package:flutter_hbb/consts.dart';
  import 'package:http/http.dart' as http;
-@@ -28,19 +30,39 @@ class HttpService {
+@@ -8,6 +10,20 @@ export 'package:http/http.dart' show Response;
+ 
+ enum HttpMethod { get, post, put, delete }
+ 
++bool _sameApiOrigin(Uri left, Uri right) {
++  if (left.scheme != right.scheme || left.port != right.port) return false;
++  if (left.host.contains(':') && right.host.contains(':')) {
++    try {
++      return listEquals(
++          Uri.parseIPv6Address(left.host), Uri.parseIPv6Address(right.host));
++    } on FormatException {
++      return false;
++    }
++  }
++  return left.host == right.host;
++}
++
++
+ class HttpService {
+   Future<http.Response> sendRequest(
+     Uri url,
+@@ -28,19 +44,41 @@ class HttpService {
            !(enableFlutterHttpOnRust || await bind.mainGetProxyStatus());
      }
  
 +    // v3 built-in API uses the same Rust selector as background synchronization.
 +    // The logical origin stays unchanged for account/token storage.
-+    final builtInApi = Uri.tryParse(await bind.mainGetApiServer());
++    final builtInApi = !isWeb && !kIsWeb && customApiFallbackOrigin.isNotEmpty
++        ? Uri.tryParse(await bind.mainGetApiServer())
++        : null;
 +    final managedApi = !isWeb &&
 +        !kIsWeb &&
 +        builtInApi != null &&
 +        builtInApi.scheme == 'https' &&
 +        customApiFallbackOrigin.isNotEmpty &&
-+        builtInApi.origin == customApiPrimaryOrigin &&
++        _sameApiOrigin(builtInApi, Uri.parse(customApiPrimaryOrigin)) &&
 +        url.scheme == 'https' &&
-+        url.origin == builtInApi.origin &&
++        _sameApiOrigin(url, builtInApi) &&
 +        url.path.startsWith('/api/');
 +    if (managedApi) useFlutterHttp = false;
 +
@@ -256,10 +279,10 @@ index 634c953..40bc82c 100644
  
 diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
 new file mode 100644
-index 0000000..e012a08
+index 0000000..203a1fd
 --- /dev/null
 +++ b/src/hbbs_http/api_failover.rs
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,266 @@
 +//! v3 only. Logical API identity stays primary; only the transport URL changes.
 +use reqwest::{header::HeaderMap, Client, Method, Response, Url};
 +use std::{
@@ -310,7 +333,7 @@ index 0000000..e012a08
 +}
 +fn endpoints() -> Option<(Url, Url)> {
 +    let primary = origin(PRIMARY)?;
-+    if primary.as_str().trim_end_matches('/') != PROFILE_PRIMARY {
++    if primary.origin() != origin(PROFILE_PRIMARY)?.origin() {
 +        return None;
 +    }
 +    let fallback = origin(PROFILE_FALLBACK)?;
@@ -359,12 +382,22 @@ index 0000000..e012a08
 +    } else if primary {
 +        let host = endpoint.host_str().ok_or("Missing API host")?;
 +        let port = endpoint.port_or_known_default().ok_or("Missing API port")?;
-+        let addrs: Vec<_> = tokio::time::timeout(CONNECT, tokio::net::lookup_host((host, port)))
-+            .await
-+            .map_err(|_| "Primary DNS timeout")?
-+            .map_err(|_| "Primary DNS unavailable")?
-+            .filter(|addr| addr.is_ipv6())
-+            .collect();
++        // Url::host_str() retains brackets for IPv6 literals. IP literals do
++        // not go through DNS; their HTTPS certificate still needs an IP SAN.
++        let literal = host
++            .trim_start_matches('[')
++            .trim_end_matches(']')
++            .parse::<std::net::IpAddr>();
++        let addrs: Vec<_> = match literal {
++            Ok(std::net::IpAddr::V6(ip)) => vec![std::net::SocketAddr::new(ip.into(), port)],
++            Ok(std::net::IpAddr::V4(_)) => Vec::new(),
++            Err(_) => tokio::time::timeout(CONNECT, tokio::net::lookup_host((host, port)))
++                .await
++                .map_err(|_| "Primary DNS timeout")?
++                .map_err(|_| "Primary DNS unavailable")?
++                .filter(|addr| addr.is_ipv6())
++                .collect(),
++        };
 +        if addrs.is_empty() {
 +            return Err("Primary has no IPv6 address".into());
 +        }
