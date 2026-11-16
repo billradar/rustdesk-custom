@@ -1,0 +1,28 @@
+{
+  "scope": "actual extracted URL functions; Config facade only; NO network/TLS/Android validation",
+  "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
+  "hbb_sha": "fae47e024dd83cef6aaecde0aa7d11731df11649",
+  "runner_sha256": "70d030cbf2fc57797f1379b52eb881014fc4eeaf5f95a6284f2c6b707734eac8",
+  "extracted_sha256": "0d246b72bbe4579ff85e4b885036a84e482713392c3b019d1b7948e40199124f",
+  "compiler": "rustc 1.75.0 (82e1608df 2023-12-21)",
+  "cases": {
+    "disabled-tcp-address": "example.test:21116",
+    "empty-api-id": "ws://example.test/ws/id",
+    "empty-api-relay": "ws://example.test/ws/relay",
+    "https-api-id": "wss://example.test/ws/id",
+    "https-api-online": "wss://example.test/ws/id",
+    "https-api-relay": "wss://example.test/ws/relay",
+    "native-ipv4-id": "ws://127.0.0.1:21118",
+    "native-ipv4-relay": "ws://127.0.0.1:21119",
+    "native-ipv6-id": "ws://[0:0:0:0:0:0:0:1]:21118",
+    "native-ipv6-relay": "ws://[0:0:0:0:0:0:0:1]:21119",
+    "explicit-wss": "wss://example.test:9443/ws/id",
+    "explicit-ws": "ws://example.test:21118",
+    "own-wss-port": "wss://example.test:8443/ws/id",
+    "peer-default-port": "wss://peer.test/ws/relay",
+    "custom-id-port": "wss://example.test/ws/id",
+    "custom-relay-port": "wss://example.test/ws/relay",
+    "intentional-plain-ws": "ws://example.test/ws/id",
+    "disabled-ipv6-tcp": "[0:0:0:0:0:0:0:1]:21116"
+  }
+}
