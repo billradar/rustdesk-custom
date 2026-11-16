@@ -16,6 +16,7 @@ from scripts.release.qualification import build_release_body
 from scripts.validation.cm_window_contract import new_file
 
 ROOT = Path(__file__).resolve().parents[2]
+CURRENT_V3 = "v3." + str(json.loads((ROOT / "patchsets/v3/patchset.json").read_text())["revision"])
 PATCH = "common/0005-custom-release-updates.patch"
 
 
@@ -168,8 +169,8 @@ class ClientUpdateTests(unittest.TestCase):
             about.parent.mkdir(parents=True)
             about.write_text("", encoding='utf-8')
             args = dict(repository="fork-owner/custom-client", version="1.5.3", sha="a" * 40, variant="standard", run="123",
-                        channel="stable", revision="v3.5")
-            self.assertEqual(write_identity(tree, **args)["revision"], "v3.5")
+                        channel="stable", revision=CURRENT_V3)
+            self.assertEqual(write_identity(tree, **args)["revision"], CURRENT_V3)
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["variant"], "standard")
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["repository"], "fork-owner/custom-client")
             for invalid in ("", "https://github.com/owner/repo", "owner/repo/extra", "owner/repo?x", "owner/.."):
@@ -193,8 +194,8 @@ class ClientUpdateTests(unittest.TestCase):
             about=tree/ABOUT_PATH;about.parent.mkdir(parents=True)
             native.write_text('{}');about.write_text('')
             for variant,label in [('standard','Standard'),('sos','SOS')]:
-                for channel,revision,version in [('stable','v3.5','1.5.3-custom.v3.5'),
-                                                  ('nightly','','1.5.3-custom.v3.5-nightly'),('ci','','1.5.3-custom.v3.5-ci')]:
+                for channel,revision,version in [('stable',CURRENT_V3,'1.5.3-custom.' + CURRENT_V3),
+                                                  ('nightly','','1.5.3-custom.' + CURRENT_V3 + '-nightly'),('ci','','1.5.3-custom.' + CURRENT_V3 + '-ci')]:
                     with self.subTest(variant=variant,channel=channel):
                         data=write_identity(tree,repository='owner/repo',version='1.5.3',sha='a'*40,
                                             variant=variant,run='123',channel=channel,revision=revision)

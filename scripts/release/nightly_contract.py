@@ -11,6 +11,7 @@ from unittest.mock import patch
 import yaml
 from scripts.release import nightly, qualification
 ROOT = Path(__file__).resolve().parents[2]
+CURRENT_V3 = "v3." + str(json.loads((ROOT / "patchsets/v3/patchset.json").read_text())["revision"])
 
 
 class NightlyTests(unittest.TestCase):
@@ -570,7 +571,7 @@ class NightlyDraftTests(unittest.TestCase):
                     body=write.call_args.args[2]['body']
                     self.assertTrue(body.startswith(self.upstream_notes+'\n\n'))
                     self.assertEqual(write.call_args.args[2]['name'],'nightly')
-                    self.assertIn('## Patchset v3.5',body)
+                    self.assertIn('## Patchset ' + CURRENT_V3,body)
                     self.assertIn('Current included customizations',body)
                     for noise in ('automation_state=', 'asset_inventory=', 'version_semantics=', 'Common Patch Hash:', 'Known limitations:', '<!-- rustdesk-custom-release-metadata'):
                         self.assertNotIn(noise,body)

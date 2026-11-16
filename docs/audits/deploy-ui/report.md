@@ -39,6 +39,10 @@ Risk: users of a server that requires Android provisioning will no longer see it
 
 v1/v2 archived patch bytes, v2.8 identity, historical Tags/Releases/signatures and their existing retirement policy are untouched. Build Identity schema, Android PIV signing configuration and Stable/Nightly mechanisms remain unchanged. New v3 patch content requires the normal reviewed content revision; this does not allocate a release or mutate historical artifacts.
 
+## CI findings and test-fixture correction
+
+The first functional head `0460abb` passed all three desktop API transports and Standard/SOS Flutter analysis, but failed architecture/preflight tests because four offline contracts still expected live v3.5 after the legitimate v3 candidate advanced to r6. Their current-version expectations now read the reviewed manifest; historical identities and negative cases are not changed. Only `_contract.py` tests are edited, not release, signing, identity generation or workflow implementations. The complete existing 34-command domain suite was rerun locally with placeholder GitHub tokens and isolated mocks; `domain-results.json` records individual results. No actual release/tag/signing API was called.
+
 ## Local validation and status
 
 - PASS: exact 1.5.3 Standard/SOS patch application, UI/source contracts, native configuration helper compilation and upstream DPI preservation (`source-results.json`).

@@ -1,5 +1,6 @@
 """Stable automatic identity and mandatory downstream lock regressions."""
 import os
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ import yaml
 from scripts.release import stable_lock as lock
 
 ROOT = Path(__file__).resolve().parents[2]
+CURRENT_V3 = "v3." + str(json.loads((ROOT / "patchsets/v3/patchset.json").read_text())["revision"])
 
 
 class LockTests(unittest.TestCase):
@@ -66,7 +68,7 @@ class LockTests(unittest.TestCase):
         self.assertTrue(result['build_needed'])
         self.assertFalse(result['draft_needed'])
         self.assertFalse(result['publish_existing'])
-        self.assertEqual(result['patch_revision'],'v3.5')
+        self.assertEqual(result['patch_revision'],CURRENT_V3)
         self.assertEqual(result['rebuild_reason'],'DRY_RUN_VALIDATION_ONLY')
 
     def test_artifact_source_and_both_variants_required(self):
