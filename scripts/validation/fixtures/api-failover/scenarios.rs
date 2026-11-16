@@ -57,7 +57,7 @@ mod scenarios {
         let body: Value = response.json().await.unwrap();
         assert_eq!(body["host"], format!("[::1]:{}", p.0.port().unwrap()));
         unavailable(); expire();
-        assert!(use_primary(&literal).await);
+        assert!(use_primary(&literal).await.unwrap());
         for code in [401, 403, 429, 500, 502, 503, 504] {
             reset();
             let before = stats(&p.1).await;
@@ -130,10 +130,26 @@ mod scenarios {
             assert!(response.remote_addr().unwrap().is_ipv4(), "only the next request switches");
             read_text_for(response, &p.0).await.unwrap();
         }
+        // A recovery HEAD must propagate certificate failure too: it cannot
+        // silently send the initiating API/recording operation to fallback.
+        let bad = Url::parse(&std::env::var("API_TEST_BAD_TLS").unwrap()).unwrap();
+        for recording in [false, true] {
+            unavailable(); expire();
+            let before = stats(&p.1).await;
+            let value = bad.join("/api/record").unwrap().to_string();
+            let error = if recording {
+                recording_endpoint_for(&value, (bad.clone(), p.1.clone()), None).await.err().expect("probe certificate must fail")
+            } else {
+                request((bad.clone(), p.1.clone()), "/api/status/200", Method::POST).await.unwrap_err()
+            };
+            assert!(error.contains("TLS validation/negotiation"), "{error}");
+            assert_eq!(stats(&p.1).await, before, "security error must stop the initiating operation");
+            assert_eq!(state().lock().unwrap().phase, Phase::Fallback);
+        }
         // A cancelled recovery lease cannot leave recovery stuck forever.
         { let mut s = state().lock().unwrap(); s.phase = Phase::RecoveryProbe; }
         expire();
-        assert!(use_primary(&p.0).await);
+        assert!(use_primary(&p.0).await.unwrap());
         assert_eq!(stats(&p.0).await["probe_status"], 405);
         // Concurrent recovery opportunities still deliver each business request once.
         unavailable(); expire();

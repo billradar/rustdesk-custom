@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "c4a394ef4615258d5843f122a0725312ed9690d3cc08b2b26b8c74aaa6c12ea0",
+    "common": "b32900b86d1b1fea1b00e50cd90c6b81f6ce0b4486fa8ba55e04dfefed972680",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -194,7 +194,7 @@
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "after": {
-          "common": "c4a394ef4615258d5843f122a0725312ed9690d3cc08b2b26b8c74aaa6c12ea0",
+          "common": "b32900b86d1b1fea1b00e50cd90c6b81f6ce0b4486fa8ba55e04dfefed972680",
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "scopes": [
@@ -216,7 +216,8 @@
           "Removed": [],
           "Security": [
             "Never replay HTTP statuses or uncertain post-connection operations; bypass upstream certificate relaxation and raw-TCP replay for the managed origin.",
-            "Make nested TLS InvalidData failures terminal rather than conceal certificate/negotiation errors through fallback."
+            "Make nested TLS InvalidData failures terminal rather than conceal certificate/negotiation errors through fallback.",
+            "Propagate terminal TLS errors from recovery HEAD probes to the initiating API/recording operation; never conceal them by sending that operation to fallback."
           ],
           "Compatibility": [
             "Read and freeze v3 API origins from Actions Variables into prepared source; bind both rendered policies and the snapshot digest to the verified source inventory."

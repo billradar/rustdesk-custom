@@ -46,6 +46,7 @@ Reason: Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS f
 
 - Never replay HTTP statuses or uncertain post-connection operations; bypass upstream certificate relaxation and raw-TCP replay for the managed origin.
 - Make nested TLS InvalidData failures terminal rather than conceal certificate/negotiation errors through fallback.
+- Propagate terminal TLS errors from recovery HEAD probes to the initiating API/recording operation; never conceal them by sending that operation to fallback.
 
 #### Compatibility
 
@@ -59,7 +60,7 @@ Known limitations: Connection-level 250ms racing is blocked by the supported req
 
 Allocation base: `7e346edef8914045d07bfbf0762f9bc0a445c06a`
 
-- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `c4a394ef4615258d5843f122a0725312ed9690d3cc08b2b26b8c74aaa6c12ea0`
+- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `b32900b86d1b1fea1b00e50cd90c6b81f6ce0b4486fa8ba55e04dfefed972680`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.4 — content-change
