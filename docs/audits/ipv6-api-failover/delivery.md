@@ -41,7 +41,7 @@
 
 ## CI 和限制
 
-Draft PR：<https://github.com/billradar/rustdesk-custom/pull/261>。以 PR 当前 head 的 checks 为准，初版提交的结果不能覆盖后续变量读取/退休变更。初版 Linux 传输测试通过；Windows 首轮在旧补丁应用阶段因 checkout CRLF 转换失败，已在新测试 workflow checkout 前固定 LF，未改写任何旧补丁。最终 head 的 CI 结果在交付答复/PR 检查中单独记录。
+Draft PR：<https://github.com/billradar/rustdesk-custom/pull/261>。以 PR 当前 head 的 checks 为准，初版提交的结果不能覆盖后续变量读取/退休变更。初版 Linux 传输测试通过；Windows 首轮在旧补丁应用阶段因 checkout CRLF 转换失败，已在新测试 workflow checkout 前固定 LF，未改写任何旧补丁。macOS 首轮随后在 Homebrew Python 的 PEP 668 安装保护处失败，已为测试矩阵增加固定 SHA 的 setup-python 3.12，未使用 break-system-packages。最终 head 的 CI 结果在交付答复/PR 检查中单独记录。
 
 真实 API 登录/currentUser/Token、OIDC 回调白名单、地址簿/设备后端一致性、现场 IPv4-only/IPv6-only/双栈及 API FRP 故障仍需运行环境验证。既有原生双栈按用户确认保持现状，不另建备用。
 
