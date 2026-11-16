@@ -58,7 +58,7 @@ mod scenarios {
         assert_eq!(body["host"], format!("[::1]:{}", p.0.port().unwrap()));
         unavailable(); expire();
         assert!(use_primary(&literal).await);
-        for code in [401, 403, 500, 503] {
+        for code in [401, 403, 429, 500, 502, 503, 504] {
             reset();
             let before = stats(&p.1).await;
             let r = request(p.clone(), &format!("/api/status/{code}"), Method::POST).await.unwrap();
@@ -69,33 +69,42 @@ mod scenarios {
         reset();
         let r = request(p.clone(), "/api/redirect", Method::GET).await.unwrap();
         assert_eq!(r.status().as_u16(), 302);
-        // IPv4-only resolution, nonexistent DNS, closed TCP, TLS mismatch and blackholed TLS.
+        // IPv4-only resolution, nonexistent DNS, closed TCP and blackholed TLS.
         for endpoint in [p.1.as_str().to_owned(), "https://no-such-api.invalid".to_owned(),
             std::env::var("API_TEST_CLOSED").unwrap(),
-            std::env::var("API_TEST_BAD_TLS").unwrap(),
             std::env::var("API_TEST_BLACKHOLE").unwrap()] {
             reset();
             let started = Instant::now();
             let r = request((Url::parse(&endpoint).unwrap(), p.1.clone()), "/api/status/200", Method::POST).await.unwrap();
-            assert!(started.elapsed() < Duration::from_secs(9));
+            assert!(started.elapsed() < Duration::from_secs(5), "serial preparation must be bounded");
             assert!(r.remote_addr().unwrap().is_ipv4());
             let body: Value = r.json().await.unwrap();
             assert_eq!(body["authorization"], "Bearer fixture-only");
             assert_eq!(body["host"], format!("127.0.0.1:{}", p.1.port().unwrap()));
             assert_eq!(state().lock().unwrap().phase, Phase::Fallback);
         }
+        // An untrusted / mismatched primary certificate is visible, never
+        // concealed by sending the business operation to fallback.
+        reset();
+        let before = stats(&p.1).await;
+        let error = request((Url::parse(&std::env::var("API_TEST_BAD_TLS").unwrap()).unwrap(), p.1.clone()), "/api/status/200", Method::POST).await.unwrap_err();
+        assert!(error.contains("TLS validation/negotiation"), "{error}");
+        assert_eq!(stats(&p.1).await, before);
+        assert_eq!(state().lock().unwrap().phase, Phase::Primary);
+        unavailable();
         // During cooldown the healthy primary is not even probed.
         let before = stats(&p.0).await;
         let r = request(p.clone(), "/api/status/503", Method::POST).await.unwrap();
         assert_eq!(r.status().as_u16(), 503);
         assert_eq!(stats(&p.0).await, before);
-        // One no-auth HEAD after cooldown restores Primary even when HEAD returns 401.
+        // No-auth HEAD restores Primary even with 404 (the earlier literal probe returned 401).
         expire();
         let r = request(p.clone(), "/api/status/200", Method::POST).await.unwrap();
         assert!(r.remote_addr().unwrap().is_ipv6());
         let after = stats(&p.0).await;
         assert_eq!(after["probe_auth"], "");
         assert_eq!(after["probe_method"], "HEAD");
+        assert_eq!(after["probe_status"], 404);
         assert_eq!(state().lock().unwrap().phase, Phase::Primary);
         // Accepted POST then lost response: never replay the uncertain operation.
         let before = stats(&p.1).await;
@@ -105,10 +114,27 @@ mod scenarios {
         let before = stats(&p.1).await;
         assert!(request(p.clone(), "/api/slow", Method::POST).await.is_err());
         assert_eq!(stats(&p.1).await, before);
+        // Headers alone do not prove a complete response. Report body loss to
+        // shared state, but never repeat this accepted POST (review P2).
+        for path in ["/api/body-drop", "/api/body-stall"] {
+            reset();
+            let before = stats(&p.1).await;
+            let response = request(p.clone(), path, Method::POST).await.unwrap();
+            assert_eq!(response.status().as_u16(), 200);
+            assert!(read_text_for(response, &p.0).await.is_err());
+            assert_eq!(stats(&p.1).await, before, "body failure must not replay");
+            assert_eq!(state().lock().unwrap().phase, Phase::Fallback);
+            let remaining = state().lock().unwrap().retry_at.unwrap().saturating_duration_since(Instant::now());
+            assert!(remaining <= Duration::from_secs(15) && remaining > Duration::from_secs(13));
+            let response = request(p.clone(), "/api/status/200", Method::POST).await.unwrap();
+            assert!(response.remote_addr().unwrap().is_ipv4(), "only the next request switches");
+            read_text_for(response, &p.0).await.unwrap();
+        }
         // A cancelled recovery lease cannot leave recovery stuck forever.
         { let mut s = state().lock().unwrap(); s.phase = Phase::RecoveryProbe; }
         expire();
         assert!(use_primary(&p.0).await);
+        assert_eq!(stats(&p.0).await["probe_status"], 405);
         // Concurrent recovery opportunities still deliver each business request once.
         unavailable(); expire();
         let before = stats(&p.0).await["requests"].as_u64().unwrap()

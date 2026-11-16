@@ -84,10 +84,10 @@ index 9c9624b..a7526b6 100644
    }
  
 diff --git a/src/common.rs b/src/common.rs
-index d9d486d..387e4e4 100644
+index d9d486d..fb0b9e8 100644
 --- a/src/common.rs
 +++ b/src/common.rs
-@@ -1606,20 +1606,39 @@ fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
+@@ -1606,22 +1606,47 @@ fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
  
  /// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
  async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u16, String)> {
@@ -139,9 +139,18 @@ index d9d486d..387e4e4 100644
 +        .await?
 +    };
      let status = response.status().as_u16();
-     let text = response.text().await?;
+-    let text = response.text().await?;
++    let text = if crate::hbbs_http::api_failover::handles(url) {
++        crate::hbbs_http::api_failover::read_text(url, response)
++            .await
++            .map_err(|e| anyhow!(e))?
++    } else {
++        response.text().await?
++    };
      Ok((status, text))
-@@ -1684,6 +1703,10 @@ where
+ }
+ 
+@@ -1684,6 +1709,10 @@ where
  /// - 4xx responses are returned as-is (server is reachable, business logic error).
  /// - If fallback also fails, returns the original HTTP result (text or error).
  pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
@@ -152,7 +161,7 @@ index d9d486d..387e4e4 100644
      with_tcp_proxy_fallback(
          &url,
          "POST",
-@@ -1718,6 +1741,9 @@ pub async fn post_request_with_status(
+@@ -1718,6 +1747,9 @@ pub async fn post_request_with_status(
      body: String,
      header: &str,
  ) -> ResultType<(u16, String)> {
@@ -162,7 +171,7 @@ index d9d486d..387e4e4 100644
      if should_use_raw_tcp_for_api(&url) {
          return post_request_via_tcp_proxy_status(&url, &body, header).await;
      }
-@@ -1965,21 +1991,34 @@ async fn http_request_http(
+@@ -1965,21 +1997,34 @@ async fn http_request_http(
      body: Option<String>,
      header: &str,
  ) -> ResultType<(u16, String)> {
@@ -212,7 +221,22 @@ index d9d486d..387e4e4 100644
      // Serialize response headers
      let mut response_headers = Map::new();
      for (key, value) in response.headers() {
-@@ -2009,6 +2048,13 @@ pub async fn http_request_sync(
+@@ -1987,7 +2032,13 @@ async fn http_request_http(
+     }
+ 
+     let status_code = response.status().as_u16();
+-    let response_body = response.text().await?;
++    let response_body = if crate::hbbs_http::api_failover::handles(url) {
++        crate::hbbs_http::api_failover::read_text(url, response)
++            .await
++            .map_err(|e| anyhow!(e))?
++    } else {
++        response.text().await?
++    };
+ 
+     // Construct the JSON object
+     let mut result = Map::new();
+@@ -2009,6 +2060,13 @@ pub async fn http_request_sync(
      body: Option<String>,
      header: String,
  ) -> ResultType<String> {
@@ -279,10 +303,10 @@ index 634c953..40bc82c 100644
  
 diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
 new file mode 100644
-index 0000000..c69fc16
+index 0000000..bacde4d
 --- /dev/null
 +++ b/src/hbbs_http/api_failover.rs
-@@ -0,0 +1,267 @@
+@@ -0,0 +1,334 @@
 +//! v3 only. Logical API identity stays primary; only the transport URL changes.
 +use hbb_common::tokio;
 +use reqwest::{header::HeaderMap, Client, Method, Response, Url};
@@ -291,9 +315,9 @@ index 0000000..c69fc16
 +    time::{Duration, Instant},
 +};
 +
-+const CONNECT: Duration = Duration::from_secs(3);
++const CONNECT: Duration = Duration::from_secs(2);
 +const REQUEST: Duration = Duration::from_secs(12);
-+const COOLDOWN: Duration = Duration::from_secs(60);
++const COOLDOWN: Duration = Duration::from_secs(15);
 +const PRIMARY: &str = env!("RUSTDESK_API_SERVER");
 +// Version-scoped Actions policy; frozen before prepared-source inventory.
 +include!("api_failover_policy.rs");
@@ -366,6 +390,7 @@ index 0000000..c69fc16
 +// Configure the user's proxy explicitly, or use a direct client. No environment
 +// proxy, TLS cache, certificate bypass, redirects, or raw protocol fallback.
 +async fn client(endpoint: &Url, primary: bool) -> Result<Client, String> {
++    let started = Instant::now();
 +    let mut builder = Client::builder()
 +        .no_proxy()
 +        .use_rustls_tls()
@@ -374,11 +399,8 @@ index 0000000..c69fc16
 +        .connect_timeout(CONNECT)
 +        .timeout(REQUEST);
 +    if let Some(proxy) = super::api_failover_proxy()? {
-+        // Remote proxy DNS cannot prove IPv6 selection. Fail closed for primary;
-+        // the configured IPv4 fallback is still accessed through the user's proxy.
-+        if primary {
-+            return Err("IPv6 primary cannot be selected through proxy DNS".into());
-+        }
++        // Respect explicit proxy configuration without guessing network type or
++        // rejecting primary in advance. The HTTP library performs proxy DNS/TLS.
 +        builder = builder.proxy(proxy);
 +    } else if primary {
 +        let host = endpoint.host_str().ok_or("Missing API host")?;
@@ -404,9 +426,62 @@ index 0000000..c69fc16
 +        }
 +        builder = builder.resolve_to_addrs(host, &addrs);
 +    }
++    // DNS above and TCP/TLS below share one connection preparation budget.
++    // A small nonzero remainder avoids library-specific zero-timeout semantics.
++    let remaining = CONNECT
++        .checked_sub(started.elapsed())
++        .filter(|remaining| !remaining.is_zero())
++        .ok_or("API connection preparation timeout")?;
 +    builder
++        .connect_timeout(remaining)
 +        .build()
 +        .map_err(|_| "Cannot build strict API client".into())
++}
++
++// Rustls certificate/handshake validation failures are carried as InvalidData
++// io errors by reqwest's connector. Conservatively make all such TLS errors
++// terminal, including negotiation failures we cannot distinguish safely.
++// Never classify by formatted error text (it can include sensitive URLs).
++fn tls_security_error(error: &reqwest::Error) -> bool {
++    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
++    while let Some(error) = source {
++        if let Some(io) = error.downcast_ref::<std::io::Error>() {
++            if io.kind() == std::io::ErrorKind::InvalidData {
++                return true;
++            }
++            // io::Error::source can skip its boxed inner error itself. Inspect
++            // get_ref first to retain nested rustls InvalidData wrappers.
++            source = io
++                .get_ref()
++                .map(|inner| inner as &(dyn std::error::Error + 'static));
++        } else {
++            source = error.source();
++        }
++    }
++    false
++}
++
++// Body failures occur after send() returned headers. They affect only future
++// requests: the current operation is never replayed, regardless of its method.
++pub async fn read_text(value: &str, response: Response) -> Result<String, String> {
++    let (primary, _) = endpoints().ok_or("API failover is not configured")?;
++    if !handles(value) {
++        return Err("URL is outside managed API policy".into());
++    }
++    read_text_for(response, &primary).await
++}
++
++async fn read_text_for(response: Response, primary: &Url) -> Result<String, String> {
++    let was_primary = response.url().origin() == primary.origin();
++    match response.text().await {
++        Ok(text) => Ok(text),
++        Err(_) => {
++            if was_primary {
++                unavailable();
++            }
++            Err("API response body failed; outcome unknown, not replayed".into())
++        }
++    }
 +}
 +
 +fn unavailable() {
@@ -504,7 +579,15 @@ index 0000000..c69fc16
 +                req = req.body(b.clone());
 +            }
 +            match req.send().await {
-+                Ok(resp) => return Ok(resp),   // 401/403/5xx are never replayed.
++                Ok(resp) => return Ok(resp), // 401/403/5xx are never replayed.
++                Err(e) if tls_security_error(&e) => {
++                    hbb_common::log::error!(
++                        "API Primary TLS security/negotiation failure; fallback suppressed"
++                    );
++                    return Err(
++                        "API primary TLS validation/negotiation failed; fallback suppressed".into(),
++                    );
++                }
 +                Err(e) if e.is_connect() => {} // HTTP request was not sent.
 +                Err(_) => {
 +                    unavailable();
@@ -540,10 +623,18 @@ index 0000000..c69fc16
 +    if use_primary(&primary).await {
 +        primary.set_path("/api/login-options");
 +        if let Ok(c) = client(&primary, true).await {
-+            if let Ok(response) = c.head(primary.clone()).timeout(CONNECT).send().await {
-+                if let Some(addr) = response.remote_addr().filter(|addr| addr.is_ipv6()) {
-+                    return Ok((rewrite(value, &primary)?.to_string(), Some(addr)));
++            match c.head(primary.clone()).timeout(CONNECT).send().await {
++                Ok(response) => {
++                    if let Some(addr) = response.remote_addr().filter(|addr| addr.is_ipv6()) {
++                        return Ok((rewrite(value, &primary)?.to_string(), Some(addr)));
++                    }
 +                }
++                Err(error) if tls_security_error(&error) => {
++                    return Err(
++                        "API primary TLS validation/negotiation failed; fallback suppressed".into(),
++                    );
++                }
++                Err(_) => {}
 +            }
 +        }
 +        unavailable();

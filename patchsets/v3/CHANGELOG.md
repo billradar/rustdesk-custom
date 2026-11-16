@@ -36,6 +36,7 @@ Reason: Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS f
 
 - Use unique non-transmitted polling fragments for concurrent managed Flutter HTTP requests and consume their terminal responses.
 - Handle HTTPS IPv6-literal origins directly as IPv6 socket addresses, preserving strict IP certificate verification and recovery instead of attempting bracketed-name DNS.
+- Feed primary response-body failures into cooldown without replay; preserve primary attempts with explicit proxies; share DNS/connect budget (2s) and use 15s cooldown.
 
 #### Removed
 
@@ -43,6 +44,7 @@ Reason: Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS f
 #### Security
 
 - Never replay HTTP statuses or uncertain post-connection operations; bypass upstream certificate relaxation and raw-TCP replay for the managed origin.
+- Make nested TLS InvalidData failures terminal rather than conceal certificate/negotiation errors through fallback.
 
 #### Compatibility
 
@@ -52,11 +54,11 @@ References: https://github.com/billradar/rustdesk-custom/pull/261
 
 Upstream compatibility: v3 only; official 1.5.3 and compatibility-test-only later sources retain active Profile routing. Legacy v1/v2 bytes are preserved in archives, but all new builds using them are forbidden. Production signing requirements and existing server fingerprint fields remain unchanged.
 
-Known limitations: Native ID/Relay dual-stack behavior is intentionally unchanged; user-scoped redundancy applies only to Web/API. Production login, OIDC, shared Token backend, full native client compilation and real-device sessions require validation.
+Known limitations: Connection-level 250ms racing is blocked by the supported reqwest preconnect/pool interface; serial fallback remains. Pool reuse, nonblocking recovery and complete application/platform/OIDC/upload validation remain pending. See PR #261 race audit.
 
 Allocation base: `7e346edef8914045d07bfbf0762f9bc0a445c06a`
 
-- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `df13adc38c7ebbf24e5d87ac919cf32eb5f0bf44145cddf0513e9530dbb8a50f`
+- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `56f13993329cb04e6e093f559fa6bab18461998cd4005b2850daf096dde6759d`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.4 — content-change

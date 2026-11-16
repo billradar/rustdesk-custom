@@ -38,11 +38,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.command == 'HEAD':
             self.server.stats['probe_auth'] = self.headers.get('Authorization', '')
             self.server.stats['probe_method'] = self.command
-            self.send_response(401)
+            count = self.server.stats.get('probe_count', 0)
+            status = (401, 404, 405)[count % 3]
+            self.server.stats['probe_count'] = count + 1
+            self.server.stats['probe_status'] = status
+            self.send_response(status)
             self.end_headers()
             return
         self.server.stats['requests'] += 1
         if self.path == '/api/drop':
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
+            return
+        if self.path in ('/api/body-drop', '/api/body-stall'):
+            self.send_response(200)
+            self.send_header('Content-Length', '100')
+            self.end_headers()
+            self.wfile.write(b'partial')
+            self.wfile.flush()
+            if self.path == '/api/body-stall':
+                time.sleep(14)
             self.connection.shutdown(socket.SHUT_RDWR)
             self.connection.close()
             return
