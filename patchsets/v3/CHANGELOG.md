@@ -37,6 +37,7 @@ Reason: Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS f
 - Use unique non-transmitted polling fragments for concurrent managed Flutter HTTP requests and consume their terminal responses.
 - Handle HTTPS IPv6-literal origins directly as IPv6 socket addresses, preserving strict IP certificate verification and recovery instead of attempting bracketed-name DNS.
 - Feed primary response-body failures into cooldown without replay; preserve primary attempts with explicit proxies; share DNS/connect budget (2s) and use 15s cooldown.
+- Preserve a frozen explicit proxy for recording HEAD and upload; never pin the proxy peer as an origin address. Verify with direct and IPv4/IPv6 CONNECT tests.
 
 #### Removed
 
@@ -58,7 +59,7 @@ Known limitations: Connection-level 250ms racing is blocked by the supported req
 
 Allocation base: `7e346edef8914045d07bfbf0762f9bc0a445c06a`
 
-- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `56f13993329cb04e6e093f559fa6bab18461998cd4005b2850daf096dde6759d`
+- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `c4a394ef4615258d5843f122a0725312ed9690d3cc08b2b26b8c74aaa6c12ea0`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.4 — content-change

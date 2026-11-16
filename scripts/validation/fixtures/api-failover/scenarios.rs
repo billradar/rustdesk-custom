@@ -147,6 +147,34 @@ mod scenarios {
         // FRP/fallback outage is an error, with no loop or downgrade.
         unavailable();
         assert!(request((p.0.clone(), Url::parse(&std::env::var("API_TEST_CLOSED").unwrap()).unwrap()), "/api/status/200", Method::POST).await.is_err());
+        // Exercise actual recording selection AND its production blocking client
+        // through IPv4/IPv6 CONNECT proxies. A proxy peer is never origin-pinned.
+        for proxy_key in [None, Some("API_TEST_PROXY4"), Some("API_TEST_PROXY6")] {
+            reset();
+            let proxy = proxy_key.map(|key| reqwest::Proxy::all(std::env::var(key).unwrap()).unwrap());
+            let value = p.0.join("/api/record").unwrap().to_string();
+            let before = stats(&p.1).await;
+            let primary_before = stats(&p.0).await["requests"].as_u64().unwrap();
+            let selected = recording_endpoint_for(&value, p.clone(), proxy).await.unwrap();
+            assert_eq!(Url::parse(&selected.url).unwrap().origin(), p.0.origin());
+            assert_eq!(selected.addr.is_none(), proxy_key.is_some());
+            assert_eq!(selected.proxy.is_some(), proxy_key.is_some());
+            assert_eq!(state().lock().unwrap().phase, Phase::Primary);
+            let (remote, body) = tokio::task::spawn_blocking(move || {
+                let response = selected.client().unwrap().post(&selected.url)
+                    .header("Authorization", "Bearer fixture-recording")
+                    .body("single-recording-chunk").send().unwrap();
+                assert_eq!(response.status().as_u16(), 200);
+                (response.remote_addr().unwrap(), response.json::<Value>().unwrap())
+            }).await.unwrap();
+            assert_eq!(remote.is_ipv4(), proxy_key == Some("API_TEST_PROXY4"));
+            assert_eq!(body["authorization"], "Bearer fixture-recording");
+            assert_eq!(body["body"], "single-recording-chunk");
+            assert_eq!(body["host"], format!("localhost:{}", p.0.port().unwrap()));
+            assert_eq!(stats(&p.1).await, before, "successful proxied TLS must not select fallback");
+            assert_eq!(stats(&p.0).await["requests"].as_u64().unwrap(), primary_before + 1);
+            assert_eq!(stats(&p.0).await["probe_auth"], "");
+        }
         let mut headers = HeaderMap::new(); headers.insert("Host", "bad.invalid".parse().unwrap());
         assert!(send_for(p.clone(), p.0.join("/api/login").unwrap().as_str(), Method::POST, headers, None).await.is_err());
     }

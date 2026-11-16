@@ -30,7 +30,7 @@ v1/v2 已按用户最新确认移到 `archive/abandoned-patchsets/`，只保存�
 - Fallback 冷却 15 秒。到期后的新请求最多领取一次 RecoveryProbe，向主 `/api/login-options` 发无认证、无 body 的 HEAD；任何 HTTP 状态证明传输可达。成功后该请求使用主；失败续用备用。探测租约 10 秒，调用取消后可重试；过时探测不能覆盖新的失败状态。无后台定时器、不重启 ID/Relay 或远程会话。
 - 串行路径预发送回退预算为主连接准备 2 秒 + 备用请求 12 秒，约 14 秒（恢复 HEAD 可能额外阻塞）；结果不确定的原请求不加第二次业务请求。系统调度和代理初始化不属于硬实时保证。
 - 配置了用户代理时仍实际尝试主入口，不根据代理存在与否选择备用；由现有 HTTP 库处理代理 DNS/TLS，不绕过代理直连。代理远端 DNS 的地址族不可由客户端保证；不额外识别网络环境。代理配置错误明确失败，不静默使用系统环境代理或默认客户端。
-- Flutter 登录、currentUser、地址簿、设备/组走现有 Rust 桥；后台同步、OIDC、部署/审计及录屏采用同一 origin 策略。流上传先用无认证 HEAD 选择端点，固定已验证 IPv6 地址，再单次发送流；不重放。下载器及客户端更新的独立信任域不改写。
+- Flutter 登录、currentUser、地址簿、设备/组走现有 Rust 桥；后台同步、OIDC、部署/审计及录屏采用同一 origin 策略。流上传先用无认证 HEAD 选择端点，直连时固定已验证 IPv6 地址，显式代理时快照并保留代理、绝不把代理 TCP peer 当成源站；再单次发送流，不重放。下载器及客户端更新的独立信任域不改写。
 - Flutter 桥用 UUID fragment 区分同 URL 并发请求；HTTP 不发送 fragment。Rust 读取终态后消费该条结果，避免串响应和已消费结果积累。无桥签名或生成代码变更。
 - 新传输不读取上游不安全 TLS cache，不调用证书绕过，不触发原生 TCP API 重发。日志只含 origin/端点角色/故障类别，不记录认证头、body、URL 查询或底层可能含 URL 的错误。
 
@@ -42,7 +42,7 @@ python3 -m scripts.upstream.patch_profiles_contract
 python3 -m scripts.upstream.patchset_version verify --base origin/main --check
 ```
 
-TLS harness 从已准备源码复制实际 selector，与上游锁定的 reqwest/Tokio 版本一起编译；hbb_common 测试 facade 仅重导出 Tokio/log，根测试 crate 不直接依赖 Tokio，以匹配上游正常依赖边界。代理 helper 使用无代理测试替身，不能将其通过视为完整真实 hbb_common 或用户代理验证。OpenSSL 在临时目录生成测试 CA 和服务器密钥，以 `SSL_CERT_FILE` 加载本机临时信任，不改变系统信任或 production TLS 代码。测试不会访问生产主备域名。单个顺序集成测试覆盖多种故障，另有 origin/重写边界测试。增加响应头后 body 截断/停顿的状态反馈、证书失败禁止备用、401/403/429/500/502/503/504 不重放；这些测试不能替代 250ms 确定性竞速测试。
+TLS harness 从已准备源码复制实际 selector，与上游锁定的 reqwest/Tokio 版本一起编译；hbb_common 测试 facade 仅重导出 Tokio/log，根测试 crate 不直接依赖 Tokio，以匹配上游正常依赖边界。代理配置 helper 使用测试替身，不能将其通过视为真实 hbb_common 配置解析验证；另有实际 IPv4/IPv6 CONNECT 代理，覆盖录屏端点选择及生产阻塞客户端的代理保留。OpenSSL 在临时目录生成测试 CA 和服务器密钥，以 `SSL_CERT_FILE` 加载本机临时信任，不改变系统信任或 production TLS 代码。测试不会访问生产主备域名。单个顺序集成测试覆盖多种故障，另有 origin/重写边界测试。增加响应头后 body 截断/停顿的状态反馈、证书失败禁止备用、401/403/429/500/502/503/504 不重放；这些测试不能替代 250ms 确定性竞速测试。
 
 桌面 CI 矩阵仅验证实际 Rust 传输模块及本地 TLS 场景，不是完整客户端跨平台构建。Android 真机 TLS 根证书、Dart 分析、完整 native 编译、OIDC 回调域名、Token 共用后端以及真实 FRP/IPv4-only/IPv6-only/双栈会话仍需相应环境证据。
 

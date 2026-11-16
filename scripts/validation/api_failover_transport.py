@@ -7,6 +7,7 @@ import hashlib
 import http.server
 import json
 import os
+import select
 from pathlib import Path
 import shutil
 import socket
@@ -15,12 +16,37 @@ import subprocess
 import tempfile
 import threading
 import time
+from urllib.parse import urlsplit
 
 FIXTURE = Path(__file__).parent / 'fixtures/api-failover'
 
 class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
     address_family = socket.AF_INET6
+
+class ConnectHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_CONNECT(self):
+        target = urlsplit('//' + self.path)
+        # Test-only proxy accepts loopback targets exclusively.
+        if target.hostname not in ('localhost', '::1', '127.0.0.1'):
+            self.send_error(403)
+            return
+        with socket.create_connection((target.hostname, target.port), timeout=3) as upstream:
+            self.send_response(200)
+            self.end_headers()
+            peers = (self.connection, upstream)
+            while True:
+                ready, _, _ = select.select(peers, [], [], 5)
+                if not ready:
+                    return
+                for peer in ready:
+                    data = peer.recv(65536)
+                    if not data:
+                        return
+                    (upstream if peer is self.connection else self.connection).sendall(data)
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -64,7 +90,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == '/api/slow':
             time.sleep(14)
             return
-        status = int(self.path.rsplit('/', 1)[-1]) if '/status/' in self.path else 302
+        status = int(self.path.rsplit('/', 1)[-1]) if '/status/' in self.path else (200 if self.path == '/api/record' else 302)
         result = json.dumps(dict(authorization=self.headers.get('Authorization'),
                                  host=self.headers.get('Host'), path=self.path, body=body)).encode()
         self.send_response(status)
@@ -114,6 +140,13 @@ def run(source, output):
             servers.append(s)
             return f'https://{"localhost" if v6 else "127.0.0.1"}:{s.server_port}'
         primary, fallback, bad = serve(), serve(False), serve(bad=True)
+        def serve_proxy(v6):
+            cls = Server if v6 else http.server.ThreadingHTTPServer
+            server = cls(('::1' if v6 else '127.0.0.1', 0), ConnectHandler)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            servers.append(server)
+            return f'http://{"[::1]" if v6 else "127.0.0.1"}:{server.server_port}'
+        proxy4, proxy6 = serve_proxy(False), serve_proxy(True)
         closed = socket.socket(socket.AF_INET6)
         closed.bind(('::1', 0))
         closed_url = f'https://localhost:{closed.getsockname()[1]}'
@@ -131,6 +164,7 @@ def run(source, output):
         threading.Thread(target=accept_blackhole, daemon=True).start()
         env = dict(os.environ, SSL_CERT_FILE=str(root / 'ca.pem'), RUSTDESK_API_SERVER='https://api.test.invalid',
                    API_TEST_PRIMARY=primary, API_TEST_FALLBACK=fallback, API_TEST_BAD_TLS=bad,
+                   API_TEST_PROXY4=proxy4, API_TEST_PROXY6=proxy6,
                    API_TEST_CLOSED=closed_url, API_TEST_BLACKHOLE=f'https://localhost:{blackhole.getsockname()[1]}')
         try:
             for args in (['test', '--locked', '--', '--nocapture'], ['clippy', '--locked', '--all-targets', '--', '-D', 'warnings']):
