@@ -3,6 +3,7 @@
 
 Structural checks are not evidence of native-window or real-session behaviour.
 """
+from scripts.upstream.patchsets import directory as patchset_directory
 import argparse
 from pathlib import Path
 import shutil
@@ -141,7 +142,7 @@ def main():
     args = parser.parse_args()
     policies = []
     for gen in ('v1', 'v2', 'v3'):
-        patch = (ROOT / 'patchsets' / gen / 'common/0004-cm-background-window.patch').read_text(encoding='utf-8')
+        patch = (patchset_directory(gen) / 'common/0004-cm-background-window.patch').read_text(encoding='utf-8')
         policies.append(new_file(patch, POLICY))
     require(all(policy == policies[0] for policy in policies), 'policy must be identical across patch generations')
     if args.source:

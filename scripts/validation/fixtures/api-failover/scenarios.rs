@@ -28,12 +28,12 @@ mod scenarios {
         for u in ["http://localhost", "https://user:pass@localhost", "https://localhost/api/", "https://localhost?q=x", "https://localhost/#x"] {
             assert!(origin(u).is_none(), "{u}");
         }
-        assert!(handles("https://rustdesk.houxnan.com/api/login"));
-        for u in ["https://elsewhere.invalid/api/login", "https://rustdesk.houxnan.com.evil.invalid/api/login", "http://rustdesk.houxnan.com/api/login", "https://user@rustdesk.houxnan.com/api/login", "https://rustdesk.houxnan.com/download"] {
+        assert!(handles("https://api.test.invalid/api/login"));
+        for u in ["https://elsewhere.invalid/api/login", "https://api.test.invalid.evil.invalid/api/login", "http://api.test.invalid/api/login", "https://user@api.test.invalid/api/login", "https://api.test.invalid/download"] {
             assert!(!handles(u));
         }
-        let rewritten = rewrite("https://rustdesk.houxnan.com/api/devices?page=2", &origin("https://rustdesk-backup.houxnan.com").unwrap()).unwrap();
-        assert_eq!(rewritten.as_str(), "https://rustdesk-backup.houxnan.com/api/devices?page=2");
+        let rewritten = rewrite("https://api.test.invalid/api/devices?page=2", &origin("https://backup.test.invalid").unwrap()).unwrap();
+        assert_eq!(rewritten.as_str(), "https://backup.test.invalid/api/devices?page=2");
     }
     // One sequential scenario protects the process-local selector from test races.
     #[tokio::test]

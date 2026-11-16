@@ -229,7 +229,7 @@ class ReviewContract(unittest.TestCase):
                     review.validate_packet(changed)
 
     def test_unknown_interface_records_patch_failure_without_approving(self):
-        critical={'files':{},'tools':{}};profile={'signature':review.build_adapter.digest(critical),'upstream_version':'1.5.1'}
+        critical={'files':{},'tools':{}};profile={'signature':review.build_adapter.digest(critical),'upstream_version':'1.5.3'}
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,self.env),patch.object(review.subprocess,'check_output',side_effect=['b'*40+'\n','']),patch.object(review.build_adapter,'inspect',return_value=(profile,critical)),patch.object(review.shutil,'copytree'),patch.object(review.subprocess,'run') as run:
             run.return_value.returncode=1;run.return_value.stdout='patch conflict';run.return_value.stderr=''
             p=review.collect(Path(td),'b'*40,Path(td)/'out','nightly')

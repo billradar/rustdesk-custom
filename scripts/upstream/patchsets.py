@@ -19,6 +19,21 @@ def version_tuple(value):
         raise ValueError('Numeric upstream version required: ' + str(value))
     return tuple(int(part) for part in match.groups())
 
+def directory(name):
+    if not re.fullmatch(r'v[1-9][0-9]*', name):
+        raise ValueError('Invalid patchset ID')
+    registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
+    if name in registry.get('retired_patchsets', []):
+        return ROOT / 'archive/abandoned-patchsets' / name
+    return ROOT / 'patchsets' / name
+
+
+def require_active(name):
+    registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
+    if name in registry.get('retired_patchsets', []):
+        raise ValueError('Retired Patchset ' + name + ': archived; new builds are forbidden')
+
+
 def profile_for_version(version, channel='ci'):
     numeric = version_tuple(version)
     normalized = '.'.join(map(str, numeric))
@@ -32,6 +47,7 @@ def profile_for_version(version, channel='ci'):
     if profile_id is None:
         profile_id = 'legacy-pre-1.5' if numeric < V2_BOUNDARY else registry['latest_maintained']
     profile = registry['profiles'][profile_id]
+    require_active(profile['patchset'])
     if type(profile['stable_allowed']) is not bool:
         raise ValueError('Invalid Stable Patch Profile policy')
     if channel == 'stable' and (fallback or not profile['stable_allowed']):
@@ -68,7 +84,7 @@ def mapped(upstream_ref):
 def metadata(name):
     if not re.fullmatch(r'v[1-9][0-9]*', name):
         raise ValueError('Invalid patchset ID')
-    path = ROOT / 'patchsets' / name / 'patchset.json'
+    path = directory(name) / 'patchset.json'
     if not path.is_file():
         raise ValueError('Patchset metadata missing: ' + name)
     return json.loads(path.read_text())
@@ -77,7 +93,7 @@ def patch_hash(folder, name=None):
     """Calculate provenance/integrity hash; never used for selection."""
     name = name or os.environ.get('PATCHSET', 'v1')
     metadata(name)
-    paths = sorted((ROOT / 'patchsets' / name / folder).glob('*.patch'))
+    paths = sorted((directory(name) / folder).glob('*.patch'))
     if not paths:
         raise ValueError('Empty patch generation')
     digest = hashlib.sha256()
@@ -87,6 +103,7 @@ def patch_hash(folder, name=None):
 
 def verify(name):
     """Explicit integrity gate; not part of patchset selection."""
+    require_active(name)
     data = metadata(name)
     for folder in ('common', 'sos'):
         if patch_hash(folder, name) != data['hashes'][folder]:

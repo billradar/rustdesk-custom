@@ -1,12 +1,23 @@
 # v3 IPv6 API 优先与 IPv4 HTTPS 备用
 
-实现及只读审计见 [审计报告](audits/ipv6-api-failover/audit.md)。仅 v3.5+ 应用 Common `0007-api-failover.patch`；v2 r8 文件、默认值、Profile 路由、签名及 Build Identity 契约保持原样。
+实现及只读审计见 [审计报告](audits/ipv6-api-failover/audit.md)。仅 v3.5+ 应用 Common `0007-api-failover.patch`。v1/v2 现已归档且禁止新构建；原始补丁字节和历史发布产物保持原样。
 
-## 配置与身份
+## Actions 配置与身份
 
-现有 `RUSTDESK_API_SERVER` 保持原义。它编译为 `https://rustdesk.houxnan.com` 时，v3 的版本化策略使用 `https://rustdesk-backup.houxnan.com` 为备用。仅同 origin 的 `/api/` 请求参与。自定义其他域名、HTTP、端口或下载 URL 不被转发。Windows EXE/API 设置及用户配置的优先级不变；逻辑 API 返回值、账号/Token 存储键保持主 origin。
+在仓库 Settings → Secrets and variables → Actions → Variables 配置公开变量：
 
-**没有新增或假装支持 `RUSTDESK_API_FALLBACK_SERVER` 环境变量。** 审计确认历史 production_config::server_fingerprint 只绑定现有固定字段；新增编译变量却不更新来源/签名契约会造成相同配置身份对应不同备用行为。最小方案将这组已提供的公开端点作为 v3 源策略，受 Common patch SHA256 和内容 revision 约束。更改这组策略必须提交新的 v3 内容 revision。既有 repository Variables 未修改；请勿为此改动跨版本共用值。
+| 变量 | 值 | 作用域 |
+| --- | --- | --- |
+| `RUSTDESK_API_SERVER` | `https://rustdesk.houxnan.com` | 原有主 API 变量，保持原义 |
+| `RUSTDESK_API_FALLBACK_SERVER` | `https://rustdesk-backup.houxnan.com` | 新增，仅在 v3 源码准备阶段读取 |
+
+生产域名不硬写进补丁。`prepare-source.yml` 只为 v3 读取这两个变量，校验为不同的严格 HTTPS origin（禁止用户名/密码、路径、query、fragment），冻结为单次准备输入。Common 阶段生成 Rust/Dart 策略及 `api-failover.json`，再复制 Standard/SOS。`api_policy_sha256` 与两个生成文件一起进入来源清单；下游验证快照、生成内容和可用的主 API 编译配置，配置漂移明确失败。包的 `prepared_source_identity` 绑定整个来源清单。既有服务器配置指纹字段不被悄悄扩展。
+
+备用变量为空时明确禁用主备，不默认任何生产域名。设置/修改变量只影响新且符合现有构建规则的批次，不覆盖已有 Release/产物，也不绕过既有去重。此环境对 repository Variables 的访问被 integration 403 拒绝，无法代用户确认变量已设置。
+
+逻辑 API 返回值和账号/Token 存储键保持主 origin。仅匹配冻结主 origin 的 `/api/` 请求由此策略管理；显式其他服务器、下载器和更新来源不转发到备用。
+
+v1/v2 已按用户最新确认移到 `archive/abandoned-patchsets/`，只保存原始证据，不再维护；CI/Nightly/Stable 选择、补丁应用及旧 prepared-source 复用入口均禁止它们，包括 1.5.1。此决策取代最初的旧版重建要求；历史 Tag、Release、签名和发布产物未改动。
 
 ## 传输规则
 

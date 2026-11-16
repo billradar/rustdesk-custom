@@ -1,5 +1,7 @@
 # RustDesk Custom
 
+> **补丁生命周期：** v1、v2 已抛弃，移入 `archive/abandoned-patchsets/`，不再维护。禁止使用它们进行新的 CI、Nightly 或 Stable 构建（包括 RustDesk 1.5.1）；当前只维护 v3。历史 Tag、Release 和签名产物不变。
+
 [English](README.md) · 中文
 
 [![Stable Release](https://img.shields.io/github/actions/workflow/status/billradar/rustdesk-custom/tag.yml?branch=main&style=flat-square&label=Stable%20Release)](https://github.com/billradar/rustdesk-custom/actions/workflows/tag.yml)

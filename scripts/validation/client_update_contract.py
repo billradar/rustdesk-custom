@@ -1,3 +1,4 @@
+from scripts.upstream.patchsets import directory as patchset_directory
 """Latest-only client update, identity and executable version-policy regressions."""
 import argparse
 import json
@@ -7,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import yaml
 from scripts.source.update_identity import write_identity
@@ -18,10 +20,10 @@ PATCH = "common/0005-custom-release-updates.patch"
 
 
 def patch_file(generation, name):
-    return new_file((ROOT / "patchsets" / generation / PATCH).read_text(encoding='utf-8'), name)
+    return new_file((patchset_directory(generation) / PATCH).read_text(encoding='utf-8'), name)
 
 
-def source_contract(tree, generation="v2"):
+def source_contract(tree, generation="v3"):
     module = (tree / "src/custom_update/mod.rs").read_text(encoding='utf-8')
     expected = patch_file(generation, "src/custom_update/mod.rs")
     if module != expected:
@@ -41,6 +43,11 @@ def source_contract(tree, generation="v2"):
 
 
 class ClientUpdateTests(unittest.TestCase):
+    def setUp(self):
+        identity = patch.dict(os.environ, GITHUB_REPOSITORY_ID='12345', GITHUB_REPOSITORY_OWNER_ID='67890')
+        identity.start()
+        self.addCleanup(identity.stop)
+
     def test_both_patch_generations_share_the_same_update_policy(self):
         for name in ("src/custom_update/mod.rs", "src/custom_update/policy.rs",
                      "src/custom_update/stable_release_fixture.txt",
@@ -160,9 +167,9 @@ class ClientUpdateTests(unittest.TestCase):
             about = tree / 'flutter/lib/common/custom_about_identity.dart'
             about.parent.mkdir(parents=True)
             about.write_text("", encoding='utf-8')
-            args = dict(repository="fork-owner/custom-client", version="1.5.1", sha="a" * 40, variant="standard", run="123",
-                        channel="stable", revision="v2.8")
-            self.assertEqual(write_identity(tree, **args)["revision"], "v2.8")
+            args = dict(repository="fork-owner/custom-client", version="1.5.3", sha="a" * 40, variant="standard", run="123",
+                        channel="stable", revision="v3.5")
+            self.assertEqual(write_identity(tree, **args)["revision"], "v3.5")
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["variant"], "standard")
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["repository"], "fork-owner/custom-client")
             for invalid in ("", "https://github.com/owner/repo", "owner/repo/extra", "owner/repo?x", "owner/.."):
@@ -186,10 +193,10 @@ class ClientUpdateTests(unittest.TestCase):
             about=tree/ABOUT_PATH;about.parent.mkdir(parents=True)
             native.write_text('{}');about.write_text('')
             for variant,label in [('standard','Standard'),('sos','SOS')]:
-                for channel,revision,version in [('stable','v2.8','1.5.0-custom.v2.8'),
-                                                  ('nightly','','1.5.0-custom.v2.8-nightly'),('ci','','1.5.0-custom.v2.8-ci')]:
+                for channel,revision,version in [('stable','v3.5','1.5.3-custom.v3.5'),
+                                                  ('nightly','','1.5.3-custom.v3.5-nightly'),('ci','','1.5.3-custom.v3.5-ci')]:
                     with self.subTest(variant=variant,channel=channel):
-                        data=write_identity(tree,repository='owner/repo',version='1.5.0',sha='a'*40,
+                        data=write_identity(tree,repository='owner/repo',version='1.5.3',sha='a'*40,
                                             variant=variant,run='123',channel=channel,revision=revision)
                         before=native.read_bytes()
                         self.assertIn('"'+version+'"',about.read_text())
@@ -201,7 +208,7 @@ class ClientUpdateTests(unittest.TestCase):
                         verify_about_identity(tree,unattended=True)
                         self.assertIn('customAboutWayland = true',about.read_text())
                         self.assertEqual(native.read_bytes(),before)
-                        self.assertEqual(data['version'],'1.5.0')
+                        self.assertEqual(data['version'],'1.5.3')
                         with self.assertRaises(ValueError):verify_about_identity(tree)
                         about.write_text(about_source(data).replace(version,'9.9.9-custom'))
                         with self.assertRaises(ValueError):verify_about_identity(tree)

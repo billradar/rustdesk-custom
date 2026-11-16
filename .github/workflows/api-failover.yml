@@ -3,6 +3,8 @@ name: API failover transport compatibility
   pull_request:
     paths:
     - patchsets/v3/**
+    - scripts/source/api_policy.py
+    - .github/workflows/prepare-source.yml
     - scripts/validation/api_failover_transport.py
     - scripts/validation/fixtures/api-failover/**
     - .github/workflows/api-failover.yml
@@ -25,6 +27,8 @@ jobs:
       PYTHONPATH: .
       CARGO_TARGET_DIR: ${{ github.workspace }}/.work/api-failover-target
     steps:
+    - name: Preserve canonical LF patch bytes on Windows
+      run: git config --global core.autocrlf false
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false

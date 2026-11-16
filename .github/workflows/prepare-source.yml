@@ -50,6 +50,7 @@ jobs:
       UPSTREAM_REF: ${{ inputs.upstream_ref }}
       BUILD_CHANNEL: ${{ inputs.channel }}
       CLIENT_PATCH_REVISION: ${{ inputs.patch_revision }}
+      API_POLICY_INPUT_PATH: .work/api-policy-input.json
       BRANDING_INPUT_PATH: .work/branding-input.json
       CLIENT_RELEASE_IDENTITY: ${{ inputs.client_release_identity && 'true' || 'false' }}
     steps:
@@ -110,6 +111,14 @@ jobs:
         CUSTOM_APP_ICON_PATH: ${{ vars.CUSTOM_APP_ICON_PATH || '' }}
         CUSTOM_TRAY_ICON_PATH: ${{ vars.CUSTOM_TRAY_ICON_PATH || '' }}
       run: python3 -m scripts.source.branding --output .work/branding-input.json --repository "$GITHUB_REPOSITORY"
+    - name: Freeze v3 public API endpoints from Actions variables
+      if: inputs.patchset == 'v3'
+      env:
+        RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
+        RUSTDESK_API_FALLBACK_SERVER: ${{ vars.RUSTDESK_API_FALLBACK_SERVER || '' }}
+      run: python3 -m scripts.source.api_policy --output .work/api-policy-input.json
+    - name: Reject abandoned Patchsets before fetching or building
+      run: python3 -c 'import os; from scripts.upstream.patchsets import require_active; require_active(os.environ["PATCHSET"])'
     - name: Fetch exact official source
       run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
     - id: profile
@@ -156,6 +165,16 @@ jobs:
     - name: Prepare Common once and fork independent variant sources
       run: |
         python3 scripts/source/prepared_source.py prepare           --base .work/official           --output .work/prepared           --ref "$UPSTREAM_REF"           --sha "$UPSTREAM_EXPECTED_SHA"           --patchset "$PATCHSET"           --bridge .work/bridge-source
+    - name: Check frozen v3 API policy matches across variants
+      if: inputs.patchset == 'v3'
+      run: |
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        standard=json.loads(Path('.work/prepared/standard/source-manifest.json').read_text())
+        sos=json.loads(Path('.work/prepared/sos/source-manifest.json').read_text())
+        assert standard['api_policy_sha256'] == sos['api_policy_sha256']
+        PY
     - id: identity
       run: "python3 - <<'PYCODE'\nimport json,os\nfrom pathlib import Path\na=json.loads(Path('.work/prepared/standard/source-manifest.json').read_text());\
         \ b=json.loads(Path('.work/prepared/sos/source-manifest.json').read_text())\nfor k in ('upstream_sha','patchset','common_patch_hash','custom_repository_sha','prepare_workflow_run'):\n\

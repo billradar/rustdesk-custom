@@ -1,58 +1,46 @@
-# 实施与验证交付记录
+# 最终实施与验证交付
 
-基线、只读发现与风险分级见 [audit.md](audit.md)，运行策略见 [../../api-failover.md](../../api-failover.md)。本任务在独立 `audit/ipv6-api-failover` 分支实施，最终以 `audit/ipv6-api-failover-review` 提交审查（首次推送被 GitHub 邮箱隐私保护拒绝，原本地历史保留）；没有合并、正式签名、发布或生产网络变更。
+只读基线及风险见 [audit.md](audit.md)，当前配置和状态机见 [../../api-failover.md](../../api-failover.md)。最终范围按用户补充为：仅 Web/API 主备；原生端口沿用既有双栈；v1/v2 归档且禁止所有新构建。后两项明确取代最初的旧版重建要求和原生备用需求。
 
-## 实施文件
+## 实施
 
-- `patchsets/v3/common/0007-api-failover.patch`：新增 `src/hbbs_http/api_failover.rs`；接入 `src/common.rs` 三个公开 API 请求入口及其 HTTP helpers，`src/hbbs_http.rs` 的严格代理配置，OIDC account 预热、record_upload 单次流传输、Flutter `http_service.dart` 和 `ui_interface.rs` 的独立请求轮询键及消费。
-- `patchsets/v3/{patchset.json,CHANGELOG.md}`：追加 v3.5，历史 revision 记录不变，runtime/real-session 状态不提升。
-- `scripts/validation/api_failover_transport.py`、`fixtures/api-failover/`：实际 selector 的锁定依赖 TLS 故障测试。测试 CA/密钥只存在临时目录。
-- `.github/workflows/api-failover.yml`：无凭据桌面传输矩阵；不访问生产服务器，不执行签名/发布。
-- `scripts/upstream/{patch_profiles_contract,patchset_version_contract}.py`：当前 v3 revision 断言读取 canonical metadata；重建历史 v3.1 候选夹具时排除新补丁，仍严格验证原历史 hash。
-- `AGENTS.md`、`docs/README.md`、`docs/api-failover.md` 及本审计目录：配置、证据和限制。
+- v3 Common `0007-api-failover.patch`：严格 TLS 的 IPv6 主入口、HTTPS 备用、Primary/PrimaryUnavailable/Fallback/RecoveryProbe 状态、60 秒冷却、无认证恢复 HEAD；HTTP 状态和发送后结果不明的请求不重放。
+- API 调用覆盖：`common.rs` 的公开 HTTP/POST/status 入口，Flutter 登录/currentUser/设备/组/地址簿，后台 heartbeat/sysinfo/审计/部署、OIDC、单次流式录屏上传。逻辑账号和 Token 存储键保持主 origin。下载/更新信任域不改写。Flutter 同 URL 并发请求用不发送至服务器的 UUID fragment 分开轮询，终态读取后消费。
+- `prepare-source.yml` 只为 v3 读取公开 `RUSTDESK_API_SERVER` 和新 `RUSTDESK_API_FALLBACK_SERVER`；`scripts/source/api_policy.py` 校验、冻结并生成 Rust/Dart 策略。生产域名未硬写入补丁。备用为空时明确禁用功能。
+- `prepared_source.py` 将快照 SHA256、生成文件纳入来源清单；复用时校验来源、生成内容和主 API 配置漂移，Standard/SOS 验证相同策略。包的 prepared_source_identity 绑定清单；没有未校验的编译期 fallback 环境覆盖。
+- v3 内容历史追加 r5；现有 r1–r4 不变，runtime/real-session 验证状态未提升。
+- `archive/abandoned-patchsets/v1`、`v2`：原始所有补丁、manifest、CHANGELOG 按字节移入，不再维护。`metadata/abandoned-patchsets.json` 固定完整文件清单；`patch-profiles.json` 明确退休。选择器拒绝所有 CI/Nightly/Stable 的旧版本，补丁应用、内容 revision 修改、准备源码和旧 prepared-source 复用均拒绝退休集；不回退 v3。
+- 新增策略/退休契约、实际 selector TLS 测试和无凭据桌面 CI；现有测试夹具改用当前维护的 v3，归档文件仅作历史完整性证据读取。README、中文 README、AGENTS 和相关指南声明新生命周期。
 
-## 参数与实现状态
+## Actions 变量
 
-没有新增环境变量。主 API 继续使用原有 `RUSTDESK_API_SERVER`；只有编译值匹配已审查主 origin 时，v3 的内容绑定策略启用所提供的备用 HTTPS origin。原因：避免将未被旧配置指纹收录的新编译变量带入身份/签名边界。未修改 repository Variables，且其实际值读取被 GitHub integration 以 HTTP 403 拒绝，不能声称已验证线上启用。
+需设置公开 repository Variables：
 
-API 已实现严格 IPv6 主入口、保守自动回退、60 秒冷却和请求机会恢复；具体请求覆盖与超时预算见运行文档。用户已确认其他原生端口已有双栈、无需备用；ID/Relay 及相关端口按此要求保持现状，不属于本次实施范围。
-
-## 本地验证
-
-| 检查 | 结果与范围 |
+| 名称 | 值 |
 | --- | --- |
-| 实际 selector TLS 测试 | Rust 1.75.0 和 1.100.0 各 2 项测试通过，其中一项包含完整顺序网络故障场景；仅本机 TLS，不是完整客户端 |
-| Clippy | 两个上述工具链，actual selector + 测试，`-D warnings` 通过 |
-| Rust 格式 | 新 selector 使用 Rust 1.75 rustfmt `--check` 通过；补丁未夹带历史 defaults 的格式重写 |
-| 工作流静态检查 | actionlint 1.7.12 对新增工作流通过；repository contract 的 YAML/签名/发布隔离检查通过 |
-| Profile/内容版本 | Profile 10 项、内容版本 11 项通过；对 origin/main 的 append-only verify 通过 |
-| 1.5.1/v2 与 1.5.3/v3 | 两版本 Standard/SOS 共四次完整 patch 应用、结构契约及配置辅助编译通过；v3 上游 DPI 逻辑保留检查通过 |
-| 现有相关契约 | config_mir 11、native_config 11、production 38、android_signing 17、client_update 10、branding 11 项通过；CM patch parity 通过 |
-| 原生 UI、Dart、真实会话 | 未测试；环境无 Flutter/Dart，尝试下载固定 Dart 3.5.4 SDK 被 HTTP 403 拒绝，未伪造 analyze/format 结果 |
-| 完整跨平台客户端 | 已尝试 Rust 1.75 `cargo check --locked --no-default-features --features flutter`，依赖 rust-webm 的 libwebm 子模块下载被代理 HTTP 403 阻止；未到本次集成代码的完整类型检查。桌面矩阵只编译测试传输模块，不能代替 Android/Windows/Linux/macOS 完整产品构建 |
+| `RUSTDESK_API_SERVER` | `https://rustdesk.houxnan.com`（原有变量） |
+| `RUSTDESK_API_FALLBACK_SERVER` | `https://rustdesk-backup.houxnan.com`（新增，仅 v3 读取） |
 
-首轮 TLS 夹具漏 Content-Length 导致 Rustls EOF，已修正后重测；Clippy 提示 single_match 已修正后通过。早期使用错误 PYTHONPATH/umask 的契约运行失败；按项目 setup 的 PYTHONPATH 与 umask 022 重跑后通过。所有通过结论只指纠正后的明确检查。
+本环境读取和尝试创建新备用变量均被 GitHub integration 返回 HTTP 403，因此**未设置/未确认线上变量**；需要有 Variables 写权限的账号完成设置。未修改 Secrets、现有主变量或生产网络配置。变量修改只影响新且符合既有构建资格/去重规则的批次，不覆盖旧 Release。
 
-## 网络测试矩阵
+## 本地验证证据
 
-| 场景 | 本地证据 | 生产状态 |
-| --- | --- | --- |
-| IPv6 主正常、双栈优先 | localhost 双栈解析，实际响应 peer 为 IPv6 | 未测试真实网络 |
-| 无 IPv6 地址/仅 IPv4 入口 | primary 解析仅 IPv4 时仅备用收到业务 POST | 未测试真实 IPv4-only 网络 |
-| 主 DNS 错误、TCP 拒绝 | 自动备用，限定预算，POST 不重复 | 未测试真实 DNS/防火墙 |
-| 主 TLS 证书错误/握手黑洞 | 严格拒绝/3 秒连接预算，自动备用 | 未测试真实路由黑洞 |
-| 401/403/500/503 | 主响应直接返回，无备用请求 | 未测试真实认证 |
-| 备用 503 | 原样报告，保持 Fallback | 未测试真实后端 |
-| POST 已发送后断开/超时 | 返回不确定结果，无备用重放 | 未测试真实登录切网 |
-| 冷却、恢复、并发 | 冷却不探测；无认证 HEAD；探测租约可回收；并发业务请求各发一次 | 未测试真实远程会话 |
-| fallback/FRP 故障 | 关闭备用 TCP 端口模拟，明确报错，无循环 | FRP 未操作/未测试 |
-| Token/currentUser、设备/地址簿/OIDC | 源调用链统一；测试认证头、body、Host 保留 | 真实 Token、回调及数据后端一致性未测试 |
-| Relay 不可达/网络重注册 | 已审计原生路径及端口 | 沿用既有双栈方案；不新增原生备用 |
+| 检查 | 结果/范围 |
+| --- | --- |
+| 全领域契约 | compat-check.yml 列出的全部领域命令通过，逐项结果见 domain-results.json；包括策略 3 项、退休 3 项、Profile 10 项、内容版本 11 项、发布/签名/来源/工作流隔离 |
+| 实际 Rust selector | Rust 1.75 上 2 项测试通过（一项含完整顺序 TLS 故障场景），Clippy `-D warnings` 通过；源/夹具哈希见 transport-msrv-results.json |
+| v3 Standard/SOS | 当前补丁应用、结构契约、配置辅助编译及上游 DPI 保留检查通过，见 source-results-final.json |
+| 归档保护 | 原提交 `7e346edef8914045d07bfbf0762f9bc0a445c06a` 的 v1/v2 全文件逐字节一致，当前退休契约通过；无历史 Tag/Release/签名产物操作 |
+| 静态检查 | 新 selector Rust 1.75 rustfmt 通过；变更工作流 actionlint 1.7.12 通过；repository architecture contract 通过 |
+| 完整产品编译 | 已尝试 Rust 1.75 cargo check，rust-webm 的 libwebm 子模块下载被代理 HTTP 403 阻止，未完成完整集成类型检查 |
+| Dart/Flutter、设备与生产网络 | 未测试。固定 Dart 3.5.4 SDK 下载被 HTTP 403 阻止；不能宣称 analyze、真机或生产主备认证通过 |
 
-## 1.5.1 v2 r8 保护证据
+本地 TLS 场景包括：双栈 localhost 的实际 IPv6 peer；无 IPv6 地址、DNS 错误、TCP 拒绝、TLS 错误、TLS 黑洞超时的预发送回退；401/403/500/503 不切换；备用 503；POST 已发送后断线/超时不重放；认证头/body/Host 保留；无凭据 HEAD 恢复、冷却与并发、取消探测租约回收；备用 TCP 不可达明确失败。均为本地模拟，不是线上 FRP 或真实登录/Token 测试。
 
-[v2-protection.json](v2-protection.json) 对基线确认 v1/v2、Profile 注册表、现有构建/来源/签名/发布实现均无变动；v2 Common SHA256 `a9a8ef83aa02890f09beb19e0b4818b268d4d873362f9ccf7ee9b09d3415e5b0`、SOS SHA256 `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` 不变，revision 仍为 8。未触碰旧 Tags、Release 或产物。源码/契约隔离得到验证；没有重新生产签名或设备运行，不能把它表述为新 APK 签名或旧产物逐字节重建已验证。
+## CI 和限制
 
-## 尚待完成
+Draft PR：<https://github.com/billradar/rustdesk-custom/pull/261>。以 PR 当前 head 的 checks 为准，初版提交的结果不能覆盖后续变量读取/退休变更。初版 Linux 传输测试通过；Windows 首轮在旧补丁应用阶段因 checkout CRLF 转换失败，已在新测试 workflow checkout 前固定 LF，未改写任何旧补丁。最终 head 的 CI 结果在交付答复/PR 检查中单独记录。
 
-Draft PR 的确切 head CI、桌面传输矩阵结果另在 PR/最终答复记录。完整客户端编译、Dart/Flutter 分析、Android TLS、真实主备 API 登录/Token/OIDC/地址簿、IPv6-only/IPv4-only 网络及 API FRP 故障仍需新证据。原生端口的现有双栈属于用户确认的基础设施，本次未操作。不得将这些未验证项写成通过。
+真实 API 登录/currentUser/Token、OIDC 回调白名单、地址簿/设备后端一致性、现场 IPv4-only/IPv6-only/双栈及 API FRP 故障仍需运行环境验证。既有原生双栈按用户确认保持现状，不另建备用。
+
+`source-results-before-retirement.json` 和 `v2-protection-before-retirement.json` 只记录用户改变旧版处置策略之前的审计阶段，不能作为当前仍允许 1.5.1 构建的依据。当前行为为**明确禁止新构建**。本任务未合并、正式签名、发布或覆盖历史产物。

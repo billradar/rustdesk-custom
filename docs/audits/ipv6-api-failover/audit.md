@@ -40,3 +40,9 @@
 ## 用户补充后的最终范围
 
 实施期间用户明确“备用只备用 web/api，而其他端口无需备用”，并说明“其他端口已经具备双栈”。因此原生协议的审计作为现有路径说明保留；上文原生主备实施前置条件不再是本任务的待办，不添加原生备用域名或配置。只实现 Web/API 主备；不改动已有原生双栈路径。Repository Variables 的实时读取返回 HTTP 403（Resource not accessible by integration），因此提供的主 API 地址作为需求输入，未冒称已读取线上构建配置。
+
+## 最终补充授权与配置设计修订
+
+用户随后要求“需要 action 读取，不要硬写入”，因此初版固定端点方案已撤销，改用 Actions 变量冻结到 v3 prepared source，详见 `docs/api-failover.md` 和 `scripts/source/api_policy.py`。
+
+用户进一步明确确认“按最新要求归档并禁止构建 v1/v2”。这项确认取代原始 1.5.1 重建不变要求：v1/v2 原字节移入 `archive/abandoned-patchsets/`，所有新构建入口明确拒绝，不能静默回退 v3；旧 Tag/Release/签名产物不动。上文有关旧版仍可构建的事实是实施前基线，不是最终行为。

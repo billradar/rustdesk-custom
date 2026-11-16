@@ -1,3 +1,4 @@
+from scripts.upstream.patchsets import directory as patchset_directory
 """Public branding defaults, escaping, identity isolation and real DEB regressions."""
 import hashlib
 import io
@@ -20,7 +21,7 @@ PATCH='common/0006-public-branding.patch'
 
 
 def source_contract(tree):
-    expected=new_file((ROOT/'patchsets/v2'/PATCH).read_text(encoding='utf-8'),'flutter/lib/common/branding.dart')
+    expected=new_file((ROOT/'archive/abandoned-patchsets/v2'/PATCH).read_text(encoding='utf-8'),'flutter/lib/common/branding.dart')
     if (tree/'flutter/lib/common/branding.dart').read_text(encoding='utf-8')!=expected:
         raise ValueError('Branding helper differs from reviewed patch')
 
@@ -110,7 +111,7 @@ class BrandingTests(unittest.TestCase):
     def test_installer_patch_handles_row_and_table_layouts(self):
         file='flutter/lib/desktop/pages/install_page.dart'
         for generation in ('v1','v2'):
-            patch_text=(ROOT/'patchsets'/generation/PATCH).read_text(encoding='utf-8')
+            patch_text=(patchset_directory(generation)/PATCH).read_text(encoding='utf-8')
             header='diff --git a/'+file+' b/'+file+'\n'
             installer=header+patch_text.split(header,1)[1].split('diff --git ',1)[0]
             for layout in ('Row','Table'):
@@ -127,13 +128,13 @@ class BrandingTests(unittest.TestCase):
 
     def test_both_generations_share_branding_implementation(self):
         for file in ['flutter/lib/common/branding.dart','flutter/lib/common/branding_values.dart']:
-            left=new_file((ROOT/'patchsets/v1'/PATCH).read_text(encoding='utf-8'),file)
-            right=new_file((ROOT/'patchsets/v2'/PATCH).read_text(encoding='utf-8'),file)
+            left=new_file((ROOT/'archive/abandoned-patchsets/v1'/PATCH).read_text(encoding='utf-8'),file)
+            right=new_file((ROOT/'archive/abandoned-patchsets/v2'/PATCH).read_text(encoding='utf-8'),file)
             self.assertEqual(left,right)
 
     def test_about_variant_helper_patch_applies_and_localizes(self):
         for generation in ('v1', 'v2', 'v3'):
-            text=(ROOT/'patchsets'/generation/PATCH).read_text(encoding='utf-8')
+            text=(patchset_directory(generation)/PATCH).read_text(encoding='utf-8')
             helper=text.split('diff --git ',2)[1]
             with tempfile.TemporaryDirectory() as td:
                 subprocess.run(['git','apply','-'],cwd=td,input='diff --git '+helper,

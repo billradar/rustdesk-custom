@@ -21,17 +21,28 @@ def commit(ref, root=ROOT):
     return git('rev-parse', '--verify', '--end-of-options', ref + '^{commit}', root=root).decode().strip()
 
 
+def location(name, root=ROOT, ref=None):
+    for prefix in ('patchsets', 'archive/abandoned-patchsets'):
+        path = f'{prefix}/{name}'
+        exists = ((root / path / 'patchset.json').is_file() if ref is None else
+                  subprocess.run(['git', 'cat-file', '-e', f'{ref}:{path}/patchset.json'], cwd=root,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0)
+        if exists:
+            return path
+    return f'patchsets/{name}'
+
+
 def manifest(name, root=ROOT, ref=None):
     if not re.fullmatch(r'v[1-9][0-9]*', name):
         raise ValueError('Invalid patchset')
-    path = f'patchsets/{name}/patchset.json'
+    path = location(name, root, ref) + '/patchset.json'
     return json.loads(git('show', f'{ref}:{path}', root=root) if ref else (root / path).read_bytes())
 
 
 def hashes(name, root=ROOT, ref=None):
     result = {}
     for folder in FOLDERS:
-        prefix = f'patchsets/{name}/{folder}/'
+        prefix = location(name, root, ref) + f'/{folder}/'
         if ref:
             rows = git('ls-tree', '-r', '-z', ref, '--', prefix, root=root).split(b'\0')
             paths = []
@@ -137,7 +148,7 @@ def render(data):
 
 def current(name, root=ROOT):
     data = validate(manifest(name, root), hashes(name, root))
-    path = root / f'patchsets/{name}/CHANGELOG.md'
+    path = root / location(name, root) / 'CHANGELOG.md'
     if path.is_symlink() or not path.is_file() or path.read_text() != render(data):
         raise ValueError('Missing or stale generated Changelog: ' + name)
     return data
@@ -149,7 +160,7 @@ def verify(name, base='origin/main', root=ROOT):
     subprocess.run(['git', 'merge-base', '--is-ancestor', base_sha, 'HEAD'], cwd=root, check=True)
     data = current(name, root)
     existing = git('ls-tree', '--name-only', base_sha, '--',
-                   f'patchsets/{name}', root=root).decode().strip()
+                   location(name, root, base_sha), root=root).decode().strip()
     if not existing:
         # A new generation gets one base-anchored content baseline. It cannot
         # rewrite an existing generation or inherit its release eligibility.
@@ -191,6 +202,8 @@ def verify(name, base='origin/main', root=ROOT):
 
 
 def bump(name, base='origin/main', check=False, root=ROOT):
+    if location(name, root).startswith('archive/'):
+        raise ValueError('Archived Patchsets cannot be maintained or revised')
     base_sha = commit(base, root)
     subprocess.run(['git', 'merge-base', '--is-ancestor', base_sha, 'HEAD'], cwd=root, check=True)
     old = manifest(name, root, base_sha)
@@ -219,7 +232,7 @@ def bump(name, base='origin/main', check=False, root=ROOT):
                   hashes=after, written=not check, review_status=entry['review_status'])
     if not check:
         (root / f'patchsets/{name}/patchset.json').write_text(json.dumps(data, indent=2) + '\n')
-        (root / f'patchsets/{name}/CHANGELOG.md').write_text(render(data))
+        (root / location(name, root) / 'CHANGELOG.md').write_text(render(data))
     return result
 
 
@@ -231,7 +244,7 @@ def main():
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     try:
-        names = [args.patchset] if args.patchset else sorted(p.parent.name for p in (ROOT / 'patchsets').glob('v*/patchset.json'))
+        names = [args.patchset] if args.patchset else sorted({p.parent.name for prefix in ('patchsets', 'archive/abandoned-patchsets') for p in (ROOT / prefix).glob('v*/patchset.json')})
         if args.mode == 'bump' and not args.patchset:
             raise ValueError('bump requires --patchset')
         results = []
@@ -242,7 +255,9 @@ def main():
                 results.append(bump(name, args.base, args.check))
             else:
                 data = validate(manifest(name), hashes(name))
-                target = ROOT / f'patchsets/{name}/CHANGELOG.md'
+                target = ROOT / location(name) / 'CHANGELOG.md'
+                if location(name).startswith('archive/') and not args.check:
+                    raise ValueError('Archived Patchsets cannot be maintained or rendered')
                 if args.check:
                     current(name)
                 else:

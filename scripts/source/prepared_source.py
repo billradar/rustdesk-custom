@@ -2,7 +2,7 @@
 """Run-bound source artifacts with public branding; no production credentials injected."""
 import argparse, datetime, hashlib, json, os, re, shutil, subprocess, tarfile
 from pathlib import Path, PurePosixPath
-from scripts.upstream.patchsets import patch_hash, verify
+from scripts.upstream.patchsets import patch_hash, verify, require_active
 from scripts.validation.compatibility import contracts
 from scripts.build.build_adapter import check
 ROOT=Path(__file__).resolve().parents[2]
@@ -19,6 +19,7 @@ def inventory(tree):
     return result
 
 def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
+    require_active(patchset)
     manifest=json.loads((tree/'source-manifest.json').read_text(encoding='utf-8'))
     expected={'variant':variant,'upstream_sha':sha,'patchset':patchset,'custom_repository_sha':custom_sha,
               'prepare_workflow_run':str(run_id),'upstream_repository':'rustdesk/rustdesk'}
@@ -45,6 +46,9 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if not branding_path.is_file() or hashlib.sha256(branding_path.read_bytes()).hexdigest()!=manifest.get('branding_sha256'):
         raise ValueError('Branding snapshot differs from prepared-source identity')
     load_branding(branding_path,manifest['custom_repository'])
+    if patchset == 'v3':
+        from scripts.source.api_policy import verify as verify_api_policy
+        verify_api_policy(tree, manifest.get('api_policy_sha256'), os.environ.get('RUSTDESK_API_SERVER'))
     from scripts.source.update_identity import verify_about_identity
     verify_about_identity(tree)
     contracts(tree,variant,patchset);check(tree)
@@ -91,6 +95,12 @@ def prepare(base,output,ref,sha,name,bridge):
     # Copies remove Git shared-object alternates; archives are standalone across runners.
     shutil.copytree(base,common,symlinks=True)
     run('bash',ROOT/'scripts/source/apply_patches.sh',common,'standard')
+    api_digest = None
+    if name == 'v3':
+        from scripts.source.api_policy import apply as apply_api_policy, load as load_api_policy, resolve as resolve_api_policy
+        policy_path = os.environ.get('API_POLICY_INPUT_PATH')
+        policy = load_api_policy(policy_path) if policy_path else resolve_api_policy('', '')
+        api_digest = apply_api_policy(common, policy)
     for variant in ('standard','sos'):
         tree=output/variant;shutil.copytree(common,tree,symlinks=True)
         if variant=='sos':
@@ -125,6 +135,8 @@ def prepare(base,output,ref,sha,name,bridge):
                   'branding_sha256':branding_sha256,
                   'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   'build_adapter_signature':profile['signature'],'files':inventory(tree)}
+        if name == 'v3':
+            manifest['api_policy_sha256'] = api_digest
         (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n', encoding='utf-8')
         verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'])
         bundle=output/('prepared-'+variant);bundle.mkdir()

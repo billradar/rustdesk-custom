@@ -70,14 +70,18 @@ def run(source, output):
         (root / 'src').mkdir()
         shutil.copyfile(FIXTURE / 'lib.rs', root / 'src/lib.rs')
         code = (source / 'src/hbbs_http/api_failover.rs').read_text()
+        from scripts.source.api_policy import resolve, sources, RUST
+        policy = resolve('https://api.test.invalid', 'https://backup.test.invalid')
+        (root / 'src/api_failover_policy.rs').write_text(sources(policy)[RUST], encoding='utf-8')
         (root / 'src/api_failover.rs').write_text(code + '\n' + (FIXTURE / 'scenarios.rs').read_text())
         def openssl(*args):
             subprocess.run(['openssl', *args], cwd=root, check=True, capture_output=True)
+        (root / 'ca.cnf').write_text('[req]\ndistinguished_name=dn\nx509_extensions=v3_ca\n[dn]\n[v3_ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n')
         openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'ca.key',
-                '-out', 'ca.pem', '-subj', '/CN=API Local Test CA', '-days', '1')
+                '-out', 'ca.pem', '-subj', '/CN=API Local Test CA', '-days', '1', '-config', 'ca.cnf')
         openssl('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'server.key',
                 '-out', 'server.csr', '-subj', '/CN=localhost')
-        (root / 'ext').write_text('subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1\nextendedKeyUsage=serverAuth\n')
+        (root / 'ext').write_text('subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n')
         openssl('x509', '-req', '-in', 'server.csr', '-CA', 'ca.pem', '-CAkey', 'ca.key',
                 '-CAcreateserial', '-out', 'server.pem', '-days', '1', '-extfile', 'ext')
         openssl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', 'bad.key',
@@ -109,7 +113,7 @@ def run(source, output):
                     return
                 threading.Thread(target=lambda c: (time.sleep(7), c.close()), args=(conn,), daemon=True).start()
         threading.Thread(target=accept_blackhole, daemon=True).start()
-        env = dict(os.environ, SSL_CERT_FILE=str(root / 'ca.pem'), RUSTDESK_API_SERVER='https://rustdesk.houxnan.com',
+        env = dict(os.environ, SSL_CERT_FILE=str(root / 'ca.pem'), RUSTDESK_API_SERVER='https://api.test.invalid',
                    API_TEST_PRIMARY=primary, API_TEST_FALLBACK=fallback, API_TEST_BAD_TLS=bad,
                    API_TEST_CLOSED=closed_url, API_TEST_BLACKHOLE=f'https://localhost:{blackhole.getsockname()[1]}')
         try:
@@ -117,6 +121,7 @@ def run(source, output):
                 subprocess.run(['cargo', args[0], '--manifest-path', str(root / 'Cargo.toml'), *args[1:]],
                                env=env, check=True)
             result = dict(scope='isolated actual selector; not full RustDesk client', rust='PASS', clippy='PASS',
+                          runner_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                           compiler=subprocess.check_output(['rustc', '--version'], env=env, text=True).strip(),
                           selector_sha256=hashlib.sha256(code.encode()).hexdigest(),
                           fixture_sha256=hashlib.sha256(b''.join((FIXTURE / name).read_bytes() for name in ('Cargo.toml', 'Cargo.lock', 'lib.rs', 'scenarios.rs'))).hexdigest(),

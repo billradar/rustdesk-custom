@@ -81,7 +81,7 @@ def baseline_conflict(source):
     with tempfile.TemporaryDirectory(prefix='patch-profile-conflict-') as temp:
         tree = Path(temp) / 'source'
         shutil.copytree(source, tree, symlinks=True)
-        for patch in sorted((ROOT / 'patchsets/v2/common').glob('*.patch')):
+        for patch in sorted((ROOT / 'archive/abandoned-patchsets/v2/common').glob('*.patch')):
             target = tree / 'libs/hbb_common' if patch.name == '0001-hbb-server-defaults.patch' else tree
             check = subprocess.run(['git', '-C', str(target), 'apply', '--check', str(patch)],
                                    capture_output=True, text=True)

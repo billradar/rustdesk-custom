@@ -10,7 +10,7 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - Forced hardware rendering policy; latest-only custom repository updates with native immutable Release proofs, typed JSON package selection and size/SHA256 verification.
 - Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.
 - Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.
-- Strict IPv6-primary API transport with a reviewed IPv4 HTTPS backup, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.
+- Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.
 
 ### Sos
 
@@ -45,17 +45,17 @@ Reason: Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS f
 
 #### Compatibility
 
-- Bind the reviewed default endpoint pair to v3 patch content rather than introducing an untracked shared build-variable override.
+- Read and freeze v3 API origins from Actions Variables into prepared source; bind both rendered policies and the snapshot digest to the verified source inventory.
 
 References: 7e346edef8914045d07bfbf0762f9bc0a445c06a
 
-Upstream compatibility: v3 only; official 1.5.3 and compatibility-test-only later sources retain Profile routing. v1/v2 content, production signing and existing configuration fingerprints are unchanged.
+Upstream compatibility: v3 only; official 1.5.3 and compatibility-test-only later sources retain active Profile routing. Legacy v1/v2 bytes are preserved in archives, but all new builds using them are forbidden. Production signing requirements and existing server fingerprint fields remain unchanged.
 
 Known limitations: Native ID/Relay dual-stack behavior is intentionally unchanged; user-scoped redundancy applies only to Web/API. Production login, OIDC, shared Token backend, full native client compilation and real-device sessions require validation.
 
 Allocation base: `7e346edef8914045d07bfbf0762f9bc0a445c06a`
 
-- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `e530dc6cc9fee61977cd477d09f393101a369258cf69a88c3225c408295f1a0e`
+- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `da0c85d1334a7e9b50e03c05a241e3437698187bf7a286a19316b0f5487cc1f9`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.4 — content-change

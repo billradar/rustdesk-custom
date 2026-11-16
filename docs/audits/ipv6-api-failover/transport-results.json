@@ -2,6 +2,9 @@
   "scope": "isolated actual selector; not full RustDesk client",
   "rust": "PASS",
   "clippy": "PASS",
+  "compiler": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+  "selector_sha256": "d87134ebb042638cfd12813edd5afbe45ab2fbc2f048fbafbcbe7fc4bb3e9ff9",
+  "fixture_sha256": "cc47f9306e2b42fb47d478d68b93b160dd7bb0b3150604dd2e93ba64407d0e0e",
   "production_network": "NOT_TESTED",
   "native_failover": "NOT_IMPLEMENTED"
 }
