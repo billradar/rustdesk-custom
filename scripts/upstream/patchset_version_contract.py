@@ -53,6 +53,7 @@ class VersionContract(unittest.TestCase):
         data = json.loads(target.read_text())
         # Reconstruct the original candidate fixture, not live v3's later revisions.
         shutil.copy2(version.ROOT/'patchsets/v2/common/0005-custom-release-updates.patch', target.parent/'common/0005-custom-release-updates.patch')
+        (target.parent / 'common/0007-api-failover.patch').unlink()
         data['revision'] = 1
         data['hashes'] = copy.deepcopy(data['versioning']['history'][0]['after'])
         data['versioning']['history'] = [data['versioning']['history'][0]]

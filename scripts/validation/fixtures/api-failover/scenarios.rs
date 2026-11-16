@@ -1,0 +1,115 @@
+#[cfg(test)]
+mod scenarios {
+    use super::*;
+    use serde_json::Value;
+    fn reset() {
+        let mut s = state().lock().unwrap();
+        s.phase = Phase::Primary;
+        s.retry_at = None;
+        s.generation += 1;
+    }
+    fn pair() -> (Url, Url) {
+        (Url::parse(&std::env::var("API_TEST_PRIMARY").unwrap()).unwrap(),
+         Url::parse(&std::env::var("API_TEST_FALLBACK").unwrap()).unwrap())
+    }
+    fn expire() { state().lock().unwrap().retry_at = Some(Instant::now() - Duration::from_secs(1)); }
+    async fn request(p: (Url, Url), path: &str, method: Method) -> Result<Response, String> {
+        let u = p.0.join(path).unwrap().to_string();
+        let mut h = HeaderMap::new();
+        h.insert("Authorization", "Bearer fixture-only".parse().unwrap());
+        send_for(p, &u, method, h, Some("fixture-body".to_owned())).await
+    }
+    async fn stats(u: &Url) -> Value {
+        Client::builder().no_proxy().use_rustls_tls().build().unwrap()
+            .get(u.join("/stats").unwrap()).send().await.unwrap().json().await.unwrap()
+    }
+    #[test]
+    fn origins_and_scope() {
+        for u in ["http://localhost", "https://user:pass@localhost", "https://localhost/api/", "https://localhost?q=x", "https://localhost/#x"] {
+            assert!(origin(u).is_none(), "{u}");
+        }
+        assert!(handles("https://rustdesk.houxnan.com/api/login"));
+        for u in ["https://elsewhere.invalid/api/login", "https://rustdesk.houxnan.com.evil.invalid/api/login", "http://rustdesk.houxnan.com/api/login", "https://user@rustdesk.houxnan.com/api/login", "https://rustdesk.houxnan.com/download"] {
+            assert!(!handles(u));
+        }
+        let rewritten = rewrite("https://rustdesk.houxnan.com/api/devices?page=2", &origin("https://rustdesk-backup.houxnan.com").unwrap()).unwrap();
+        assert_eq!(rewritten.as_str(), "https://rustdesk-backup.houxnan.com/api/devices?page=2");
+    }
+    // One sequential scenario protects the process-local selector from test races.
+    #[tokio::test]
+    async fn transport_and_recovery() {
+        reset();
+        let p = pair();
+        let response = request(p.clone(), "/api/status/200", Method::POST).await.unwrap();
+        assert!(response.remote_addr().unwrap().is_ipv6());
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["authorization"], "Bearer fixture-only");
+        assert_eq!(body["body"], "fixture-body");
+        assert_eq!(body["host"], format!("localhost:{}", p.0.port().unwrap()));
+        for code in [401, 403, 500, 503] {
+            reset();
+            let before = stats(&p.1).await;
+            let r = request(p.clone(), &format!("/api/status/{code}"), Method::POST).await.unwrap();
+            assert_eq!(r.status().as_u16(), code);
+            assert_eq!(state().lock().unwrap().phase, Phase::Primary);
+            assert_eq!(stats(&p.1).await, before, "business status must not replay POST");
+        }
+        reset();
+        let r = request(p.clone(), "/api/redirect", Method::GET).await.unwrap();
+        assert_eq!(r.status().as_u16(), 302);
+        // IPv4-only resolution, nonexistent DNS, closed TCP, TLS mismatch and blackholed TLS.
+        for endpoint in [p.1.as_str().to_owned(), "https://no-such-api.invalid".to_owned(),
+            std::env::var("API_TEST_CLOSED").unwrap(),
+            std::env::var("API_TEST_BAD_TLS").unwrap(),
+            std::env::var("API_TEST_BLACKHOLE").unwrap()] {
+            reset();
+            let started = Instant::now();
+            let r = request((Url::parse(&endpoint).unwrap(), p.1.clone()), "/api/status/200", Method::POST).await.unwrap();
+            assert!(started.elapsed() < Duration::from_secs(9));
+            assert!(r.remote_addr().unwrap().is_ipv4());
+            let body: Value = r.json().await.unwrap();
+            assert_eq!(body["authorization"], "Bearer fixture-only");
+            assert_eq!(body["host"], format!("127.0.0.1:{}", p.1.port().unwrap()));
+            assert_eq!(state().lock().unwrap().phase, Phase::Fallback);
+        }
+        // During cooldown the healthy primary is not even probed.
+        let before = stats(&p.0).await;
+        let r = request(p.clone(), "/api/status/503", Method::POST).await.unwrap();
+        assert_eq!(r.status().as_u16(), 503);
+        assert_eq!(stats(&p.0).await, before);
+        // One no-auth HEAD after cooldown restores Primary even when HEAD returns 401.
+        expire();
+        let r = request(p.clone(), "/api/status/200", Method::POST).await.unwrap();
+        assert!(r.remote_addr().unwrap().is_ipv6());
+        let after = stats(&p.0).await;
+        assert_eq!(after["probe_auth"], "");
+        assert_eq!(after["probe_method"], "HEAD");
+        assert_eq!(state().lock().unwrap().phase, Phase::Primary);
+        // Accepted POST then lost response: never replay the uncertain operation.
+        let before = stats(&p.1).await;
+        assert!(request(p.clone(), "/api/drop", Method::POST).await.is_err());
+        assert_eq!(stats(&p.1).await, before);
+        reset();
+        let before = stats(&p.1).await;
+        assert!(request(p.clone(), "/api/slow", Method::POST).await.is_err());
+        assert_eq!(stats(&p.1).await, before);
+        // A cancelled recovery lease cannot leave recovery stuck forever.
+        { let mut s = state().lock().unwrap(); s.phase = Phase::RecoveryProbe; }
+        expire();
+        assert!(use_primary(&p.0).await);
+        // Concurrent recovery opportunities still deliver each business request once.
+        unavailable(); expire();
+        let before = stats(&p.0).await["requests"].as_u64().unwrap()
+            + stats(&p.1).await["requests"].as_u64().unwrap();
+        let (a, b) = tokio::join!(request(p.clone(), "/api/status/200", Method::POST), request(p.clone(), "/api/status/200", Method::POST));
+        assert!(a.is_ok() && b.is_ok());
+        let after = stats(&p.0).await["requests"].as_u64().unwrap()
+            + stats(&p.1).await["requests"].as_u64().unwrap();
+        assert_eq!(after - before, 2);
+        // FRP/fallback outage is an error, with no loop or downgrade.
+        unavailable();
+        assert!(request((p.0.clone(), Url::parse(&std::env::var("API_TEST_CLOSED").unwrap()).unwrap()), "/api/status/200", Method::POST).await.is_err());
+        let mut headers = HeaderMap::new(); headers.insert("Host", "bad.invalid".parse().unwrap());
+        assert!(send_for(p.clone(), p.0.join("/api/login").unwrap().as_str(), Method::POST, headers, None).await.is_err());
+    }
+}

@@ -1,0 +1,7 @@
+{
+  "scope": "isolated actual selector; not full RustDesk client",
+  "rust": "PASS",
+  "clippy": "PASS",
+  "production_network": "NOT_TESTED",
+  "native_failover": "NOT_IMPLEMENTED"
+}

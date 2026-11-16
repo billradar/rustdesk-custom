@@ -1,0 +1,10 @@
+{
+  "scope": "isolated actual selector; not full RustDesk client",
+  "rust": "PASS",
+  "clippy": "PASS",
+  "compiler": "rustc 1.75.0 (82e1608df 2023-12-21)",
+  "selector_sha256": "52b3848263813f7ba2e1d27ddf2d925131e8498dd8ab26f319fe036f98745f3b",
+  "fixture_sha256": "301892ccd0f3890bf9b0ecb2828de0023bb428dfdc7d6534c083d1dac4f29053",
+  "production_network": "NOT_TESTED",
+  "native_failover": "NOT_IMPLEMENTED"
+}

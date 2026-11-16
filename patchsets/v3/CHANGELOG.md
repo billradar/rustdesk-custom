@@ -10,12 +10,53 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - Forced hardware rendering policy; latest-only custom repository updates with native immutable Release proofs, typed JSON package selection and size/SHA256 verification.
 - Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.
 - Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.
+- Strict IPv6-primary API transport with a reviewed IPv4 HTTPS backup, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.
 
 ### Sos
 
 - SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common.
 
 ## Revision history
+
+### v3.5 — content-change
+
+Scope: common
+
+Reason: Add an isolated strict IPv6-primary API transport with safe IPv4 HTTPS fallback without changing historical builds.
+
+#### Added
+
+- Use strict HTTPS API fallback with a 60-second recovery cooldown, bounded DNS/connect/request budgets and no-auth recovery HEAD probes.
+
+#### Changed
+
+- Route managed Flutter API, background synchronization, OIDC and recording transport through one endpoint policy; keep logical account identity at the primary origin.
+
+#### Fixed
+
+- Use unique non-transmitted polling fragments for concurrent managed Flutter HTTP requests and consume their terminal responses.
+
+#### Removed
+
+
+#### Security
+
+- Never replay HTTP statuses or uncertain post-connection operations; bypass upstream certificate relaxation and raw-TCP replay for the managed origin.
+
+#### Compatibility
+
+- Bind the reviewed default endpoint pair to v3 patch content rather than introducing an untracked shared build-variable override.
+
+References: 7e346edef8914045d07bfbf0762f9bc0a445c06a
+
+Upstream compatibility: v3 only; official 1.5.3 and compatibility-test-only later sources retain Profile routing. v1/v2 content, production signing and existing configuration fingerprints are unchanged.
+
+Known limitations: Native ID/Relay dual-stack behavior is intentionally unchanged; user-scoped redundancy applies only to Web/API. Production login, OIDC, shared Token backend, full native client compilation and real-device sessions require validation.
+
+Allocation base: `7e346edef8914045d07bfbf0762f9bc0a445c06a`
+
+- common: `972dc3b04e6854bb5ebddd594e495892b0c0fdcc22392746433fd709d9856e67` → `e530dc6cc9fee61977cd477d09f393101a369258cf69a88c3225c408295f1a0e`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.4 — content-change
 
