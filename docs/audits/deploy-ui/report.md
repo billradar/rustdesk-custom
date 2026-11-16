@@ -41,7 +41,7 @@ v1/v2 archived patch bytes, v2.8 identity, historical Tags/Releases/signatures a
 
 ## CI findings and test-fixture correction
 
-The first functional head `0460abb` passed all three desktop API transports and Standard/SOS Flutter analysis, but failed architecture/preflight tests because four offline contracts still expected live v3.5 after the legitimate v3 candidate advanced to r6. Their current-version expectations now read the reviewed manifest; historical identities and negative cases are not changed. Only `_contract.py` tests are edited, not release, signing, identity generation or workflow implementations. The complete existing 34-command domain suite was rerun locally with placeholder GitHub tokens and isolated mocks; `domain-results.json` records individual results. No actual release/tag/signing API was called.
+The first functional head `0460abb` passed all three desktop API transports and Standard/SOS Flutter analysis, but failed architecture/preflight tests because four offline contracts still expected live v3.5 after the legitimate v3 candidate advanced to r6. Their current-version expectations now read the reviewed manifest; historical identities and negative cases are not changed. Only `_contract.py` tests are edited, not release, signing, identity generation or workflow implementations. The complete existing 33-command domain suite was rerun locally with placeholder GitHub tokens and isolated mocks; `domain-results.json` records individual results. No actual release/tag/signing API was called.
 
 ## Local validation and status
 
