@@ -1,7 +1,7 @@
 {
   "id": "v3",
   "status": "validation_pending",
-  "revision": 5,
+  "revision": 6,
   "baseline": {
     "upstream_sha": "05b9f2d8919b5cdfaa0bb3280601a02881556a42",
     "upstream_version": "1.5.3",
@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "b32900b86d1b1fea1b00e50cd90c6b81f6ce0b4486fa8ba55e04dfefed972680",
+    "common": "e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -230,6 +230,47 @@
         "compatibility": "v3 only; official 1.5.3 and compatibility-test-only later sources retain active Profile routing. Legacy v1/v2 bytes are preserved in archives, but all new builds using them are forbidden. Production signing requirements and existing server fingerprint fields remain unchanged.",
         "limitations": "Connection-level 250ms racing is blocked by the supported reqwest preconnect/pool interface; serial fallback remains. Pool reuse, nonblocking recovery and complete application/platform/OIDC/upload validation remain pending. See PR #261 race audit.",
         "review_status": "reviewed"
+      },
+      {
+        "revision": 6,
+        "kind": "content-change",
+        "base_sha": "290b2a4672ac4b5db8a6b724e1f1a51f7186ea57",
+        "before": {
+          "common": "b32900b86d1b1fea1b00e50cd90c6b81f6ce0b4486fa8ba55e04dfefed972680",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "after": {
+          "common": "e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "scopes": [
+          "common"
+        ],
+        "categories": {
+          "Added": [
+            "Add a shared v3 Dart deployment UI policy, disabled by default."
+          ],
+          "Changed": [
+            "Omit the Android settings tile and automatic prompt handler; guard both dialog entry functions."
+          ],
+          "Fixed": [
+            "Prevent server-triggered or direct dialog paths from re-exposing hidden deployment UI."
+          ],
+          "Removed": [],
+          "Security": [
+            "Retain backend deployment authorization; do not bypass server provisioning requirements."
+          ],
+          "Compatibility": [
+            "Preserve install/update/service/network/file-transfer behavior, all native deployment APIs and CLI, archived v1/v2 and signing/release mechanisms."
+          ]
+        },
+        "reason": "Hide client-visible Android device deployment entry points with one v3 UI policy while retaining provisioning APIs and CLI.",
+        "references": [
+          "https://github.com/billradar/rustdesk-custom/pull/265"
+        ],
+        "compatibility": "v3 Standard/SOS only; exact 1.5.3 and existing maintained-profile compatibility routing. No Rust bridge changes.",
+        "limitations": "Rendered Android UI and full native packages require device/build validation; desktop Deploy UI is not applicable. Server-side deployment requirements are not bypassed.",
+        "review_status": "reviewed"
       }
     ],
     "features": {
@@ -238,7 +279,8 @@
         "Forced hardware rendering policy; latest-only custom repository updates with native immutable Release proofs, typed JSON package selection and size/SHA256 verification.",
         "Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.",
         "Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.",
-        "Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged."
+        "Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.",
+        "Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged."
       ],
       "sos": [
         "SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common."

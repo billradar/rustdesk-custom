@@ -99,6 +99,9 @@ def contracts(tree, variant, patchset=None):
     update_source_contract(tree, patchset)
     from scripts.validation.branding_contract import source_contract as branding_source_contract
     branding_source_contract(tree)
+    if patchset == 'v3':
+        from scripts.validation.deploy_ui_contract import source_contract as deploy_source_contract
+        deploy_source_contract(tree)
     return {'Config API': 'PASS', 'Rust API structure': 'PASS', 'Flutter API structure': 'PASS',
             'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
 
@@ -205,11 +208,13 @@ def main():
                     raise RuntimeError(f'Flutter pub get failed: {log}')
                 run([sys.executable, str(ROOT / 'scripts/validation/cm_window_contract.py'),
                      '--source', str(tree), '--dart', 'dart'], log)
+                from scripts.validation.deploy_ui_contract import FILES as deploy_files
+                analysis_files = FILES + (deploy_files if os.environ.get('PATCHSET') == 'v3' else [])
                 # Only error severity fails. Upstream lint warnings remain in logs.
                 with log.open('a', encoding='utf-8') as stream:
                     analysis_start = stream.tell()
                     result = subprocess.run(['flutter', 'analyze', '--no-fatal-infos', '--no-fatal-warnings',
-                        *[file.removeprefix('flutter/') for file in FILES if file.endswith('.dart')]],
+                        *[file.removeprefix('flutter/') for file in analysis_files if file.endswith('.dart')]],
                         cwd=tree / 'flutter', stdout=stream, stderr=subprocess.STDOUT)
                 if result.returncode:
                     raise RuntimeError(f'Flutter analyze errors: {log}')

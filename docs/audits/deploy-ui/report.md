@@ -15,7 +15,7 @@ Base: `290b2a4672ac4b5db8a6b724e1f1a51f7186ea57`. Reference RustDesk: `95cca3f66
 
 These entries provision/register a client device using an API Token. They are not installers, client updates, service startup, file transfer, remote sessions or GitHub deployment. No dedicated upstream hide-Deploy switch was found. Windows/Linux/macOS have no corresponding menu, navigation entry or prompt in the locked source (**NOT APPLICABLE**). Translation entries are retained.
 
-Proposed implementation: independent Common `0008-hide-deploy-ui.patch`, v3 only, with `flutter/lib/common/deploy_policy.dart` defining `kRadarDeployUiEnabled = false`. All four UI gates import that policy; underlying dialogs/API/CLI remain. Standard and SOS receive the same Common policy, with existing variant restrictions unchanged. No runtime/build variable or user configuration is introduced.
+Implementation: independent Common `0008-hide-deploy-ui.patch`, v3 only, with `flutter/lib/common/deploy_policy.dart` defining `kRadarDeployUiEnabled = false`. All four UI gates import that policy; underlying dialogs/API/CLI remain. Standard and SOS receive the same Common policy, with existing variant restrictions unchanged. No runtime/build variable or user configuration is introduced.
 
 ## CI safety before remote writes
 
@@ -39,9 +39,18 @@ Risk: users of a server that requires Android provisioning will no longer see it
 
 v1/v2 archived patch bytes, v2.8 identity, historical Tags/Releases/signatures and their existing retirement policy are untouched. Build Identity schema, Android PIV signing configuration and Stable/Nightly mechanisms remain unchanged. New v3 patch content requires the normal reviewed content revision; this does not allocate a release or mutate historical artifacts.
 
-## Status
+## Local validation and status
 
-Implementation and current-head CI results will be recorded before delivery; this initial audit does not claim runtime validation.
+- PASS: exact 1.5.3 Standard/SOS patch application, UI/source contracts, native configuration helper compilation and upstream DPI preservation (`source-results.json`).
+- PASS: v3 Deploy source contract verifies all four gates, unexpected callers and retained Rust entry points.
+- The first content-version test run exposed a historical r1 fixture containing the new r6 patch. The fixture now excludes both post-r1 additions (0007/0008) and still checks the original r1 hashes; no runtime check is removed or weakened.
+- PASS: Profile (10), retirement (3), content-version (11) contracts and base-anchored content verification. v1/v2 hashes remain unchanged; v3 candidate content advances from r5 to r6 only.
+- NOT RUN locally: Flutter analyze, full Android APK compilation, rendered menu/device interaction (Flutter/Dart/Android SDK/adb absent). Current-head CI will run existing generated-bridge/Flutter analysis with the new files explicitly included. No new workflow is added.
+- Android Standard: source omission/guards PASS; actual runtime UI NOT RUN. Android SOS: NOT APPLICABLE (not an enabled package variant).
+- Windows x64, Linux x64/ARM64, macOS Intel/Apple Silicon: Deploy UI NOT APPLICABLE in the locked upstream; native package builds/runtime unaffected-code regression NOT RUN.
+- Underlying API/CLI/protocol implementations and translation strings have no changes in `0008`; only four Dart files are patched. No Rust compile interface is changed.
+
+The Draft PR remains unmerged; CI status must be read for its exact latest head. Review readiness is pending that verification, not production authorization.
 
 DEPLOYMENT: NOT PERFORMED
 RELEASE: NOT PERFORMED
