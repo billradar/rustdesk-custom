@@ -1,0 +1,12 @@
+[
+  {
+    "variant": "standard",
+    "patch_apply": "PASS",
+    "adapter_source_contract": "PASS"
+  },
+  {
+    "variant": "sos",
+    "patch_apply": "PASS",
+    "adapter_source_contract": "PASS"
+  }
+]

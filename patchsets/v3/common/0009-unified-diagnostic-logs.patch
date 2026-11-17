@@ -1,0 +1,2718 @@
+diff --git a/Cargo.lock b/Cargo.lock
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3048,6 +3048,16 @@
+ ]
+ 
+ [[package]]
++name = "fs2"
++version = "0.4.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
++dependencies = [
++ "libc",
++ "winapi 0.3.9",
++]
++
++[[package]]
+ name = "fs_extra"
+ version = "1.3.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -3780,6 +3790,7 @@
+ name = "hbb_common"
+ version = "0.1.0"
+ dependencies = [
++ "radar_diagnostics",
+  "anyhow",
+  "async-recursion",
+  "base64 0.22.1",
+@@ -6671,6 +6682,22 @@
+ version = "5.2.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "74765f6d916ee2faa39bc8e68e4f3ed8949b48cccdac59983d287a7cb71ce9c5"
++
++[[package]]
++name = "radar_diagnostics"
++version = "0.1.0"
++dependencies = [
++ "chrono",
++ "filetime",
++ "fs2",
++ "hmac",
++ "log",
++ "rand 0.8.5",
++ "serde 1.0.228",
++ "serde_json 1.0.118",
++ "sha2",
++ "tar",
++]
+ 
+ [[package]]
+ name = "radium"
+@@ -8632,6 +8659,17 @@
+ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+ 
+ [[package]]
++name = "tar"
++version = "0.4.46"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
++dependencies = [
++ "filetime",
++ "libc",
++ "xattr",
++]
++
++[[package]]
+ name = "target-lexicon"
+ version = "0.12.14"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/AudioRecordHandle.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/AudioRecordHandle.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/AudioRecordHandle.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/AudioRecordHandle.kt
+@@ -10,7 +10,7 @@
+ import androidx.annotation.RequiresApi
+ import androidx.core.app.ActivityCompat
+ import android.os.Build
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import kotlin.concurrent.thread
+ 
+ const val AUDIO_ENCODING = AudioFormat.ENCODING_PCM_FLOAT //  ENCODING_OPUS need API 30
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/BootReceiver.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/BootReceiver.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/BootReceiver.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/BootReceiver.kt
+@@ -6,7 +6,7 @@
+ import android.content.Context
+ import android.content.Intent
+ import android.os.Build
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import android.widget.Toast
+ import com.hjq.permissions.XXPermissions
+ import io.flutter.embedding.android.FlutterActivity
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DiagnosticLog.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DiagnosticLog.kt
+new file mode 100644
+--- /dev/null
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DiagnosticLog.kt
+@@ -0,0 +1,16 @@
++package com.carriez.flutter_hbb
++
++/** Typed metadata adapter. Never format message, tag, throwable or stack to storage. */
++@androidx.annotation.Keep
++object DiagnosticLog {
++    @androidx.annotation.Keep
++    private external fun nativeEvent(level: Int)
++    private fun event(level: Int): Int {
++        try { nativeEvent(level) } catch (_: UnsatisfiedLinkError) { /* Rust not loaded yet. */ }
++        if (level == 1) android.util.Log.e("RadarDiagnostics", "Native error (details omitted)")
++        return 0
++    }
++    @Suppress("UNUSED_PARAMETER") fun d(tag: String?, message: String?, error: Throwable? = null): Int = event(3)
++    @Suppress("UNUSED_PARAMETER") fun w(tag: String?, message: String?, error: Throwable? = null): Int = event(2)
++    @Suppress("UNUSED_PARAMETER") fun e(tag: String?, message: String?, error: Throwable? = null): Int = event(1)
++}
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt
+@@ -6,7 +6,7 @@
+ import android.os.ParcelFileDescriptor
+ import android.provider.DocumentsContract
+ import android.provider.DocumentsContract.Document
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import java.io.FileNotFoundException
+ import java.io.IOException
+ import java.util.UUID
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt
+@@ -14,7 +14,7 @@
+ import android.os.Handler
+ import android.os.IBinder
+ import android.os.Looper
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import android.view.Gravity
+ import android.view.MotionEvent
+ import android.view.View
+@@ -111,7 +111,7 @@
+                 floatingView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+                 Log.d(logTag, "custom svg loaded")
+             } catch (e: Exception) {
+-                e.printStackTrace()
++                com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+             }
+         }
+         val originalBitmap = Bitmap.createBitmap(
+@@ -191,7 +191,7 @@
+                         viewHeight = size
+                     }
+                 } catch (e: Exception) {
+-                    e.printStackTrace()
++                    com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+                 }
+             }
+         }
+@@ -206,7 +206,7 @@
+                         viewTransparency = transparency * 1f / 10
+                     }
+                 } catch (e: Exception) {
+-                    e.printStackTrace()
++                    com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+                 }
+             }
+         }
+@@ -349,7 +349,7 @@
+         try {
+             pendingIntent.send()
+         } catch (e: PendingIntent.CanceledException) {
+-            e.printStackTrace()
++            com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+         }
+     }
+ 
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputService.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputService.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputService.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputService.kt
+@@ -14,7 +14,7 @@
+ import android.os.Bundle
+ import android.os.Handler
+ import android.os.Looper
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import android.widget.EditText
+ import android.view.accessibility.AccessibilityEvent
+ import android.view.ViewGroup.LayoutParams
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt
+@@ -61,10 +61,10 @@
+ 
+     private fun convertUnicodeToKeyCode(unicode: Int): Int {
+         val charMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
+-        android.util.Log.d(tag, "unicode: $unicode")
++        com.carriez.flutter_hbb.DiagnosticLog.d(tag, "unicode: $unicode")
+         val events = charMap.getEvents(charArrayOf(unicode.toChar()))
+         if (events != null && events.size > 0) {
+-            android.util.Log.d(tag, "keycode ${events[0].keyCode}")
++            com.carriez.flutter_hbb.DiagnosticLog.d(tag, "keycode ${events[0].keyCode}")
+             return events[0].keyCode
+         }
+         return 0
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainActivity.kt
+@@ -18,7 +18,7 @@
+ import android.os.Bundle
+ import android.os.Build
+ import android.os.IBinder
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import android.view.KeyEvent
+ import android.view.WindowManager
+ import android.media.MediaCodecInfo
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainApplication.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainApplication.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainApplication.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainApplication.kt
+@@ -1,7 +1,7 @@
+ package com.carriez.flutter_hbb
+ 
+ import android.app.Application
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import ffi.FFI
+ 
+ class MainApplication : Application() {
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt
+@@ -29,7 +29,7 @@
+ import android.media.projection.MediaProjectionManager
+ import android.os.*
+ import android.util.DisplayMetrics
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import android.view.Surface
+ import android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
+ import android.view.WindowManager
+@@ -136,7 +136,7 @@
+                         loginRequestNotification(id, type, username, peerId)
+                     }
+                 } catch (e: JSONException) {
+-                    e.printStackTrace()
++                    com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+                 }
+             }
+             "update_voice_call_state" -> {
+@@ -163,7 +163,7 @@
+                         }
+                     }
+                 } catch (e: JSONException) {
+-                    e.printStackTrace()
++                    com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+                 }
+             }
+             "stop_capture" -> {
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/PermissionRequestTransparentActivity.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/PermissionRequestTransparentActivity.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/PermissionRequestTransparentActivity.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/PermissionRequestTransparentActivity.kt
+@@ -7,7 +7,7 @@
+ import android.os.Build
+ import android.os.Bundle
+ import android.os.ResultReceiver
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ 
+ class PermissionRequestTransparentActivity: Activity() {
+     private val logTag = "permissionRequest"
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RdClipboardManager.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RdClipboardManager.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RdClipboardManager.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/RdClipboardManager.kt
+@@ -8,7 +8,7 @@
+ import android.content.ClipDescription
+ import android.content.ClipboardManager
+ import android.os.Parcel
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import androidx.annotation.Keep
+ 
+ import hbb.MessageOuterClass.ClipboardFormat
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/VolumeController.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/VolumeController.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/VolumeController.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/VolumeController.kt
+@@ -4,7 +4,7 @@
+ 
+ import android.media.AudioManager
+ import android.os.Build
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ 
+ class VolumeController(private val audioManager: AudioManager) {
+     private val logTag = "volume controller"
+diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/common.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/common.kt
+--- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/common.kt
++++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/common.kt
+@@ -16,7 +16,7 @@
+ import android.provider.Settings
+ import android.provider.Settings.*
+ import android.util.DisplayMetrics
+-import android.util.Log
++import com.carriez.flutter_hbb.DiagnosticLog as Log
+ import android.view.WindowManager
+ import androidx.annotation.RequiresApi
+ import androidx.core.content.ContextCompat.getSystemService
+@@ -104,7 +104,7 @@
+             }
+         })
+     } catch (e: Exception) {
+-        e.printStackTrace()
++        com.carriez.flutter_hbb.DiagnosticLog.e("Native", "Exception", e)
+     }
+ }
+ 
+diff --git a/flutter/lib/common/diagnostic_events.dart b/flutter/lib/common/diagnostic_events.dart
+new file mode 100644
+--- /dev/null
++++ b/flutter/lib/common/diagnostic_events.dart
+@@ -0,0 +1,34 @@
++import 'dart:convert';
++import 'dart:ui';
++import 'package:flutter/foundation.dart';
++import '../models/platform_model.dart';
++
++bool _installed = false;
++bool _pending = false;
++
++/// One in-flight bridge event, no raw message/exception/stack crosses the boundary.
++void diagnosticEvent({int level = 3, String kind = 'legacy_event', String code = 'none'}) {
++  if (_pending) return;
++  _pending = true;
++  () async {
++    try {
++      await bind.mainDiagnostics(request: jsonEncode({'op':'event','event':{'level':level,'module':'flutter','kind':kind,'code':code}}));
++    } catch (_) {
++      // FFI may not yet be initialized during startup; never recursively log failures.
++    } finally { _pending = false; }
++  }();
++}
++
++void installDiagnosticHooks() {
++  if (_installed) return;
++  _installed = true;
++  debugPrint = (String? message, {int? wrapWidth}) { diagnosticEvent(); };
++  FlutterError.onError = (details) {
++    diagnosticEvent(level:1,kind:'failed',code:'unknown');
++    FlutterError.presentError(FlutterErrorDetails(exception: StateError('Diagnostic error (details omitted)')));
++  };
++  PlatformDispatcher.instance.onError = (error, stack) {
++    diagnosticEvent(level:1,kind:'failed',code:'unknown');
++    return false; // Preserve the platform's necessary uncaught-error handling.
++  };
++}
+diff --git a/flutter/lib/common/widgets/logs_page.dart b/flutter/lib/common/widgets/logs_page.dart
+new file mode 100644
+--- /dev/null
++++ b/flutter/lib/common/widgets/logs_page.dart
+@@ -0,0 +1,180 @@
++import 'dart:async';
++import 'dart:convert';
++import 'dart:io';
++import 'package:file_picker/file_picker.dart';
++import 'package:flutter/material.dart';
++import '../../common.dart';
++import '../../models/model.dart';
++import '../../models/platform_model.dart';
++
++class DiagnosticFailure implements Exception {
++  final String code;
++  DiagnosticFailure(this.code);
++}
++
++/// Shared desktop/mobile settings. No raw application output is imported.
++class LogsPage extends StatefulWidget {
++  const LogsPage({Key? key}) : super(key: key);
++  @override
++  State<LogsPage> createState() => _LogsPageState();
++}
++
++class _LogsPageState extends State<LogsPage> {
++  Map<String, dynamic>? _settings;
++  Map<String, dynamic> _status = {}, _build = {};
++  List<dynamic> _files = [], _rows = [];
++  final Set<String> _selected = {};
++  final _search = TextEditingController();
++  Timer? _timer;
++  bool _busy = false, _polling = false;
++  String? _error;
++  int? _filterLevel;
++  String? _filterModule;
++  DateTime? _after;
++  int _offset = 0;
++  String t(String en, String zh) =>
++      Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
++
++  Future<dynamic> _request(Map<String, dynamic> request) async {
++    final decoded = jsonDecode(await bind.mainDiagnostics(request: jsonEncode(request)));
++    if (decoded['ok'] != true) throw DiagnosticFailure(decoded['error'] as String? ?? 'diagnostics_failed');
++    return decoded['data'];
++  }
++
++  @override
++  void initState() {
++    super.initState();
++    _refresh();
++    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
++  }
++  @override
++  void dispose() { _timer?.cancel(); _search.dispose(); super.dispose(); }
++
++  Future<void> _refresh() async {
++    if (_polling || _busy) return;
++    _polling = true;
++    try {
++      final value = await _request({'op':'status'});
++      if (!mounted) return;
++      setState(() { _status = Map<String,dynamic>.from(value['status']); _build = Map<String,dynamic>.from(value['build']??{}); _settings ??= Map<String,dynamic>.from(value['settings']); });
++    } catch (_) { if (mounted) setState(() => _error = 'diagnostics_unavailable'); }
++    finally { _polling = false; }
++  }
++
++  Future<void> _run(Future<void> Function() action) async {
++    if (_busy) return;
++    setState(() { _busy=true; _error=null; });
++    try { await action(); }
++    catch (error) { if (mounted) setState(() => _error = error is DiagnosticFailure ? _failure(error.code) : t('Operation failed. Check directory permissions and settings. No raw error details are exported.', '操作失败，请检查目录权限及配置。不会导出原始错误详情。')); }
++    finally { if (mounted) {setState(() => _busy=false); await _refresh();} }
++  }
++  String _failure(String code) {
++    final messages={
++      'protected_logs_fill_quota':t('Protected logs fill the storage limit. Release a kept log or increase the limit, then restart recording.','受保护日志已占满容量，请解除部分保留或提高上限，然后重新开启记录。'),
++      'storage_unavailable':t('Storage is unavailable. Check the directory or choose the default location.','存储不可用，请检查目录或选择默认目录。'),
++      'export_requires_storage_budget':t('Export needs temporary space within the total limit. Select fewer logs, clean up or increase the limit.','导出需要总容量上限内的临时空间。请减少所选文件、清理日志或提高总容量。'),
++      'export_disk_space':t('Insufficient free disk space for export.','磁盘剩余空间不足，无法导出。'),
++      'invalid_settings':t('Invalid settings: check the size limits, level and duration.','配置无效，请检查大小上限、等级和时长。'),
++      'invalid_schedule':t('Invalid schedule: the end must follow the start.','时间配置无效，结束时间必须晚于开始时间。'),
++      'permission_denied':t('Directory permission denied. Choose the default directory or grant access again.','目录权限不足，请选择默认目录或重新授权。'),
++      'diagnostics_busy':t('Logs are busy. Try again shortly.','日志正在处理其他操作，请稍后重试。'),
++      'active_or_missing_file':t('A selected log is active in another process or no longer exists. Refresh the list.','所选日志正在其他进程写入或已不存在，请刷新列表。'),
++      'corrupt_record':t('A log is damaged. Exclude it from export; raw data will not be copied.','日志文件损坏，请排除该文件后导出，不会复制原始数据。'),
++    };
++    return messages[code]??t('Diagnostic operation failed. No raw error details are exported.','日志操作失败，不会导出原始错误详情。');
++  }
++  Future<void> _save({bool? enabled}) async {
++    final next = Map<String,dynamic>.from(_settings!);
++    if (enabled != null) next['enabled']=enabled;
++    await _request({'op':'configure','settings':next});
++    final value = await _request({'op':'status'});
++    if (mounted) setState(() => _settings=Map<String,dynamic>.from(value['settings']));
++  }
++  Future<int?> _number(String title, int value) async {
++    final input=TextEditingController(text:'$value');
++    final result=await showDialog<int>(context:context,builder:(context)=>AlertDialog(
++      title:Text(title),content:TextField(controller:input,keyboardType:TextInputType.number),
++      actions:[TextButton(onPressed:()=>Navigator.pop(context),child:Text(t('Cancel','取消'))),TextButton(onPressed:(){final n=int.tryParse(input.text);if(n!=null&&n>0)Navigator.pop(context,n);},child:Text(t('OK','确定')))]));
++    input.dispose();return result;
++  }
++  Future<DateTime?> _date() async {
++    final day=await showDatePicker(context:context,initialDate:DateTime.now(),firstDate:DateTime.now().subtract(const Duration(days:1)),lastDate:DateTime.now().add(const Duration(days:366)));
++    if(day==null||!mounted)return null;
++    final time=await showTimePicker(context:context,initialTime:TimeOfDay.now());
++    return time==null?null:DateTime(day.year,day.month,day.day,time.hour,time.minute);
++  }
++  Future<void> _loadFiles() async {
++    final files=await _request({'op':'files'});
++    if(mounted)setState((){_files=files as List<dynamic>;_selected.removeWhere((id)=>!_files.any((f)=>f['id']==id));});
++  }
++  Future<void> _query() async {
++    final rows=await _request({'op':'query','query':{'keyword':_search.text,'level':_filterLevel,'module':_filterModule,'after':_after?.toUtc().toIso8601String(),'offset':_offset}});
++    if(mounted)setState(()=>_rows=rows as List<dynamic>);
++    await _loadFiles();
++  }
++  Future<void> _export() async {
++    await _loadFiles();
++    final ids=_selected.isEmpty?_files.map((f)=>f['id']).toList():_selected.toList();
++    if(ids.isEmpty)return;
++    final result=await _request({'op':'export','ids':ids});
++    final source=File(result['path'] as String);
++    if(isAndroid){await gFFI.invokeMethodWithResult<bool>('export_file',{'path':source.path});}
++    else {final path=await FilePicker.platform.saveFile(dialogTitle:t('Export sanitized logs','导出脱敏日志'),fileName:'radar-diagnostics.tar');if(path!=null)await source.copy(path);}
++    // Private temporary export is removed after the platform picker completes.
++    if(await source.exists())await source.delete();
++  }
++  Widget _choice(String title, String key, Map<int,String> choices, {int scale=1, bool nullable=false}) {
++    final raw=_settings![key];final selected=raw==null?-1:(raw as num).toInt()~/scale;
++    final value=choices.containsKey(selected)?selected:0;
++    return ListTile(title:Text(title),trailing:DropdownButton<int>(value:value,items:[...choices.entries.map((e)=>DropdownMenuItem(value:e.key,child:Text(e.value))),DropdownMenuItem(value:0,child:Text(t('Custom…','自定义…')))],onChanged:_busy?null:(v)async{if(v==null)return;int? number=v;if(v==0)number=await _number(title,selected>0?selected:1);if(number==null||!mounted)return;final n=number;setState(()=>_settings![key]=n<0&&nullable?null:n*scale);}));
++  }
++  @override
++  Widget build(BuildContext context) {
++    final s=_settings;
++    if(s==null)return Center(child:Text(_error??t('Loading logs…','正在读取日志…')));
++    const mb=1024*1024;
++    final stateNames={'off':t('Off','关闭'),'waiting':t('Waiting','等待开始'),'recording':t('Recording','记录中'),'stopped':t('Stopped','已停止'),'error':t('Error','错误')};
++    return ListView(padding:const EdgeInsets.all(16),children:[
++      Text(t('Logs','日志'),style:Theme.of(context).textTheme.headlineSmall),
++      Text('${t('Build Identity','构建身份')}: ${jsonEncode(_build)}'),
++      Text(t('Local, sanitized diagnostic events. Passwords, tokens and user content are never collected. Historical raw logs are excluded.','本地脱敏诊断事件；不采集密码、Token 或用户内容，不导入历史原始日志。')),
++      Text(t('Scheduled capture runs only while the app process is running. Android may suspend background work. A missed start resumes only within its original end time.','预约采集仅在应用进程运行时生效。Android 可能暂停后台运行；错过开始时间仅在原定结束时间内恢复。')),
++      if(_error!=null)Text(_error!,style:const TextStyle(color:Colors.red)),
++      if(_status['error']!=null)Text('${t('Warning','警告')}: ${_failure(_status['error'] as String)}',style:const TextStyle(color:Colors.red)),
++      SwitchListTile(title:Text(t('Record optional diagnostic logs','记录可选诊断日志')),value:_status['state']=='recording'||_status['state']=='waiting',onChanged:_busy?null:(v)=>_run(()async{if(v){await _save(enabled:true);}else{await _request({'op':'stop'});s['enabled']=false;}})),
++      Text('${t('Status','状态')}: ${stateNames[_status['state']]??_status['state']}\n${t('Elapsed / remaining seconds','已记录 / 剩余秒数')}: ${_status['elapsed_seconds']??0} / ${_status['remaining_seconds']??"∞"}\n${t('Current / total bytes','当前文件 / 总字节数')}: ${_status['current_bytes']??0} / ${_status['total_bytes']??0}\n${t('Files / dropped events','文件数 / 丢弃事件数')}: ${_status['files']??0} / ${_status['dropped']??0}\n${t('Temporary export bytes (included in total)','临时导出字节数（计入总量）')}: ${_status['export_bytes']??0}'),
++      _choice(t('Capture level','采集等级'),'level',{1:'Error',2:'Info',3:'Debug',4:'Trace'}),
++      _choice(t('Duration (minutes)','记录时长（分钟）'),'duration_seconds',{5:t('5 minutes','5 分钟'),15:t('15 minutes','15 分钟'),30:t('30 minutes','30 分钟'),60:t('1 hour','1 小时'),360:t('6 hours','6 小时'),720:t('12 hours','12 小时'),1440:t('24 hours','24 小时'),10080:t('7 days','7 天'),-1:t('Until stopped','手动停止')},scale:60,nullable:true),
++      ListTile(title:Text(t('Start date and time','开始日期和时间')),subtitle:Text(s['start_utc']==null?t('Immediately','立即开始'):DateTime.fromMillisecondsSinceEpoch((s['start_utc'] as int)*1000).toLocal().toString()),onTap:_busy?null:()async{final date=await _date();if(date!=null&&mounted)setState(()=>s['start_utc']=date.millisecondsSinceEpoch~/1000);},trailing:TextButton(onPressed:()=>setState(()=>s['start_utc']=null),child:Text(t('Now','立即')))),
++      ListTile(title:Text(t('End date and time','结束日期和时间')),subtitle:Text(s['end_utc']==null?t('Use duration','按持续时长'):DateTime.fromMillisecondsSinceEpoch((s['end_utc'] as int)*1000).toLocal().toString()),onTap:_busy?null:()async{final date=await _date();if(date!=null&&mounted)setState(()=>s['end_utc']=date.millisecondsSinceEpoch~/1000);},trailing:TextButton(onPressed:()=>setState(()=>s['end_utc']=null),child:Text(t('Clear','清除')))),
++      Text(t('When both an end time and duration are set, the earlier limit applies.','同时设置结束时间与持续时长时，按较早的限制停止。')),
++      _choice(t('Single file (MiB)','单文件大小（MiB）'),'file_bytes',{5:'5',10:'10',20:'20',50:'50',100:'100',500:'500',1024:'1024'},scale:mb),
++      _choice(t('Total storage (MiB)','总容量（MiB）'),'total_bytes',{50:'50',100:'100',250:'250',500:'500',1024:'1024',5120:'5120'},scale:mb),
++      _choice(t('Retention (days)','保留期限（天）'),'retention_days',{1:'1',7:'7',30:'30',90:'90',-1:t('Manual cleanup','手动清理')},nullable:true),
++      Text(t('Limits: file 1–5120 MiB; total up to 51200 MiB and at least one file. Custom duration up to 366 days; retention up to 3650 days.','范围：单文件 1–5120 MiB；总量最高 51200 MiB，且不小于单文件。自定义时长最多 366 天，保留期最多 3650 天。')),
++      Text('${t('Current directory','当前目录')}: ${_status['directory']??""}'),
++      Wrap(spacing:8,children:[
++        TextButton(onPressed:_busy?null:()=>setState(()=>s['directory']=null),child:Text(t('Default directory','应用默认目录'))),
++        if(!isAndroid)TextButton(onPressed:_busy?null:()async{final path=await FilePicker.platform.getDirectoryPath();if(path!=null&&mounted)setState(()=>s['directory']='$path${Platform.pathSeparator}RadarDiagnostics');},child:Text(t('Custom directory','自定义目录'))),
++        if(!isAndroid)TextButton(onPressed:_busy?null:()=>_run(()async{final path=_status['directory'] as String?;if(path==null)return;if(Platform.isWindows){await Process.run('explorer.exe',[path]);}else{await Process.run(Platform.isMacOS?'open':'xdg-open',[path]);}}),child:Text(t('Open directory','打开目录'))),
++        ElevatedButton(onPressed:_busy?null:()=>_run(()=>_save()),child:Text(t('Apply settings','应用配置'))),
++      ]),
++      if(isAndroid)Text(t('Active logs stay in private app storage. Export opens Android’s document picker for your chosen destination; no broad storage permission is required.','活动日志保存在应用私有目录。导出通过 Android 文档选择器选择存储位置，不申请全盘访问权限。')),
++      const Divider(),
++      TextField(controller:_search,decoration:InputDecoration(labelText:t('Search sanitized events','搜索脱敏事件'))),
++      DropdownButton<int>(value:_filterLevel,hint:Text(t('All levels','全部等级')),items:[const DropdownMenuItem<int>(value:null,child:Text('All')),for(final e in {1:'Error',2:'Info',3:'Debug',4:'Trace'}.entries)DropdownMenuItem(value:e.key,child:Text(e.value))],onChanged:(v)=>setState(()=>_filterLevel=v)),
++      DropdownButton<String>(value:_filterModule,hint:Text(t('All modules','全部模块')),items:[const DropdownMenuItem<String>(value:null,child:Text('All')),for(final name in ['app','config','network','tls','websocket','api','rendezvous','relay','session','audio','video','transfer','clipboard','flutter','native','permission','other'])DropdownMenuItem(value:name,child:Text(name))],onChanged:(v)=>setState(()=>_filterModule=v)),
++      TextButton(onPressed:()async{final date=await _date();if(mounted)setState(()=>_after=date);},child:Text('${t('Since','起始时间')}: ${_after??t('All','全部')}')),
++      Wrap(spacing:8,children:[
++        ElevatedButton(onPressed:_busy?null:()=>_run(()async{_offset=0;await _query();}),child:Text(t('View / search','查看 / 搜索'))),
++        TextButton(onPressed:_busy||_offset==0?null:()=>_run(()async{_offset=(_offset-200).clamp(0,1000000).toInt();await _query();}),child:Text(t('Previous','上一页'))),
++        TextButton(onPressed:_busy||_rows.length<200?null:()=>_run(()async{_offset+=200;await _query();}),child:Text(t('Next','下一页'))),
++        TextButton(onPressed:_busy?null:()=>_run(_loadFiles),child:Text(t('List files','文件列表'))),
++        TextButton(onPressed:_busy?null:()=>_run(_export),child:Text(t('Export selected / all','导出所选 / 全部'))),
++        TextButton(onPressed:_busy?null:()=>_run(()async{final yes=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(title:Text(t('Delete closed, unpinned logs?','删除已关闭且未保留的日志？')),actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:Text(t('Cancel','取消'))),TextButton(onPressed:()=>Navigator.pop(context,true),child:Text(t('Delete','删除')))]));if(yes==true){await _request({'op':'clear','confirmed':true});await _loadFiles();}}),child:Text(t('Clean up','清理'))),
++      ]),
++      for(final f in _files)CheckboxListTile(title:Text('${f['id']} (${f['bytes']} bytes)'),subtitle:Text(f['active']==true?t('Active — protected','正在写入，受保护'):t('Closed','已关闭')),value:_selected.contains(f['id']),onChanged:(v)=>setState((){if(v==true){_selected.add(f['id'] as String);}else{_selected.remove(f['id']);}}),secondary:IconButton(icon:Icon(f['pinned']==true?Icons.lock:Icons.lock_open),tooltip:t('Keep / release file','保留 / 解除保留'),onPressed:_busy?null:()=>_run(()async{await _request({'op':'pin','id':f['id'],'pinned':f['pinned']!=true});await _loadFiles();}))),
++      for(final row in _rows)SelectableText(jsonEncode(row)),
++    ]);
++  }
++}
+diff --git a/flutter/lib/desktop/pages/desktop_setting_page.dart b/flutter/lib/desktop/pages/desktop_setting_page.dart
+--- a/flutter/lib/desktop/pages/desktop_setting_page.dart
++++ b/flutter/lib/desktop/pages/desktop_setting_page.dart
+@@ -1,3 +1,4 @@
++import '../../common/widgets/logs_page.dart';
+ import '../../common/branding.dart';
+ import '../../common/widgets/custom_update.dart';
+ import 'dart:async';
+@@ -60,6 +61,7 @@
+   display,
+   account,
+   printer,
++  logs,
+   about,
+ }
+ 
+@@ -82,6 +84,7 @@
+         !bind.isDisableSettings() &&
+         bind.mainGetBuildinOption(key: kOptionHideRemotePrinterSetting) != 'Y')
+       SettingsTabKey.printer,
++    if (!isWeb) SettingsTabKey.logs,
+     SettingsTabKey.about,
+   ];
+ 
+@@ -213,6 +216,9 @@
+           settingTabs
+               .add(_TabInfo(tab, 'Printer', Icons.print_outlined, Icons.print));
+           break;
++        case SettingsTabKey.logs:
++          settingTabs.add(_TabInfo(tab, 'Logs', Icons.article_outlined, Icons.article));
++          break;
+         case SettingsTabKey.about:
+           settingTabs
+               .add(_TabInfo(tab, 'About', Icons.info_outline, Icons.info));
+@@ -243,6 +249,9 @@
+           break;
+         case SettingsTabKey.printer:
+           children.add(const _Printer());
++          break;
++        case SettingsTabKey.logs:
++          children.add(const LogsPage());
+           break;
+         case SettingsTabKey.about:
+           children.add(const _About());
+diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
+--- a/flutter/lib/main.dart
++++ b/flutter/lib/main.dart
+@@ -1,3 +1,4 @@
++import 'common/diagnostic_events.dart';
+ import 'common/deploy_policy.dart';
+ import 'common/branding.dart';
+ import 'dart:async';
+@@ -40,6 +41,7 @@
+ late List<String> kBootArgs;
+ 
+ Future<void> main(List<String> args) async {
++  installDiagnosticHooks();
+   earlyAssert();
+   WidgetsFlutterBinding.ensureInitialized();
+ 
+diff --git a/flutter/lib/mobile/pages/settings_page.dart b/flutter/lib/mobile/pages/settings_page.dart
+--- a/flutter/lib/mobile/pages/settings_page.dart
++++ b/flutter/lib/mobile/pages/settings_page.dart
+@@ -1,3 +1,4 @@
++import '../../common/widgets/logs_page.dart';
+ import '../../common/deploy_policy.dart';
+ import '../../common/branding.dart';
+ import '../../common/widgets/custom_update.dart';
+@@ -744,6 +745,11 @@
+     final settings = SettingsList(
+       sections: [
+         customClientSection,
++        SettingsSection(title: Text(translate('Logs')), tiles: [
++          SettingsTile(title: Text(translate('Logs')), leading: const Icon(Icons.article_outlined), onPressed: (context) {
++            Navigator.of(context).push(MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar(title: Text(translate('Logs'))), body: const LogsPage())));
++          }),
++        ]),
+         if (!bind.isDisableAccount())
+           SettingsSection(
+             title: Text(translate('Account')),
+diff --git a/libs/radar_diagnostics/Cargo.toml b/libs/radar_diagnostics/Cargo.toml
+new file mode 100644
+--- /dev/null
++++ b/libs/radar_diagnostics/Cargo.toml
+@@ -0,0 +1,17 @@
++[package]
++name = "radar_diagnostics"
++version = "0.1.0"
++edition = "2021"
++rust-version = "1.75"
++[dependencies]
++serde = { version = "1", features = ["derive"] }
++serde_json = "1"
++chrono = "0.4"
++rand = "0.8"
++sha2 = "0.10"
++hmac = "0.12"
++fs2 = "0.4"
++log = "0.4"
++tar = "0.4"
++[dev-dependencies]
++filetime = "0.2"
+diff --git a/libs/radar_diagnostics/src/lib.rs b/libs/radar_diagnostics/src/lib.rs
+new file mode 100644
+--- /dev/null
++++ b/libs/radar_diagnostics/src/lib.rs
+@@ -0,0 +1,1869 @@
++//! Optional local diagnostics. Arbitrary log arguments NEVER enter this store.
++use fs2::FileExt;
++use hmac::{Hmac, Mac};
++use serde::{Deserialize, Serialize};
++use sha2::Sha256;
++use std::{
++    fs::{self, File, OpenOptions},
++    io::{self, BufRead, BufReader, Read, Write},
++    path::{Path, PathBuf},
++    sync::{
++        atomic::{AtomicU64, Ordering},
++        mpsc::{self, SyncSender},
++        Arc, Mutex, OnceLock,
++    },
++    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
++};
++const MB: u64 = 1024 * 1024;
++const MAX_RECORD: usize = 4096;
++const MAX_QUERY: usize = 200;
++fn now() -> i64 {
++    SystemTime::now()
++        .duration_since(UNIX_EPOCH)
++        .unwrap_or_default()
++        .as_secs() as i64
++}
++fn error(code: &'static str) -> io::Error {
++    io::Error::other(code)
++}
++#[derive(Clone, Debug, Serialize, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct Settings {
++    pub enabled: bool,
++    pub level: u8,
++    pub duration_seconds: Option<u64>,
++    pub start_utc: Option<i64>,
++    pub end_utc: Option<i64>,
++    #[serde(default)]
++    pub active_until_utc: Option<i64>,
++    #[serde(default)]
++    pub active_started_utc: Option<i64>,
++    pub file_bytes: u64,
++    pub total_bytes: u64,
++    pub retention_days: Option<u32>,
++    pub directory: Option<PathBuf>,
++}
++impl Default for Settings {
++    fn default() -> Self {
++        Self {
++            enabled: false,
++            level: 2,
++            duration_seconds: Some(3600),
++            start_utc: None,
++            end_utc: None,
++            active_until_utc: None,
++            active_started_utc: None,
++            file_bytes: 20 * MB,
++            total_bytes: 100 * MB,
++            retention_days: Some(7),
++            directory: None,
++        }
++    }
++}
++impl Settings {
++    pub fn validate(&self) -> io::Result<()> {
++        if self
++            .directory
++            .as_ref()
++            .is_some_and(|v| !v.is_absolute() || v.as_os_str().len() > 4096)
++        {
++            return Err(error("invalid_settings"));
++        }
++        if [
++            self.start_utc,
++            self.end_utc,
++            self.active_until_utc,
++            self.active_started_utc,
++        ]
++        .into_iter()
++        .flatten()
++        .any(|v| v < 0 || v > now() + 2 * 366 * 86400)
++        {
++            return Err(error("invalid_schedule"));
++        }
++        if !(1..=4).contains(&self.level)
++            || self.file_bytes < MB
++            || self.file_bytes > 5 * 1024 * MB
++            || self.total_bytes < self.file_bytes
++            || self.total_bytes > 50 * 1024 * MB
++            || self
++                .duration_seconds
++                .is_some_and(|v| v == 0 || v > 366 * 86400)
++            || self.retention_days.is_some_and(|v| v == 0 || v > 3650)
++            || matches!((self.start_utc,self.end_utc),(Some(a),Some(b)) if a>=b)
++        {
++            return Err(error("invalid_settings"));
++        }
++        Ok(())
++    }
++}
++#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum Module {
++    App,
++    Config,
++    Network,
++    Tls,
++    Websocket,
++    Api,
++    Rendezvous,
++    Relay,
++    Session,
++    Audio,
++    Video,
++    Transfer,
++    Clipboard,
++    Flutter,
++    Native,
++    Permission,
++    Other,
++}
++#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum Kind {
++    Started,
++    Stopped,
++    Changed,
++    Attempt,
++    Connected,
++    Failed,
++    Disconnected,
++    Upgrade,
++    LegacyEvent,
++    Overflow,
++}
++#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum Code {
++    None,
++    Io,
++    Timeout,
++    Dns,
++    Tcp,
++    Certificate,
++    Tls,
++    Protocol,
++    Http,
++    Cancelled,
++    Permission,
++    Storage,
++    Unknown,
++}
++#[derive(Clone, Debug, Serialize, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct Event {
++    timestamp: String,
++    level: u8,
++    module: Module,
++    process: u32,
++    thread: String,
++    kind: Kind,
++    recording: String,
++    session: Option<String>,
++    code: Code,
++    status: Option<u16>,
++    endpoint: Option<String>,
++    transport: Option<String>,
++    port: Option<u16>,
++    route: Option<String>,
++}
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub struct Status {
++    pub state: String,
++    pub error: Option<String>,
++    pub elapsed_seconds: u64,
++    pub remaining_seconds: Option<u64>,
++    pub current_bytes: u64,
++    pub total_bytes: u64,
++    pub files: usize,
++    pub dropped: u64,
++    pub export_bytes: u64,
++    pub directory: PathBuf,
++}
++impl Default for Status {
++    fn default() -> Self {
++        Self {
++            state: "off".into(),
++            error: None,
++            elapsed_seconds: 0,
++            remaining_seconds: None,
++            current_bytes: 0,
++            total_bytes: 0,
++            files: 0,
++            dropped: 0,
++            export_bytes: 0,
++            directory: PathBuf::new(),
++        }
++    }
++}
++#[derive(Clone, Serialize)]
++pub struct LogFile {
++    pub id: String,
++    pub bytes: u64,
++    pub pinned: bool,
++    pub active: bool,
++}
++#[derive(Default, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct Query {
++    pub after: Option<String>,
++    pub level: Option<u8>,
++    pub module: Option<Module>,
++    pub keyword: Option<String>,
++    pub offset: Option<usize>,
++}
++#[derive(Serialize, Deserialize)]
++#[serde(deny_unknown_fields)]
++struct Persisted {
++    settings: Settings,
++    key: [u8; 32],
++    recording: String,
++}
++impl Persisted {
++    fn new(settings: Settings) -> Self {
++        Self {
++            settings,
++            key: rand::random(),
++            recording: hex(&rand::random::<[u8; 16]>()),
++        }
++    }
++    fn decode(bytes: &[u8]) -> io::Result<Self> {
++        let saved: Self =
++            serde_json::from_slice(bytes).map_err(|_| error("invalid_saved_settings"))?;
++        saved.settings.validate()?;
++        if saved.recording.len() != 32 || !saved.recording.bytes().all(|b| b.is_ascii_hexdigit()) {
++            return Err(error("invalid_saved_recording"));
++        }
++        Ok(saved)
++    }
++}
++struct Shared {
++    settings: Settings,
++    status: Status,
++    key: [u8; 32],
++    recording: String,
++    build: serde_json::Value,
++}
++enum Command {
++    Configure(Settings),
++    Stop,
++    Pin(String, bool),
++    Clear,
++    Query(Query),
++    Export(Vec<String>),
++    Files,
++}
++struct Work {
++    command: Command,
++    reply: mpsc::Sender<Result<serde_json::Value, String>>,
++}
++pub struct Engine {
++    shared: Arc<Mutex<Shared>>,
++    events: SyncSender<Event>,
++    commands: SyncSender<Work>,
++    drops: Arc<AtomicU64>,
++}
++fn public_error(error: io::Error) -> String {
++    let candidate = error.to_string();
++    if [
++        "invalid_settings",
++        "invalid_query",
++        "invalid_schedule",
++        "unsafe_directory",
++        "diagnostics_busy",
++        "invalid_id",
++        "missing_file",
++        "active_or_missing_file",
++        "invalid_selection",
++        "export_requires_storage_budget",
++        "export_disk_space",
++        "corrupt_record",
++        "unsafe_record",
++        "unsafe_file",
++    ]
++    .contains(&candidate.as_str())
++    {
++        candidate
++    } else {
++        match error.kind() {
++            io::ErrorKind::PermissionDenied => "permission_denied",
++            io::ErrorKind::WouldBlock => "diagnostics_busy",
++            _ => "diagnostics_operation_failed",
++        }
++        .into()
++    }
++}
++fn hex(data: &[u8]) -> String {
++    const HEX: &[u8; 16] = b"0123456789abcdef";
++    data.iter()
++        .flat_map(|b| {
++            [
++                HEX[(b >> 4) as usize] as char,
++                HEX[(b & 15) as usize] as char,
++            ]
++        })
++        .collect()
++}
++fn pseudonym(key: &[u8; 32], value: &str) -> String {
++    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC key");
++    mac.update(value.as_bytes());
++    hex(&mac.finalize().into_bytes()[..12])
++}
++fn try_exclusive(file: &File) -> io::Result<()> {
++    file.try_lock_exclusive().map_err(|e| {
++        if e.raw_os_error() == fs2::lock_contended_error().raw_os_error() {
++            io::Error::new(io::ErrorKind::WouldBlock, "diagnostics_busy")
++        } else {
++            e
++        }
++    })
++}
++fn private_file(path: &Path) -> io::Result<File> {
++    let mut options = OpenOptions::new();
++    options.read(true).write(true).create_new(true);
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::OpenOptionsExt;
++        options.mode(0o600);
++    }
++    options.open(path)
++}
++fn private_dir(path: &Path) -> io::Result<()> {
++    if fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
++        return Err(error("unsafe_directory"));
++    }
++    fs::create_dir_all(path)?;
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::PermissionsExt;
++        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
++    }
++    if fs::symlink_metadata(path)?.file_type().is_symlink() {
++        return Err(error("unsafe_directory"));
++    }
++    Ok(())
++}
++impl Engine {
++    pub fn start(default: PathBuf) -> io::Result<Self> {
++        private_dir(&default)?;
++        let config = default.join("settings.json");
++        let saved = fs::read(&config).or_else(|e| {
++            if e.kind() == io::ErrorKind::NotFound {
++                fs::read(config.with_extension("backup"))
++            } else {
++                Err(e)
++            }
++        });
++        let saved = match saved {
++            Ok(bytes) => Persisted::decode(&bytes)?,
++            Err(e) if e.kind() == io::ErrorKind::NotFound => Persisted::new(Settings::default()),
++            Err(_) => return Err(error("settings_unreadable")),
++        };
++        let mut settings = saved.settings;
++        settings.validate()?;
++        // Restart can resume only the previously saved absolute end, never a fresh duration.
++        if settings.enabled
++            && settings
++                .active_until_utc
++                .or(settings.end_utc)
++                .is_some_and(|v| now() >= v)
++        {
++            settings.enabled = false;
++        }
++        let directory = settings
++            .directory
++            .clone()
++            .unwrap_or_else(|| default.join("records"));
++        let key = saved.key;
++        let shared = Arc::new(Mutex::new(Shared {
++            settings,
++            status: Status {
++                directory: directory.clone(),
++                ..Status::default()
++            },
++            key,
++            recording: saved.recording,
++            build: serde_json::json!({}),
++        }));
++        let (tx, rx) = mpsc::sync_channel(1024);
++        let (cx, cr) = mpsc::sync_channel::<Work>(16);
++        let drops = Arc::new(AtomicU64::new(0));
++        let state = shared.clone();
++        let lost = drops.clone();
++        std::thread::Builder::new()
++            .name("radar-diagnostics".into())
++            .spawn(move || {
++                let mut store = Store::new(directory, config);
++                loop {
++                    // Bounded command service avoids starving records under viewer polling.
++                    for _ in 0..4 {
++                        match cr.try_recv() {
++                            Ok(work) => {
++                                let result =
++                                    store.command(work.command, &state).map_err(public_error);
++                                let _ = work.reply.send(result);
++                            }
++                            Err(_) => break,
++                        }
++                    }
++                    store.tick(&state, &lost);
++                    match rx.recv_timeout(Duration::from_millis(100)) {
++                        Ok(event) => {
++                            if let Err(e) = store.write(event, &state) {
++                                if e.kind() == io::ErrorKind::WouldBlock {
++                                    lost.fetch_add(1, Ordering::Relaxed);
++                                    continue;
++                                }
++                                let mut s = state.lock().unwrap();
++                                s.status.state = "error".into();
++                                s.status.error = Some(
++                                    match (e.kind(), e.to_string().as_str()) {
++                                        (_, "quota_protected") => "protected_logs_fill_quota",
++                                        (io::ErrorKind::PermissionDenied, _) => "permission_denied",
++                                        _ => "storage_unavailable",
++                                    }
++                                    .into(),
++                                );
++                                s.settings.enabled = false;
++                                let _ = store.persist(&s.settings, &s.key, &s.recording, false);
++                                store.close();
++                            }
++                        }
++                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
++                        Err(mpsc::RecvTimeoutError::Timeout) => {}
++                    }
++                }
++            })?;
++        Ok(Self {
++            shared,
++            events: tx,
++            commands: cx,
++            drops,
++        })
++    }
++    pub fn set_build(&self, value: &serde_json::Value) {
++        let mut safe = serde_json::Map::new();
++        for key in [
++            "version",
++            "revision",
++            "patchset_version",
++            "upstream_sha",
++            "variant",
++            "build_run",
++            "channel",
++        ] {
++            if let Some(v) = value[key].as_str() {
++                let valid = match key {
++                    "upstream_sha" => v.len() == 40 && v.bytes().all(|b| b.is_ascii_hexdigit()),
++                    "variant" => ["standard", "sos"].contains(&v),
++                    "channel" => ["ci", "stable", "nightly"].contains(&v),
++                    "build_run" => {
++                        !v.is_empty() && v.len() <= 20 && v.bytes().all(|b| b.is_ascii_digit())
++                    }
++                    _ => {
++                        !v.is_empty()
++                            && v.len() <= 40
++                            && v.bytes()
++                                .all(|b| b.is_ascii_digit() || b == b'.' || b == b'v')
++                    }
++                };
++                if valid {
++                    safe.insert(key.into(), v.into());
++                }
++            }
++        }
++        self.shared.lock().unwrap().build = serde_json::Value::Object(safe);
++    }
++    pub fn settings(&self) -> Settings {
++        self.shared.lock().unwrap().settings.clone()
++    }
++    pub fn status(&self) -> Status {
++        self.shared.lock().unwrap().status.clone()
++    }
++    // Closed typed arguments keep raw messages out of this capture boundary.
++    #[allow(clippy::too_many_arguments)]
++    pub fn capture(
++        &self,
++        level: u8,
++        module: Module,
++        kind: Kind,
++        code: Code,
++        session: Option<&str>,
++        endpoint: Option<&str>,
++        status: Option<u16>,
++    ) {
++        let event = {
++            let Ok(s) = self.shared.try_lock() else {
++                self.drops.fetch_add(1, Ordering::Relaxed);
++                return;
++            };
++            if !s.settings.enabled || level > s.settings.level || !(1..=4).contains(&level) {
++                return;
++            }
++            let parsed = endpoint.and_then(parse_endpoint);
++            Event {
++                timestamp: chrono::Utc::now().to_rfc3339(),
++                level,
++                module,
++                process: std::process::id(),
++                thread: pseudonym(
++                    &s.key,
++                    &format!("{}:{:?}", std::process::id(), std::thread::current().id()),
++                ),
++                kind,
++                recording: s.recording.clone(),
++                session: session.map(|v| pseudonym(&s.key, v)),
++                code,
++                status,
++                endpoint: endpoint.map(|v| pseudonym(&s.key, v)),
++                transport: parsed.as_ref().map(|v| v.0.clone()),
++                port: parsed.as_ref().map(|v| v.1),
++                route: parsed.map(|v| v.2),
++            }
++        };
++        if self.events.try_send(event).is_err() {
++            self.drops.fetch_add(1, Ordering::Relaxed);
++        }
++    }
++    fn call(&self, command: Command) -> Result<serde_json::Value, String> {
++        let (tx, rx) = mpsc::channel();
++        self.commands
++            .try_send(Work { command, reply: tx })
++            .map_err(|_| "diagnostics_busy".to_string())?;
++        rx.recv_timeout(Duration::from_secs(30))
++            .map_err(|_| "diagnostics_timeout".to_string())?
++    }
++    pub fn request(&self, value: serde_json::Value) -> Result<serde_json::Value, String> {
++        let op = value.get("op").and_then(|v| v.as_str()).unwrap_or("");
++        match op {
++            "event" => {
++                #[derive(Deserialize)]
++                #[serde(deny_unknown_fields)]
++                struct Input {
++                    level: u8,
++                    module: Module,
++                    kind: Kind,
++                    code: Code,
++                }
++                let input: Input =
++                    serde_json::from_value(value["event"].clone()).map_err(|_| "invalid_event")?;
++                self.capture(
++                    input.level,
++                    input.module,
++                    input.kind,
++                    input.code,
++                    None,
++                    None,
++                    None,
++                );
++                Ok(serde_json::json!(true))
++            }
++            "status" => Ok(
++                serde_json::json!({"status":self.status(),"settings":self.settings(),"build":self.shared.lock().unwrap().build}),
++            ),
++            "configure" => self.call(Command::Configure(
++                serde_json::from_value(value["settings"].clone())
++                    .map_err(|_| "invalid_settings")?,
++            )),
++            "stop" => self.call(Command::Stop),
++            "files" => self.call(Command::Files),
++            "query" => self.call(Command::Query(
++                serde_json::from_value(value["query"].clone()).map_err(|_| "invalid_query")?,
++            )),
++            "pin" => self.call(Command::Pin(
++                value["id"].as_str().ok_or("invalid_id")?.into(),
++                value["pinned"].as_bool().ok_or("invalid_pin")?,
++            )),
++            "clear" if value["confirmed"] == true => self.call(Command::Clear),
++            "export" => self.call(Command::Export(
++                serde_json::from_value(value["ids"].clone()).map_err(|_| "invalid_ids")?,
++            )),
++            _ => Err("invalid_operation".into()),
++        }
++    }
++}
++// No raw URL fields are serialized. Only these closed route names are exposed.
++fn parse_endpoint(value: &str) -> Option<(String, u16, String)> {
++    let (scheme, rest) = value.split_once("://")?;
++    if !["ws", "wss", "http", "https"].contains(&scheme) {
++        return None;
++    }
++    let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
++    let port = authority
++        .rsplit_once(':')
++        .and_then(|(_, p)| p.parse::<u16>().ok())
++        .unwrap_or(if matches!(scheme, "wss" | "https") {
++            443
++        } else {
++            80
++        });
++    let route = match path {
++        "ws/id" => "id",
++        "ws/relay" => "relay",
++        _ => "other",
++    };
++    Some((scheme.into(), port, route.into()))
++}
++struct RemoveOnDrop(Option<PathBuf>);
++impl Drop for RemoveOnDrop {
++    fn drop(&mut self) {
++        if let Some(path) = &self.0 {
++            let _ = fs::remove_file(path);
++        }
++    }
++}
++struct Store {
++    directory: PathBuf,
++    config: PathBuf,
++    active: Option<(String, File, u64)>,
++    started: Option<Instant>,
++    deadline: Option<Instant>,
++    last_tick: Option<Instant>,
++    config_modified: Option<SystemTime>,
++    elapsed_at_start: u64,
++}
++impl Store {
++    fn new(directory: PathBuf, config: PathBuf) -> Self {
++        Self {
++            directory,
++            config: config.clone(),
++            active: None,
++            started: None,
++            deadline: None,
++            last_tick: None,
++            elapsed_at_start: 0,
++            config_modified: fs::metadata(&config).and_then(|m| m.modified()).ok(),
++        }
++    }
++    fn close(&mut self) {
++        if let Some((_, mut f, _)) = self.active.take() {
++            let _ = f.flush();
++            let _ = f.sync_data();
++        }
++    }
++    fn lock(&self) -> io::Result<File> {
++        private_dir(&self.directory)?;
++        let path = self.directory.join(".writer-lock");
++        if fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
++            return Err(error("unsafe_lock"));
++        }
++        let f = OpenOptions::new()
++            .read(true)
++            .write(true)
++            .create(true)
++            .truncate(false)
++            .open(path)?;
++        try_exclusive(&f)?;
++        Ok(f)
++    }
++    fn files(&self) -> io::Result<Vec<LogFile>> {
++        let mut files = Vec::new();
++        for entry in fs::read_dir(&self.directory)? {
++            let entry = entry?;
++            let id = entry.file_name().to_string_lossy().into_owned();
++            if valid_id(&id) && entry.file_type()?.is_file() {
++                let file = OpenOptions::new()
++                    .read(true)
++                    .write(true)
++                    .open(entry.path())?;
++                let active = file.try_lock_exclusive().is_err();
++                files.push(LogFile {
++                    bytes: entry.metadata()?.len(),
++                    pinned: self.directory.join(format!("{id}.keep")).exists(),
++                    id,
++                    active,
++                });
++            }
++        }
++        files.sort_by(|a, b| a.id.cmp(&b.id));
++        Ok(files)
++    }
++    fn persist(
++        &mut self,
++        settings: &Settings,
++        key: &[u8; 32],
++        recording: &str,
++        replace_recording: bool,
++    ) -> io::Result<()> {
++        // This is deliberately separate from exportable records. No credential/config capture.
++        let lock_path = self.config.with_extension("lock");
++        if fs::symlink_metadata(&lock_path).is_ok_and(|m| m.file_type().is_symlink()) {
++            return Err(error("unsafe_config_lock"));
++        }
++        let lock = OpenOptions::new()
++            .read(true)
++            .write(true)
++            .create(true)
++            .truncate(false)
++            .open(lock_path)?;
++        try_exclusive(&lock)?;
++        if !replace_recording {
++            if let Ok(bytes) = fs::read(&self.config) {
++                if Persisted::decode(&bytes)?.recording != recording {
++                    return Err(error("diagnostics_busy"));
++                }
++            }
++        }
++        let temp = self
++            .config
++            .with_extension(format!("{}.tmp", std::process::id()));
++        let _ = fs::remove_file(&temp);
++        let mut f = private_file(&temp)?;
++        f.write_all(&serde_json::to_vec(&Persisted {
++            settings: settings.clone(),
++            key: *key,
++            recording: recording.to_owned(),
++        })?)?;
++        f.sync_all()?;
++        #[cfg(windows)]
++        if self.config.exists() {
++            let backup = self.config.with_extension("backup");
++            if backup.exists() {
++                fs::remove_file(&backup)?;
++            }
++            fs::rename(&self.config, backup)?;
++        }
++        fs::rename(temp, &self.config)?;
++        self.config_modified = fs::metadata(&self.config).and_then(|m| m.modified()).ok();
++        Ok(())
++    }
++    fn command(
++        &mut self,
++        command: Command,
++        shared: &Mutex<Shared>,
++    ) -> io::Result<serde_json::Value> {
++        match command {
++            Command::Configure(mut settings) => {
++                settings.validate()?;
++                settings.active_until_utc = None;
++                settings.active_started_utc = None;
++                if settings.enabled {
++                    settings.active_until_utc = settings.end_utc;
++                    let start = settings.start_utc.unwrap_or_else(now).max(now());
++                    settings.active_started_utc = Some(start);
++                    if let Some(seconds) = settings.duration_seconds {
++                        let end = start.saturating_add(seconds as i64);
++                        settings.active_until_utc =
++                            Some(settings.end_utc.map_or(end, |v| v.min(end)));
++                    }
++                    if settings.active_until_utc.is_some_and(|v| v <= start) {
++                        return Err(error("invalid_schedule"));
++                    }
++                }
++                let directory = settings
++                    .directory
++                    .clone()
++                    .unwrap_or_else(|| self.config.parent().unwrap().join("records"));
++                private_dir(&directory)?;
++                let probe = directory.join(format!(".probe-{}", hex(&rand::random::<[u8; 8]>())));
++                drop(private_file(&probe)?);
++                fs::remove_file(probe)?;
++                let key = rand::random();
++                let recording = hex(&rand::random::<[u8; 16]>());
++                self.persist(&settings, &key, &recording, true)?;
++                self.close();
++                self.directory = directory;
++                self.started = None;
++                self.deadline = None;
++                self.last_tick = None;
++                let mut s = shared.lock().unwrap();
++                s.settings = settings;
++                s.key = key;
++                s.recording = recording;
++                s.status.error = None;
++                Ok(serde_json::json!(true))
++            }
++            Command::Stop => {
++                let mut settings = shared.lock().unwrap().settings.clone();
++                settings.enabled = false;
++                {
++                    let s = shared.lock().unwrap();
++                    self.persist(&settings, &s.key, &s.recording, false)?;
++                }
++                self.close();
++                shared.lock().unwrap().settings = settings;
++                Ok(serde_json::json!(true))
++            }
++            Command::Files => {
++                let _lock = self.lock()?;
++                Ok(serde_json::to_value(self.files()?)?)
++            }
++            Command::Pin(id, pin) => {
++                if !valid_id(&id) {
++                    return Err(error("invalid_id"));
++                }
++                let _lock = self.lock()?;
++                if !self.files()?.iter().any(|f| f.id == id) {
++                    return Err(error("missing_file"));
++                }
++                let path = self.directory.join(format!("{id}.keep"));
++                if pin {
++                    if !path.exists() {
++                        drop(private_file(&path)?);
++                    }
++                } else if path.exists() {
++                    fs::remove_file(path)?;
++                }
++                Ok(serde_json::json!(true))
++            }
++            Command::Clear => {
++                let _lock = self.lock()?;
++                for f in self.files()? {
++                    if !f.active && !f.pinned {
++                        fs::remove_file(self.directory.join(f.id))?;
++                    }
++                }
++                Ok(serde_json::json!(true))
++            }
++            Command::Query(query) => {
++                let after = query
++                    .after
++                    .as_deref()
++                    .map(chrono::DateTime::parse_from_rfc3339)
++                    .transpose()
++                    .map_err(|_| error("invalid_query"))?;
++                if query.level.is_some_and(|v| !(1..=4).contains(&v)) {
++                    return Err(error("invalid_query"));
++                }
++                self.close();
++                let _lock = self.lock()?;
++                let mut rows = Vec::new();
++                let mut skip = query.offset.unwrap_or(0).min(1_000_000);
++                for f in self.files()? {
++                    if f.active {
++                        continue;
++                    }
++                    visit_records(&self.directory.join(f.id), |event| {
++                        let text = serde_json::to_string(&event)?;
++                        if after.as_ref().is_some_and(|v| {
++                            chrono::DateTime::parse_from_rfc3339(&event.timestamp)
++                                .expect("validated timestamp")
++                                < *v
++                        }) || query.level.is_some_and(|v| event.level > v)
++                            || query.module.is_some_and(|v| {
++                                std::mem::discriminant(&event.module) != std::mem::discriminant(&v)
++                            })
++                            || query.keyword.as_ref().is_some_and(|v| !text.contains(v))
++                        {
++                            return Ok(true);
++                        }
++                        if skip > 0 {
++                            skip -= 1;
++                            return Ok(true);
++                        }
++                        rows.push(event);
++                        Ok(rows.len() != MAX_QUERY)
++                    })?;
++                    if rows.len() == MAX_QUERY {
++                        break;
++                    }
++                }
++                Ok(serde_json::to_value(rows)?)
++            }
++            Command::Export(ids) => {
++                if ids.is_empty() || ids.len() > 1000 || ids.iter().any(|id| !valid_id(id)) {
++                    return Err(error("invalid_selection"));
++                }
++                self.close();
++                let config_lock = OpenOptions::new()
++                    .read(true)
++                    .write(true)
++                    .create(true)
++                    .truncate(false)
++                    .open(self.config.with_extension("lock"))?;
++                try_exclusive(&config_lock)?;
++                let _lock = self.lock()?;
++                let files = self.files()?;
++                let exports = self.config.parent().unwrap().join("exports");
++                private_dir(&exports)?;
++                let metadata = serde_json::to_vec(
++                    &serde_json::json!({"schema":1,"privacy":"typed-events-only","automatic_upload":false,"build":shared.lock().unwrap().build,"platform":std::env::consts::OS,"architecture":std::env::consts::ARCH}),
++                )?;
++                let mut sizes = Vec::new();
++                let mut archive_size = 1024 + 512 + ((metadata.len() as u64 + 511) / 512) * 512;
++                for id in &ids {
++                    if !files.iter().any(|f| f.id == *id && !f.active) {
++                        return Err(error("active_or_missing_file"));
++                    }
++                    let mut size = 0;
++                    visit_records(&self.directory.join(id), |e| {
++                        size += serde_json::to_vec(&e)?.len() as u64 + 1;
++                        Ok(true)
++                    })?;
++                    sizes.push(size);
++                    archive_size += 512 + ((size + 511) / 512) * 512;
++                }
++                // Temporary archives are part of the configured storage cap. Never exceed
++                // it to export; the user can select fewer files, clean up or raise the cap.
++                self.clean_exports()?;
++                let used: u64 = files.iter().map(|f| f.bytes).sum::<u64>() + self.export_bytes()?;
++                let limit = shared.lock().unwrap().settings.total_bytes;
++                if used.saturating_add(archive_size) > limit {
++                    return Err(error("export_requires_storage_budget"));
++                }
++                if fs2::available_space(&exports)? < archive_size.saturating_add(MB) {
++                    return Err(error("export_disk_space"));
++                }
++                let path = exports.join(format!(
++                    "diagnostics-{}.tar",
++                    hex(&rand::random::<[u8; 16]>())
++                ));
++                let mut cleanup = RemoveOnDrop(Some(path.clone()));
++                let file = private_file(&path)?;
++                try_exclusive(&file)?;
++                let mut archive = tar::Builder::new(file);
++                for (id, size) in ids.into_iter().zip(sizes) {
++                    let mut header = tar::Header::new_gnu();
++                    header.set_size(size);
++                    header.set_mode(0o600);
++                    header.set_cksum();
++                    archive.append_data(
++                        &mut header,
++                        &id,
++                        ValidatedReader::new(&self.directory.join(&id))?,
++                    )?;
++                }
++                let mut header = tar::Header::new_gnu();
++                header.set_size(metadata.len() as u64);
++                header.set_mode(0o600);
++                header.set_cksum();
++                archive.append_data(&mut header, "metadata.json", metadata.as_slice())?;
++                archive.finish()?;
++                archive.into_inner()?.sync_all()?;
++                cleanup.0 = None;
++                Ok(serde_json::json!({"path":path}))
++            }
++        }
++    }
++    fn export_files(&self) -> io::Result<Vec<(PathBuf, u64, SystemTime, bool)>> {
++        let directory = self.config.parent().unwrap().join("exports");
++        if !directory.exists() {
++            return Ok(Vec::new());
++        }
++        let mut result = Vec::new();
++        for entry in fs::read_dir(directory)? {
++            let entry = entry?;
++            let name = entry.file_name().to_string_lossy().into_owned();
++            if !name.starts_with("diagnostics-")
++                || !name.ends_with(".tar")
++                || name.len() != 48
++                || !entry.file_type()?.is_file()
++            {
++                continue;
++            }
++            let file = OpenOptions::new()
++                .read(true)
++                .write(true)
++                .open(entry.path())?;
++            result.push((
++                entry.path(),
++                entry.metadata()?.len(),
++                entry.metadata()?.modified()?,
++                try_exclusive(&file).is_err(),
++            ));
++        }
++        Ok(result)
++    }
++    fn export_bytes(&self) -> io::Result<u64> {
++        Ok(self.export_files()?.iter().map(|v| v.1).sum())
++    }
++    fn clean_exports(&self) -> io::Result<()> {
++        for (path, _, modified, active) in self.export_files()? {
++            if !active
++                && SystemTime::now()
++                    .duration_since(modified)
++                    .is_ok_and(|v| v.as_secs() > 86400)
++            {
++                fs::remove_file(path)?;
++            }
++        }
++        Ok(())
++    }
++    fn tick(&mut self, shared: &Mutex<Shared>, drops: &AtomicU64) {
++        if self
++            .last_tick
++            .is_some_and(|v| v.elapsed() < Duration::from_secs(1))
++        {
++            return;
++        }
++        self.last_tick = Some(Instant::now());
++        let modified = fs::metadata(&self.config).and_then(|m| m.modified()).ok();
++        let mut s = shared.lock().unwrap();
++        if modified.is_some() && modified != self.config_modified {
++            if let Ok(bytes) = fs::read(&self.config) {
++                if let Ok(saved) = Persisted::decode(&bytes) {
++                    {
++                        let settings = saved.settings;
++                        self.close();
++                        self.directory = settings
++                            .directory
++                            .clone()
++                            .unwrap_or_else(|| self.config.parent().unwrap().join("records"));
++                        self.started = None;
++                        self.deadline = None;
++                        s.settings = settings;
++                        s.key = saved.key;
++                        s.recording = saved.recording;
++                        s.status.error = None;
++                        self.config_modified = modified;
++                    }
++                }
++            }
++        }
++        let current = now();
++        if !s.settings.enabled {
++            self.close();
++            if s.status.error.is_some() {
++                s.status.state = "error".into();
++                return;
++            }
++            s.status.state = if self.started.is_some() {
++                "stopped"
++            } else {
++                "off"
++            }
++            .into();
++        } else if s
++            .settings
++            .active_until_utc
++            .or(s.settings.end_utc)
++            .is_some_and(|v| current >= v)
++            || self.deadline.is_some_and(|v| Instant::now() >= v)
++        {
++            self.close();
++            s.settings.enabled = false;
++            s.status.state = "stopped".into();
++            let _ = self.persist(&s.settings, &s.key, &s.recording, false);
++        } else if s.settings.start_utc.is_some_and(|v| current < v) && self.started.is_none() {
++            s.status.state = "waiting".into();
++        } else {
++            if self.started.is_none() {
++                self.started = Some(Instant::now());
++                self.elapsed_at_start = s
++                    .settings
++                    .active_started_utc
++                    .map(|v| current.saturating_sub(v).max(0) as u64)
++                    .unwrap_or(0);
++                self.deadline = s.settings.active_until_utc.or(s.settings.end_utc).map(|v| {
++                    Instant::now() + Duration::from_secs(v.saturating_sub(current) as u64)
++                });
++            }
++            s.status.state = "recording".into();
++        }
++        s.status.elapsed_seconds = self
++            .started
++            .map(|v| v.elapsed().as_secs().saturating_add(self.elapsed_at_start))
++            .unwrap_or(0);
++        s.status.remaining_seconds = self
++            .deadline
++            .map(|v| v.saturating_duration_since(Instant::now()).as_secs());
++        s.status.dropped = drops.load(Ordering::Relaxed);
++        s.status.current_bytes = self.active.as_ref().map(|v| v.2).unwrap_or(0);
++        s.status.directory = self.directory.clone();
++        // Disk enumeration is worker-only and never on producer/UI threads.
++        if let Ok(_lock) = self.lock() {
++            if let Ok(files) = self.files() {
++                let mut total: u64 =
++                    files.iter().map(|v| v.bytes).sum::<u64>() + self.export_bytes().unwrap_or(0);
++                for f in &files {
++                    let path = self.directory.join(&f.id);
++                    let expired = s.settings.retention_days.is_some_and(|days| {
++                        path.metadata()
++                            .and_then(|m| m.modified())
++                            .ok()
++                            .and_then(|v| SystemTime::now().duration_since(v).ok())
++                            .is_some_and(|age| age.as_secs() > days as u64 * 86400)
++                    });
++                    if !f.active
++                        && !f.pinned
++                        && (expired || total > s.settings.total_bytes)
++                        && fs::remove_file(path).is_ok()
++                    {
++                        total = total.saturating_sub(f.bytes);
++                    }
++                }
++                s.status.total_bytes = total;
++                s.status.export_bytes = self.export_bytes().unwrap_or(0);
++                let _ = self.clean_exports();
++                s.status.files = self.files().map(|v| v.len()).unwrap_or(files.len());
++            }
++        }
++    }
++    fn write(&mut self, event: Event, shared: &Mutex<Shared>) -> io::Result<()> {
++        let s = shared.lock().unwrap();
++        if s.status.state != "recording"
++            || !s.settings.enabled
++            || event.recording != s.recording
++            || event.level > s.settings.level
++        {
++            return Ok(());
++        }
++        let settings = s.settings.clone();
++        drop(s);
++        let mut data = serde_json::to_vec(&event)?;
++        data.push(b'\n');
++        if data.len() > MAX_RECORD {
++            return Err(error("record_too_large"));
++        }
++        let config_lock = OpenOptions::new()
++            .read(true)
++            .write(true)
++            .create(true)
++            .truncate(false)
++            .open(self.config.with_extension("lock"))?;
++        try_exclusive(&config_lock)?;
++        let _lock = self.lock()?;
++        if self
++            .active
++            .as_ref()
++            .is_some_and(|v| v.2 + data.len() as u64 > settings.file_bytes)
++        {
++            self.close();
++        }
++        let files = self.files()?;
++        let mut total: u64 = files.iter().map(|v| v.bytes).sum::<u64>() + self.export_bytes()?;
++        for f in files {
++            let path = self.directory.join(&f.id);
++            let expired = settings.retention_days.is_some_and(|days| {
++                path.metadata()
++                    .and_then(|m| m.modified())
++                    .ok()
++                    .and_then(|t| SystemTime::now().duration_since(t).ok())
++                    .is_some_and(|v| v.as_secs() > days as u64 * 86400)
++            });
++            if !f.active
++                && !f.pinned
++                && (expired || total + data.len() as u64 > settings.total_bytes)
++            {
++                fs::remove_file(path)?;
++                total = total.saturating_sub(f.bytes);
++            }
++        }
++        if total + data.len() as u64 > settings.total_bytes {
++            return Err(error("quota_protected"));
++        }
++        if self.active.is_none() {
++            let id = format!(
++                "rlog-{:020}-{}.ndjson",
++                now(),
++                hex(&rand::random::<[u8; 8]>())
++            );
++            let f = private_file(&self.directory.join(&id))?;
++            try_exclusive(&f)?;
++            self.active = Some((id, f, 0));
++        }
++        let (_, file, size) = self.active.as_mut().unwrap();
++        file.write_all(&data)?;
++        *size += data.len() as u64;
++        Ok(())
++    }
++}
++fn valid_id(id: &str) -> bool {
++    id.starts_with("rlog-")
++        && id.ends_with(".ndjson")
++        && id.len() < 100
++        && id
++            .bytes()
++            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.')
++}
++fn visit_records(path: &Path, mut visit: impl FnMut(Event) -> io::Result<bool>) -> io::Result<()> {
++    if !fs::symlink_metadata(path)?.file_type().is_file() {
++        return Err(error("unsafe_file"));
++    }
++    let mut reader = BufReader::new(File::open(path)?);
++    loop {
++        let mut bytes = Vec::new();
++        let size = reader
++            .by_ref()
++            .take(MAX_RECORD as u64 + 1)
++            .read_until(b'\n', &mut bytes)?;
++        if size == 0 {
++            break;
++        }
++        if size > MAX_RECORD {
++            return Err(error("corrupt_record"));
++        }
++        let event: Event = serde_json::from_slice(&bytes).map_err(|_| error("corrupt_record"))?;
++        validate_event(&event)?;
++        if !visit(event)? {
++            break;
++        }
++    }
++    Ok(())
++}
++fn validate_event(e: &Event) -> io::Result<()> {
++    let is_hex = |v: &str, n: usize| v.len() == n && v.bytes().all(|b| b.is_ascii_hexdigit());
++    if !(1..=4).contains(&e.level)
++        || chrono::DateTime::parse_from_rfc3339(&e.timestamp).is_err()
++        || !is_hex(&e.recording, 32)
++        || !is_hex(&e.thread, 24)
++        || e.session.as_ref().is_some_and(|v| !is_hex(v, 24))
++        || e.endpoint.as_ref().is_some_and(|v| !is_hex(v, 24))
++        || e.transport
++            .as_ref()
++            .is_some_and(|v| !["http", "https", "ws", "wss"].contains(&v.as_str()))
++        || e.route
++            .as_ref()
++            .is_some_and(|v| !["id", "relay", "other"].contains(&v.as_str()))
++        || e.status.is_some_and(|v| !(100..=599).contains(&v))
++    {
++        return Err(error("unsafe_record"));
++    }
++    Ok(())
++}
++struct ValidatedReader {
++    reader: BufReader<File>,
++    pending: Vec<u8>,
++    offset: usize,
++}
++impl ValidatedReader {
++    fn new(path: &Path) -> io::Result<Self> {
++        if !fs::symlink_metadata(path)?.file_type().is_file() {
++            return Err(error("unsafe_file"));
++        }
++        Ok(Self {
++            reader: BufReader::new(File::open(path)?),
++            pending: Vec::new(),
++            offset: 0,
++        })
++    }
++}
++impl Read for ValidatedReader {
++    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
++        if out.is_empty() {
++            return Ok(0);
++        }
++        if self.offset == self.pending.len() {
++            let mut line = Vec::new();
++            let size = self
++                .reader
++                .by_ref()
++                .take(MAX_RECORD as u64 + 1)
++                .read_until(b'\n', &mut line)?;
++            if size == 0 {
++                return Ok(0);
++            }
++            if size > MAX_RECORD {
++                return Err(error("corrupt_record"));
++            }
++            let event: Event =
++                serde_json::from_slice(&line).map_err(|_| error("corrupt_record"))?;
++            validate_event(&event)?;
++            self.pending = serde_json::to_vec(&event)?;
++            self.pending.push(b'\n');
++            self.offset = 0;
++        }
++        let size = out.len().min(self.pending.len() - self.offset);
++        out[..size].copy_from_slice(&self.pending[self.offset..self.offset + size]);
++        self.offset += size;
++        Ok(size)
++    }
++}
++static ENGINE: OnceLock<Engine> = OnceLock::new();
++pub fn initialize(directory: PathBuf) -> io::Result<()> {
++    static INITIALIZE: Mutex<()> = Mutex::new(());
++    let _guard = INITIALIZE.lock().unwrap();
++    if ENGINE.get().is_none() {
++        let engine = Engine::start(directory)?;
++        let _ = ENGINE.set(engine);
++        if let Some(engine) = ENGINE.get() {
++            engine.capture(2, Module::App, Kind::Started, Code::None, None, None, None);
++        }
++    }
++    Ok(())
++}
++pub fn global() -> Option<&'static Engine> {
++    ENGINE.get()
++}
++pub fn legacy(record: &log::Record) {
++    if let Some(engine) = global() {
++        let target = record.target();
++        let module = if target.contains("websocket") {
++            Module::Websocket
++        } else if target.contains("tls") {
++            Module::Tls
++        } else if target.contains("rendezvous") {
++            Module::Rendezvous
++        } else if target.contains("hbbs_http") {
++            Module::Api
++        } else if target.contains("config") {
++            Module::Config
++        } else if target.contains("relay") {
++            Module::Relay
++        } else if target.contains("tcp")
++            || target.contains("udp")
++            || target.contains("socket")
++            || target.contains("proxy")
++        {
++            Module::Network
++        } else if target.contains("permission") || target.contains("privilege") {
++            Module::Permission
++        } else if target.contains("flutter") {
++            Module::Flutter
++        } else if target.contains("core_main") || target.contains("service") {
++            Module::App
++        } else if target.contains("client") {
++            Module::Session
++        } else if target.contains("audio") {
++            Module::Audio
++        } else if target.contains("video") {
++            Module::Video
++        } else if target.contains("clipboard") {
++            Module::Clipboard
++        } else if target.contains("file") {
++            Module::Transfer
++        } else {
++            Module::Other
++        };
++        let level = match record.level() {
++            log::Level::Error => 1,
++            log::Level::Warn | log::Level::Info => 2,
++            log::Level::Debug => 3,
++            log::Level::Trace => 4,
++        };
++        engine.capture(
++            level,
++            module,
++            Kind::LegacyEvent,
++            if level == 1 {
++                Code::Unknown
++            } else {
++                Code::None
++            },
++            None,
++            None,
++            None,
++        );
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    struct Temp(PathBuf);
++    impl Temp {
++        fn new() -> Self {
++            Self(
++                std::env::temp_dir()
++                    .join(format!("radar-test-{}", hex(&rand::random::<[u8; 16]>()))),
++            )
++        }
++    }
++    impl Drop for Temp {
++        fn drop(&mut self) {
++            let _ = fs::remove_dir_all(&self.0);
++        }
++    }
++    fn fixture() -> (Temp, Store, Mutex<Shared>) {
++        let t = Temp::new();
++        private_dir(&t.0).unwrap();
++        let directory = t.0.join("records");
++        private_dir(&directory).unwrap();
++        let state = Mutex::new(Shared {
++            settings: Settings {
++                enabled: true,
++                ..Settings::default()
++            },
++            status: Status {
++                state: "recording".into(),
++                ..Status::default()
++            },
++            key: [1; 32],
++            recording: "a".repeat(32),
++            build: serde_json::json!({}),
++        });
++        let store = Store::new(directory, t.0.join("settings.json"));
++        (t, store, state)
++    }
++    fn write_record(store: &mut Store, state: &Mutex<Shared>) {
++        for attempt in 0..250 {
++            match store.write(event(), state) {
++                Ok(()) => return,
++                Err(e) if e.kind() == io::ErrorKind::WouldBlock && attempt < 249 => {
++                    std::thread::sleep(Duration::from_millis(1))
++                }
++                Err(e) => panic!("unexpected storage failure: {e}"),
++            }
++        }
++    }
++    fn event() -> Event {
++        Event {
++            timestamp: chrono::Utc::now().to_rfc3339(),
++            level: 2,
++            module: Module::Websocket,
++            process: 1,
++            thread: "b".repeat(24),
++            kind: Kind::Upgrade,
++            recording: "a".repeat(32),
++            session: Some("c".repeat(24)),
++            code: Code::Http,
++            status: Some(301),
++            endpoint: Some("d".repeat(24)),
++            transport: Some("ws".into()),
++            port: Some(80),
++            route: Some("id".into()),
++        }
++    }
++    #[test]
++    fn defaults_and_every_preset() {
++        assert!(!Settings::default().enabled);
++        assert_eq!(Settings::default().level, 2);
++        for duration in [300, 900, 1800, 3600, 21600, 43200, 86400, 604800] {
++            Settings {
++                duration_seconds: Some(duration),
++                ..Settings::default()
++            }
++            .validate()
++            .unwrap();
++        }
++        for mb in [5, 10, 20, 50, 100, 500, 1024] {
++            Settings {
++                file_bytes: mb * MB,
++                total_bytes: 5 * 1024 * MB,
++                ..Settings::default()
++            }
++            .validate()
++            .unwrap();
++        }
++        for mb in [50, 100, 250, 500, 1024, 5120] {
++            Settings {
++                total_bytes: mb * MB,
++                ..Settings::default()
++            }
++            .validate()
++            .unwrap();
++        }
++        for days in [1, 7, 30, 90] {
++            Settings {
++                retention_days: Some(days),
++                ..Settings::default()
++            }
++            .validate()
++            .unwrap();
++        }
++        assert!(Settings {
++            file_bytes: 101 * MB,
++            ..Settings::default()
++        }
++        .validate()
++        .is_err());
++        assert!(Settings {
++            level: 5,
++            ..Settings::default()
++        }
++        .validate()
++        .is_err());
++        assert!(Settings {
++            duration_seconds: Some(0),
++            ..Settings::default()
++        }
++        .validate()
++        .is_err());
++        assert!(Settings {
++            start_utc: Some(2),
++            end_utc: Some(1),
++            ..Settings::default()
++        }
++        .validate()
++        .is_err());
++    }
++    #[test]
++    fn typed_privacy_and_corrupt_record_rejection() {
++        let secret = "Bearer TOP_SECRET-password-cookie-private-key";
++        let digest = pseudonym(&[1; 32], secret);
++        assert!(!digest.contains(secret));
++        assert_eq!(digest, pseudonym(&[1; 32], secret));
++        assert_ne!(digest, pseudonym(&[2; 32], secret));
++        let mut e = event();
++        e.endpoint = Some(secret.into());
++        assert!(validate_event(&e).is_err());
++        let mut json = serde_json::to_value(event()).unwrap();
++        json["password"] = secret.into();
++        assert!(serde_json::from_value::<Event>(json).is_err());
++        assert_eq!(
++            parse_endpoint("wss://host/ws/id"),
++            Some(("wss".into(), 443, "id".into()))
++        );
++        assert_eq!(
++            parse_endpoint("ws://host/ws/relay"),
++            Some(("ws".into(), 80, "relay".into()))
++        );
++        assert_eq!(
++            parse_endpoint("ws://[::1]:21118/ws/id"),
++            Some(("ws".into(), 21118, "id".into()))
++        );
++        for url in [
++            "wss://host/ws/id",
++            "ws://[::1]:21118/ws/relay",
++            "https://host/api/login?token=secret",
++        ] {
++            let parsed = parse_endpoint(url).unwrap();
++            assert!(!serde_json::to_string(&parsed).unwrap().contains("secret"));
++        }
++    }
++    #[test]
++    fn schedule_monotonic_deadline_and_restart_expiry() {
++        let (_t, mut store, state) = fixture();
++        let drops = AtomicU64::new(0);
++        {
++            let mut s = state.lock().unwrap();
++            s.settings.start_utc = Some(now() + 60);
++            s.settings.end_utc = Some(now() + 120);
++        }
++        store.last_tick = None;
++        store.tick(&state, &drops);
++        assert_eq!(state.lock().unwrap().status.state, "waiting");
++        state.lock().unwrap().settings.start_utc = Some(now() - 1);
++        store.last_tick = None;
++        store.tick(&state, &drops);
++        assert_eq!(state.lock().unwrap().status.state, "recording");
++        // Simulated wall-clock rollback cannot override an expired monotonic deadline.
++        state.lock().unwrap().settings.end_utc = Some(now() + 10000);
++        store.deadline = Some(Instant::now() - Duration::from_secs(1));
++        store.last_tick = None;
++        store.tick(&state, &drops);
++        assert_eq!(state.lock().unwrap().status.state, "stopped");
++        let t = Temp::new();
++        private_dir(&t.0).unwrap();
++        fs::write(
++            t.0.join("settings.json"),
++            serde_json::to_vec(&Persisted::new(Settings {
++                enabled: true,
++                end_utc: Some(now() - 1),
++                ..Settings::default()
++            }))
++            .unwrap(),
++        )
++        .unwrap();
++        let engine = Engine::start(t.0.clone()).unwrap();
++        assert!(!engine.settings().enabled);
++        drop(engine);
++    }
++    #[test]
++    fn rotation_quota_active_and_pin_protection() {
++        let (_t, mut store, state) = fixture();
++        {
++            let mut s = state.lock().unwrap();
++            s.settings.file_bytes = MB;
++            s.settings.total_bytes = 2 * MB;
++        }
++        for _ in 0..6000 {
++            write_record(&mut store, &state);
++        }
++        let files = store.files().unwrap();
++        assert!(files.len() >= 2);
++        assert!(files.iter().map(|f| f.bytes).sum::<u64>() <= 2 * MB);
++        assert_eq!(files.iter().filter(|f| f.active).count(), 1);
++        let closed = files.iter().find(|f| !f.active).unwrap().id.clone();
++        store
++            .command(Command::Pin(closed.clone(), true), &state)
++            .unwrap();
++        store.command(Command::Clear, &state).unwrap();
++        let files = store.files().unwrap();
++        assert!(files.iter().any(|f| f.id == closed));
++        assert!(files.iter().any(|f| f.active));
++        // Quota cannot be freed by deleting a protected file.
++        for f in &files {
++            if !f.active {
++                let path = store.directory.join(&f.id);
++                let file = OpenOptions::new().write(true).open(path).unwrap();
++                file.set_len(2 * MB).unwrap();
++            }
++        }
++        assert!(store.write(event(), &state).is_err());
++    }
++    #[test]
++    fn levels_disabled_and_recording_generation_gate() {
++        let (_t, mut store, state) = fixture();
++        let mut e = event();
++        e.level = 4;
++        store.write(e, &state).unwrap();
++        assert!(store.files().unwrap().is_empty());
++        state.lock().unwrap().settings.level = 4;
++        write_record(&mut store, &state);
++        store.close();
++        state.lock().unwrap().settings.enabled = false;
++        let before = store.files().unwrap()[0].bytes;
++        write_record(&mut store, &state);
++        assert_eq!(store.files().unwrap()[0].bytes, before);
++        state.lock().unwrap().settings.enabled = true;
++        state.lock().unwrap().recording = "f".repeat(32);
++        write_record(&mut store, &state);
++        assert_eq!(store.files().unwrap()[0].bytes, before);
++    }
++    #[test]
++    fn bounded_query_safe_archive_and_confirmation() {
++        let (_t, mut store, state) = fixture();
++        for _ in 0..300 {
++            write_record(&mut store, &state);
++        }
++        store.close();
++        let rows = store
++            .command(Command::Query(Query::default()), &state)
++            .unwrap();
++        assert_eq!(rows.as_array().unwrap().len(), MAX_QUERY);
++        let files = store.files().unwrap();
++        let export = store
++            .command(
++                Command::Export(files.iter().map(|v| v.id.clone()).collect()),
++                &state,
++            )
++            .unwrap();
++        let mut archive = tar::Archive::new(File::open(export["path"].as_str().unwrap()).unwrap());
++        let entries = archive
++            .entries()
++            .unwrap()
++            .map(|v| v.unwrap().path().unwrap().into_owned())
++            .collect::<Vec<_>>();
++        assert!(entries.contains(&PathBuf::from("metadata.json")));
++        assert!(store
++            .command(Command::Export(vec!["../secret".into()]), &state)
++            .is_err());
++        let engine = Engine::start(Temp::new().0.clone()).unwrap();
++        assert!(engine.request(serde_json::json!({"op":"clear"})).is_err());
++    }
++    #[test]
++    fn nonblocking_overflow_and_shared_concurrent_producers() {
++        let t = Temp::new();
++        let engine = Arc::new(Engine::start(t.0.clone()).unwrap());
++        engine.shared.lock().unwrap().settings.enabled = true;
++        // Holding the state lock represents slow storage/settings activity: producers drop immediately.
++        let guard = engine.shared.lock().unwrap();
++        let start = Instant::now();
++        engine.capture(1, Module::App, Kind::Started, Code::None, None, None, None);
++        assert!(start.elapsed() < Duration::from_millis(100));
++        drop(guard);
++        assert_eq!(engine.drops.load(Ordering::Relaxed), 1);
++        let workers = (0..8)
++            .map(|_| {
++                let e = engine.clone();
++                std::thread::spawn(move || {
++                    for _ in 0..1000 {
++                        e.capture(
++                            2,
++                            Module::Network,
++                            Kind::Attempt,
++                            Code::None,
++                            None,
++                            Some("wss://secret-host/ws/id"),
++                            None,
++                        );
++                    }
++                })
++            })
++            .collect::<Vec<_>>();
++        for w in workers {
++            w.join().unwrap();
++        }
++        assert!(engine.drops.load(Ordering::Relaxed) > 0);
++    }
++    #[test]
++    fn os_file_lock_protects_other_writer() {
++        let (_t, store, _state) = fixture();
++        let guard = store.lock().unwrap();
++        assert!(store.lock().is_err());
++        drop(guard);
++        assert!(store.lock().is_ok());
++    }
++    #[test]
++    fn metadata_allowlist_and_legacy_payload_is_never_formatted() {
++        struct Secret;
++        impl std::fmt::Display for Secret {
++            fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++                panic!("legacy secret was formatted");
++            }
++        }
++        let t = Temp::new();
++        initialize(t.0.clone()).unwrap();
++        let engine = global().unwrap();
++        engine.set_build(&serde_json::json!({"version":"1.5.3","variant":"standard","password":"SECRET","upstream_sha":"SECRET","repository":"private-host"}));
++        let build = engine.shared.lock().unwrap().build.clone();
++        assert_eq!(build["version"], "1.5.3");
++        assert!(build.get("password").is_none());
++        assert!(build.get("upstream_sha").is_none());
++        engine.request(serde_json::json!({"op":"configure","settings":Settings {enabled:true,..Settings::default()}})).unwrap();
++        legacy(
++            &log::Record::builder()
++                .level(log::Level::Info)
++                .args(format_args!("{}", Secret))
++                .build(),
++        );
++        engine.request(serde_json::json!({"op":"stop"})).unwrap();
++    }
++    #[test]
++    fn invalid_directory_corrupt_file_and_partial_export_cleanup() {
++        let (t, mut store, state) = fixture();
++        let invalid = t.0.join("not-a-directory");
++        fs::write(&invalid, b"occupied").unwrap();
++        assert!(store
++            .command(
++                Command::Configure(Settings {
++                    directory: Some(invalid),
++                    ..Settings::default()
++                }),
++                &state
++            )
++            .is_err());
++        write_record(&mut store, &state);
++        store.close();
++        let id = store.files().unwrap()[0].id.clone();
++        fs::write(store.directory.join(&id), b"{\"password\":\"SECRET\"}\n").unwrap();
++        assert!(store
++            .command(Command::Query(Query::default()), &state)
++            .is_err());
++        assert!(store.command(Command::Export(vec![id]), &state).is_err());
++        assert_eq!(fs::read_dir(t.0.join("exports")).unwrap().count(), 0);
++    }
++    #[test]
++    fn child_process_writer() {
++        let Ok(path) = std::env::var("RADAR_DIAGNOSTIC_TEST_DIR") else {
++            return;
++        };
++        let directory = PathBuf::from(path);
++        private_dir(&directory).unwrap();
++        let mut store = Store::new(directory.clone(), directory.join("settings.json"));
++        let state = Mutex::new(Shared {
++            settings: Settings {
++                enabled: true,
++                file_bytes: MB,
++                total_bytes: 2 * MB,
++                ..Settings::default()
++            },
++            status: Status {
++                state: "recording".into(),
++                ..Status::default()
++            },
++            key: [1; 32],
++            recording: "a".repeat(32),
++            build: serde_json::json!({}),
++        });
++        for _ in 0..4000 {
++            for attempt in 0..100 {
++                match store.write(event(), &state) {
++                    Ok(()) => break,
++                    Err(e) if e.kind() == io::ErrorKind::WouldBlock && attempt < 99 => {
++                        std::thread::sleep(Duration::from_millis(1))
++                    }
++                    Err(e) => panic!("writer failed: {e}"),
++                }
++            }
++        }
++        store.close();
++    }
++    #[test]
++    fn cooperating_processes_enforce_one_quota() {
++        let (t, store, _state) = fixture();
++        let exe = std::env::current_exe().unwrap();
++        let mut a = std::process::Command::new(&exe)
++            .args(["--exact", "tests::child_process_writer"])
++            .env("RADAR_DIAGNOSTIC_TEST_DIR", &store.directory)
++            .spawn()
++            .unwrap();
++        let mut b = std::process::Command::new(&exe)
++            .args(["--exact", "tests::child_process_writer"])
++            .env("RADAR_DIAGNOSTIC_TEST_DIR", &store.directory)
++            .spawn()
++            .unwrap();
++        assert!(a.wait().unwrap().success());
++        assert!(b.wait().unwrap().success());
++        let files = store.files().unwrap();
++        assert!(files.iter().all(|f| !f.active));
++        assert!(files.iter().map(|f| f.bytes).sum::<u64>() <= 2 * MB);
++        drop(t);
++    }
++    #[test]
++    fn expiry_works_while_off_and_preserves_pins() {
++        let (_t, mut store, state) = fixture();
++        state.lock().unwrap().settings.retention_days = Some(1);
++        write_record(&mut store, &state);
++        store.close();
++        let first = store.files().unwrap()[0].id.clone();
++        write_record(&mut store, &state);
++        store.close();
++        let ids = store
++            .files()
++            .unwrap()
++            .into_iter()
++            .map(|f| f.id)
++            .collect::<Vec<_>>();
++        let second = ids.iter().find(|v| **v != first).unwrap();
++        store
++            .command(Command::Pin(first.clone(), true), &state)
++            .unwrap();
++        for id in &ids {
++            filetime::set_file_mtime(
++                store.directory.join(id),
++                filetime::FileTime::from_unix_time(now() - 2 * 86400, 0),
++            )
++            .unwrap();
++        }
++        state.lock().unwrap().settings.enabled = false;
++        store.tick(&state, &AtomicU64::new(0));
++        assert!(store.directory.join(first).exists());
++        assert!(!store.directory.join(second).exists());
++    }
++    #[test]
++    fn temporary_archives_obey_the_same_storage_cap() {
++        let (t, mut store, state) = fixture();
++        for _ in 0..100 {
++            write_record(&mut store, &state);
++        }
++        store.close();
++        let files = store.files().unwrap();
++        let bytes = files[0].bytes;
++        state.lock().unwrap().settings.total_bytes = bytes * 2;
++        let ids = files.iter().map(|f| f.id.clone()).collect::<Vec<_>>();
++        assert!(store.command(Command::Export(ids.clone()), &state).is_err());
++        assert_eq!(store.export_bytes().unwrap(), 0);
++        state.lock().unwrap().settings.total_bytes = 10 * MB;
++        let value = store.command(Command::Export(ids), &state).unwrap();
++        let path = PathBuf::from(value["path"].as_str().unwrap());
++        assert!(path.exists());
++        store.tick(&state, &AtomicU64::new(0));
++        assert!(state.lock().unwrap().status.export_bytes > 0);
++        assert!(state.lock().unwrap().status.total_bytes > bytes);
++        let mut reader = ValidatedReader::new(&store.directory.join(&files[0].id)).unwrap();
++        let mut streamed = Vec::new();
++        reader.read_to_end(&mut streamed).unwrap();
++        assert_eq!(streamed.len() as u64, bytes);
++        drop(t);
++    }
++    #[test]
++    fn private_recording_key_is_shared_but_never_exposed() {
++        let (t, mut store, state) = fixture();
++        store
++            .command(
++                Command::Configure(Settings {
++                    enabled: true,
++                    ..Settings::default()
++                }),
++                &state,
++            )
++            .unwrap();
++        let other = Engine::start(t.0.clone()).unwrap();
++        let original = state.lock().unwrap().recording.clone();
++        assert_eq!(other.shared.lock().unwrap().recording, original);
++        assert_eq!(other.shared.lock().unwrap().key, state.lock().unwrap().key);
++        let public = other.request(serde_json::json!({"op":"status"})).unwrap();
++        assert!(public.get("key").is_none());
++        assert!(public["settings"].get("key").is_none());
++        let old_key = other.shared.lock().unwrap().key;
++        store
++            .command(
++                Command::Configure(Settings {
++                    enabled: true,
++                    ..Settings::default()
++                }),
++                &state,
++            )
++            .unwrap();
++        // An old process must not overwrite a newer recording during automatic stop.
++        assert!(store
++            .persist(&Settings::default(), &old_key, &original, false)
++            .is_err());
++        let saved = Persisted::decode(&fs::read(t.0.join("settings.json")).unwrap()).unwrap();
++        assert_eq!(saved.recording, state.lock().unwrap().recording);
++        assert_ne!(saved.key, old_key);
++        drop(other);
++    }
++}
+diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
+--- a/src/flutter_ffi.rs
++++ b/src/flutter_ffi.rs
+@@ -1,8 +1,3 @@
+-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+-use crate::{
+-    keyboard::input_source::{change_input_source, get_cur_session_input_source},
+-    trusted_devices::authority,
+-};
+ #[cfg(target_os = "linux")]
+ use crate::platform::linux::is_x11;
+ use crate::{
+@@ -14,6 +9,12 @@
+     input::*,
+     ui_interface::{self, *},
+ };
++#[cfg(not(any(target_os = "android", target_os = "ios")))]
++use crate::{
++    keyboard::input_source::{change_input_source, get_cur_session_input_source},
++    trusted_devices::authority,
++};
++use base::{config::keys, fs};
+ use flutter_rust_bridge::{StreamSink, SyncReturn};
+ use hbb_common::{
+     config::{self, LocalConfig, PeerConfig, PeerInfoSerde},
+@@ -21,10 +22,8 @@
+     rendezvous_proto::ConnType,
+     ResultType,
+ };
+-use base::{
+-    config::keys,
+-    fs,
+-};
++#[cfg(all(target_os = "android", debug_assertions))]
++use std::fmt::Write as _;
+ use std::{
+     collections::HashMap,
+     sync::{
+@@ -53,13 +52,26 @@
+     } else {
+         crate::read_custom_client(custom_client_config);
+     }
++    let _ =
++        hbb_common::radar_diagnostics::initialize(config::Config::log_path().join("diagnostics"));
++    if let Some(engine) = hbb_common::radar_diagnostics::global() {
++        if let Ok(build) =
++            serde_json::from_str::<serde_json::Value>(include_str!("custom_update/build.json"))
++        {
++            engine.set_build(&build);
++        }
++    }
+     #[cfg(target_os = "android")]
+     {
+         // flexi_logger can't work when android_logger initialized.
+         #[cfg(debug_assertions)]
+         android_logger::init_once(
+             android_logger::Config::default()
+-                .with_max_level(log::LevelFilter::Debug) // limit log level
++                .with_max_level(log::LevelFilter::Trace)
++                .format(|buf, record| {
++                    hbb_common::radar_diagnostics::legacy(record);
++                    write!(buf, "diagnostic event (details omitted)")
++                })
+                 .with_tag("ffi"), // logs will show under mytag tag
+         );
+         #[cfg(not(debug_assertions))]
+@@ -1233,6 +1245,19 @@
+ 
+ pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
+     http_request(url, method, body, header)
++}
++
++/// Runs on the existing asynchronous Flutter bridge worker, never the UI thread.
++pub fn main_diagnostics(request: String) -> String {
++    let result = (|| -> Result<serde_json::Value, String> {
++        let engine = hbb_common::radar_diagnostics::global().ok_or("diagnostics_unavailable")?;
++        let value = serde_json::from_str(&request).map_err(|_| "invalid_request")?;
++        engine.request(value)
++    })();
++    match result {
++        Ok(data) => serde_json::json!({"ok":true,"data":data}).to_string(),
++        Err(code) => serde_json::json!({"ok":false,"error":code}).to_string(),
++    }
+ }
+ 
+ pub fn main_get_local_option(key: String) -> SyncReturn<String> {
+@@ -2884,7 +2909,9 @@
+ pub fn main_set_common(_key: String, _value: String) {
+     // Custom downloads have a separate API-digest verification and explicit
+     // installer handoff. Never enter the legacy official installer path.
+-    if matches!(_key.as_str(), "download-new-version" | "update-me") { return; }
++    if matches!(_key.as_str(), "download-new-version" | "update-me") {
++        return;
++    }
+     #[cfg(target_os = "windows")]
+     if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
+         std::thread::spawn(move || {
+@@ -3044,8 +3071,7 @@
+ 
+ pub fn session_set_common(session_id: SessionID, key: String, value: String) {
+     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+-        if key == "continue-insecure-connection"
+-        {
++        if key == "continue-insecure-connection" {
+             s.continue_insecure_connection(value == "Y");
+             return;
+         }
+diff --git a/src/lang/cn.rs b/src/lang/cn.rs
+--- a/src/lang/cn.rs
++++ b/src/lang/cn.rs
+@@ -9,6 +9,7 @@
+         ("Complete installation in the system installer", "请在系统安装程序中完成安装"),
+         ("Unable to open installer; check installation permissions", "无法打开安装程序，请检查安装权限"),
+ 
++        ("Logs", "日志"),
+         ("Status", "状态"),
+         ("Your Desktop", "你的桌面"),
+         ("desk_tip", "你的桌面可以通过下面的 ID 和密码访问。"),
+diff --git a/src/platform/android_log.rs b/src/platform/android_log.rs
+--- a/src/platform/android_log.rs
++++ b/src/platform/android_log.rs
+@@ -2,7 +2,6 @@
+ use hbb_common::{
+     config::Config,
+     flexi_logger::{
+-        opt_format,
+         writers::{FileLogWriter, LogWriter},
+         Age, Cleanup, Criterion, DeferredNow, FileSpec, FlexiLoggerError, Logger, Naming,
+     },
+@@ -35,20 +34,23 @@
+ }
+ 
+ pub fn initialize() {
++    let _ = hbb_common::radar_diagnostics::initialize(Config::log_path().join("diagnostics"));
+     static INIT: Once = Once::new();
+     INIT.call_once(|| {
+-        let result = Logger::try_with_env_or_str("debug,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error")
+-            .and_then(|logger| {
+-                let default_writer = FileLogWriter::builder(FileSpec::default().directory(Config::log_path()))
+-                    .format(opt_format)
++        let result = Logger::try_with_str("trace").and_then(|logger| {
++            let default_writer =
++                FileLogWriter::builder(FileSpec::default().directory(Config::log_path()))
++                    .format(hbb_common::diagnostic_format)
+                     .rotate(
+                         Criterion::AgeOrSize(Age::Day, DEFAULT_LOG_MAX_BYTES),
+                         Naming::Timestamps,
+                         Cleanup::KeepLogFiles(DEFAULT_LOG_FILE_COUNT),
+                     )
+                     .try_build();
+-                logger.log_to_writer(Box::new(DocumentWriter { default_writer })).start()
+-            });
++            logger
++                .log_to_writer(Box::new(DocumentWriter { default_writer }))
++                .start()
++        });
+         if let Err(error) = result {
+             report_error(&error);
+         }
+@@ -70,16 +72,19 @@
+ 
+ impl LogWriter for DocumentWriter {
+     fn write(&self, now: &mut DeferredNow, record: &Record) -> io::Result<()> {
++        hbb_common::radar_diagnostics::legacy(record);
+         // JNI logs while detaching threads; calling back into JNI there is unsafe.
+         if record.target() == "jni" || record.target().starts_with("jni::") {
+-            logcat().log(record);
++            return Ok(());
++        }
++        if record.level() != Level::Error {
+             return Ok(());
+         }
+         if !PUBLIC_LOGS_ENABLED.load(Ordering::Relaxed) {
+             return self.write_default(now, record);
+         }
+         let mut message = Vec::new();
+-        opt_format(&mut message, now, record)?;
++        hbb_common::diagnostic_format(&mut message, now, record)?;
+         message.push(b'\n');
+         let message = String::from_utf8(message)
+             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+@@ -142,3 +147,23 @@
+         );
+     }
+ }
++
++#[no_mangle]
++pub extern "system" fn Java_com_carriez_flutter_1hbb_DiagnosticLog_nativeEvent(
++    _env: jni::JNIEnv,
++    _instance: jni::objects::JObject,
++    level: jni::sys::jint,
++) {
++    if let Some(engine) = hbb_common::radar_diagnostics::global() {
++        use hbb_common::radar_diagnostics::{Code, Kind, Module};
++        engine.capture(
++            level.clamp(1, 4) as u8,
++            Module::Native,
++            Kind::LegacyEvent,
++            Code::None,
++            None,
++            None,
++            None,
++        );
++    }
++}

@@ -1,0 +1,11 @@
+{
+  "overall": "PASS",
+  "adapter_source_contract": "PASS",
+  "format": "PASS",
+  "runtime_tests": "PASS",
+  "clippy": "PASS",
+  "source_sha256": "1a1ab42646b07dc1ab71d3da96d2357f0d82c276534c12c1ade58780ea3cf9a4",
+  "compiler": "rustc 1.75.0 (82e1608df 2023-12-21)",
+  "full_client_build": "NOT RUN",
+  "device_runtime": "NOT RUN"
+}

@@ -12,3 +12,208 @@ diff --git a/src/config.rs b/src/config.rs
  
  pub const RENDEZVOUS_PORT: i32 = 21116;
  pub const RELAY_PORT: i32 = 21117;
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -11,6 +11,7 @@
+ webrtc = ["dep:webrtc"]
+ 
+ [dependencies]
++radar_diagnostics = { path = "../radar_diagnostics" }
+ # new flexi_logger failed on rustc 1.75
+ flexi_logger = { version = "0.27", features = ["async"] }
+ protobuf = { version = "3.7", features = ["with-bytes"] }
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,5 @@
++#[cfg(debug_assertions)]
++use std::io::Write as _;
+ pub mod compress;
+ pub mod protos;
+ pub use bytes;
+@@ -21,6 +23,7 @@
+ pub mod udp;
+ pub use env_logger;
+ pub use log;
++pub use radar_diagnostics;
+ pub mod bytes_codec;
+ pub use anyhow::{self, bail};
+ pub use futures_util;
+@@ -58,9 +61,9 @@
+ pub mod log_throttle;
+ pub mod rx_probe;
+ pub mod stream;
+-pub mod websocket;
+ #[cfg(feature = "webrtc")]
+ pub mod webrtc;
++pub mod websocket;
+ #[cfg(any(target_os = "android", target_os = "ios"))]
+ pub use rustls_platform_verifier;
+ pub use stream::Stream;
+@@ -68,9 +71,9 @@
+ pub mod tls;
+ pub mod verifier;
+ pub use async_recursion;
++pub use libloading;
+ #[cfg(target_os = "linux")]
+ pub use users;
+-pub use libloading;
+ #[cfg(target_os = "linux")]
+ pub use x11;
+ 
+@@ -424,7 +427,45 @@
+     }
+ }
+ 
++/// All app-managed legacy file output is metadata only. Never format record.args().
++pub fn diagnostic_format(
++    w: &mut dyn std::io::Write,
++    _now: &mut flexi_logger::DeferredNow,
++    record: &log::Record,
++) -> std::io::Result<()> {
++    if record.level() == log::Level::Error {
++        write!(
++            w,
++            "{} ERROR diagnostic event (details omitted)",
++            chrono::Utc::now().to_rfc3339()
++        )
++    } else {
++        Ok(())
++    }
++}
++
++#[cfg(not(debug_assertions))]
++struct DiagnosticWriter(flexi_logger::writers::FileLogWriter);
++#[cfg(not(debug_assertions))]
++impl flexi_logger::writers::LogWriter for DiagnosticWriter {
++    fn write(
++        &self,
++        now: &mut flexi_logger::DeferredNow,
++        record: &log::Record,
++    ) -> std::io::Result<()> {
++        radar_diagnostics::legacy(record);
++        if record.level() == log::Level::Error {
++            flexi_logger::writers::LogWriter::write(&self.0, now, record)
++        } else {
++            Ok(())
++        }
++    }
++    fn flush(&self) -> std::io::Result<()> {
++        flexi_logger::writers::LogWriter::flush(&self.0)
++    }
++}
+ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHandle> {
++    let _ = radar_diagnostics::initialize(config::Config::log_path().join("diagnostics"));
+     static INIT: std::sync::Once = std::sync::Once::new();
+     #[allow(unused_mut)]
+     let mut logger_holder: Option<flexi_logger::LoggerHandle> = None;
+@@ -436,8 +477,17 @@
+         // is the one upstream signal that explains a session which never connected.
+         #[cfg(debug_assertions)]
+         {
+-            use env_logger::*;
+-            init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error,smithay_client_toolkit=warn"));
++            env_logger::Builder::new()
++                .filter_level(log::LevelFilter::Trace)
++                .format(|buf, record| {
++                    radar_diagnostics::legacy(record);
++                    if record.level() == log::Level::Error {
++                        writeln!(buf, "error event (details omitted)")
++                    } else {
++                        Ok(())
++                    }
++                })
++                .init();
+         }
+         #[cfg(not(debug_assertions))]
+         {
+@@ -452,32 +502,21 @@
+                 path.push(_name);
+             }
+             use flexi_logger::*;
+-            if let Ok(x) = Logger::try_with_env_or_str("debug,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error,smithay_client_toolkit=warn") {
+-                logger_holder = x
+-                    .log_to_file(FileSpec::default().directory(path))
+-                    .write_mode(if _is_async {
+-                        WriteMode::Async
+-                    } else {
+-                        WriteMode::Direct
+-                    })
+-                    .format(opt_format)
+-                    .rotate(
+-                        // Size as well as age: rotating only daily lets one day's file grow
+-                        // without limit, so whoever can drive a hot log site — a peer sending
+-                        // malformed packets, a socket erroring in a retry loop — decides how
+-                        // much disk this uses. Bounding it here covers every call site at once.
+-                        Criterion::AgeOrSize(Age::Day, 16 * 1024 * 1024),
+-                        Naming::Timestamps,
+-                        // 90 files is ~90 days for any machine that stays under the
+-                        // size criterion — i.e. every ordinary install, on every platform this
+-                        // ships to. Raising it to protect the flood case would have bought little
+-                        // (a count cannot outrun a flood; only the rate limits at the log sites
+-                        // can) at the price of multiplying steady-state retention and disk for
+-                        // everyone.
+-                        Cleanup::KeepLogFiles(90),
+-                    )
+-                    .start()
+-                    .ok();
++            if let Ok(writer) = writers::FileLogWriter::builder(FileSpec::default().directory(path))
++                .format(diagnostic_format)
++                .rotate(
++                    Criterion::AgeOrSize(Age::Day, 16 * 1024 * 1024),
++                    Naming::Timestamps,
++                    Cleanup::KeepLogFiles(90),
++                )
++                .try_build()
++            {
++                logger_holder = Logger::try_with_str("trace").ok().and_then(|logger| {
++                    logger
++                        .log_to_writer(Box::new(DiagnosticWriter(writer)))
++                        .start()
++                        .ok()
++                });
+             }
+         }
+     });
+diff --git a/src/websocket.rs b/src/websocket.rs
+--- a/src/websocket.rs
++++ b/src/websocket.rs
+@@ -152,6 +152,17 @@
+         danger_accept_invalid_cert: Option<bool>,
+         original_danger_accept_invalid_certs: Option<bool>,
+     ) -> ResultType<(WsStream, SocketAddr)> {
++        if let Some(engine) = crate::radar_diagnostics::global() {
++            engine.capture(
++                2,
++                crate::radar_diagnostics::Module::Websocket,
++                crate::radar_diagnostics::Kind::Attempt,
++                crate::radar_diagnostics::Code::None,
++                None,
++                Some(url),
++                None,
++            );
++        }
+         let ws_config = None;
+         let request = url
+             .into_client_request()
+@@ -209,6 +220,19 @@
+             .await?
+             .map(|(stream, _)| Either::Left(stream))
+         };
++        if let Some(engine) = crate::radar_diagnostics::global() {
++            use crate::radar_diagnostics::{Code, Kind, Module};
++            let (kind, code, status) = match &result {
++                Ok(_) => (Kind::Connected, Code::None, Some(101)),
++                Err(tungstenite::Error::Http(response)) => {
++                    (Kind::Failed, Code::Http, Some(response.status().as_u16()))
++                }
++                Err(tungstenite::Error::Tls(_)) => (Kind::Failed, Code::Tls, None),
++                Err(tungstenite::Error::Io(_)) => (Kind::Failed, Code::Io, None),
++                Err(_) => (Kind::Failed, Code::Protocol, None),
++            };
++            engine.capture(2, Module::Websocket, kind, code, None, Some(url), status);
++        }
+         match result {
+             Ok(stream) => {
+                 upsert_tls_cache(url, tls_type, danger_accept_invalid_cert.unwrap_or(false));

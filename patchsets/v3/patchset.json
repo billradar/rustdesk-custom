@@ -1,7 +1,7 @@
 {
   "id": "v3",
   "status": "validation_pending",
-  "revision": 6,
+  "revision": 7,
   "baseline": {
     "upstream_sha": "05b9f2d8919b5cdfaa0bb3280601a02881556a42",
     "upstream_version": "1.5.3",
@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854",
+    "common": "563c50a9c7d6bbfff6c903844ac6264fc2f7b69509c8f336114f6b492ee1dd56",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -271,6 +271,44 @@
         "compatibility": "v3 Standard/SOS only; exact 1.5.3 and existing maintained-profile compatibility routing. No Rust bridge changes.",
         "limitations": "Rendered Android UI and full native packages require device/build validation; desktop Deploy UI is not applicable. Server-side deployment requirements are not bypassed.",
         "review_status": "reviewed"
+      },
+      {
+        "revision": 7,
+        "kind": "content-change",
+        "base_sha": "83bbff7a047eae5a2fdc57026c779050c02c8063",
+        "before": {
+          "common": "e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "after": {
+          "common": "563c50a9c7d6bbfff6c903844ac6264fc2f7b69509c8f336114f6b492ee1dd56",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "scopes": [
+          "common"
+        ],
+        "categories": {
+          "Added": [
+            "Add a shared Logs settings page with level, schedule, file/total limits, retention, viewer, pinning, confirmed cleanup and local export.",
+            "Add a typed NDJSON engine with a bounded nonblocking capture queue, process file locks, rotation, quota protection and allowlisted export metadata.",
+            "Add Rust 1.75 runtime/privacy/concurrent-process tests and read-only three-platform diagnostic compatibility CI."
+          ],
+          "Changed": [],
+          "Fixed": [],
+          "Removed": [],
+          "Security": [
+            "Omit arbitrary Rust/third-party messages, Flutter debug/error text and Android native messages before app-managed persistence. Keep endpoint and session identifiers as per-recording HMAC pseudonyms.",
+            "Record typed WebSocket transport/port/route/status events without changing TLS, redirects or retry policy."
+          ],
+          "Compatibility": []
+        },
+        "reason": "Introduce one optional typed diagnostic store and shared settings page for v3, with bounded asynchronous capture and pre-write privacy enforcement.",
+        "references": [
+          "83bbff7a047eae5a2fdc57026c779050c02c8063"
+        ],
+        "compatibility": "v3 Common is shared by Standard and SOS. Exact Profile routing, archived v1/v2 bytes, signing, package identity, native connection policy and production workflows are unchanged.",
+        "limitations": "Draft implementation. Full client builds, Flutter rendering, Android JNI/SAF and physical devices remain unverified. Legacy events currently contain metadata rather than arbitrary text. Broader typed session/error instrumentation and platform/service runtime evidence require follow-up before complete acceptance.",
+        "review_status": "reviewed"
       }
     ],
     "features": {
@@ -280,7 +318,8 @@
         "Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.",
         "Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.",
         "Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.",
-        "Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged."
+        "Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged.",
+        "Optional unified typed diagnostic storage, shared Logs settings and sanitized native/Flutter/Rust adapters; complete runtime acceptance is pending."
       ],
       "sos": [
         "SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common."
