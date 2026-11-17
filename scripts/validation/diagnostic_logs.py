@@ -78,7 +78,9 @@ def run(source,output,targets=()):
             shutil.copyfile(source/'libs/radar_diagnostics/Cargo.toml',tree/'Cargo.toml')
             shutil.copyfile(ROOT/'scripts/validation/fixtures/diagnostic-logs/Cargo.lock',tree/'Cargo.lock')
             env=dict(os.environ,CARGO_TARGET_DIR=os.environ.get('CARGO_TARGET_DIR',str(ROOT/'.work/diagnostic-target')))
-            for name,args in [('format',['fmt','--check']),('runtime_tests',['test','--locked']),('clippy',['clippy','--locked','--all-targets','--','-D','warnings'])]:
+            # Process-spawning cases must not inherit unrelated cases' live OS locks.
+            # Each concurrency case still runs its explicit threads/processes in parallel.
+            for name,args in [('format',['fmt','--check']),('runtime_tests',['test','--locked','--','--test-threads=1']),('clippy',['clippy','--locked','--all-targets','--','-D','warnings'])]:
                 result[name]='FAIL'
                 subprocess.run(['cargo',*args],cwd=tree,env=env,check=True)
                 result[name]='PASS'

@@ -50,11 +50,13 @@ Existing Ubuntu Python 3.10 lacked stdlib tomllib: reuse already-pinned tomli in
 
 Codex review of `8ec1930` found P1 first-initializer bypass and P2 stale-enable restart. The first FFI initialization now uses the private resolver, with negative adapter tests rejecting the old direct path and any new bridge ABI. Starting is a distinct backend operation: ordinary configuration preserves authorization and the current window/key, ignores stale enabled flags, checks for expiry and respects another process's stopped state under the persisted-state lock. The page refreshes only the backend-owned enabled flag while preserving unsaved form edits. Schedule edits apply on the next explicit start. New runtime regressions cover stopped/expired/cross-process cases and freezing elapsed time on manual stop. File lists are capped at 200 entries per page before crossing the sync result bridge; export selection is bounded. Android's known per-key log calls are removed entirely rather than emitted as per-key metadata. Existing necessary native system messages retain sanitized levels.
 
+The next ARM64 run also exposed cross-case fork inheritance: while one case held a fixture lock, another case spawned a child that briefly retained the open-file description until exec, yielding the expected nonblocking busy result in a case with no intentional contention. The harness now runs cases sequentially. The producer test still runs eight threads; the cooperating-writer case still releases two real processes together, requires progress/accounting from both and enforces quota/active/pin assertions. No concurrency case or assertion is disabled; no production lock timeout is relaxed.
+
 ## Verification
 
 | Check | Result | Scope/evidence |
 |---|---|---|
-| Rust 1.75 actual engine unit/runtime tests | PASS | 19 Rust cases (including child-process helper), actual source via `diagnostic_logs.py`; see [core-results.json](core-results.json) |
+| Rust 1.75 actual engine unit/runtime tests | PASS | 19 Rust cases (including child-process helper), isolated test-case scheduling with explicit concurrent thread/process tests, actual source via `diagnostic_logs.py`; see [core-results.json](core-results.json) |
 | Pre-write privacy / payload not formatted | PASS | Typed schema, poisoned fields, build allowlist, HMAC checks and a Display implementation that panics if formatted |
 | Concurrent writer/quota protection | PASS | Actual child processes and OS file locks; active/pinned files protected |
 | Rotation, quota, retention, archive budget | PASS | Runtime filesystem tests, closed/pinned/active and private-export cases |
