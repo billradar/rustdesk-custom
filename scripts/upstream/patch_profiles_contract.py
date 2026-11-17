@@ -131,7 +131,11 @@ class ProfileContract(unittest.TestCase):
         new = ROOT / 'patchsets/v3'
         for scope in ('common', 'sos'):
             for source in (old / scope).glob('*.patch'):
-                if source.name not in ('0004-cm-background-window.patch','0005-custom-release-updates.patch'):
+                if source.name == '0001-hbb-server-defaults.patch':
+                    current = (new / scope / source.name).read_bytes()
+                    self.assertTrue(current.startswith(source.read_bytes()))
+                    self.assertIn(b'radar_diagnostics', current[len(source.read_bytes()):])
+                elif source.name not in ('0004-cm-background-window.patch','0005-custom-release-updates.patch'):
                     self.assertEqual(source.read_bytes(), (new / scope / source.name).read_bytes())
 
     def test_stable_lock_and_preflight_reject_before_external_effects(self):

@@ -70,6 +70,10 @@ v3.5 adds `0007-api-failover.patch`. Actions `prepare-source.yml` reads public `
 
 v3.6 adds Common `0008-hide-deploy-ui.patch`: one default-disabled Dart UI policy omits the Android Deploy settings tile and server-triggered prompt, and guards both dialog entry points. Device provisioning APIs, CLI, server requirements, installation/update/service behavior and desktop menus stay unchanged. Run `scripts.validation.deploy_ui_contract` against prepared v3 sources; existing compatibility CI analyzes the policy/dialog files. See `docs/audits/deploy-ui/report.md`. No workflow or production configuration is changed.
 
+### Unified diagnostic logs (v3.7 draft)
+
+`0009-unified-diagnostic-logs.patch` adds `libs/radar_diagnostics` and the shared Logs settings page; the v3 `0001` submodule patch adapts the existing global logger instead of initializing a second one. Optional persistence is off by default. Never import or export arbitrary legacy text, payloads, exception messages, tokens or keys. The new store accepts closed typed fields, HMAC identifiers and validated build metadata. Android uses private active storage and the existing SAF export channel. Legacy app-managed error files are metadata-only; OS-owned crash/driver reports and historical raw files are outside the managed exporter. This is a Draft with acceptance gaps, not a claim of complete module diagnostics or four-platform runtime success. Read `docs/audits/unified-logs/report.md`; run `scripts/validation/diagnostic_logs.py` on actual prepared source. No deployment, signing, production workflow dispatch, router re-enabling or merge is authorized for this work.
+
 ## 3. Repository map: where to look first
 
 | Path | What it owns | Start here when... |

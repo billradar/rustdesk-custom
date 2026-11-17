@@ -12,12 +12,54 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.
 - Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.
 - Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged.
+- Optional unified typed diagnostic storage, shared Logs settings and sanitized native/Flutter/Rust adapters; complete runtime acceptance is pending.
 
 ### Sos
 
 - SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common.
 
 ## Revision history
+
+### v3.7 — content-change
+
+Scope: common
+
+Reason: Introduce one optional typed diagnostic store and shared settings page for v3, with bounded asynchronous capture and pre-write privacy enforcement.
+
+#### Added
+
+- Add a shared Logs settings page with level, schedule, file/total limits, retention, viewer, pinning, confirmed cleanup and local export.
+- Add a typed NDJSON engine with a bounded nonblocking capture queue, process file locks, rotation, quota protection and allowlisted export metadata.
+- Add Rust 1.75 runtime/privacy/concurrent-process tests and read-only three-platform diagnostic compatibility CI.
+- Add poll-scoped local session correlation, typed module/action hooks and actual local-TLS request/body privacy and association tests.
+
+#### Changed
+
+
+#### Fixed
+
+
+#### Removed
+
+
+#### Security
+
+- Omit arbitrary Rust/third-party messages, Flutter debug/error text and Android native messages before app-managed persistence. Keep endpoint and session identifiers as per-recording HMAC pseudonyms.
+- Record typed WebSocket transport/port/route/status events without changing TLS, redirects or retry policy.
+
+#### Compatibility
+
+
+References: 83bbff7a047eae5a2fdc57026c779050c02c8063, https://github.com/billradar/rustdesk-custom/pull/266
+
+Upstream compatibility: v3 Common is shared by Standard and SOS. Exact Profile routing, archived v1/v2 bytes, signing, package identity, native connection policy and production workflows are unchanged.
+
+Known limitations: Draft acceptance remains open. Typed module hooks and local poll/thread session correlation are implemented and runtime-tested in isolation; full client/module execution, Flutter rendering, Android JNI/SAF and physical devices remain unverified. Cross-process matching is not inferred.
+
+Allocation base: `83bbff7a047eae5a2fdc57026c779050c02c8063`
+
+- common: `e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854` → `89aa4fdb04c4c2dd42a25332f9084d437d57d20b0b04d7eb483a5b001f4c56cd`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.6 — content-change
 

@@ -51,3 +51,5 @@
 
 - [IPv6 API 主入口与 IPv4 备用策略及验证边界](api-failover.md)
 - [v3 客户端 Deploy UI 隐藏范围与验证](audits/deploy-ui/report.md)
+
+- [Unified diagnostic logs audit and acceptance status](audits/unified-logs/report.md)

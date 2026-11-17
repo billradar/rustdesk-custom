@@ -102,6 +102,8 @@ def contracts(tree, variant, patchset=None):
     if patchset == 'v3':
         from scripts.validation.deploy_ui_contract import source_contract as deploy_source_contract
         deploy_source_contract(tree)
+        from scripts.validation.diagnostic_logs import source_contract as logs_source_contract
+        logs_source_contract(tree)
     return {'Config API': 'PASS', 'Rust API structure': 'PASS', 'Flutter API structure': 'PASS',
             'SOS UI structure': 'PASS' if variant == 'sos' else 'N/A'}
 
@@ -209,7 +211,8 @@ def main():
                 run([sys.executable, str(ROOT / 'scripts/validation/cm_window_contract.py'),
                      '--source', str(tree), '--dart', 'dart'], log)
                 from scripts.validation.deploy_ui_contract import FILES as deploy_files
-                analysis_files = FILES + (deploy_files if os.environ.get('PATCHSET') == 'v3' else [])
+                from scripts.validation.diagnostic_logs import FILES as logs_files
+                analysis_files = FILES + (deploy_files + logs_files if os.environ.get('PATCHSET') == 'v3' else [])
                 # Only error severity fails. Upstream lint warnings remain in logs.
                 with log.open('a', encoding='utf-8') as stream:
                     analysis_start = stream.tell()

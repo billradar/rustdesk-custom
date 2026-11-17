@@ -109,6 +109,7 @@ def run(source, output):
         for name in ('Cargo.toml', 'Cargo.lock'):
             shutil.copyfile(FIXTURE / name, root / name)
         shutil.copytree(FIXTURE / 'facade', root / 'facade')
+        shutil.copytree(source / 'libs/radar_diagnostics', root / 'diagnostics')
         (root / 'src').mkdir()
         shutil.copyfile(FIXTURE / 'lib.rs', root / 'src/lib.rs')
         code = (source / 'src/hbbs_http/api_failover.rs').read_text()
@@ -174,6 +175,7 @@ def run(source, output):
                           runner_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                           compiler=subprocess.check_output(['rustc', '--version'], env=env, text=True).strip(),
                           selector_sha256=hashlib.sha256(code.encode()).hexdigest(),
+                          diagnostic_core_sha256=hashlib.sha256((source / 'libs/radar_diagnostics/src/lib.rs').read_bytes()).hexdigest(),
                           fixture_sha256=hashlib.sha256(b''.join((FIXTURE / name).read_bytes() for name in ('Cargo.toml', 'Cargo.lock', 'lib.rs', 'scenarios.rs', 'facade/Cargo.toml', 'facade/src/lib.rs'))).hexdigest(),
                           production_network='NOT_TESTED', native_failover='NOT_IMPLEMENTED')
             if output:
