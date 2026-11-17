@@ -109,6 +109,15 @@ def run(source, output):
         for name in ('Cargo.toml', 'Cargo.lock'):
             shutil.copyfile(FIXTURE / name, root / name)
         shutil.copytree(FIXTURE / 'facade', root / 'facade')
+        facade_manifest = root / 'facade/Cargo.toml'
+        manifest = facade_manifest.read_text()
+        inventory_path = 'path = "../../diagnostic-logs"'
+        if manifest.count(inventory_path) != 1:
+            raise ValueError('Unexpected diagnostic inventory dependency')
+        # The checked-in manifest is resolvable by dependency tools. Runtime tests
+        # always rebind it to the actual prepared-source crate copied below.
+        facade_manifest.write_text(manifest.replace(inventory_path, 'path = "../diagnostics"'))
+
         shutil.copytree(source / 'libs/radar_diagnostics', root / 'diagnostics')
         (root / 'src').mkdir()
         shutil.copyfile(FIXTURE / 'lib.rs', root / 'src/lib.rs')

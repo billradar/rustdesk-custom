@@ -18,6 +18,9 @@ FILES = ['flutter/lib/common/widgets/logs_page.dart', 'flutter/lib/common/diagno
 
 def source_contract(source):
     source=Path(source)
+    inventory=ROOT/'scripts/validation/fixtures/diagnostic-logs/Cargo.toml'
+    if inventory.read_bytes() != (source/'libs/radar_diagnostics/Cargo.toml').read_bytes():
+        raise ValueError('Diagnostic dependency inventory differs from actual source')
     for name in ["Cargo.toml","Cargo.lock","libs/hbb_common/Cargo.toml","libs/radar_diagnostics/Cargo.toml"]:
         tomllib.loads((source/name).read_text())
     for name in FILES + ['libs/radar_diagnostics/src/lib.rs','libs/radar_diagnostics/Cargo.toml']:

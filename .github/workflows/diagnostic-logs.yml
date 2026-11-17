@@ -4,6 +4,8 @@ name: Unified diagnostic logs compatibility
     paths:
     - patchsets/v3/**
     - scripts/validation/diagnostic_logs.py
+    - scripts/validation/dependency_inventories.py
+    - scripts/validation/fixtures/api-failover/**
     - scripts/validation/fixtures/diagnostic-logs/**
     - .github/workflows/diagnostic-logs.yml
 permissions:
@@ -47,6 +49,8 @@ jobs:
     - name: Install Android standard libraries for core-only checks
       if: matrix.runner == 'ubuntu-22.04'
       run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+    - name: Resolve static Cargo dependency inventories
+      run: python3 scripts/validation/dependency_inventories.py
     - name: Test actual diagnostic engine and sanitized adapters
       run: |
         set -euo pipefail
