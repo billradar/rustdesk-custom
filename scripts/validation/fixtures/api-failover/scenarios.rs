@@ -191,6 +191,21 @@ mod scenarios {
             assert_eq!(stats(&p.0).await["requests"].as_u64().unwrap(), primary_before + 1);
             assert_eq!(stats(&p.0).await["probe_auth"], "");
         }
+        // This fixture enables native-tls like upstream. On Linux this executes
+        // the updated OpenSSL dependency, rather than only compiling it while
+        // all selector requests use rustls. Trust only the temporary test CA.
+        let ca = std::fs::read(std::env::var("SSL_CERT_FILE").unwrap()).unwrap();
+        let native = Client::builder().no_proxy().use_native_tls().https_only(true)
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(3))
+            .add_root_certificate(reqwest::Certificate::from_pem(&ca).unwrap())
+            .build().unwrap();
+        let response = native.get(p.0.join("/api/status/200").unwrap()).send().await.unwrap();
+        assert_eq!(response.status().as_u16(), 200);
+        response.text().await.unwrap();
+        let bad = Url::parse(&std::env::var("API_TEST_BAD_TLS").unwrap()).unwrap();
+        assert!(native.get(bad.join("/api/status/200").unwrap()).send().await.is_err(),
+            "native TLS must still reject the untrusted server certificate");
         let mut headers = HeaderMap::new(); headers.insert("Host", "bad.invalid".parse().unwrap());
         assert!(send_for(p.clone(), p.0.join("/api/login").unwrap().as_str(), Method::POST, headers, None).await.is_err());
     }
