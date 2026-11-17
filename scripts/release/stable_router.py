@@ -11,7 +11,7 @@ import sys
 from scripts.release.router_retry_policy import decide, requested_force_retry
 from scripts.release.coordinator_lite import from_hashes as lite_identity
 from scripts.release.channel import build_identity, release_preflight, wayland_identity
-from scripts.upstream.patchsets import patch_hash, patchset_for_version
+from scripts.upstream.patchsets import ROOT, V2_BOUNDARY, version_tuple, patch_hash, patchset_for_version
 from scripts.upstream.resolve import api, choose_stable
 
 REPOSITORY = 'billradar/rustdesk-custom'
@@ -51,6 +51,31 @@ def existing_build(data):
     return not release_preflight(data)['build_needed']
 
 
+def _historical_patchset(version):
+    """Validate recorded routing without admitting an archived generation to a new build.
+
+    Historical exact mappings remain in the registry after retirement. Unknown
+    versions must not inherit today's latest-maintained compatibility fallback.
+    Current discovery/prepare/worker admission still use the active-only API.
+    """
+    numeric = version_tuple(version)
+    registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
+    if registry.get('schema') != 'patch-profiles-v1':
+        raise ValueError('Unknown historical Patch Profile schema')
+    normalized = '.'.join(map(str, numeric))
+    profile_id = registry['exact_versions'].get(normalized)
+    if profile_id is None and numeric < V2_BOUNDARY:
+        profile_id = 'legacy-pre-1.5'
+    if profile_id is None:
+        raise ValueError('Unknown historical Stable version')
+    selected = registry['profiles'][profile_id]['patchset']
+    if not re.fullmatch(r'v[1-9][0-9]*', selected):
+        raise ValueError('Invalid historical Patch Profile patchset')
+    if selected not in registry.get('retired_patchsets', []):
+        return patchset_for_version(version, channel='stable')
+    return selected
+
+
 def recorded_identity(row):
     """Recover automatically computed identity from the run's latest lock attempt."""
     run_id = str(row.get('id', ''))
@@ -78,7 +103,7 @@ def recorded_identity(row):
     for key, size in (('upstream_sha', 40), ('common_patch_hash', 64), ('sos_patch_hash', 64)):
         if not re.fullmatch('[0-9a-f]{' + str(size) + '}', str(data.get(key, ''))):
             raise ValueError('Invalid historical Stable source identity')
-    if data.get('patchset') != patchset_for_version(data.get('version', ''), channel='stable'):
+    if data.get('patchset') != _historical_patchset(data.get('version', '')):
         raise ValueError('Invalid historical Stable patchset')
     identity = build_identity(data['upstream_sha'], data['patchset'], data['common_patch_hash'],
                               data['sos_patch_hash'], wayland_included=data['wayland_included'],

@@ -167,6 +167,42 @@ class StableRouterContract(unittest.TestCase):
         with patch.object(router.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
             with self.assertRaisesRegex(ValueError, 'unavailable'): router.recorded_identity(row)
 
+    def test_retired_historical_lock_does_not_admit_a_new_legacy_build(self):
+        from scripts.release.stable_lock import SCHEMA
+        data = dict(schema=SCHEMA, channel='stable', workflow_run='123',
+                    custom_repository_sha='a'*40, upstream_sha='b'*40, version='1.5.1',
+                    patchset='v2', common_patch_hash='c'*64, sos_patch_hash='d'*64,
+                    wayland_included=False, wayland_policy_sha256='', android_signing_enabled=False)
+        data['build_identity'] = router.build_identity(data['upstream_sha'], 'v2', 'c'*64, 'd'*64,
+            wayland_included=False, wayland_policy_sha256='', android_signing_enabled=False)
+        def download(args, **kwargs):
+            root = Path(args[args.index('--dir')+1]) / 'stable-build-lock-123-1'
+            root.mkdir()
+            (root/'stable-lock.json').write_text(json.dumps(data))
+            return SimpleNamespace(returncode=0)
+        row = dict(id=123, head_sha='a'*40, head_branch='main', event='workflow_dispatch',
+                   status='completed', conclusion='success',
+                   display_title='Stable latest / draft / wayland=false / android-signing=false')
+        with patch.object(router.subprocess, 'run', side_effect=download):
+            historical = router.recorded_identity(row)
+            self.assertEqual(historical, router.lite_identity('b'*40, 'c'*64, 'd'*64))
+            with patch.object(router, 'api', return_value={'workflow_runs':[row]}):
+                self.assertEqual(router.workflow_runs('v1.5.3', 'e'*64), [])
+                self.assertEqual(router.workflow_runs('v1.5.3', historical), [row])
+            data['patchset']='v3'
+            with self.assertRaisesRegex(ValueError, 'historical Stable patchset'):
+                router.recorded_identity(row)
+        for version in ('1.4.9','1.5.0','1.5.1'):
+            with patch.object(router, 'choose_stable', return_value=dict(upstream_tag='v'+version,upstream_sha='b'*40,version=version)):
+                with self.assertRaisesRegex(ValueError, 'Retired'):
+                    router.discovery()
+
+    def test_historical_profiles_never_fall_back_for_unknown_versions(self):
+        for version,selected in [('1.4.9','v1'),('v1.5.0','v2'),('1.5.1','v2'),('1.5.3','v3')]:
+            self.assertEqual(router._historical_patchset(version), selected)
+        for version in ('1.5.2','1.5.4','garbage',''):
+            with self.assertRaises(ValueError): router._historical_patchset(version)
+
     def test_existing_build_delegates_to_unified_preflight(self):
         data = {'channel': 'stable'}
         with patch.object(router, 'release_preflight', return_value={'build_needed': False}) as gate:

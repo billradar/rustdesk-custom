@@ -16,8 +16,16 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[2]
 FILES = ['flutter/lib/common/widgets/logs_page.dart', 'flutter/lib/common/diagnostic_events.dart', 'flutter/lib/common/diagnostic_rpc.dart']
 
+def verify_inventory_manifest(inventory, actual):
+    # Git's text attributes can produce CRLF in prepared Windows worktrees.
+    # Normalize only those line endings; retain exact checks on all other bytes.
+    if inventory.read_bytes().replace(b'\r\n', b'\n') != actual.read_bytes().replace(b'\r\n', b'\n'):
+        raise ValueError('Diagnostic dependency inventory differs from actual source')
+
 def source_contract(source):
     source=Path(source)
+    inventory=ROOT/'scripts/validation/fixtures/diagnostic-logs/Cargo.toml'
+    verify_inventory_manifest(inventory, source/'libs/radar_diagnostics/Cargo.toml')
     for name in ["Cargo.toml","Cargo.lock","libs/hbb_common/Cargo.toml","libs/radar_diagnostics/Cargo.toml"]:
         tomllib.loads((source/name).read_text())
     for name in FILES + ['libs/radar_diagnostics/src/lib.rs','libs/radar_diagnostics/Cargo.toml']:
@@ -64,7 +72,28 @@ def adapter_regressions(source):
             except ValueError:
                 continue
             raise ValueError('Unsafe adapter regression was not rejected')
-    return {'adapter_negative_regressions':'PASS'}
+    manifest=(source/'libs/radar_diagnostics/Cargo.toml').read_bytes().replace(b'\r\n',b'\n')
+    with tempfile.TemporaryDirectory(prefix='diagnostic-manifest-regression-') as directory:
+        inventory=Path(directory)/'inventory.toml'
+        actual=Path(directory)/'actual.toml'
+        inventory.write_bytes(manifest)
+        actual.write_bytes(manifest.replace(b'\n',b'\r\n'))
+        verify_inventory_manifest(inventory,actual)
+        verify_inventory_manifest(actual,inventory)
+        for changed in [
+            manifest.replace(b'serde = { version = "1"', b'serde = { version = "2"',1),
+            manifest.replace(b'features = ["derive"]', b'features = []',1),
+            manifest+b'\n[target.\'cfg(windows)\'.dependencies]\nwindows-sys = "0.52"\n',
+        ]:
+            if changed==manifest:
+                raise ValueError('Manifest regression mutation missing')
+            actual.write_bytes(changed.replace(b'\n',b'\r\n'))
+            try:
+                verify_inventory_manifest(inventory,actual)
+            except ValueError:
+                continue
+            raise ValueError('Dependency drift accepted after newline normalization')
+    return {'adapter_negative_regressions':'PASS','manifest_newline_and_dependency_regressions':'PASS'}
 
 def run(source,output,targets=()):
     source=Path(source)

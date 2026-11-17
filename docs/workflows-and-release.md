@@ -35,6 +35,8 @@ Nightly 根据用户 2026-10-25 的要求恢复为独立构建通道；它不能
 
 ## 4. Stable 资格验证与发布
 
+历史 Stable 锁通过 `stable_router._historical_patchset` 校验记录中的精确版本映射；退役状态不应阻止读取旧记录。该历史解析器不提供未知版本回退，也不参与新构建准入。新发现、源码准备和 worker 准入仍使用 active-only Profile API，继续禁止 v1/v2；锁缺失、来源或身份不符仍停止路由。
+
 Stable 发布以**准确的自定义提交 + 准确的官方上游 Stable 版本/SHA + 当前补丁集身份**为约束。
 
 ~~~text
