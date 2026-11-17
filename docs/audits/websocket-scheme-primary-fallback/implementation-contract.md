@@ -47,3 +47,40 @@ Both `rustdesk.houxnan.com` and `rustdesk-backup.houxnan.com` are named in one T
 2. Add v3 Common patch and source-policy generation changes; update `patchset.json` revision, content hashes, and append-only history with the project's existing versioning tool.
 3. Validate patch application for Standard and SOS, transport unit tests, certificate/SNI/Host/Upgrade behavior, and Android actual connection registration.
 4. No automatic merging, signing, publication, or server changes. This contract alone is not a working fix.
+
+## Security blocker found in upstream hbb_common websocket connector
+
+Read-only inspection of `rustdesk/hbb_common/src/websocket.rs` (current upstream, not yet verified against locked 1.5.3 submodule) shows `WsStream::try_connect` retrying with `danger_accept_invalid_cert = Some(true)` after rustls failure and then trying native TLS. This can turn a certificate failure into a successful connection without ordinary PKI verification. **A WSS failover feature must not call that permissive retry path**. First establish an explicit strict-TLS connection method, or prove the locked submodule's implementation is different. A permissive TLS cache must not be reused for failover candidates.
+
+## Concrete candidate selection contract
+
+- Eligibility: `allow-websocket` enabled; an unqualified endpoint whose normalized hostname equals the frozen primary API hostname and belongs to the configured own ID server or a verified own relay; neither a peer-supplied relay nor arbitrary IP address is eligible.
+- Derivation: frozen `https://primary[:port]` and `https://fallback[:port]` become `wss://primary[:port]/ws/id` and `wss://fallback[:port]/ws/id` respectively (or `/ws/relay` for a verified own relay). Explicit runtime WS/WSS URLs and explicit custom port configuration must not be silently overwritten.
+- API and WSS state machines are independent. Do not copy API's 15-second cooldown without testing WebSocket connection lifecycle. Cache WSS preference only per verified endpoint role and logical identity; never persist fallback as a user's configured ID server.
+- One primary attempt, at most one fallback attempt per new logical connection; bounded deadlines and cancellation. No application-level message replay before registration is proven idempotent.
+- Failover classification: DNS failure, connect refused/unreachable, or bounded connect timeout can trigger fallback; TLS certificate errors, TLS alerts of uncertain cause, HTTP redirects, 401/403, malformed 101 Upgrade and application protocol errors must not. Avoid classifying only from a stringified anyhow error.
+- Successful fallback must preserve the original logical rendezvous identity and key/authentication policy; do not replace or rewrite configured server keys, account origins or tokens.
+- Primary recovery: only future new connections or explicit reconnects may migrate. Existing healthy connections stay attached.
+- Separate common infrastructure failure: both hostnames may share one Nginx and RustDesk backend; hostname fallback covers path/IPv6 problems, not origin outages.
+
+## Verification matrix and exit criteria
+
+| Case | Expected |
+| --- | --- |
+| Primary IPv6 unreachable, fallback IPv4 WSS 101 | fallback selected and protocol registration completes |
+| Primary HTTP 301 | report scheme/proxy misconfiguration, do not auto-follow |
+| Primary TLS wrong SAN, expired certificate, untrusted CA | fail closed, never retry insecurely |
+| Fallback TLS wrong SAN | fail closed, no connection |
+| Primary HTTP 401/403 or malformed Upgrade | no failover |
+| API primary down, WSS primary healthy | WSS remains primary |
+| WSS primary down, API primary healthy | only WSS falls back |
+| Peer-supplied relay address | unchanged, never replaced with API fallback |
+| Explicit ws/wss URL, IP endpoint, websocket-port | existing behavior preserved unless explicitly covered by verified owned mapping |
+| Fallback fails or times out | finite error, no reconnect storm |
+| Primary recovers while fallback session healthy | no forced disconnect |
+| Concurrent ID/Relay connection attempts | no duplicated registration or cross-role health contamination |
+| Explicit SOCKS/HTTP proxy | same proxy, SNI, Host and TLS verification; no unintended direct bypass |
+| Standard/SOS prepared source | patch applies cleanly; content hash and version history pass |
+| Android real device | WSS handshake and authenticated ID/Relay session proven by redacted logs |
+
+**Release gate:** do not mark Ready for Review based on policy-only tests. Require actual patched hbb_common compilation, a deterministic local TLS/WSS harness and real-device confirmation. No production server changes, CI publishing, signing or merging as part of this audit.
