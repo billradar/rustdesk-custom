@@ -162,12 +162,12 @@ new file mode 100644
 +
 +    #[test]
 +    fn transport_classification_never_falls_back_on_http_or_tls() {
-+        let redirect = tungstenite::Error::Http(
++        let redirect = tungstenite::Error::Http(Box::new(
 +            tungstenite::http::Response::builder()
 +                .status(301)
 +                .body(Some(Vec::new()))
 +                .unwrap(),
-+        );
++        ));
 +        assert!(!retryable_transport(&anyhow::Error::new(redirect), true));
 +        let refused = anyhow::Error::new(io::Error::new(
 +            ErrorKind::ConnectionRefused, "offline",
