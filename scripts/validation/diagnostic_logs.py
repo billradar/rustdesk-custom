@@ -7,10 +7,14 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import tomllib
+import re
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
-FILES = ['flutter/lib/common/widgets/logs_page.dart', 'flutter/lib/common/diagnostic_events.dart']
+FILES = ['flutter/lib/common/widgets/logs_page.dart', 'flutter/lib/common/diagnostic_events.dart', 'flutter/lib/common/diagnostic_rpc.dart']
 
 def source_contract(source):
     source=Path(source)
@@ -19,6 +23,9 @@ def source_contract(source):
     for name in FILES + ['libs/radar_diagnostics/src/lib.rs','libs/radar_diagnostics/Cargo.toml']:
         if not (source/name).is_file():
             raise ValueError('Missing unified diagnostic source: '+name)
+    bridge=(source/'src/flutter_ffi.rs').read_text()
+    if 'pub fn main_diagnostics' in bridge or 'radar-diagnostic-request:' not in bridge or 'radar-diagnostic-result:' not in bridge:
+        raise ValueError('Diagnostic transport must preserve the original bridge ABI')
     common=(source/'libs/hbb_common/src/lib.rs').read_text()
     android=(source/'src/platform/android_log.rs').read_text()
     for value in (common,android):
@@ -27,7 +34,7 @@ def source_contract(source):
     if 'record.args()' in (source/'libs/radar_diagnostics/src/lib.rs').read_text().replace('//! Optional local diagnostics. Arbitrary log arguments NEVER enter this store.',''):
         raise ValueError('Raw log arguments imported')
     for path in (source/'flutter/android/app/src/main/kotlin').rglob('*.kt'):
-        if path.name!='DiagnosticLog.kt' and ('import android.util.Log' in path.read_text() or 'android.util.Log.' in path.read_text() or '.printStackTrace()' in path.read_text()):
+        if path.name!='DiagnosticLog.kt' and (('import android.util.Log' in path.read_text() and re.search(r'\bLog\.',path.read_text())) or 'android.util.Log.' in path.read_text() or '.printStackTrace()' in path.read_text()):
             raise ValueError('Unmanaged native log: '+str(path.relative_to(source)))
     return {'adapter_source_contract':'PASS'}
 

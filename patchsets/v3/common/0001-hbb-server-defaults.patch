@@ -62,10 +62,29 @@ diff --git a/src/lib.rs b/src/lib.rs
  #[cfg(target_os = "linux")]
  pub use x11;
  
-@@ -424,7 +427,45 @@
+@@ -424,7 +427,66 @@
      }
  }
  
++/// Android's file-transfer home is external storage. Diagnostics must instead use
++/// internal files storage next to PathProvider's application-documents directory.
++pub fn diagnostics_path() -> Option<std::path::PathBuf> {
++    #[cfg(target_os = "android")]
++    {
++        let app_dir = std::path::PathBuf::from(config::APP_DIR.read().unwrap().clone());
++        if !app_dir.is_absolute() || app_dir.file_name()? != "app_flutter" {
++            return None;
++        }
++        let path = app_dir.parent()?.join("files").join("diagnostics");
++        std::fs::create_dir_all(&path).ok()?;
++        std::fs::canonicalize(path).ok()
++    }
++    #[cfg(not(target_os = "android"))]
++    {
++        Some(config::Config::log_path().join("diagnostics"))
++    }
++}
++
 +/// All app-managed legacy file output is metadata only. Never format record.args().
 +pub fn diagnostic_format(
 +    w: &mut dyn std::io::Write,
@@ -104,11 +123,13 @@ diff --git a/src/lib.rs b/src/lib.rs
 +    }
 +}
  pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHandle> {
-+    let _ = radar_diagnostics::initialize(config::Config::log_path().join("diagnostics"));
++    if let Some(path) = diagnostics_path() {
++        let _ = radar_diagnostics::initialize(path);
++    }
      static INIT: std::sync::Once = std::sync::Once::new();
      #[allow(unused_mut)]
      let mut logger_holder: Option<flexi_logger::LoggerHandle> = None;
-@@ -436,8 +477,17 @@
+@@ -436,8 +498,17 @@
          // is the one upstream signal that explains a session which never connected.
          #[cfg(debug_assertions)]
          {
@@ -128,7 +149,7 @@ diff --git a/src/lib.rs b/src/lib.rs
          }
          #[cfg(not(debug_assertions))]
          {
-@@ -452,32 +502,21 @@
+@@ -452,32 +523,21 @@
                  path.push(_name);
              }
              use flexi_logger::*;

@@ -115,15 +115,24 @@ new file mode 100644
 diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt
 --- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt
 +++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DocumentLogs.kt
-@@ -6,7 +6,7 @@
- import android.os.ParcelFileDescriptor
- import android.provider.DocumentsContract
- import android.provider.DocumentsContract.Document
--import android.util.Log
-+import com.carriez.flutter_hbb.DiagnosticLog as Log
- import java.io.FileNotFoundException
- import java.io.IOException
- import java.util.UUID
+@@ -161,7 +161,7 @@
+             } catch (closeError: Exception) {
+                 error.addSuppressed(closeError)
+             }
+-            Log.e("DocumentLogs", "File logging stopped", error)
++            com.carriez.flutter_hbb.DiagnosticLog.e("DocumentLogs", "File logging stopped", error)
+             throw error
+         }
+     }
+@@ -202,7 +202,7 @@
+                     throw IOException("Unable to remove an expired log file")
+                 }
+             } catch (error: Exception) {
+-                Log.w("DocumentLogs", "Unable to remove an expired log file", error)
++                com.carriez.flutter_hbb.DiagnosticLog.w("DocumentLogs", "Unable to remove an expired log file", error)
+             }
+         }
+     }
 diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt
 --- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt
 +++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/FloatingWindowService.kt
@@ -315,11 +324,10 @@ diff --git a/flutter/lib/common/diagnostic_events.dart b/flutter/lib/common/diag
 new file mode 100644
 --- /dev/null
 +++ b/flutter/lib/common/diagnostic_events.dart
-@@ -0,0 +1,34 @@
-+import 'dart:convert';
+@@ -0,0 +1,33 @@
 +import 'dart:ui';
 +import 'package:flutter/foundation.dart';
-+import '../models/platform_model.dart';
++import 'diagnostic_rpc.dart';
 +
 +bool _installed = false;
 +bool _pending = false;
@@ -330,7 +338,7 @@ new file mode 100644
 +  _pending = true;
 +  () async {
 +    try {
-+      await bind.mainDiagnostics(request: jsonEncode({'op':'event','event':{'level':level,'module':'flutter','kind':kind,'code':code}}));
++      await diagnosticRpc({'op':'event','event':{'level':level,'module':'flutter','kind':kind,'code':code}});
 +    } catch (_) {
 +      // FFI may not yet be initialized during startup; never recursively log failures.
 +    } finally { _pending = false; }
@@ -350,6 +358,31 @@ new file mode 100644
 +    return false; // Preserve the platform's necessary uncaught-error handling.
 +  };
 +}
+diff --git a/flutter/lib/common/diagnostic_rpc.dart b/flutter/lib/common/diagnostic_rpc.dart
+new file mode 100644
+--- /dev/null
++++ b/flutter/lib/common/diagnostic_rpc.dart
+@@ -0,0 +1,20 @@
++import 'dart:async';
++import 'dart:convert';
++import 'package:flutter/foundation.dart';
++import 'package:uuid/uuid.dart';
++import '../models/platform_model.dart';
++
++/// Reuse the original bridge ABI. Requests are intercepted before option persistence.
++/// The async setter queues work; the synchronous getter only polls memory.
++Future<dynamic> diagnosticRpc(Map<String, dynamic> request) async {
++  if (kIsWeb) return {'ok':false,'error':'unsupported_platform'};
++  final id=const Uuid().v4();
++  await bind.mainSetLocalOption(key:'radar-diagnostic-request:$id',value:jsonEncode(request));
++  final watch=Stopwatch()..start();
++  while (watch.elapsed < const Duration(seconds: 60)) {
++    final result=bind.mainGetLocalOption(key:'radar-diagnostic-result:$id');
++    if(result.isNotEmpty)return jsonDecode(result);
++    await Future<void>.delayed(const Duration(milliseconds:50));
++  }
++  return {'ok':false,'error':'diagnostics_timeout'};
++}
 diff --git a/flutter/lib/common/widgets/logs_page.dart b/flutter/lib/common/widgets/logs_page.dart
 new file mode 100644
 --- /dev/null
@@ -362,7 +395,7 @@ new file mode 100644
 +import 'package:flutter/material.dart';
 +import '../../common.dart';
 +import '../../models/model.dart';
-+import '../../models/platform_model.dart';
++import '../diagnostic_rpc.dart';
 +
 +class DiagnosticFailure implements Exception {
 +  final String code;
@@ -393,7 +426,7 @@ new file mode 100644
 +      Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
 +
 +  Future<dynamic> _request(Map<String, dynamic> request) async {
-+    final decoded = jsonDecode(await bind.mainDiagnostics(request: jsonEncode(request)));
++    final decoded = await diagnosticRpc(request);
 +    if (decoded['ok'] != true) throw DiagnosticFailure(decoded['error'] as String? ?? 'diagnostics_failed');
 +    return decoded['data'];
 +  }
@@ -480,10 +513,10 @@ new file mode 100644
 +    // Private temporary export is removed after the platform picker completes.
 +    if(await source.exists())await source.delete();
 +  }
-+  Widget _choice(String title, String key, Map<int,String> choices, {int scale=1, bool nullable=false}) {
++  Widget _choice(String title, String key, Map<int,String> choices, {int scale=1, bool nullable=false, bool custom=true}) {
 +    final raw=_settings![key];final selected=raw==null?-1:(raw as num).toInt()~/scale;
 +    final value=choices.containsKey(selected)?selected:0;
-+    return ListTile(title:Text(title),trailing:DropdownButton<int>(value:value,items:[...choices.entries.map((e)=>DropdownMenuItem(value:e.key,child:Text(e.value))),DropdownMenuItem(value:0,child:Text(t('Custom…','自定义…')))],onChanged:_busy?null:(v)async{if(v==null)return;int? number=v;if(v==0)number=await _number(title,selected>0?selected:1);if(number==null||!mounted)return;final n=number;setState(()=>_settings![key]=n<0&&nullable?null:n*scale);}));
++    return ListTile(title:Text(title),trailing:DropdownButton<int>(value:value,items:[...choices.entries.map((e)=>DropdownMenuItem(value:e.key,child:Text(e.value))),if(custom)DropdownMenuItem(value:0,child:Text(t('Custom…','自定义…')))],onChanged:_busy?null:(v)async{if(v==null)return;int? number=v;if(v==0)number=await _number(title,selected>0?selected:1);if(number==null||!mounted)return;final n=number;setState(()=>_settings![key]=n<0&&nullable?null:n*scale);}));
 +  }
 +  @override
 +  Widget build(BuildContext context) {
@@ -500,7 +533,7 @@ new file mode 100644
 +      if(_status['error']!=null)Text('${t('Warning','警告')}: ${_failure(_status['error'] as String)}',style:const TextStyle(color:Colors.red)),
 +      SwitchListTile(title:Text(t('Record optional diagnostic logs','记录可选诊断日志')),value:_status['state']=='recording'||_status['state']=='waiting',onChanged:_busy?null:(v)=>_run(()async{if(v){await _save(enabled:true);}else{await _request({'op':'stop'});s['enabled']=false;}})),
 +      Text('${t('Status','状态')}: ${stateNames[_status['state']]??_status['state']}\n${t('Elapsed / remaining seconds','已记录 / 剩余秒数')}: ${_status['elapsed_seconds']??0} / ${_status['remaining_seconds']??"∞"}\n${t('Current / total bytes','当前文件 / 总字节数')}: ${_status['current_bytes']??0} / ${_status['total_bytes']??0}\n${t('Files / dropped events','文件数 / 丢弃事件数')}: ${_status['files']??0} / ${_status['dropped']??0}\n${t('Temporary export bytes (included in total)','临时导出字节数（计入总量）')}: ${_status['export_bytes']??0}'),
-+      _choice(t('Capture level','采集等级'),'level',{1:'Error',2:'Info',3:'Debug',4:'Trace'}),
++      _choice(t('Capture level','采集等级'),'level',{1:'Error',2:'Info',3:'Debug',4:'Trace'},custom:false),
 +      _choice(t('Duration (minutes)','记录时长（分钟）'),'duration_seconds',{5:t('5 minutes','5 分钟'),15:t('15 minutes','15 分钟'),30:t('30 minutes','30 分钟'),60:t('1 hour','1 小时'),360:t('6 hours','6 小时'),720:t('12 hours','12 小时'),1440:t('24 hours','24 小时'),10080:t('7 days','7 天'),-1:t('Until stopped','手动停止')},scale:60,nullable:true),
 +      ListTile(title:Text(t('Start date and time','开始日期和时间')),subtitle:Text(s['start_utc']==null?t('Immediately','立即开始'):DateTime.fromMillisecondsSinceEpoch((s['start_utc'] as int)*1000).toLocal().toString()),onTap:_busy?null:()async{final date=await _date();if(date!=null&&mounted)setState(()=>s['start_utc']=date.millisecondsSinceEpoch~/1000);},trailing:TextButton(onPressed:()=>setState(()=>s['start_utc']=null),child:Text(t('Now','立即')))),
 +      ListTile(title:Text(t('End date and time','结束日期和时间')),subtitle:Text(s['end_utc']==null?t('Use duration','按持续时长'):DateTime.fromMillisecondsSinceEpoch((s['end_utc'] as int)*1000).toLocal().toString()),onTap:_busy?null:()async{final date=await _date();if(date!=null&&mounted)setState(()=>s['end_utc']=date.millisecondsSinceEpoch~/1000);},trailing:TextButton(onPressed:()=>setState(()=>s['end_utc']=null),child:Text(t('Clear','清除')))),
@@ -641,13 +674,14 @@ diff --git a/libs/radar_diagnostics/src/lib.rs b/libs/radar_diagnostics/src/lib.
 new file mode 100644
 --- /dev/null
 +++ b/libs/radar_diagnostics/src/lib.rs
-@@ -0,0 +1,1869 @@
+@@ -0,0 +1,2043 @@
 +//! Optional local diagnostics. Arbitrary log arguments NEVER enter this store.
 +use fs2::FileExt;
 +use hmac::{Hmac, Mac};
 +use serde::{Deserialize, Serialize};
 +use sha2::Sha256;
 +use std::{
++    collections::HashMap,
 +    fs::{self, File, OpenOptions},
 +    io::{self, BufRead, BufReader, Read, Write},
 +    path::{Path, PathBuf},
@@ -901,11 +935,20 @@ new file mode 100644
 +    command: Command,
 +    reply: mpsc::Sender<Result<serde_json::Value, String>>,
 +}
++enum Route {
++    Immediate(serde_json::Value),
++    Work(Command),
++}
++struct Job {
++    created: Instant,
++    receiver: mpsc::Receiver<Result<serde_json::Value, String>>,
++}
 +pub struct Engine {
 +    shared: Arc<Mutex<Shared>>,
 +    events: SyncSender<Event>,
 +    commands: SyncSender<Work>,
 +    drops: Arc<AtomicU64>,
++    jobs: Mutex<HashMap<String, Job>>,
 +}
 +fn public_error(error: io::Error) -> String {
 +    let candidate = error.to_string();
@@ -1083,6 +1126,7 @@ new file mode 100644
 +            events: tx,
 +            commands: cx,
 +            drops,
++            jobs: Mutex::new(HashMap::new()),
 +        })
 +    }
 +    pub fn set_build(&self, value: &serde_json::Value) {
@@ -1177,9 +1221,8 @@ new file mode 100644
 +        rx.recv_timeout(Duration::from_secs(30))
 +            .map_err(|_| "diagnostics_timeout".to_string())?
 +    }
-+    pub fn request(&self, value: serde_json::Value) -> Result<serde_json::Value, String> {
-+        let op = value.get("op").and_then(|v| v.as_str()).unwrap_or("");
-+        match op {
++    fn route(&self, value: serde_json::Value) -> Result<Route, String> {
++        match value.get("op").and_then(|v| v.as_str()).unwrap_or("") {
 +            "event" => {
 +                #[derive(Deserialize)]
 +                #[serde(deny_unknown_fields)]
@@ -1189,41 +1232,108 @@ new file mode 100644
 +                    kind: Kind,
 +                    code: Code,
 +                }
-+                let input: Input =
++                let event: Input =
 +                    serde_json::from_value(value["event"].clone()).map_err(|_| "invalid_event")?;
 +                self.capture(
-+                    input.level,
-+                    input.module,
-+                    input.kind,
-+                    input.code,
++                    event.level,
++                    event.module,
++                    event.kind,
++                    event.code,
 +                    None,
 +                    None,
 +                    None,
 +                );
-+                Ok(serde_json::json!(true))
++                Ok(Route::Immediate(serde_json::json!(true)))
 +            }
-+            "status" => Ok(
++            "status" => Ok(Route::Immediate(
 +                serde_json::json!({"status":self.status(),"settings":self.settings(),"build":self.shared.lock().unwrap().build}),
-+            ),
-+            "configure" => self.call(Command::Configure(
++            )),
++            "configure" => Ok(Route::Work(Command::Configure(
 +                serde_json::from_value(value["settings"].clone())
 +                    .map_err(|_| "invalid_settings")?,
-+            )),
-+            "stop" => self.call(Command::Stop),
-+            "files" => self.call(Command::Files),
-+            "query" => self.call(Command::Query(
++            ))),
++            "stop" => Ok(Route::Work(Command::Stop)),
++            "files" => Ok(Route::Work(Command::Files)),
++            "query" => Ok(Route::Work(Command::Query(
 +                serde_json::from_value(value["query"].clone()).map_err(|_| "invalid_query")?,
-+            )),
-+            "pin" => self.call(Command::Pin(
++            ))),
++            "pin" => Ok(Route::Work(Command::Pin(
 +                value["id"].as_str().ok_or("invalid_id")?.into(),
 +                value["pinned"].as_bool().ok_or("invalid_pin")?,
-+            )),
-+            "clear" if value["confirmed"] == true => self.call(Command::Clear),
-+            "export" => self.call(Command::Export(
++            ))),
++            "clear" if value["confirmed"] == true => Ok(Route::Work(Command::Clear)),
++            "export" => Ok(Route::Work(Command::Export(
 +                serde_json::from_value(value["ids"].clone()).map_err(|_| "invalid_ids")?,
-+            )),
++            ))),
 +            _ => Err("invalid_operation".into()),
 +        }
++    }
++    pub fn request(&self, value: serde_json::Value) -> Result<serde_json::Value, String> {
++        match self.route(value)? {
++            Route::Immediate(value) => Ok(value),
++            Route::Work(command) => self.call(command),
++        }
++    }
++    /// Submit using existing asynchronous FFI setters. Payloads are never local options.
++    pub fn begin(&self, id: &str, value: serde_json::Value) -> Result<(), String> {
++        if id.is_empty() || id.len() > 64 || !id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
++        {
++            return Err("invalid_request".into());
++        }
++        let mut jobs = self.jobs.try_lock().map_err(|_| "diagnostics_busy")?;
++        jobs.retain(|_, job| job.created.elapsed() < Duration::from_secs(60));
++        if jobs.len() >= 16 || jobs.contains_key(id) {
++            return Err("diagnostics_busy".into());
++        }
++        let (sender, receiver) = mpsc::channel();
++        match self.route(value) {
++            Ok(Route::Work(command)) => self
++                .commands
++                .try_send(Work {
++                    command,
++                    reply: sender,
++                })
++                .map_err(|_| "diagnostics_busy")?,
++            Ok(Route::Immediate(value)) => {
++                let _ = sender.send(Ok(value));
++            }
++            Err(code) => {
++                let _ = sender.send(Err(code));
++            }
++        }
++        jobs.insert(
++            id.into(),
++            Job {
++                created: Instant::now(),
++                receiver,
++            },
++        );
++        Ok(())
++    }
++    /// Synchronous FFI getter only polls bounded in-memory results: no filesystem/wait.
++    pub fn poll(&self, id: &str) -> String {
++        let Ok(mut jobs) = self.jobs.try_lock() else {
++            return String::new();
++        };
++        let result = match jobs.get(id) {
++            Some(job) => match job.receiver.try_recv() {
++                Ok(value) => value,
++                Err(mpsc::TryRecvError::Empty)
++                    if job.created.elapsed() < Duration::from_secs(60) =>
++                {
++                    return String::new()
++                }
++                Err(mpsc::TryRecvError::Empty) => Err("diagnostics_timeout".into()),
++                Err(mpsc::TryRecvError::Disconnected) => Err("diagnostics_operation_failed".into()),
++            },
++            None => Err("diagnostics_busy".into()),
++        };
++        jobs.remove(id);
++        match result {
++            Ok(data) => serde_json::json!({"ok":true,"data":data}),
++            Err(code) => serde_json::json!({"ok":false,"error":code}),
++        }
++        .to_string()
 +    }
 +}
 +// No raw URL fields are serialized. Only these closed route names are exposed.
@@ -2381,17 +2491,36 @@ new file mode 100644
 +            recording: "a".repeat(32),
 +            build: serde_json::json!({}),
 +        });
++        let ready = directory.join(format!(".ready-{}", std::process::id()));
++        drop(private_file(&ready).unwrap());
++        let deadline = Instant::now() + Duration::from_secs(5);
++        while !directory.join(".go").exists() && Instant::now() < deadline {
++            std::thread::sleep(Duration::from_millis(1));
++        }
++        assert!(
++            directory.join(".go").exists(),
++            "parent must release the start barrier"
++        );
++        let mut written = 0;
++        let mut dropped = 0;
 +        for _ in 0..4000 {
-+            for attempt in 0..100 {
-+                match store.write(event(), &state) {
-+                    Ok(()) => break,
-+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock && attempt < 99 => {
-+                        std::thread::sleep(Duration::from_millis(1))
-+                    }
-+                    Err(e) => panic!("writer failed: {e}"),
++            let mut event = event();
++            event.process = std::process::id();
++            match store.write(event, &state) {
++                Ok(()) => written += 1,
++                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
++                    dropped += 1;
++                    std::thread::sleep(Duration::from_millis(1));
 +                }
++                Err(e) => panic!("writer failed: {e}"),
 +            }
 +        }
++        assert!(written > 0, "each process must make forward progress");
++        assert_eq!(written + dropped, 4000);
++        println!(
++            "process {} wrote {written}, contention drops {dropped}",
++            std::process::id()
++        );
 +        store.close();
 +    }
 +    #[test]
@@ -2408,8 +2537,23 @@ new file mode 100644
 +            .env("RADAR_DIAGNOSTIC_TEST_DIR", &store.directory)
 +            .spawn()
 +            .unwrap();
-+        assert!(a.wait().unwrap().success());
-+        assert!(b.wait().unwrap().success());
++        let deadline = Instant::now() + Duration::from_secs(5);
++        while !(store.directory.join(format!(".ready-{}", a.id())).exists()
++            && store.directory.join(format!(".ready-{}", b.id())).exists())
++            && Instant::now() < deadline
++        {
++            std::thread::sleep(Duration::from_millis(1));
++        }
++        let ready = store.directory.join(format!(".ready-{}", a.id())).exists()
++            && store.directory.join(format!(".ready-{}", b.id())).exists();
++        fs::write(store.directory.join(".go"), b"start").unwrap();
++        let first = a.wait().unwrap();
++        let second = b.wait().unwrap();
++        assert!(
++            ready,
++            "both independent writers must reach the start barrier"
++        );
++        assert!(first.success() && second.success());
 +        let files = store.files().unwrap();
 +        assert!(files.iter().all(|f| !f.active));
 +        assert!(files.iter().map(|f| f.bytes).sum::<u64>() <= 2 * MB);
@@ -2510,6 +2654,69 @@ new file mode 100644
 +        assert_ne!(saved.key, old_key);
 +        drop(other);
 +    }
++    #[test]
++    fn bounded_rpc_reuses_the_worker_and_only_polls_memory() {
++        let t = Temp::new();
++        let engine = Engine::start(t.0.clone()).unwrap();
++        engine
++            .begin("abc", serde_json::json!({"op":"status"}))
++            .unwrap();
++        assert_eq!(
++            serde_json::from_str::<serde_json::Value>(&engine.poll("abc")).unwrap()["ok"],
++            true
++        );
++        assert_eq!(
++            serde_json::from_str::<serde_json::Value>(&engine.poll("abc")).unwrap()["ok"],
++            false
++        );
++        for i in 0..16 {
++            engine
++                .begin(&format!("{i:032x}"), serde_json::json!({"op":"status"}))
++                .unwrap();
++        }
++        assert!(engine
++            .begin("ffff", serde_json::json!({"op":"status"}))
++            .is_err());
++        assert!(engine
++            .begin("../bad", serde_json::json!({"op":"status"}))
++            .is_err());
++        for i in 0..16 {
++            assert!(!engine.poll(&format!("{i:032x}")).is_empty());
++        }
++        let (sender, receiver) = mpsc::channel();
++        engine.jobs.lock().unwrap().insert(
++            "abc".into(),
++            Job {
++                created: Instant::now(),
++                receiver,
++            },
++        );
++        let state = engine.shared.lock().unwrap();
++        let start = Instant::now();
++        assert!(engine.poll("abc").is_empty());
++        assert!(start.elapsed() < Duration::from_millis(100));
++        drop(state);
++        drop(sender);
++        assert!(!engine.poll("abc").is_empty());
++        engine.begin("abc",serde_json::json!({"op":"configure","settings":Settings {enabled:true,..Settings::default()}})).unwrap();
++        let deadline = Instant::now() + Duration::from_secs(5);
++        loop {
++            let result = engine.poll("abc");
++            if !result.is_empty() {
++                assert_eq!(
++                    serde_json::from_str::<serde_json::Value>(&result).unwrap()["ok"],
++                    true
++                );
++                break;
++            }
++            assert!(Instant::now() < deadline);
++            std::thread::sleep(Duration::from_millis(1));
++        }
++        assert!(engine.settings().enabled);
++        assert!(!fs::read_to_string(t.0.join("settings.json"))
++            .unwrap()
++            .contains("radar-diagnostic-request"));
++    }
 +}
 diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
 --- a/src/flutter_ffi.rs
@@ -2577,27 +2784,48 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
                  .with_tag("ffi"), // logs will show under mytag tag
          );
          #[cfg(not(debug_assertions))]
-@@ -1233,6 +1245,19 @@
- 
- pub fn main_http_request(url: String, method: String, body: Option<String>, header: String) {
-     http_request(url, method, body, header)
-+}
-+
-+/// Runs on the existing asynchronous Flutter bridge worker, never the UI thread.
-+pub fn main_diagnostics(request: String) -> String {
-+    let result = (|| -> Result<serde_json::Value, String> {
-+        let engine = hbb_common::radar_diagnostics::global().ok_or("diagnostics_unavailable")?;
-+        let value = serde_json::from_str(&request).map_err(|_| "invalid_request")?;
-+        engine.request(value)
-+    })();
-+    match result {
-+        Ok(data) => serde_json::json!({"ok":true,"data":data}).to_string(),
-+        Err(code) => serde_json::json!({"ok":false,"error":code}).to_string(),
-+    }
+@@ -1236,6 +1248,15 @@
  }
  
  pub fn main_get_local_option(key: String) -> SyncReturn<String> {
-@@ -2884,7 +2909,9 @@
++    if let Some(id) = key.strip_prefix("radar-diagnostic-result:") {
++        return SyncReturn(
++            hbb_common::radar_diagnostics::global()
++                .map(|engine| engine.poll(id))
++                .unwrap_or_else(|| {
++                    serde_json::json!({"ok":false,"error":"diagnostics_unavailable"}).to_string()
++                }),
++        );
++    }
+     SyncReturn(get_local_option(key))
+ }
+ 
+@@ -1277,6 +1298,24 @@
+ }
+ 
+ pub fn main_set_local_option(key: String, value: String) {
++    if let Some(id) = key.strip_prefix("radar-diagnostic-request:") {
++        if let Some(engine) = hbb_common::radar_diagnostics::global() {
++            let request = if value.len() <= 65536 {
++                serde_json::from_str(&value).unwrap_or(serde_json::Value::Null)
++            } else {
++                serde_json::Value::Null
++            };
++            #[cfg(target_os = "android")]
++            let request =
++                if request["op"] == "configure" && !request["settings"]["directory"].is_null() {
++                    serde_json::Value::Null
++                } else {
++                    request
++                };
++            let _ = engine.begin(id, request);
++        }
++        return; // Never persist diagnostic requests as options or send them to a server.
++    }
+     let is_texture_render_key = key.eq(keys::OPTION_TEXTURE_RENDER);
+     let is_d3d_render_key = key.eq(keys::OPTION_ALLOW_D3D_RENDER);
+     set_local_option(key, value.clone());
+@@ -2884,7 +2923,9 @@
  pub fn main_set_common(_key: String, _value: String) {
      // Custom downloads have a separate API-digest verification and explicit
      // installer handoff. Never enter the legacy official installer path.
@@ -2608,7 +2836,7 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
      #[cfg(target_os = "windows")]
      if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
          std::thread::spawn(move || {
-@@ -3044,8 +3071,7 @@
+@@ -3044,8 +3085,7 @@
  
  pub fn session_set_common(session_id: SessionID, key: String, value: String) {
      if let Some(s) = sessions::get_session_by_session_id(&session_id) {
@@ -2640,11 +2868,13 @@ diff --git a/src/platform/android_log.rs b/src/platform/android_log.rs
          writers::{FileLogWriter, LogWriter},
          Age, Cleanup, Criterion, DeferredNow, FileSpec, FlexiLoggerError, Logger, Naming,
      },
-@@ -35,20 +34,23 @@
+@@ -35,20 +34,25 @@
  }
  
  pub fn initialize() {
-+    let _ = hbb_common::radar_diagnostics::initialize(Config::log_path().join("diagnostics"));
++    if let Some(path) = hbb_common::diagnostics_path() {
++        let _ = hbb_common::radar_diagnostics::initialize(path);
++    }
      static INIT: Once = Once::new();
      INIT.call_once(|| {
 -        let result = Logger::try_with_env_or_str("debug,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error")
@@ -2670,7 +2900,7 @@ diff --git a/src/platform/android_log.rs b/src/platform/android_log.rs
          if let Err(error) = result {
              report_error(&error);
          }
-@@ -70,16 +72,19 @@
+@@ -70,16 +74,19 @@
  
  impl LogWriter for DocumentWriter {
      fn write(&self, now: &mut DeferredNow, record: &Record) -> io::Result<()> {
@@ -2692,7 +2922,23 @@ diff --git a/src/platform/android_log.rs b/src/platform/android_log.rs
          message.push(b'\n');
          let message = String::from_utf8(message)
              .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-@@ -142,3 +147,23 @@
+@@ -128,7 +135,7 @@
+     )
+ }
+ 
+-fn report_error(error: &dyn std::fmt::Display) {
++fn report_error(_error: &dyn std::fmt::Display) {
+     static ERRORS: LogThrottle = LogThrottle::new(ERROR_INTERVAL);
+     if let Some(count) = ERRORS.due() {
+         // Reporting through log::error! here would call this writer recursively.
+@@ -136,9 +143,29 @@
+             &Record::builder()
+                 .level(Level::Error)
+                 .args(format_args!(
+-                    "Android file logging failed: {error} (x{count})"
++                    "Android file logging failed (details omitted; x{count})"
+                 ))
+                 .build(),
          );
      }
  }

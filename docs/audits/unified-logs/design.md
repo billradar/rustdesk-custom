@@ -22,7 +22,7 @@ Necessary existing errors/crash/system reporting remains, with app-managed file 
 
 ## Shared engine
 
-- One bounded, nonblocking producer queue; all event content safe before enqueue. Queue-full drops increment atomic counters without recursive log calls. Management commands use a separate bounded channel and an asynchronous Flutter bridge.
+- One bounded, nonblocking producer queue; all event content safe before enqueue. Queue-full drops increment atomic counters without recursive log calls. Management commands use a separate bounded channel and the existing asynchronous Flutter setter plus an in-memory result polling namespace; no new generated bridge ABI is required.
 - A worker owns file I/O, rotation, cleanup, scheduling and export; no storage operation on network/audio/video/UI producers. File locks serialize cooperating processes and protect active logs; a mutex alone is insufficient for service/main/CM processes.
 - Defaults: optional persistence off; Info; 1h; 20 MB/file; 100 MB total; 7 days. Warn is included by Info. Level gates control capture, not just viewer filtering. Range-check custom sizes, total>=single, finite durations and start<end.
 - Fixed schema NDJSON in application-owned files. Rotation closes a file before allocating the next; quota cleanup removes oldest unlocked/unpinned managed files only. Never delete active/pinned/unrecognized files. If protected usage leaves insufficient room, pause optional writes with an explicit status/error. Test disk errors and contention, not only happy paths.

@@ -49,7 +49,7 @@ Reason: Introduce one optional typed diagnostic store and shared settings page f
 #### Compatibility
 
 
-References: 83bbff7a047eae5a2fdc57026c779050c02c8063
+References: 83bbff7a047eae5a2fdc57026c779050c02c8063, https://github.com/billradar/rustdesk-custom/pull/266
 
 Upstream compatibility: v3 Common is shared by Standard and SOS. Exact Profile routing, archived v1/v2 bytes, signing, package identity, native connection policy and production workflows are unchanged.
 
@@ -57,7 +57,7 @@ Known limitations: Draft implementation. Full client builds, Flutter rendering, 
 
 Allocation base: `83bbff7a047eae5a2fdc57026c779050c02c8063`
 
-- common: `e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854` → `563c50a9c7d6bbfff6c903844ac6264fc2f7b69509c8f336114f6b492ee1dd56`
+- common: `e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854` → `90a0a7057381361a2eb176677c711a1f002a3d4887238ab4cfdf133459ec4166`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.6 — content-change

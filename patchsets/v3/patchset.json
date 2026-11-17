@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "563c50a9c7d6bbfff6c903844ac6264fc2f7b69509c8f336114f6b492ee1dd56",
+    "common": "90a0a7057381361a2eb176677c711a1f002a3d4887238ab4cfdf133459ec4166",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -281,7 +281,7 @@
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "after": {
-          "common": "563c50a9c7d6bbfff6c903844ac6264fc2f7b69509c8f336114f6b492ee1dd56",
+          "common": "90a0a7057381361a2eb176677c711a1f002a3d4887238ab4cfdf133459ec4166",
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "scopes": [
@@ -304,7 +304,8 @@
         },
         "reason": "Introduce one optional typed diagnostic store and shared settings page for v3, with bounded asynchronous capture and pre-write privacy enforcement.",
         "references": [
-          "83bbff7a047eae5a2fdc57026c779050c02c8063"
+          "83bbff7a047eae5a2fdc57026c779050c02c8063",
+          "https://github.com/billradar/rustdesk-custom/pull/266"
         ],
         "compatibility": "v3 Common is shared by Standard and SOS. Exact Profile routing, archived v1/v2 bytes, signing, package identity, native connection policy and production workflows are unchanged.",
         "limitations": "Draft implementation. Full client builds, Flutter rendering, Android JNI/SAF and physical devices remain unverified. Legacy events currently contain metadata rather than arbitrary text. Broader typed session/error instrumentation and platform/service runtime evidence require follow-up before complete acceptance.",
