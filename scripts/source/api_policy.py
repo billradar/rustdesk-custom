@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 SCHEMA = 'api-failover-policy-v1'
 RUST = 'src/hbbs_http/api_failover_policy.rs'
 DART = 'flutter/lib/utils/api_failover_policy.dart'
+WSS = 'libs/hbb_common/src/radar_wss_generated.rs'
 SNAPSHOT = 'api-failover.json'
 
 
@@ -58,7 +59,10 @@ def sources(value):
     dart = ('// Generated from frozen public Actions variables.\n'
             'const customApiPrimaryOrigin = ' + json.dumps(value['primary']) + ';\n'
             'const customApiFallbackOrigin = ' + json.dumps(value['fallback']) + ';\n')
-    return {RUST: rust, DART: dart}
+    wss = ('// Generated from frozen public Actions API origins for own WSS.\n'
+           'const PROFILE_PRIMARY: &str = ' + json.dumps(value['primary']) + ';\n'
+           'const PROFILE_FALLBACK: &str = ' + json.dumps(value['fallback']) + ';\n')
+    return {RUST: rust, DART: dart, WSS: wss}
 
 
 def apply(tree, value):
