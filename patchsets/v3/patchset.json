@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "4c5c33a4f18537e61459a995f1c837d432eabd7f514c5a48f910f2720810e889",
+    "common": "d8a8ac87c190e03a78e857db2a8e1e533cef61624c424a30b5e0d155fa817a89",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -321,7 +321,7 @@
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "after": {
-          "common": "4c5c33a4f18537e61459a995f1c837d432eabd7f514c5a48f910f2720810e889",
+          "common": "d8a8ac87c190e03a78e857db2a8e1e533cef61624c424a30b5e0d155fa817a89",
           "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
         },
         "scopes": [
@@ -335,7 +335,8 @@
             "Build-source preparation now injects WSS domain constants from the immutable HTTPS origin snapshot; patch application routes the new Common patch to hbb_common."
           ],
           "Fixed": [
-            "Prefer WSS for the compiled own HTTPS primary when no runtime API server is configured, avoiding HTTP 301 on WS."
+            "Prefer WSS for the compiled own HTTPS primary when no runtime API server is configured, avoiding HTTP 301 on WS.",
+            "Allow a single verified backup attempt for direct-socket generic IO/DNS failures without treating proxy errors as eligible."
           ],
           "Removed": [],
           "Security": [
