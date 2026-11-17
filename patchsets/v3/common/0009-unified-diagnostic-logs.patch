@@ -95,7 +95,7 @@ diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/Diagnos
 new file mode 100644
 --- /dev/null
 +++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DiagnosticLog.kt
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,20 @@
 +package com.carriez.flutter_hbb
 +
 +/** Typed metadata adapter. Never format message, tag, throwable or stack to storage. */
@@ -105,7 +105,11 @@ new file mode 100644
 +    private external fun nativeEvent(level: Int)
 +    private fun event(level: Int): Int {
 +        try { nativeEvent(level) } catch (_: UnsatisfiedLinkError) { /* Rust not loaded yet. */ }
-+        if (level == 1) android.util.Log.e("RadarDiagnostics", "Native error (details omitted)")
++        when (level) {
++            1 -> android.util.Log.e("RadarDiagnostics", "Native error (details omitted)")
++            2 -> android.util.Log.w("RadarDiagnostics", "Native warning (details omitted)")
++            else -> android.util.Log.d("RadarDiagnostics", "Native diagnostic event (details omitted)")
++        }
 +        return 0
 +    }
 +    @Suppress("UNUSED_PARAMETER") fun d(tag: String?, message: String?, error: Throwable? = null): Int = event(3)
@@ -196,16 +200,18 @@ diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputSe
 diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt
 --- a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt
 +++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt
-@@ -61,10 +61,10 @@
+@@ -57,14 +57,11 @@
+         }
+     }
+ 
+-    private val tag = "KeyEventConverter"
  
      private fun convertUnicodeToKeyCode(unicode: Int): Int {
          val charMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
 -        android.util.Log.d(tag, "unicode: $unicode")
-+        com.carriez.flutter_hbb.DiagnosticLog.d(tag, "unicode: $unicode")
          val events = charMap.getEvents(charArrayOf(unicode.toChar()))
          if (events != null && events.size > 0) {
 -            android.util.Log.d(tag, "keycode ${events[0].keyCode}")
-+            com.carriez.flutter_hbb.DiagnosticLog.d(tag, "keycode ${events[0].keyCode}")
              return events[0].keyCode
          }
          return 0
@@ -387,7 +393,7 @@ diff --git a/flutter/lib/common/widgets/logs_page.dart b/flutter/lib/common/widg
 new file mode 100644
 --- /dev/null
 +++ b/flutter/lib/common/widgets/logs_page.dart
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,189 @@
 +import 'dart:async';
 +import 'dart:convert';
 +import 'dart:io';
@@ -421,7 +427,8 @@ new file mode 100644
 +  int? _filterLevel;
 +  String? _filterModule;
 +  DateTime? _after;
-+  int _offset = 0;
++  int _offset = 0, _fileOffset = 0;
++  bool _fileHasMore = false;
 +  String t(String en, String zh) =>
 +      Localizations.localeOf(context).languageCode == 'zh' ? zh : en;
 +
@@ -446,7 +453,7 @@ new file mode 100644
 +    try {
 +      final value = await _request({'op':'status'});
 +      if (!mounted) return;
-+      setState(() { _status = Map<String,dynamic>.from(value['status']); _build = Map<String,dynamic>.from(value['build']??{}); _settings ??= Map<String,dynamic>.from(value['settings']); });
++      setState(() { _status = Map<String,dynamic>.from(value['status']); _build = Map<String,dynamic>.from(value['build']??{}); _settings ??= Map<String,dynamic>.from(value['settings']); _settings!['enabled']=value['settings']['enabled']; });
 +    } catch (_) { if (mounted) setState(() => _error = 'diagnostics_unavailable'); }
 +    finally { _polling = false; }
 +  }
@@ -469,6 +476,7 @@ new file mode 100644
 +      'permission_denied':t('Directory permission denied. Choose the default directory or grant access again.','目录权限不足，请选择默认目录或重新授权。'),
 +      'diagnostics_busy':t('Logs are busy. Try again shortly.','日志正在处理其他操作，请稍后重试。'),
 +      'active_or_missing_file':t('A selected log is active in another process or no longer exists. Refresh the list.','所选日志正在其他进程写入或已不存在，请刷新列表。'),
++      'too_many_files':t('Export up to 1000 files at a time. Clear the selection and export in smaller groups.','每次最多导出 1000 个文件，请清空选择后分批导出。'),
 +      'corrupt_record':t('A log is damaged. Exclude it from export; raw data will not be copied.','日志文件损坏，请排除该文件后导出，不会复制原始数据。'),
 +    };
 +    return messages[code]??t('Diagnostic operation failed. No raw error details are exported.','日志操作失败，不会导出原始错误详情。');
@@ -476,7 +484,7 @@ new file mode 100644
 +  Future<void> _save({bool? enabled}) async {
 +    final next = Map<String,dynamic>.from(_settings!);
 +    if (enabled != null) next['enabled']=enabled;
-+    await _request({'op':'configure','settings':next});
++    await _request({'op':enabled==true?'start':'configure','settings':next});
 +    final value = await _request({'op':'status'});
 +    if (mounted) setState(() => _settings=Map<String,dynamic>.from(value['settings']));
 +  }
@@ -494,8 +502,8 @@ new file mode 100644
 +    return time==null?null:DateTime(day.year,day.month,day.day,time.hour,time.minute);
 +  }
 +  Future<void> _loadFiles() async {
-+    final files=await _request({'op':'files'});
-+    if(mounted)setState((){_files=files as List<dynamic>;_selected.removeWhere((id)=>!_files.any((f)=>f['id']==id));});
++    final files=await _request({'op':'files','offset':_fileOffset});
++    if(mounted)setState((){_files=files['files'] as List<dynamic>;_fileHasMore=files['has_more']==true;});
 +  }
 +  Future<void> _query() async {
 +    final rows=await _request({'op':'query','query':{'keyword':_search.text,'level':_filterLevel,'module':_filterModule,'after':_after?.toUtc().toIso8601String(),'offset':_offset}});
@@ -506,6 +514,7 @@ new file mode 100644
 +    await _loadFiles();
 +    final ids=_selected.isEmpty?_files.map((f)=>f['id']).toList():_selected.toList();
 +    if(ids.isEmpty)return;
++    if(ids.length>1000)throw DiagnosticFailure('too_many_files');
 +    final result=await _request({'op':'export','ids':ids});
 +    final source=File(result['path'] as String);
 +    if(isAndroid){await gFFI.invokeMethodWithResult<bool>('export_file',{'path':source.path});}
@@ -537,6 +546,7 @@ new file mode 100644
 +      _choice(t('Duration (minutes)','记录时长（分钟）'),'duration_seconds',{5:t('5 minutes','5 分钟'),15:t('15 minutes','15 分钟'),30:t('30 minutes','30 分钟'),60:t('1 hour','1 小时'),360:t('6 hours','6 小时'),720:t('12 hours','12 小时'),1440:t('24 hours','24 小时'),10080:t('7 days','7 天'),-1:t('Until stopped','手动停止')},scale:60,nullable:true),
 +      ListTile(title:Text(t('Start date and time','开始日期和时间')),subtitle:Text(s['start_utc']==null?t('Immediately','立即开始'):DateTime.fromMillisecondsSinceEpoch((s['start_utc'] as int)*1000).toLocal().toString()),onTap:_busy?null:()async{final date=await _date();if(date!=null&&mounted)setState(()=>s['start_utc']=date.millisecondsSinceEpoch~/1000);},trailing:TextButton(onPressed:()=>setState(()=>s['start_utc']=null),child:Text(t('Now','立即')))),
 +      ListTile(title:Text(t('End date and time','结束日期和时间')),subtitle:Text(s['end_utc']==null?t('Use duration','按持续时长'):DateTime.fromMillisecondsSinceEpoch((s['end_utc'] as int)*1000).toLocal().toString()),onTap:_busy?null:()async{final date=await _date();if(date!=null&&mounted)setState(()=>s['end_utc']=date.millisecondsSinceEpoch~/1000);},trailing:TextButton(onPressed:()=>setState(()=>s['end_utc']=null),child:Text(t('Clear','清除')))),
++      Text(t('Schedule changes apply on the next explicit start. Applying settings never starts a stopped recording.','时间安排修改将在下次手动开启时生效；应用配置不会启动已停止的记录。')),
 +      Text(t('When both an end time and duration are set, the earlier limit applies.','同时设置结束时间与持续时长时，按较早的限制停止。')),
 +      _choice(t('Single file (MiB)','单文件大小（MiB）'),'file_bytes',{5:'5',10:'10',20:'20',50:'50',100:'100',500:'500',1024:'1024'},scale:mb),
 +      _choice(t('Total storage (MiB)','总容量（MiB）'),'total_bytes',{50:'50',100:'100',250:'250',500:'500',1024:'1024',5120:'5120'},scale:mb),
@@ -560,8 +570,13 @@ new file mode 100644
 +        TextButton(onPressed:_busy||_offset==0?null:()=>_run(()async{_offset=(_offset-200).clamp(0,1000000).toInt();await _query();}),child:Text(t('Previous','上一页'))),
 +        TextButton(onPressed:_busy||_rows.length<200?null:()=>_run(()async{_offset+=200;await _query();}),child:Text(t('Next','下一页'))),
 +        TextButton(onPressed:_busy?null:()=>_run(_loadFiles),child:Text(t('List files','文件列表'))),
-+        TextButton(onPressed:_busy?null:()=>_run(_export),child:Text(t('Export selected / all','导出所选 / 全部'))),
++        TextButton(onPressed:_busy?null:()=>_run(_export),child:Text(t('Export selected / current page','导出所选 / 当前页'))),
 +        TextButton(onPressed:_busy?null:()=>_run(()async{final yes=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(title:Text(t('Delete closed, unpinned logs?','删除已关闭且未保留的日志？')),actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:Text(t('Cancel','取消'))),TextButton(onPressed:()=>Navigator.pop(context,true),child:Text(t('Delete','删除')))]));if(yes==true){await _request({'op':'clear','confirmed':true});await _loadFiles();}}),child:Text(t('Clean up','清理'))),
++      ]),
++      Wrap(spacing:8,children:[
++        TextButton(onPressed:_busy||_fileOffset==0?null:()=>_run(()async{_fileOffset=(_fileOffset-200).clamp(0,1000000).toInt();await _loadFiles();}),child:Text(t('Previous files','上一页文件'))),
++        TextButton(onPressed:_busy||!_fileHasMore?null:()=>_run(()async{_fileOffset+=200;await _loadFiles();}),child:Text(t('Next files','下一页文件'))),
++        TextButton(onPressed:_busy?null:()=>setState(()=>_selected.clear()),child:Text('${t('Clear selection','清空选择')} (${_selected.length})')),
 +      ]),
 +      for(final f in _files)CheckboxListTile(title:Text('${f['id']} (${f['bytes']} bytes)'),subtitle:Text(f['active']==true?t('Active — protected','正在写入，受保护'):t('Closed','已关闭')),value:_selected.contains(f['id']),onChanged:(v)=>setState((){if(v==true){_selected.add(f['id'] as String);}else{_selected.remove(f['id']);}}),secondary:IconButton(icon:Icon(f['pinned']==true?Icons.lock:Icons.lock_open),tooltip:t('Keep / release file','保留 / 解除保留'),onPressed:_busy?null:()=>_run(()async{await _request({'op':'pin','id':f['id'],'pinned':f['pinned']!=true});await _loadFiles();}))),
 +      for(final row in _rows)SelectableText(jsonEncode(row)),
@@ -674,7 +689,7 @@ diff --git a/libs/radar_diagnostics/src/lib.rs b/libs/radar_diagnostics/src/lib.
 new file mode 100644
 --- /dev/null
 +++ b/libs/radar_diagnostics/src/lib.rs
-@@ -0,0 +1,2043 @@
+@@ -0,0 +1,2193 @@
 +//! Optional local diagnostics. Arbitrary log arguments NEVER enter this store.
 +use fs2::FileExt;
 +use hmac::{Hmac, Mac};
@@ -924,12 +939,13 @@ new file mode 100644
 +}
 +enum Command {
 +    Configure(Settings),
++    Start(Settings),
 +    Stop,
 +    Pin(String, bool),
 +    Clear,
 +    Query(Query),
 +    Export(Vec<String>),
-+    Files,
++    Files(usize),
 +}
 +struct Work {
 +    command: Command,
@@ -1049,12 +1065,7 @@ new file mode 100644
 +        let mut settings = saved.settings;
 +        settings.validate()?;
 +        // Restart can resume only the previously saved absolute end, never a fresh duration.
-+        if settings.enabled
-+            && settings
-+                .active_until_utc
-+                .or(settings.end_utc)
-+                .is_some_and(|v| now() >= v)
-+        {
++        if settings.enabled && settings.active_until_utc.is_some_and(|v| now() >= v) {
 +            settings.enabled = false;
 +        }
 +        let directory = settings
@@ -1188,6 +1199,9 @@ new file mode 100644
 +            if !s.settings.enabled || level > s.settings.level || !(1..=4).contains(&level) {
 +                return;
 +            }
++            let session = session.filter(|v| v.len() <= 1024);
++            let endpoint = endpoint.filter(|v| v.len() <= 4096);
++            let status = status.filter(|v| (100..=599).contains(v));
 +            let parsed = endpoint.and_then(parse_endpoint);
 +            Event {
 +                timestamp: chrono::Utc::now().to_rfc3339(),
@@ -1252,8 +1266,14 @@ new file mode 100644
 +                serde_json::from_value(value["settings"].clone())
 +                    .map_err(|_| "invalid_settings")?,
 +            ))),
++            "start" => Ok(Route::Work(Command::Start(
++                serde_json::from_value(value["settings"].clone())
++                    .map_err(|_| "invalid_settings")?,
++            ))),
 +            "stop" => Ok(Route::Work(Command::Stop)),
-+            "files" => Ok(Route::Work(Command::Files)),
++            "files" => Ok(Route::Work(Command::Files(
++                value["offset"].as_u64().unwrap_or(0).min(1_000_000) as usize,
++            ))),
 +            "query" => Ok(Route::Work(Command::Query(
 +                serde_json::from_value(value["query"].clone()).map_err(|_| "invalid_query")?,
 +            ))),
@@ -1438,7 +1458,7 @@ new file mode 100644
 +        key: &[u8; 32],
 +        recording: &str,
 +        replace_recording: bool,
-+    ) -> io::Result<()> {
++    ) -> io::Result<bool> {
 +        // This is deliberately separate from exportable records. No credential/config capture.
 +        let lock_path = self.config.with_extension("lock");
 +        if fs::symlink_metadata(&lock_path).is_ok_and(|m| m.file_type().is_symlink()) {
@@ -1451,11 +1471,14 @@ new file mode 100644
 +            .truncate(false)
 +            .open(lock_path)?;
 +        try_exclusive(&lock)?;
++        let mut saved_settings = settings.clone();
 +        if !replace_recording {
 +            if let Ok(bytes) = fs::read(&self.config) {
-+                if Persisted::decode(&bytes)?.recording != recording {
++                let current = Persisted::decode(&bytes)?;
++                if current.recording != recording {
 +                    return Err(error("diagnostics_busy"));
 +                }
++                saved_settings.enabled &= current.settings.enabled;
 +            }
 +        }
 +        let temp = self
@@ -1464,7 +1487,7 @@ new file mode 100644
 +        let _ = fs::remove_file(&temp);
 +        let mut f = private_file(&temp)?;
 +        f.write_all(&serde_json::to_vec(&Persisted {
-+            settings: settings.clone(),
++            settings: saved_settings.clone(),
 +            key: *key,
 +            recording: recording.to_owned(),
 +        })?)?;
@@ -1479,7 +1502,83 @@ new file mode 100644
 +        }
 +        fs::rename(temp, &self.config)?;
 +        self.config_modified = fs::metadata(&self.config).and_then(|m| m.modified()).ok();
-+        Ok(())
++        Ok(saved_settings.enabled)
++    }
++    fn elapsed(&self) -> u64 {
++        self.started
++            .map(|start| {
++                let elapsed = start.elapsed();
++                let elapsed = self
++                    .deadline
++                    .map(|end| elapsed.min(end.saturating_duration_since(start)))
++                    .unwrap_or(elapsed);
++                self.elapsed_at_start.saturating_add(elapsed.as_secs())
++            })
++            .unwrap_or(0)
++    }
++    fn configure(
++        &mut self,
++        mut settings: Settings,
++        explicit_start: bool,
++        shared: &Mutex<Shared>,
++    ) -> io::Result<serde_json::Value> {
++        settings.validate()?;
++        let current = shared.lock().unwrap().settings.clone();
++        let expired = current.active_until_utc.is_some_and(|v| now() >= v)
++            || self.deadline.is_some_and(|v| Instant::now() >= v);
++        settings.enabled = explicit_start || (current.enabled && !expired);
++        settings.active_until_utc = None;
++        settings.active_started_utc = None;
++        if explicit_start {
++            settings.active_until_utc = settings.end_utc;
++            let start = settings.start_utc.unwrap_or_else(now).max(now());
++            settings.active_started_utc = Some(start);
++            if let Some(seconds) = settings.duration_seconds {
++                let end = start.saturating_add(seconds as i64);
++                settings.active_until_utc = Some(settings.end_utc.map_or(end, |v| v.min(end)));
++            }
++            if settings.active_until_utc.is_some_and(|v| v <= start) {
++                return Err(error("invalid_schedule"));
++            }
++        }
++        if !explicit_start && settings.enabled {
++            settings.active_started_utc = current.active_started_utc;
++            settings.active_until_utc = current.active_until_utc;
++        }
++        let directory = settings
++            .directory
++            .clone()
++            .unwrap_or_else(|| self.config.parent().unwrap().join("records"));
++        private_dir(&directory)?;
++        let probe = directory.join(format!(".probe-{}", hex(&rand::random::<[u8; 8]>())));
++        drop(private_file(&probe)?);
++        fs::remove_file(probe)?;
++        let (key, recording) = if explicit_start {
++            (rand::random(), hex(&rand::random::<[u8; 16]>()))
++        } else {
++            let s = shared.lock().unwrap();
++            (s.key, s.recording.clone())
++        };
++        settings.enabled = self.persist(&settings, &key, &recording, explicit_start)?;
++        let stopped_elapsed = self.elapsed();
++        self.close();
++        self.directory = directory;
++        if explicit_start || !settings.enabled {
++            self.started = None;
++            self.deadline = None;
++        }
++        self.last_tick = None;
++        let mut s = shared.lock().unwrap();
++        if explicit_start {
++            s.status.elapsed_seconds = 0;
++        } else if !settings.enabled {
++            s.status.elapsed_seconds = stopped_elapsed;
++        }
++        s.settings = settings;
++        s.key = key;
++        s.recording = recording;
++        s.status.error = None;
++        Ok(serde_json::json!(true))
 +    }
 +    fn command(
 +        &mut self,
@@ -1487,46 +1586,8 @@ new file mode 100644
 +        shared: &Mutex<Shared>,
 +    ) -> io::Result<serde_json::Value> {
 +        match command {
-+            Command::Configure(mut settings) => {
-+                settings.validate()?;
-+                settings.active_until_utc = None;
-+                settings.active_started_utc = None;
-+                if settings.enabled {
-+                    settings.active_until_utc = settings.end_utc;
-+                    let start = settings.start_utc.unwrap_or_else(now).max(now());
-+                    settings.active_started_utc = Some(start);
-+                    if let Some(seconds) = settings.duration_seconds {
-+                        let end = start.saturating_add(seconds as i64);
-+                        settings.active_until_utc =
-+                            Some(settings.end_utc.map_or(end, |v| v.min(end)));
-+                    }
-+                    if settings.active_until_utc.is_some_and(|v| v <= start) {
-+                        return Err(error("invalid_schedule"));
-+                    }
-+                }
-+                let directory = settings
-+                    .directory
-+                    .clone()
-+                    .unwrap_or_else(|| self.config.parent().unwrap().join("records"));
-+                private_dir(&directory)?;
-+                let probe = directory.join(format!(".probe-{}", hex(&rand::random::<[u8; 8]>())));
-+                drop(private_file(&probe)?);
-+                fs::remove_file(probe)?;
-+                let key = rand::random();
-+                let recording = hex(&rand::random::<[u8; 16]>());
-+                self.persist(&settings, &key, &recording, true)?;
-+                self.close();
-+                self.directory = directory;
-+                self.started = None;
-+                self.deadline = None;
-+                self.last_tick = None;
-+                let mut s = shared.lock().unwrap();
-+                s.settings = settings;
-+                s.key = key;
-+                s.recording = recording;
-+                s.status.error = None;
-+                Ok(serde_json::json!(true))
-+            }
++            Command::Configure(settings) => self.configure(settings, false, shared),
++            Command::Start(settings) => self.configure(settings, true, shared),
 +            Command::Stop => {
 +                let mut settings = shared.lock().unwrap().settings.clone();
 +                settings.enabled = false;
@@ -1534,13 +1595,28 @@ new file mode 100644
 +                    let s = shared.lock().unwrap();
 +                    self.persist(&settings, &s.key, &s.recording, false)?;
 +                }
++                let elapsed = self.elapsed();
 +                self.close();
-+                shared.lock().unwrap().settings = settings;
++                self.deadline = None;
++                let mut state = shared.lock().unwrap();
++                state.settings = settings;
++                state.status.elapsed_seconds = elapsed;
++                state.status.remaining_seconds = None;
++                state.status.state = "stopped".into();
 +                Ok(serde_json::json!(true))
 +            }
-+            Command::Files => {
++            Command::Files(offset) => {
 +                let _lock = self.lock()?;
-+                Ok(serde_json::to_value(self.files()?)?)
++                let files = self.files()?;
++                let total = files.len();
++                let page = files
++                    .into_iter()
++                    .skip(offset)
++                    .take(MAX_QUERY)
++                    .collect::<Vec<_>>();
++                Ok(
++                    serde_json::json!({"files":page,"total":total,"has_more":offset.saturating_add(MAX_QUERY)<total}),
++                )
 +            }
 +            Command::Pin(id, pin) => {
 +                if !valid_id(&id) {
@@ -1562,6 +1638,12 @@ new file mode 100644
 +            }
 +            Command::Clear => {
 +                let _lock = self.lock()?;
++                for (path, _, _, active) in self.export_files()? {
++                    if !active {
++                        fs::remove_file(path)?;
++                    }
++                }
++
 +                for f in self.files()? {
 +                    if !f.active && !f.pinned {
 +                        fs::remove_file(self.directory.join(f.id))?;
@@ -1631,7 +1713,7 @@ new file mode 100644
 +                let exports = self.config.parent().unwrap().join("exports");
 +                private_dir(&exports)?;
 +                let metadata = serde_json::to_vec(
-+                    &serde_json::json!({"schema":1,"privacy":"typed-events-only","automatic_upload":false,"build":shared.lock().unwrap().build,"platform":std::env::consts::OS,"architecture":std::env::consts::ARCH}),
++                    &serde_json::json!({"schema":1,"privacy":"typed-events-only","automatic_upload":false,"exporter_build":shared.lock().unwrap().build,"dropped_events_snapshot":shared.lock().unwrap().status.dropped,"platform":std::env::consts::OS,"architecture":std::env::consts::ARCH}),
 +                )?;
 +                let mut sizes = Vec::new();
 +                let mut archive_size = 1024 + 512 + ((metadata.len() as u64 + 511) / 512) * 512;
@@ -1765,6 +1847,7 @@ new file mode 100644
 +            }
 +        }
 +        let current = now();
++        let was_recording = s.status.state == "recording";
 +        if !s.settings.enabled {
 +            self.close();
 +            if s.status.error.is_some() {
@@ -1777,18 +1860,20 @@ new file mode 100644
 +                "off"
 +            }
 +            .into();
-+        } else if s
-+            .settings
-+            .active_until_utc
-+            .or(s.settings.end_utc)
-+            .is_some_and(|v| current >= v)
++        } else if s.settings.active_until_utc.is_some_and(|v| current >= v)
 +            || self.deadline.is_some_and(|v| Instant::now() >= v)
 +        {
 +            self.close();
 +            s.settings.enabled = false;
 +            s.status.state = "stopped".into();
 +            let _ = self.persist(&s.settings, &s.key, &s.recording, false);
-+        } else if s.settings.start_utc.is_some_and(|v| current < v) && self.started.is_none() {
++        } else if s
++            .settings
++            .active_started_utc
++            .or(s.settings.start_utc)
++            .is_some_and(|v| current < v)
++            && self.started.is_none()
++        {
 +            s.status.state = "waiting".into();
 +        } else {
 +            if self.started.is_none() {
@@ -1798,16 +1883,15 @@ new file mode 100644
 +                    .active_started_utc
 +                    .map(|v| current.saturating_sub(v).max(0) as u64)
 +                    .unwrap_or(0);
-+                self.deadline = s.settings.active_until_utc.or(s.settings.end_utc).map(|v| {
++                self.deadline = s.settings.active_until_utc.map(|v| {
 +                    Instant::now() + Duration::from_secs(v.saturating_sub(current) as u64)
 +                });
 +            }
 +            s.status.state = "recording".into();
 +        }
-+        s.status.elapsed_seconds = self
-+            .started
-+            .map(|v| v.elapsed().as_secs().saturating_add(self.elapsed_at_start))
-+            .unwrap_or(0);
++        if s.settings.enabled || was_recording {
++            s.status.elapsed_seconds = self.elapsed();
++        }
 +        s.status.remaining_seconds = self
 +            .deadline
 +            .map(|v| v.saturating_duration_since(Instant::now()).as_secs());
@@ -2284,6 +2368,7 @@ new file mode 100644
 +            serde_json::to_vec(&Persisted::new(Settings {
 +                enabled: true,
 +                end_utc: Some(now() - 1),
++                active_until_utc: Some(now() - 1),
 +                ..Settings::default()
 +            }))
 +            .unwrap(),
@@ -2435,7 +2520,7 @@ new file mode 100644
 +        assert_eq!(build["version"], "1.5.3");
 +        assert!(build.get("password").is_none());
 +        assert!(build.get("upstream_sha").is_none());
-+        engine.request(serde_json::json!({"op":"configure","settings":Settings {enabled:true,..Settings::default()}})).unwrap();
++        engine.request(serde_json::json!({"op":"start","settings":Settings {enabled:true,..Settings::default()}})).unwrap();
 +        legacy(
 +            &log::Record::builder()
 +                .level(log::Level::Info)
@@ -2451,7 +2536,7 @@ new file mode 100644
 +        fs::write(&invalid, b"occupied").unwrap();
 +        assert!(store
 +            .command(
-+                Command::Configure(Settings {
++                Command::Start(Settings {
 +                    directory: Some(invalid),
 +                    ..Settings::default()
 +                }),
@@ -2614,6 +2699,8 @@ new file mode 100644
 +        let mut streamed = Vec::new();
 +        reader.read_to_end(&mut streamed).unwrap();
 +        assert_eq!(streamed.len() as u64, bytes);
++        store.command(Command::Clear, &state).unwrap();
++        assert!(!path.exists());
 +        drop(t);
 +    }
 +    #[test]
@@ -2621,7 +2708,7 @@ new file mode 100644
 +        let (t, mut store, state) = fixture();
 +        store
 +            .command(
-+                Command::Configure(Settings {
++                Command::Start(Settings {
 +                    enabled: true,
 +                    ..Settings::default()
 +                }),
@@ -2638,7 +2725,7 @@ new file mode 100644
 +        let old_key = other.shared.lock().unwrap().key;
 +        store
 +            .command(
-+                Command::Configure(Settings {
++                Command::Start(Settings {
 +                    enabled: true,
 +                    ..Settings::default()
 +                }),
@@ -2698,7 +2785,7 @@ new file mode 100644
 +        drop(state);
 +        drop(sender);
 +        assert!(!engine.poll("abc").is_empty());
-+        engine.begin("abc",serde_json::json!({"op":"configure","settings":Settings {enabled:true,..Settings::default()}})).unwrap();
++        engine.begin("abc",serde_json::json!({"op":"start","settings":Settings {enabled:true,..Settings::default()}})).unwrap();
 +        let deadline = Instant::now() + Duration::from_secs(5);
 +        loop {
 +            let result = engine.poll("abc");
@@ -2716,6 +2803,84 @@ new file mode 100644
 +        assert!(!fs::read_to_string(t.0.join("settings.json"))
 +            .unwrap()
 +            .contains("radar-diagnostic-request"));
++    }
++    #[test]
++    fn applying_settings_cannot_restart_a_stopped_or_expired_recording() {
++        let (t, mut store, state) = fixture();
++        store
++            .command(Command::Start(Settings::default()), &state)
++            .unwrap();
++        let original = state.lock().unwrap().recording.clone();
++        let end = state.lock().unwrap().settings.active_until_utc;
++        let mut changed = state.lock().unwrap().settings.clone();
++        changed.duration_seconds = Some(21600);
++        changed.retention_days = Some(30);
++        changed.enabled = false;
++        store.command(Command::Configure(changed), &state).unwrap();
++        assert!(state.lock().unwrap().settings.enabled);
++        assert_eq!(state.lock().unwrap().settings.active_until_utc, end);
++        assert_eq!(state.lock().unwrap().recording, original);
++        // The deadline has expired, even if tick has not yet updated enabled.
++        store.deadline = Some(Instant::now() - Duration::from_secs(1));
++        let mut stale = state.lock().unwrap().settings.clone();
++        stale.enabled = true;
++        store
++            .command(Command::Configure(stale.clone()), &state)
++            .unwrap();
++        assert!(!state.lock().unwrap().settings.enabled);
++        store.command(Command::Configure(stale), &state).unwrap();
++        assert!(!state.lock().unwrap().settings.enabled);
++        store
++            .command(Command::Start(Settings::default()), &state)
++            .unwrap();
++        assert!(state.lock().unwrap().settings.enabled);
++        // A different process stopped the same recording; an old in-memory flag cannot re-enable it.
++        let config = t.0.join("settings.json");
++        let mut saved = Persisted::decode(&fs::read(&config).unwrap()).unwrap();
++        saved.settings.enabled = false;
++        fs::write(&config, serde_json::to_vec(&saved).unwrap()).unwrap();
++        let mut stale = state.lock().unwrap().settings.clone();
++        stale.enabled = true;
++        store.command(Command::Configure(stale), &state).unwrap();
++        assert!(!state.lock().unwrap().settings.enabled);
++    }
++    #[test]
++    fn file_listing_is_paged_before_crossing_the_ui_bridge() {
++        let (_t, mut store, state) = fixture();
++        for i in 0..250 {
++            drop(
++                private_file(
++                    &store
++                        .directory
++                        .join(format!("rlog-{:020}-{i:016x}.ndjson", now())),
++                )
++                .unwrap(),
++            );
++        }
++        let first = store.command(Command::Files(0), &state).unwrap();
++        let second = store.command(Command::Files(200), &state).unwrap();
++        assert_eq!(first["files"].as_array().unwrap().len(), 200);
++        assert_eq!(first["has_more"], true);
++        assert_eq!(second["files"].as_array().unwrap().len(), 50);
++        assert_eq!(second["has_more"], false);
++        assert_eq!(second["total"], 250);
++    }
++    #[test]
++    fn manual_stop_freezes_elapsed_time_and_clears_remaining_budget() {
++        let (_t, mut store, state) = fixture();
++        store
++            .command(Command::Start(Settings::default()), &state)
++            .unwrap();
++        store.started = Some(Instant::now() - Duration::from_secs(10));
++        store.deadline = Some(Instant::now() + Duration::from_secs(3600));
++        store.command(Command::Stop, &state).unwrap();
++        let elapsed = state.lock().unwrap().status.elapsed_seconds;
++        assert!(elapsed >= 10);
++        store.started = Some(Instant::now() - Duration::from_secs(100));
++        store.last_tick = None;
++        store.tick(&state, &AtomicU64::new(0));
++        assert_eq!(state.lock().unwrap().status.elapsed_seconds, elapsed);
++        assert_eq!(state.lock().unwrap().status.remaining_seconds, None);
 +    }
 +}
 diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
@@ -2756,12 +2921,13 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
  use std::{
      collections::HashMap,
      sync::{
-@@ -53,13 +52,26 @@
+@@ -53,13 +52,27 @@
      } else {
          crate::read_custom_client(custom_client_config);
      }
-+    let _ =
-+        hbb_common::radar_diagnostics::initialize(config::Config::log_path().join("diagnostics"));
++    if let Some(path) = hbb_common::diagnostics_path() {
++        let _ = hbb_common::radar_diagnostics::initialize(path);
++    }
 +    if let Some(engine) = hbb_common::radar_diagnostics::global() {
 +        if let Ok(build) =
 +            serde_json::from_str::<serde_json::Value>(include_str!("custom_update/build.json"))
@@ -2784,7 +2950,7 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
                  .with_tag("ffi"), // logs will show under mytag tag
          );
          #[cfg(not(debug_assertions))]
-@@ -1236,6 +1248,15 @@
+@@ -1236,6 +1249,15 @@
  }
  
  pub fn main_get_local_option(key: String) -> SyncReturn<String> {
@@ -2800,7 +2966,7 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
      SyncReturn(get_local_option(key))
  }
  
-@@ -1277,6 +1298,24 @@
+@@ -1277,6 +1299,25 @@
  }
  
  pub fn main_set_local_option(key: String, value: String) {
@@ -2812,12 +2978,13 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
 +                serde_json::Value::Null
 +            };
 +            #[cfg(target_os = "android")]
-+            let request =
-+                if request["op"] == "configure" && !request["settings"]["directory"].is_null() {
-+                    serde_json::Value::Null
-+                } else {
-+                    request
-+                };
++            let request = if (request["op"] == "configure" || request["op"] == "start")
++                && !request["settings"]["directory"].is_null()
++            {
++                serde_json::Value::Null
++            } else {
++                request
++            };
 +            let _ = engine.begin(id, request);
 +        }
 +        return; // Never persist diagnostic requests as options or send them to a server.
@@ -2825,7 +2992,7 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
      let is_texture_render_key = key.eq(keys::OPTION_TEXTURE_RENDER);
      let is_d3d_render_key = key.eq(keys::OPTION_ALLOW_D3D_RENDER);
      set_local_option(key, value.clone());
-@@ -2884,7 +2923,9 @@
+@@ -2884,7 +2925,9 @@
  pub fn main_set_common(_key: String, _value: String) {
      // Custom downloads have a separate API-digest verification and explicit
      // installer handoff. Never enter the legacy official installer path.
@@ -2836,7 +3003,7 @@ diff --git a/src/flutter_ffi.rs b/src/flutter_ffi.rs
      #[cfg(target_os = "windows")]
      if _key == "install-printer" && crate::platform::is_win_10_or_greater() {
          std::thread::spawn(move || {
-@@ -3044,8 +3085,7 @@
+@@ -3044,8 +3087,7 @@
  
  pub fn session_set_common(session_id: SessionID, key: String, value: String) {
      if let Some(s) = sessions::get_session_by_session_id(&session_id) {

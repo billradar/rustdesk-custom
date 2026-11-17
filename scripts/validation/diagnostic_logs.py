@@ -28,6 +28,11 @@ def source_contract(source):
         raise ValueError('Diagnostic transport must preserve the original bridge ABI')
     common=(source/'libs/hbb_common/src/lib.rs').read_text()
     android=(source/'src/platform/android_log.rs').read_text()
+    for value in (bridge,common,android):
+        if re.search(r'radar_diagnostics::initialize\(\s*(?:config::)?Config::log_path',value):
+            raise ValueError('Diagnostics initialized before private storage resolution')
+    if 'hbb_common::diagnostics_path()' not in bridge:
+        raise ValueError('First initialization must use the private storage resolver')
     for value in (common,android):
         if 'radar_diagnostics' not in value or '.format(opt_format)' in value:
             raise ValueError('Unmanaged legacy file formatter')
@@ -36,13 +41,37 @@ def source_contract(source):
     for path in (source/'flutter/android/app/src/main/kotlin').rglob('*.kt'):
         if path.name!='DiagnosticLog.kt' and (('import android.util.Log' in path.read_text() and re.search(r'\bLog\.',path.read_text())) or 'android.util.Log.' in path.read_text() or '.printStackTrace()' in path.read_text()):
             raise ValueError('Unmanaged native log: '+str(path.relative_to(source)))
+    keyboard=source/'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/KeyboardKeyEventMapper.kt'
+    if re.search(r'(?:Log|DiagnosticLog)\.d\(',keyboard.read_text()):
+        raise ValueError('Per-key input events must never be logged')
     return {'adapter_source_contract':'PASS'}
+
+def adapter_regressions(source):
+    from unittest.mock import patch
+    source=Path(source)
+    original=Path.read_text
+    bridge=source/'src/flutter_ffi.rs'
+    actual=original(bridge)
+    insecure=actual.replace('radar_diagnostics::initialize(path)', 'radar_diagnostics::initialize(config::Config::log_path().join("diagnostics"))',1)
+    if insecure==actual:
+        raise ValueError('Private initializer regression target missing')
+    for modified in [insecure,actual+'\npub fn main_diagnostics(request: String) -> String { request }\n']:
+        def read(path,*args,**kwargs):
+            return modified if path==bridge else original(path,*args,**kwargs)
+        with patch.object(Path,'read_text',read):
+            try:
+                source_contract(source)
+            except ValueError:
+                continue
+            raise ValueError('Unsafe adapter regression was not rejected')
+    return {'adapter_negative_regressions':'PASS'}
 
 def run(source,output,targets=()):
     source=Path(source)
     result={'overall':'FAIL'}
     try:
         result.update(source_contract(source))
+        result.update(adapter_regressions(source))
         with tempfile.TemporaryDirectory(prefix='radar-diagnostics-') as directory:
             tree=Path(directory)
             shutil.copytree(source/'libs/radar_diagnostics/src',tree/'src')

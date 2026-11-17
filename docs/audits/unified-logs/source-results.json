@@ -3,24 +3,28 @@
     "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
     "variant": "standard",
     "patch_apply": "PASS",
-    "adapter_source_contract": "PASS"
+    "adapter_source_contract": "PASS",
+    "adapter_negative_regressions": "PASS"
   },
   {
     "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
     "variant": "sos",
     "patch_apply": "PASS",
-    "adapter_source_contract": "PASS"
+    "adapter_source_contract": "PASS",
+    "adapter_negative_regressions": "PASS"
   },
   {
     "upstream_sha": "54416dcaa127d209f2cfbdc4b08235bae78ccfe6",
     "variant": "standard",
     "patch_apply": "PASS",
-    "adapter_source_contract": "PASS"
+    "adapter_source_contract": "PASS",
+    "adapter_negative_regressions": "PASS"
   },
   {
     "upstream_sha": "54416dcaa127d209f2cfbdc4b08235bae78ccfe6",
     "variant": "sos",
     "patch_apply": "PASS",
-    "adapter_source_contract": "PASS"
+    "adapter_source_contract": "PASS",
+    "adapter_negative_regressions": "PASS"
   }
 ]
