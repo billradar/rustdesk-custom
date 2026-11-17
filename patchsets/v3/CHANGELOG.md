@@ -31,6 +31,7 @@ Reason: Introduce one optional typed diagnostic store and shared settings page f
 - Add a shared Logs settings page with level, schedule, file/total limits, retention, viewer, pinning, confirmed cleanup and local export.
 - Add a typed NDJSON engine with a bounded nonblocking capture queue, process file locks, rotation, quota protection and allowlisted export metadata.
 - Add Rust 1.75 runtime/privacy/concurrent-process tests and read-only three-platform diagnostic compatibility CI.
+- Add poll-scoped local session correlation, typed module/action hooks and actual local-TLS request/body privacy and association tests.
 
 #### Changed
 
@@ -53,11 +54,11 @@ References: 83bbff7a047eae5a2fdc57026c779050c02c8063, https://github.com/billrad
 
 Upstream compatibility: v3 Common is shared by Standard and SOS. Exact Profile routing, archived v1/v2 bytes, signing, package identity, native connection policy and production workflows are unchanged.
 
-Known limitations: Draft implementation. Full client builds, Flutter rendering, Android JNI/SAF and physical devices remain unverified. Legacy events currently contain metadata rather than arbitrary text. Broader typed session/error instrumentation and platform/service runtime evidence require follow-up before complete acceptance.
+Known limitations: Draft acceptance remains open. Typed module hooks and local poll/thread session correlation are implemented and runtime-tested in isolation; full client/module execution, Flutter rendering, Android JNI/SAF and physical devices remain unverified. Cross-process matching is not inferred.
 
 Allocation base: `83bbff7a047eae5a2fdc57026c779050c02c8063`
 
-- common: `e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854` → `bc9496cd79942b9f1db0aed0823a2738b791ef2b4037a0427a6b86f1a1037f7b`
+- common: `e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854` → `5a1867dd5dd8f9fbf810d150080854c932a3684292a37fe404b5aa223ef88996`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.6 — content-change

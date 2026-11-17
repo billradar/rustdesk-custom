@@ -33,7 +33,7 @@ No new build variable or production domain is introduced. No production workflow
 
 ## Privacy boundary and risks
 
-- HIGH / OPEN — Typed diagnostic detail and per-remote-session correlation are not yet complete across every subsystem. Legacy facade events expose module/severity/type metadata, not arbitrary error strings. WSS receives explicit transport/status fields; broader API/config/session/audio/video/transfer/permission fields still need review and integration before claiming complete diagnostic coverage.
+- HIGH / ACCEPTANCE OPEN — Typed hooks now cover the requested module families and local async/thread session propagation; see [module-coverage.md](module-coverage.md) for exact functions, boundaries and runtime evidence. Full client/module execution and cross-process attribution remain unverified; do not claim exhaustive end-to-end coverage. Legacy text is still omitted, not reintroduced.
 - HIGH / OPEN — Full Flutter bridge/UI and Android JNI/SAF builds/runtime remain unverified. Core success does not establish that an installed APK can display/export logs or explain its 301.
 - MEDIUM / OPEN — OS-owned crash/driver reports, third-party direct stdout/stderr and historical raw logs are not sanitized by the managed exporter. They are excluded, not imported. This is not an OS-wide privacy guarantee. Do not offer raw-log import/export through the new page.
 - MEDIUM / OPEN — Schedule/backend/SAF permissions and sleep/time changes require actual platform testing. The UI expressly says collection requires the process to run and Android may suspend it. Cross-process configuration is polled; no claim of instantaneous policy propagation across all services/users.
@@ -52,11 +52,15 @@ Codex review of `8ec1930` found P1 first-initializer bypass and P2 stale-enable 
 
 The next ARM64 run also exposed cross-case fork inheritance: while one case held a fixture lock, another case spawned a child that briefly retained the open-file description until exec, yielding the expected nonblocking busy result in a case with no intentional contention. The harness now runs cases sequentially. The producer test still runs eight threads; the cooperating-writer case still releases two real processes together, requires progress/accounting from both and enforces quota/active/pin assertions. No concurrency case or assertion is disabled; no production lock timeout is relaxed.
 
+## Typed module/session follow-up
+
+Added a closed Action vocabulary, random DiagnosticContext, poll-scoped async propagation and explicit decoder/child-task propagation. Incoming/outgoing contexts are independent; nested network/API operations retain their parent local identity. Context is restored before yielding and on unwind. Module-family state hooks are coalesced, without reading content. Typed API selection/status, config, DNS/TCP/UDP/proxy/TLS, rendezvous/relay/NAT, OIDC/upload, login/permission and media/transfer/clipboard hooks are inventoried in [module-coverage.md](module-coverage.md). Existing network retries/authentication/TLS policy remain unchanged. The TLS selector harness now links the actual diagnostic crate instead of a mock logging sink, and verifies private material does not reach its managed records. Previous e780a45 CI is historical evidence only; the follow-up needs fresh CI.
+
 ## Verification
 
 | Check | Result | Scope/evidence |
 |---|---|---|
-| Rust 1.75 actual engine unit/runtime tests | PASS | 19 Rust cases (including child-process helper), isolated test-case scheduling with explicit concurrent thread/process tests, actual source via `diagnostic_logs.py`; see [core-results.json](core-results.json) |
+| Rust 1.75 actual engine unit/runtime tests | PASS | 22 Rust cases (including child-process helper), isolated test-case scheduling with explicit concurrent thread/process tests, actual source via `diagnostic_logs.py`; see [core-results.json](core-results.json) |
 | Pre-write privacy / payload not formatted | PASS | Typed schema, poisoned fields, build allowlist, HMAC checks and a Display implementation that panics if formatted |
 | Concurrent writer/quota protection | PASS | Actual child processes and OS file locks; active/pinned files protected |
 | Rotation, quota, retention, archive budget | PASS | Runtime filesystem tests, closed/pinned/active and private-export cases |

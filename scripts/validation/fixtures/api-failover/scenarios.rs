@@ -39,6 +39,11 @@ mod scenarios {
     // One sequential scenario protects the process-local selector from test races.
     #[tokio::test]
     async fn transport_and_recovery() {
+        use hbb_common::radar_diagnostics as diagnostics;
+        let root = std::path::PathBuf::from(std::env::var("SSL_CERT_FILE").unwrap());
+        diagnostics::initialize(root.parent().unwrap().join("diagnostic-test")).unwrap();
+        let engine = diagnostics::global().unwrap();
+        engine.request(serde_json::json!({"op":"start","settings":diagnostics::Settings {enabled:true,..Default::default()}})).unwrap();
         reset();
         let p = pair();
         let response = request(p.clone(), "/api/status/200#rd-api-request-local", Method::POST).await.unwrap();
@@ -208,5 +213,24 @@ mod scenarios {
             "native TLS must still reject the untrusted server certificate");
         let mut headers = HeaderMap::new(); headers.insert("Host", "bad.invalid".parse().unwrap());
         assert!(send_for(p.clone(), p.0.join("/api/login").unwrap().as_str(), Method::POST, headers, None).await.is_err());
+        // Assert actual local-TLS selector events, not string matches on patch text.
+        let mut records = serde_json::json!([]);
+        for _ in 0..20 {
+            records = engine.request(serde_json::json!({"op":"query","query":{"module":"api"}})).unwrap();
+            if records.as_array().unwrap().iter().any(|v|v["action"]=="api_request" && v["status"]==200) { break; }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(records.as_array().unwrap().iter().any(|v|v["action"]=="api_request" && v["status"]==200));
+        let text=records.to_string();
+        for secret in ["fixture-only","fixture-body","Authorization","127.0.0.1","localhost"] { assert!(!text.contains(secret),"private request material reached diagnostics"); }
+        let request_records:Vec<_>=records.as_array().unwrap().iter().filter(|v|v["action"]=="api_request").collect();
+        assert!(request_records.iter().all(|v|v["session"].as_str().is_some_and(|v|v.len()==24)));
+        let body_records:Vec<_>=records.as_array().unwrap().iter().filter(|v|v["action"]=="api_response_body").collect();
+        assert!(!body_records.is_empty(),"body-read diagnostics must be captured");
+        assert!(body_records.iter().all(|v|request_records.iter().any(|request|request["session"]==v["session"])),"body completion/failure must retain its request context");
+        let identities:std::collections::HashSet<_>=request_records.iter().map(|v|v["session"].to_string()).collect();
+        assert!(identities.len()>=2,"independent API calls must not share an accidental task-local identity");
+        engine.request(serde_json::json!({"op":"stop"})).unwrap();
+
     }
 }

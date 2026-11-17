@@ -3,48 +3,48 @@
     "check": "scripts.upstream.patch_profiles_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 0.39
+    "seconds": 0.5
   },
   {
     "check": "scripts.upstream.patchset_version_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 1.82
+    "seconds": 2.06
   },
   {
     "check": "scripts.upstream.retired_patchsets_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 0.47
+    "seconds": 0.26
   },
   {
     "check": "scripts.validation.api_policy_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 0.26
+    "seconds": 0.14
   },
   {
     "check": "scripts.validation.client_update_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 3.29
+    "seconds": 0.47
   },
   {
     "check": "scripts.release.channel_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 1.42
+    "seconds": 0.7
   },
   {
     "check": "scripts.release.stable_lock_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 0.58
+    "seconds": 0.31
   },
   {
     "check": "scripts.build.build_adapter_contract",
     "result": "PASS",
     "exit_code": 0,
-    "seconds": 0.51
+    "seconds": 0.24
   }
 ]
