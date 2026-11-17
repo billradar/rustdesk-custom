@@ -8,6 +8,7 @@ import scripts.release.channel as channel
 import scripts.release.qualification as qualification
 from scripts.release.naming import native_package_name, windows_installer_name
 ROOT = Path(__file__).resolve().parents[2]
+CURRENT_V3 = "v3." + str(json.loads((ROOT / "patchsets/v3/patchset.json").read_text())["revision"])
 import yaml
 
 class RealPatchsetRevisionContract(unittest.TestCase):
@@ -31,7 +32,7 @@ class StablePatchsetNotesContract(unittest.TestCase):
             asset.write_bytes(b'validated test asset')
             info=dict(channel='stable',upstream_tag='v1.5.3',
                       upstream_version='1.5.3',upstream_sha='a'*40,
-                      patchset='v3',patch_revision='v3.5',
+                      patchset='v3',patch_revision=CURRENT_V3,
                       common_patch_hash=channel.patch_hash('common','v3'),
                       custom_repository_sha='b'*40,
                       upstream_changelog='# Official upstream notes')
@@ -63,14 +64,14 @@ class StablePatchsetNotesContract(unittest.TestCase):
                 channel.draft(destination)
             body=captured[0][1]['body']
             self.assertTrue(body.startswith('# Official upstream notes'))
-            self.assertIn('## Patchset v3.5',body)
+            self.assertIn('## Patchset ' + CURRENT_V3,body)
             self.assertIn('Current included customizations',body)
             self.assertNotIn('Known limitations:',body)
             self.assertNotIn('Patchset Version:',body)
             self.assertIn(patchset_notes('v3'),body)
             self.assertNotIn('<!-- rustdesk-custom-release-metadata',body)
             self.assertEqual(body,captured[-1][1]['body'])
-            self.assertEqual(captured[-1][1]['tag_name'],'v1.5.3-custom.v3.5')
+            self.assertEqual(captured[-1][1]['tag_name'],'v1.5.3-custom.' + CURRENT_V3)
             self.assertEqual(captured[-1][1]['target_commitish'],'b'*40)
             self.assertIs(captured[-1][1]['draft'],True)
             self.assertIs(captured[-1][1]['prerelease'],False)

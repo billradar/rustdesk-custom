@@ -11,12 +11,53 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - Public display branding, About version/variant labels and Windows printer payload integration; native package identity is unchanged.
 - Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.
 - Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.
+- Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged.
 
 ### Sos
 
 - SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common.
 
 ## Revision history
+
+### v3.6 — content-change
+
+Scope: common
+
+Reason: Hide client-visible Android device deployment entry points with one v3 UI policy while retaining provisioning APIs and CLI.
+
+#### Added
+
+- Add a shared v3 Dart deployment UI policy, disabled by default.
+
+#### Changed
+
+- Omit the Android settings tile and automatic prompt handler; guard both dialog entry functions.
+
+#### Fixed
+
+- Prevent server-triggered or direct dialog paths from re-exposing hidden deployment UI.
+
+#### Removed
+
+
+#### Security
+
+- Retain backend deployment authorization; do not bypass server provisioning requirements.
+
+#### Compatibility
+
+- Preserve install/update/service/network/file-transfer behavior, all native deployment APIs and CLI, archived v1/v2 and signing/release mechanisms.
+
+References: https://github.com/billradar/rustdesk-custom/pull/265
+
+Upstream compatibility: v3 Standard/SOS only; exact 1.5.3 and existing maintained-profile compatibility routing. No Rust bridge changes.
+
+Known limitations: Rendered Android UI and full native packages require device/build validation; desktop Deploy UI is not applicable. Server-side deployment requirements are not bypassed.
+
+Allocation base: `290b2a4672ac4b5db8a6b724e1f1a51f7186ea57`
+
+- common: `b32900b86d1b1fea1b00e50cd90c6b81f6ce0b4486fa8ba55e04dfefed972680` → `e15c571660b4df61b229862707606ffc879ebdae32fa9b5fd835e3722ab25854`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.5 — content-change
 
