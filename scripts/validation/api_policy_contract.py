@@ -7,7 +7,7 @@ from scripts.source import api_policy as policy
 
 class PolicyContract(unittest.TestCase):
     def tree(self, root):
-        for name in (policy.RUST, policy.DART):
+        for name in (policy.RUST, policy.DART, policy.WSS):
             p = root / name
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text('// placeholder')
@@ -29,9 +29,11 @@ class PolicyContract(unittest.TestCase):
             value = policy.resolve('https://Primary.test.invalid:443/', 'https://backup.test.invalid')
             digest = policy.apply(tree, value)
             self.assertEqual(policy.verify(tree, digest, 'https://primary.test.invalid'), value)
+            self.assertIn('const PROFILE_FALLBACK: &str = "https://backup.test.invalid";',
+                          (tree / policy.WSS).read_text())
             with self.assertRaises(ValueError):
                 policy.verify(tree, digest, 'https://changed.test.invalid')
-            for name in (policy.RUST, policy.DART, policy.SNAPSHOT):
+            for name in (policy.RUST, policy.DART, policy.WSS, policy.SNAPSHOT):
                 p = tree / name; old = p.read_bytes(); p.write_bytes(old + b' ')
                 with self.assertRaises(ValueError): policy.verify(tree, digest)
                 p.write_bytes(old)

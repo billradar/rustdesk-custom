@@ -132,6 +132,7 @@ jobs:
         python3 scripts/upstream/interface_review_contract.py
         python3 -m scripts.upstream.retired_patchsets_contract
         python3 -m scripts.validation.api_policy_contract
+        python3 -m scripts.validation.wss_failover_policy_contract
         python3 -m scripts.upstream.patch_profiles_contract
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.build.updater_dependencies_contract
@@ -265,6 +266,13 @@ jobs:
         python3 -m scripts.validation.windows_printer_contract
 
         '
+    - name: Run actual hbb_common WSS failure-policy unit test
+      if: env.PATCHSET == 'v3'
+      shell: bash
+      run: |
+        set -euo pipefail
+        source scripts/validation/test_config.sh
+        cargo test --locked --manifest-path ".work/validation/${SELECTED_VARIANT}/Cargo.toml" -p hbb_common --lib websocket::radar_wss_policy::tests::transport_classification_never_falls_back_on_http_or_tls -- --exact
     - name: Preserve diagnostics even on conflict
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

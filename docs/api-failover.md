@@ -48,4 +48,13 @@ TLS harness 从已准备源码复制实际 selector，与上游锁定的 reqwest
 
 ## 原生协议状态
 
-用户已补充：其他原生端口已有双栈，只需 Web/API 备用。因此 ID Server、Relay、NAT 测试及其既有双栈连接流程均保持现状，不新增原生备用地址或端口映射。原生代码审计保留为边界说明；本任务的完成范围是 API 切换，不要求原生协议另建主备。
+用户已补充：其他原生端口已有双栈，只需 Web/API 备用。因此原生 TCP/UDP ID Server、Relay 与 NAT 测试的既有双栈连接流程保持不变，不新增原生备用地址或端口映射。v3.8 候选另为明确归属的 WebSocket ID/同主机 Relay 握手增加独立的 WSS 主备回退，见下节；不等同于原生 TCP/UDP 主备。
+
+## v3.8 WSS 主备（待实际运行验证）
+
+- 使用同一份冻结的 `RUSTDESK_API_SERVER` / `RUSTDESK_API_FALLBACK_SERVER` HTTPS 主备 origin 派生 `wss://` 入口，无新增 Actions 变量或 UI 开关。只适用于默认 WSS 443 端口、主域名与实际自有 ID 主机精确匹配、未显式覆盖 API/WS 端口的场景。
+- `hbb_common::websocket::check_ws` 在运行时 API 为空时为上述自有主机选择 WSS，修复 80 端口 `ws://` 被 Nginx 301 重定向的问题。
+- `WsFramedStream` 仅在自有主域名 WSS 建连的 DNS/TCP/超时错误时尝试冻结备用域名一次。API 的健康状态和冷却机制不介入；对现有成功连接不迁移、不重放注册消息。
+- 主备都使用严格 Rustls 证书校验，不使用缓存中的 `danger_accept_invalid_certs`，且 TLS、HTTP、握手/协议错误都不能触发备用重试。第三方 Relay 和 IP 端点不改写。
+- 当前主备域名可能共用 Nginx 与后端，因此不是服务器级高可用；此策略也没有为 WSS 强制执行“主 IPv6-only、备 IPv4-only”，而是在主域名的普通 DNS/连接失败后尝试备用。
+- 实现和合规范围见 [WSS 修复契约](audits/websocket-scheme-primary-fallback/implementation-contract.md)。尚未完成正式的完整跨平台编译、真实 TLS 证书/代理故障注入、Android 真机远程会话及生产端点故障演练，不应直接标记 Ready for Review。

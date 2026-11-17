@@ -13,12 +13,53 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 - Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.
 - Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged.
 - Optional unified typed diagnostic storage, shared Logs settings and sanitized native/Flutter/Rust adapters; complete runtime acceptance is pending.
+- Strict-TLS WSS primary/fallback handshake for the verified own ID/same-host relay, independently selected from frozen HTTPS API origins; peer relays are never redirected.
 
 ### Sos
 
 - SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common.
 
 ## Revision history
+
+### v3.8 — content-change
+
+Scope: common
+
+Reason: Implement an owned-host WSS fallback handshake with strict certificate validation; preserve independent HTTP API transport behavior.
+
+#### Added
+
+- Add a frozen-primary/fallback WSS transport selector for owned ID and same-host relay handshake endpoints.
+
+#### Changed
+
+- Build-source preparation now injects WSS domain constants from the immutable HTTPS origin snapshot; patch application routes the new Common patch to hbb_common.
+
+#### Fixed
+
+- Prefer WSS for the compiled own HTTPS primary when no runtime API server is configured, avoiding HTTP 301 on WS.
+- Allow a single verified backup attempt for direct-socket generic IO/DNS failures without treating proxy errors as eligible.
+
+#### Removed
+
+
+#### Security
+
+- Reject permissive TLS certificate retries on managed WSS endpoints; do not fail over on TLS, HTTP or protocol errors.
+
+#### Compatibility
+
+
+References: https://github.com/billradar/rustdesk-custom/pull/269
+
+Upstream compatibility: RustDesk 1.5.3 locked hbb_common fae47e024dd83cef6aaecde0aa7d11731df11649. Common applies to Standard and SOS; archived v1/v2 remain unchanged.
+
+Known limitations: Draft: native compilation, actual DNS/proxy/TLS WSS harness and Android real-device failover remain unverified. Only the default WSS port 443 and an owned endpoint matching the frozen primary host are eligible; hostname fallback shares the same origin Nginx.
+
+Allocation base: `c027a877d4463d6fe1e1533248917d45d1bcd07d`
+
+- common: `89aa4fdb04c4c2dd42a25332f9084d437d57d20b0b04d7eb483a5b001f4c56cd` → `9b97db05d65b3cc69bac2c11204635cc56172e0066b72f43e81d5a0deaa1b26a`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.7 — content-change
 

@@ -1,7 +1,7 @@
 {
   "id": "v3",
   "status": "validation_pending",
-  "revision": 7,
+  "revision": 8,
   "baseline": {
     "upstream_sha": "05b9f2d8919b5cdfaa0bb3280601a02881556a42",
     "upstream_version": "1.5.3",
@@ -16,7 +16,7 @@
     }
   },
   "hashes": {
-    "common": "89aa4fdb04c4c2dd42a25332f9084d437d57d20b0b04d7eb483a5b001f4c56cd",
+    "common": "9b97db05d65b3cc69bac2c11204635cc56172e0066b72f43e81d5a0deaa1b26a",
     "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
   },
   "variants": {
@@ -311,6 +311,46 @@
         "compatibility": "v3 Common is shared by Standard and SOS. Exact Profile routing, archived v1/v2 bytes, signing, package identity, native connection policy and production workflows are unchanged.",
         "limitations": "Draft acceptance remains open. Typed module hooks and local poll/thread session correlation are implemented and runtime-tested in isolation; full client/module execution, Flutter rendering, Android JNI/SAF and physical devices remain unverified. Cross-process matching is not inferred.",
         "review_status": "reviewed"
+      },
+      {
+        "revision": 8,
+        "kind": "content-change",
+        "base_sha": "c027a877d4463d6fe1e1533248917d45d1bcd07d",
+        "before": {
+          "common": "89aa4fdb04c4c2dd42a25332f9084d437d57d20b0b04d7eb483a5b001f4c56cd",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "after": {
+          "common": "9b97db05d65b3cc69bac2c11204635cc56172e0066b72f43e81d5a0deaa1b26a",
+          "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+        },
+        "scopes": [
+          "common"
+        ],
+        "categories": {
+          "Added": [
+            "Add a frozen-primary/fallback WSS transport selector for owned ID and same-host relay handshake endpoints."
+          ],
+          "Changed": [
+            "Build-source preparation now injects WSS domain constants from the immutable HTTPS origin snapshot; patch application routes the new Common patch to hbb_common."
+          ],
+          "Fixed": [
+            "Prefer WSS for the compiled own HTTPS primary when no runtime API server is configured, avoiding HTTP 301 on WS.",
+            "Allow a single verified backup attempt for direct-socket generic IO/DNS failures without treating proxy errors as eligible."
+          ],
+          "Removed": [],
+          "Security": [
+            "Reject permissive TLS certificate retries on managed WSS endpoints; do not fail over on TLS, HTTP or protocol errors."
+          ],
+          "Compatibility": []
+        },
+        "reason": "Implement an owned-host WSS fallback handshake with strict certificate validation; preserve independent HTTP API transport behavior.",
+        "references": [
+          "https://github.com/billradar/rustdesk-custom/pull/269"
+        ],
+        "compatibility": "RustDesk 1.5.3 locked hbb_common fae47e024dd83cef6aaecde0aa7d11731df11649. Common applies to Standard and SOS; archived v1/v2 remain unchanged.",
+        "limitations": "Draft: native compilation, actual DNS/proxy/TLS WSS harness and Android real-device failover remain unverified. Only the default WSS port 443 and an owned endpoint matching the frozen primary host are eligible; hostname fallback shares the same origin Nginx.",
+        "review_status": "reviewed"
       }
     ],
     "features": {
@@ -321,7 +361,8 @@
         "Public RPM filenames use one OS/architecture selector, with a distinct SUSE family suffix; the v3 updater matches this normalized convention.",
         "Strict IPv6-primary API transport with an Actions-configured IPv4 HTTPS fallback, conservative no-replay rules and opportunistic recovery; existing native ID/Relay dual-stack behavior is unchanged.",
         "Default-hidden Android client Deploy UI with shared menu/prompt/dialog policy; backend/CLI unchanged.",
-        "Optional unified typed diagnostic storage, shared Logs settings and sanitized native/Flutter/Rust adapters; complete runtime acceptance is pending."
+        "Optional unified typed diagnostic storage, shared Logs settings and sanitized native/Flutter/Rust adapters; complete runtime acceptance is pending.",
+        "Strict-TLS WSS primary/fallback handshake for the verified own ID/same-host relay, independently selected from frozen HTTPS API origins; peer relays are never redirected."
       ],
       "sos": [
         "SOS built-in mode with simplified desktop home and restricted settings tabs, layered over Common."

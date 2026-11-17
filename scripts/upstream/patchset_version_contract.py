@@ -54,7 +54,7 @@ class VersionContract(unittest.TestCase):
         # Reconstruct the original candidate fixture, not live v3's later revisions.
         shutil.copy2(version.ROOT/'archive/abandoned-patchsets/v2/common/0005-custom-release-updates.patch', target.parent/'common/0005-custom-release-updates.patch')
         shutil.copy2(version.ROOT/'archive/abandoned-patchsets/v2/common/0001-hbb-server-defaults.patch', target.parent/'common/0001-hbb-server-defaults.patch')
-        for later_patch in ('0007-api-failover.patch', '0008-hide-deploy-ui.patch', '0009-unified-diagnostic-logs.patch'):
+        for later_patch in ('0007-api-failover.patch', '0008-hide-deploy-ui.patch', '0009-unified-diagnostic-logs.patch', '0010-hbb-wss-primary-fallback.patch'):
             (target.parent / 'common' / later_patch).unlink()
         data['revision'] = 1
         data['hashes'] = copy.deepcopy(data['versioning']['history'][0]['after'])
