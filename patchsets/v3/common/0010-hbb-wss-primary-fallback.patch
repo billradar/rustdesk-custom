@@ -10,7 +10,7 @@ diff --git a/src/radar_wss_policy.rs b/src/radar_wss_policy.rs
 new file mode 100644
 --- /dev/null
 +++ b/src/radar_wss_policy.rs
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,169 @@
 +//! WSS primary/fallback handshake policy for the verified own RustDesk endpoint.
 +//! This module deliberately has no shared HTTP API state.
 +use crate::{
@@ -124,8 +124,12 @@ new file mode 100644
 +        && matches!(candidate.domain(), Some(host) if host == primary_domain || Some(host) == fallback.domain())
 +}
 +
-+fn retryable_io_kind(kind: ErrorKind) -> bool {
-+    matches!(
++fn retryable_io_kind(kind: ErrorKind, direct: bool) -> bool {
++    // Name-resolution failures commonly surface as ErrorKind::Other.
++    // Only direct sockets may use that broad IO class; an explicit proxy
++    // can report authentication/configuration errors in the same class.
++    (direct && kind == ErrorKind::Other)
++        || matches!(
 +        kind,
 +        ErrorKind::ConnectionRefused
 +            | ErrorKind::ConnectionAborted
@@ -136,19 +140,19 @@ new file mode 100644
 +    )
 +}
 +
-+pub(super) fn retryable_transport(error: &anyhow::Error) -> bool {
++pub(super) fn retryable_transport(error: &anyhow::Error, direct: bool) -> bool {
 +    // A tungstenite TLS/HTTP/protocol failure is authoritative: never inspect
 +    // nested IO errors or string messages to turn it into an eligible failure.
 +    for source in error.chain() {
 +        if let Some(ws) = source.downcast_ref::<tungstenite::Error>() {
-+            return matches!(ws, tungstenite::Error::Io(io) if retryable_io_kind(io.kind()));
++            return matches!(ws, tungstenite::Error::Io(io) if retryable_io_kind(io.kind(), direct));
 +        }
 +    }
 +    error.chain().any(|source| {
 +        source.is::<tokio::time::error::Elapsed>()
 +            || source
 +                .downcast_ref::<io::Error>()
-+                .is_some_and(|io| retryable_io_kind(io.kind()))
++                .is_some_and(|io| retryable_io_kind(io.kind(), direct))
 +    })
 +}
 +
@@ -164,12 +168,16 @@ new file mode 100644
 +                .body(Some(Vec::new()))
 +                .unwrap(),
 +        );
-+        assert!(!retryable_transport(&anyhow::Error::new(redirect)));
++        assert!(!retryable_transport(&anyhow::Error::new(redirect), true));
 +        let refused = anyhow::Error::new(io::Error::new(
 +            ErrorKind::ConnectionRefused, "offline",
 +        ));
-+        assert!(retryable_transport(&refused));
-+        assert!(!retryable_transport(&anyhow::Error::msg("TLS certificate mismatch")));
++        assert!(retryable_transport(&refused, true));
++        assert!(retryable_transport(&refused, false));
++        let dns = anyhow::Error::new(io::Error::new(ErrorKind::Other, "dns error"));
++        assert!(retryable_transport(&dns, true));
++        assert!(!retryable_transport(&dns, false));
++        assert!(!retryable_transport(&anyhow::Error::msg("TLS certificate mismatch"), true));
 +    }
 +}
 diff --git a/src/websocket.rs b/src/websocket.rs
@@ -207,7 +215,7 @@ diff --git a/src/websocket.rs b/src/websocket.rs
 +            )
 +            .await;
 +            if let Err(error) = &primary {
-+                if radar_wss_policy::retryable_transport(error) {
++                if radar_wss_policy::retryable_transport(error, proxy_conf.is_none()) {
 +                    log::warn!("Own WSS primary connection unavailable; trying configured backup");
 +                    return Self::try_connect(
 +                        &fallback,
