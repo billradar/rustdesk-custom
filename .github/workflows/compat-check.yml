@@ -132,6 +132,7 @@ jobs:
         python3 scripts/upstream/interface_review_contract.py
         python3 -m scripts.upstream.retired_patchsets_contract
         python3 -m scripts.validation.api_policy_contract
+        python3 -m scripts.validation.wss_failover_policy_contract
         python3 -m scripts.upstream.patch_profiles_contract
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.build.updater_dependencies_contract
