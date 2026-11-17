@@ -38,6 +38,7 @@ Reason: Implement an owned-host WSS fallback handshake with strict certificate v
 #### Fixed
 
 - Prefer WSS for the compiled own HTTPS primary when no runtime API server is configured, avoiding HTTP 301 on WS.
+- Allow a single verified backup attempt for direct-socket generic IO/DNS failures without treating proxy errors as eligible.
 
 #### Removed
 
@@ -57,7 +58,7 @@ Known limitations: Draft: native compilation, actual DNS/proxy/TLS WSS harness a
 
 Allocation base: `c027a877d4463d6fe1e1533248917d45d1bcd07d`
 
-- common: `89aa4fdb04c4c2dd42a25332f9084d437d57d20b0b04d7eb483a5b001f4c56cd` → `4c5c33a4f18537e61459a995f1c837d432eabd7f514c5a48f910f2720810e889`
+- common: `89aa4fdb04c4c2dd42a25332f9084d437d57d20b0b04d7eb483a5b001f4c56cd` → `d8a8ac87c190e03a78e857db2a8e1e533cef61624c424a30b5e0d155fa817a89`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
 
 ### v3.7 — content-change
