@@ -29,7 +29,10 @@ apply_one() {
 }
 for patch in "$root"/patchsets/"$patchset"/common/*.patch; do
     target=$source_tree
-    [[ "$(basename "$patch")" != 0001-hbb-server-defaults.patch ]] || target="$source_tree/libs/hbb_common"
+    case "$(basename "$patch")" in
+        0001-hbb-server-defaults.patch|0010-hbb-wss-primary-fallback.patch)
+            target="$source_tree/libs/hbb_common" ;;
+    esac
     apply_one "$patch" "$target"
 done
 if [[ "$variant" == sos ]]; then
