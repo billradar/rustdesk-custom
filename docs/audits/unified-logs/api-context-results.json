@@ -4,9 +4,9 @@
   "clippy": "PASS",
   "runner_sha256": "d194287268c1241904543ea15b4960e4ab9cd1542b952b67f134b5cd916b1516",
   "compiler": "rustc 1.75.0 (82e1608df 2023-12-21)",
-  "selector_sha256": "1eb41448c28960cdccbf0268a737b14f48915152ec528e4e076a5f5c9f569a9f",
-  "diagnostic_core_sha256": "4ef6e96c929acfb001018f5c132db019a58f32d0ca69f7069c8390903983c134",
-  "fixture_sha256": "7e211f39ab2401e2db01de263f552403e125bd1df29ed93e32dad87f67072bd8",
+  "selector_sha256": "37036f4c51fabbb3625560f1c4940baeb94e8b1bbc487e180160d536998c9e9a",
+  "diagnostic_core_sha256": "234f8faf385db45c1cbe1172d74bc26e71662bd655ebd99f96b3b15de1d8589a",
+  "fixture_sha256": "1aefb8abcd54a608d9c9483006889e869ebfceafbfb3aa0949338805bf3f8368",
   "production_network": "NOT_TESTED",
   "native_failover": "NOT_IMPLEMENTED"
 }

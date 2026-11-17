@@ -734,7 +734,7 @@ diff --git a/libs/radar_diagnostics/src/lib.rs b/libs/radar_diagnostics/src/lib.
 new file mode 100644
 --- /dev/null
 +++ b/libs/radar_diagnostics/src/lib.rs
-@@ -0,0 +1,2563 @@
+@@ -0,0 +1,2565 @@
 +//! Optional local diagnostics. Arbitrary log arguments NEVER enter this store.
 +use fs2::FileExt;
 +use hmac::{Hmac, Mac};
@@ -914,6 +914,8 @@ new file mode 100644
 +    NatTest,
 +    RelayConnect,
 +    ApiRequest,
++    ApiSelectPrimary,
++    ApiSelectFallback,
 +    ApiResponseBody,
 +    ApiRecovery,
 +    TokenRefresh,
@@ -4958,7 +4960,7 @@ diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
      }
      if use_primary(&primary).await? {
 -        hbb_common::log::info!(
-+        diagnostic.event(Action::ApiRequest,Module::Api,Kind::Attempt,Code::None,Some(primary.as_str()),None);
++        diagnostic.event(Action::ApiSelectPrimary,Module::Api,Kind::Attempt,Code::None,Some(primary.as_str()),None);
 +    hbb_common::log::info!(
              "API endpoint=Primary origin={}",
              primary.origin().ascii_serialization()
@@ -4971,15 +4973,26 @@ diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
                      hbb_common::log::error!(
                          "API Primary TLS security/negotiation failure; fallback suppressed"
                      );
-@@ -314,6 +403,7 @@
+@@ -305,8 +394,9 @@
+                         "API primary TLS validation/negotiation failed; fallback suppressed".into(),
+                     );
+                 }
+-                Err(e) if e.is_connect() => {} // HTTP request was not sent.
++                Err(e) if e.is_connect() => { diagnostic.event(Action::ApiSelectPrimary,Module::Api,Kind::Failed,Code::Io,None,None); } // HTTP request was not sent.
+                 Err(_) => {
++                    diagnostic.event(Action::ApiSelectPrimary,Module::Api,Kind::Failed,Code::Io,None,None);
+                     unavailable();
+                     return Err("API primary request failed after connection; outcome unknown, not replayed".into());
+                 }
+@@ -314,6 +404,7 @@
          }
          unavailable();
      }
-+    diagnostic.event(Action::ApiRequest,Module::Api,Kind::Attempt,Code::None,Some(fallback.as_str()),None);
++    diagnostic.event(Action::ApiSelectFallback,Module::Api,Kind::Attempt,Code::None,Some(fallback.as_str()),None);
      hbb_common::log::info!(
          "API endpoint=Fallback origin={}",
          fallback.origin().ascii_serialization()
-@@ -328,6 +418,30 @@
+@@ -328,6 +419,30 @@
      req.send()
          .await
          .map_err(|_| "API fallback request failed; not replayed".into())
@@ -5010,7 +5023,7 @@ diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
  }
  
  // Snapshot the explicit proxy together with the selected endpoint. A proxy's
-@@ -396,6 +510,14 @@
+@@ -396,6 +511,14 @@
                      }
                  }
                  Err(error) if tls_security_error(&error) => {

@@ -223,6 +223,9 @@ mod scenarios {
         assert!(records.as_array().unwrap().iter().any(|v|v["action"]=="api_request" && v["status"]==200));
         let text=records.to_string();
         for secret in ["fixture-only","fixture-body","Authorization","127.0.0.1","localhost"] { assert!(!text.contains(secret),"private request material reached diagnostics"); }
+        for role in ["api_select_primary","api_select_fallback"] {
+            assert!(records.as_array().unwrap().iter().any(|v|v["action"]==role && v["endpoint"].as_str().is_some_and(|v|v.len()==24)),"selected endpoint needs an explicit role and private pseudonym");
+        }
         let request_records:Vec<_>=records.as_array().unwrap().iter().filter(|v|v["action"]=="api_request").collect();
         assert!(request_records.iter().all(|v|v["session"].as_str().is_some_and(|v|v.len()==24)));
         let body_records:Vec<_>=records.as_array().unwrap().iter().filter(|v|v["action"]=="api_response_body").collect();

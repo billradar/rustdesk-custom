@@ -5,7 +5,7 @@
   "format": "PASS",
   "runtime_tests": "PASS",
   "clippy": "PASS",
-  "source_sha256": "4ef6e96c929acfb001018f5c132db019a58f32d0ca69f7069c8390903983c134",
+  "source_sha256": "234f8faf385db45c1cbe1172d74bc26e71662bd655ebd99f96b3b15de1d8589a",
   "compiler": "rustc 1.75.0 (82e1608df 2023-12-21)",
   "full_client_build": "NOT RUN",
   "device_runtime": "NOT RUN"
