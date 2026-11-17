@@ -1,6 +1,6 @@
 # v3 WebSocket scheme fix — implementation contract (draft)
 
-Status: revised implementation contract for WSS primary/fallback; no runtime patch applied or CI passed.
+Status: v3.8 Common candidate runtime patch committed (0010-hbb-wss-primary-fallback.patch). Exact-source hunk context independently checked against locked hbb_common fae47e0 + existing 0001; GitHub CI and real-device acceptance remain pending.
 
 ## Observed failure
 With `allow-websocket=Y`, an ID server endpoint `<host>:21116` is converted by upstream `hbb_common::websocket::check_ws` into `ws://<host>/ws/id` when `Config::get_option("api-server")` does not start with HTTPS. A reverse proxy redirects HTTP to HTTPS (301); the WebSocket handshake fails. The compiled API default in `src/common.rs::get_api_server_` does not automatically populate the runtime option.
@@ -44,7 +44,7 @@ Both `rustdesk.houxnan.com` and `rustdesk-backup.houxnan.com` are named in one T
 ## Runtime acceptance gates
 
 1. Read the locked upstream 1.5.3 hbb_common source and v3 patched `src/websocket.rs` before implementing. Confirm where connection lifecycle and retry policy can be safely inserted without modifying arbitrary peer endpoints.
-2. Add v3 Common patch and source-policy generation changes; update `patchset.json` revision, content hashes, and append-only history with the project's existing versioning tool.
+2. v3 Common patch, source-policy generation and v3.8 patchset version/hash/history are committed. Verify with the project's native contract tools and GitHub CI before acceptance.
 3. Validate patch application for Standard and SOS, transport unit tests, certificate/SNI/Host/Upgrade behavior, and Android actual connection registration.
 4. No automatic merging, signing, publication, or server changes. This contract alone is not a working fix.
 
@@ -84,3 +84,10 @@ Read-only inspection of `rustdesk/hbb_common/src/websocket.rs` (current upstream
 | Android real device | WSS handshake and authenticated ID/Relay session proven by redacted logs |
 
 **Release gate:** do not mark Ready for Review based on policy-only tests. Require actual patched hbb_common compilation, a deterministic local TLS/WSS harness and real-device confirmation. No production server changes, CI publishing, signing or merging as part of this audit.
+
+## Implemented candidate scope (not proof of runtime success)
+
+- `patchsets/v3/common/0010-hbb-wss-primary-fallback.patch` adds strict WSS handshake primary/fallback for exact owned host and default HTTPS/WSS 443 origin pair; no shared API health state and no transport retry after WebSocket handshake.
+- `scripts/source/apply_patches.sh` explicitly routes 0010 to the locked `libs/hbb_common`; `scripts/source/api_policy.py` generates and verifies the same frozen origin policy in the hbb submodule.
+- `scripts/validation/api_policy_contract.py` now checks generated hbb file tampering; `scripts/validation/wss_failover_policy_contract.py` is run by compatibility CI.
+- Explicit limitations: no WSS IP-family forcing, no cross-host peer relay failover, no subprotocol-level session reconnection, no automatic migration of healthy sessions. TLS, HTTP and protocol errors fail closed.
