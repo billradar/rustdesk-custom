@@ -43,7 +43,7 @@ def repository():
     return repo
 
 
-def discover(run_id=''):
+def discover(run_id='', allow_retired_skip=False):
     branch = api(f'repos/{OFFICIAL}')['default_branch']
     if run_id:
         if not re.fullmatch(r'[1-9][0-9]*', str(run_id)):
@@ -64,7 +64,19 @@ def discover(run_id=''):
         raise ValueError('Invalid official source SHA')
     cargo = api(f'repos/{OFFICIAL}/contents/Cargo.toml?ref={sha}')
     version = tomllib.loads(base64.b64decode(cargo['content']).decode())['package']['version']
-    patchset = patchset_for_version(version)
+    try:
+        patchset = patchset_for_version(version, channel='nightly')
+    except ValueError as error:
+        # Match Stable's distinction between historical mappings and new-build
+        # admission: an archived profile is valid history, not buildable input.
+        # Only the router may skip it; downstream resolve must still fail closed.
+        if not allow_retired_skip or not str(error).startswith('Retired Patchset '):
+            raise
+        return dict(channel='nightly', upstream_repository=OFFICIAL,
+                    upstream_sha=sha, upstream_ref=sha, upstream_tag='',
+                    upstream_version=version, official_run_id=str(run['id']),
+                    official_run_url=run['html_url'], dedup_state='RETIRED_PROFILE',
+                    skip_reason=str(error), build_needed=False)
     return dict(channel='nightly', upstream_repository=OFFICIAL, upstream_sha=sha,
                 upstream_ref=sha, upstream_tag='', upstream_version=version, patchset=patchset,
                 official_run_id=str(run['id']), official_run_url=run['html_url'],
@@ -713,9 +725,12 @@ def main(argv=None):
         else:
             # The scheduled/manual Router must resolve once, then pass this
             # immutable source identity to the downstream Resolve workflow.
-            data = discover()
+            data = discover(allow_retired_skip=(a.mode == 'route'))
         save(data)
         if a.mode == 'route':
+            if data.get('dedup_state') == 'RETIRED_PROFILE':
+                print('Nightly route skipped: ' + data['skip_reason'])
+                return
             route(data)
 
 
