@@ -56,6 +56,7 @@ class NightlyRouterRegression(unittest.TestCase):
             env=dict(GITHUB_REPOSITORY='example/repo',GITHUB_REF='refs/heads/main',
                      GITHUB_EVENT_NAME='workflow_dispatch',RELEASE_MODE='dry-run',
                      INCLUDE_WAYLAND='true',ANDROID_PRODUCTION_SIGNING_ENABLED='false',
+                     UPSTREAM_VERSION='1.5.3',PATCHSET='v3',
                      GITHUB_OUTPUT=str(output))
             with patch.dict(os.environ,env), \
                  patch.object(nightly,'api',side_effect=AssertionError('Dry-run history queried')) as history:
@@ -72,7 +73,7 @@ class NightlyRouterRegression(unittest.TestCase):
         env = dict(GITHUB_REPOSITORY='example/repo', GITHUB_REF='refs/heads/main',
                    GITHUB_EVENT_NAME='workflow_dispatch', FORCE_RETRY='true',
                    ANDROID_PRODUCTION_SIGNING_ENABLED='false')
-        data = dict(upstream_sha='a'*40, official_run_id='123', upstream_version='1.5.1', patchset='v2',
+        data = dict(upstream_sha='a'*40, official_run_id='123', upstream_version='1.5.3', patchset='v3',
                     common_patch_hash='b'*64, sos_patch_hash='c'*64)
         with patch.dict(os.environ, env), \
              patch.object(nightly,'api',return_value={'workflow_runs':[]}), \

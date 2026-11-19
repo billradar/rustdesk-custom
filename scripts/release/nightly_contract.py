@@ -20,13 +20,13 @@ class NightlyTests(unittest.TestCase):
                     path='.github/workflows/flutter-nightly.yml', head_repository={'full_name':nightly.OFFICIAL},
                     head_sha='b'*40, id=17, html_url='https://github.com/rustdesk/rustdesk/actions/runs/17')
 
-    def discover(self, run):
+    def discover(self, run, version='1.5.3'):
         def api(path):
             if path == 'repos/'+nightly.OFFICIAL:
                 return {'default_branch':'master'}
             if '/contents/' in path:
                 self.assertIn('?ref='+'b'*40,path)
-                return {'content':base64.b64encode(b'[package]\nversion="1.5.3"\n').decode()}
+                return {'content':base64.b64encode(f'[package]\nversion="{version}"\n'.encode()).decode()}
             if '/workflows/' in path:
                 return {'workflow_runs':[run]}
             return run
@@ -39,6 +39,17 @@ class NightlyTests(unittest.TestCase):
         self.assertEqual(d['upstream_ref'],d['upstream_sha'])
         self.assertEqual(d['upstream_tag'],'')
         self.assertEqual(d['patchset'],'v3')
+        self.assertEqual(d['profile'], 'rd-1.5.3')
+        self.assertFalse(d['compatibility_test_only'])
+
+    def test_discovery_marks_unknown_version_as_test_only(self):
+        d=self.discover(self.run_fixture(), version='1.5.4')
+        self.assertEqual(d['upstream_ref'], 'b'*40)
+        self.assertEqual(d['profile'], 'rd-1.5.3')
+        self.assertEqual(d['patchset'], 'v3')
+        self.assertTrue(d['fallback'])
+        self.assertTrue(d['compatibility_test_only'])
+        self.assertFalse(d['stable_allowed'])
 
     def test_failed_running_foreign_or_wrong_workflow_is_blocked(self):
         for k,v in [('status','in_progress'),('conclusion','failure'),('head_branch','other'),
@@ -156,13 +167,71 @@ class NightlyTests(unittest.TestCase):
             nightly.dedup()
             self.assertIn('skip=true',(Path(td)/'out').read_text())
 
+    def test_dedup_rejects_test_only_even_in_dry_run_before_history(self):
+        env=dict(GITHUB_REPOSITORY='example/repo', GITHUB_REF='refs/heads/main',
+                 GITHUB_EVENT_NAME='workflow_dispatch', RELEASE_MODE='dry-run',
+                 UPSTREAM_EXPECTED_SHA='b'*40, UPSTREAM_VERSION='1.5.4', PATCHSET='v3')
+        with patch.dict(os.environ, env), patch.object(nightly, 'api') as history:
+            with self.assertRaisesRegex(ValueError, 'Compatibility-test-only'):
+                nightly.dedup()
+        history.assert_not_called()
+
     def test_manual_and_scheduled_entrypoints_both_resolve_latest(self):
+        fixture = {'upstream_sha': 'b'*40, 'upstream_version': '1.5.3', 'patchset': 'v3'}
         for mode, event in [('resolve', 'workflow_dispatch'), ('route', 'schedule'), ('route', 'workflow_dispatch')]:
-            with self.subTest(mode=mode, event=event), patch.dict(os.environ, GITHUB_EVENT_NAME=event), patch.object(nightly, 'discover', return_value={'upstream_sha': 'b'*40}) as discover, patch.object(nightly, 'save') as save, patch.object(nightly, 'route') as route:
+            with self.subTest(mode=mode, event=event), patch.dict(os.environ, GITHUB_EVENT_NAME=event), patch.object(nightly, 'discover', return_value=dict(fixture)) as discover, patch.object(nightly, 'save') as save, patch.object(nightly, 'route') as route:
                 nightly.main([mode])
                 discover.assert_called_once_with(**({'allow_retired_skip': True} if mode == 'route' else {}))
-                save.assert_called_once_with({'upstream_sha': 'b'*40})
+                save.assert_called_once_with(fixture)
                 self.assertEqual(route.call_count, int(mode == 'route'))
+
+    def test_unknown_nightly_version_only_schedules_exact_source_compatibility(self):
+        from scripts.upstream.patchsets import profile_for_version
+        selection = profile_for_version('1.5.4', 'nightly')
+        data = dict(upstream_sha='b'*40, upstream_version='1.5.4',
+                    patchset=selection['selected'], **selection)
+        self.assertTrue(data['compatibility_test_only'])
+        with patch.object(nightly, 'discover', return_value=data), \
+             patch.object(nightly, 'save') as save, \
+             patch.object(nightly, 'route') as dispatch:
+            nightly.main(['route'])
+        dispatch.assert_not_called()
+        self.assertEqual(save.call_args.args[0]['dedup_state'], 'COMPATIBILITY_TEST_ONLY')
+        self.assertFalse(save.call_args.args[0]['build_needed'])
+
+    def test_manual_nightly_resolve_rejects_test_only_profile(self):
+        fallback = dict(upstream_sha='b'*40, upstream_version='1.5.4', patchset='v3')
+        with patch.dict(os.environ, OFFICIAL_RUN_ID='', UPSTREAM_EXPECTED_SHA='', NIGHTLY_DISPLAY_LABEL=''), \
+             patch.object(nightly, 'discover', return_value=fallback), \
+             patch.object(nightly, 'save') as save:
+            with self.assertRaisesRegex(ValueError, 'Compatibility-test-only'):
+                nightly.main(['resolve'])
+        self.assertEqual(save.call_args.args[0]['dedup_state'], 'PROFILE_REJECTED')
+
+    def test_router_refuses_test_only_or_retired_profile_before_dispatch(self):
+        env=dict(GITHUB_REPOSITORY='example/repo', GITHUB_REF='refs/heads/main',
+                 GITHUB_EVENT_NAME='schedule')
+        with patch.dict(os.environ, env), patch.object(nightly, 'api') as history, \
+             patch.object(nightly.subprocess, 'run') as dispatch:
+            for version, patchset in (('1.5.4', 'v3'), ('1.5.1', 'v2'), ('1.5.3', 'v2')):
+                with self.subTest(version=version), self.assertRaises(ValueError):
+                    nightly.route(dict(upstream_version=version, patchset=patchset))
+        history.assert_not_called()
+        dispatch.assert_not_called()
+
+    def test_boolean_discovery_outputs_are_valid_for_workflow_routing(self):
+        with tempfile.TemporaryDirectory() as td, \
+             patch.dict(os.environ, GITHUB_OUTPUT=str(Path(td)/'output'), INCLUDE_WAYLAND='false'):
+            old_cwd=Path.cwd()
+            try:
+                os.chdir(td)
+                nightly.save(dict(upstream_sha='b'*40, compatibility_test_only=True,
+                                  build_needed=False))
+            finally:
+                os.chdir(old_cwd)
+            output=(Path(td)/'output').read_text()
+            self.assertIn('compatibility_test_only=true\n', output)
+            self.assertIn('build_needed=false\n', output)
 
     def test_resolve_uses_router_pinned_official_run_and_sha(self):
         fixture = dict(upstream_sha='b'*40, upstream_version='1.5.3', patchset='v3',
@@ -334,6 +403,19 @@ class NightlyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):nightly.aggregate(root,d)
                 gate.assert_not_called()
 
+    def test_aggregate_rejects_test_only_profile_before_artifact_access(self):
+        env=dict(UPSTREAM_EXPECTED_SHA='b'*40, UPSTREAM_VERSION='1.5.4', PATCHSET='v3',
+                 RELEASE_MODE='dry-run')
+        discovery=dict(channel='nightly', upstream_repository=nightly.OFFICIAL,
+                       upstream_sha='b'*40, upstream_version='1.5.4', patchset='v3',
+                       compatibility_test_only=False)
+        with tempfile.TemporaryDirectory() as td, patch.dict(os.environ, env), \
+             patch.object(qualification, 'aggregate') as gate:
+            d=Path(td)/'discovery.json';d.write_text(json.dumps(discovery))
+            with self.assertRaisesRegex(ValueError, 'Compatibility-test-only'):
+                nightly.aggregate(Path(td), d)
+            gate.assert_not_called()
+
     def test_draft_mode_requires_signed_android_aggregate(self):
         env=dict(UPSTREAM_EXPECTED_SHA='b'*40,UPSTREAM_VERSION='1.5.3',PATCHSET='v3',
                  GITHUB_SHA='a'*40,GITHUB_RUN_ID='9',RELEASE_MODE='draft',
@@ -372,6 +454,7 @@ class NightlyTests(unittest.TestCase):
         self.assertIs(w['on']['workflow_dispatch']['inputs']['force_retry']['default'], False)
         dedup_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'dedup')
         self.assertIn('inputs.force_retry', dedup_step['env']['FORCE_RETRY'])
+        self.assertEqual(dedup_step['env']['UPSTREAM_VERSION'], '${{ steps.resolve.outputs.upstream_version }}')
         resolve_step = next(s for s in w['jobs']['resolve']['steps'] if s.get('id') == 'resolve')
         self.assertIn('inputs.display_label', resolve_step['env']['NIGHTLY_DISPLAY_LABEL'])
         self.assertIn('inputs.official_run_id', resolve_step['env']['OFFICIAL_RUN_ID'])
@@ -468,6 +551,15 @@ class NightlyTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'",w['jobs']['route']['if'])
         self.assertEqual(w['jobs']['route']['permissions'],{'contents':'read','actions':'write'})
         self.assertEqual(w['jobs']['route']['timeout-minutes'],180)
+        self.assertEqual(w['jobs']['route']['outputs']['compatibility_test_only'],
+                         '${{ steps.selection.outputs.compatibility_test_only }}')
+        compatibility=w['jobs']['compatibility']
+        self.assertEqual(compatibility['if'], "needs.route.outputs.compatibility_test_only == 'true'")
+        self.assertEqual(compatibility['permissions'], {'contents': 'read'})
+        self.assertEqual(compatibility['uses'], './.github/workflows/compat-check.yml')
+        self.assertEqual(compatibility['with']['channel'], 'ci')
+        self.assertEqual(compatibility['with']['upstream_sha'], '${{ needs.route.outputs.upstream_sha }}')
+        self.assertEqual(compatibility['with']['upstream_ref'], '${{ needs.route.outputs.upstream_sha }}')
         names=[]
         for family in ['platforms','android']:
             w=yaml.safe_load((ROOT/f'.github/workflows/build-stable-{family}.yml').read_text())
