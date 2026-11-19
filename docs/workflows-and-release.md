@@ -14,6 +14,7 @@
 | `.github/workflows/tag.yml` | Stable 解析、revision 预检、构建、产物聚合、可选 Android 生产签名及 Dry-run / Draft / Release 决策 |
 | `.github/workflows/upstream-stable.yml` | 定期发现官方 Stable Release，并将最新版本路由到已签名的私有 Draft 构建 |
 | `.github/workflows/upstream-main-compatibility.yml` | 定期验证官方上游默认分支的兼容性；不构建或发布 Nightly 产物 |
+| `.github/workflows/upstream-nightly.yml` | 发现官方最新成功 Nightly：已批准版本进入受控构建；未知/候选版本仅在原始 SHA 上运行兼容性检查，退役版本跳过 |
 | `.github/workflows/android-yubikey-signing-test.yml` | 需要手动触发并明确授权的 YubiKey 签名冒烟测试，不发布或提升 Release |
 
 本表用于导航。触发器、输入、权限、条件、Job 依赖和发布语义均以当前工作流文件为准。不要引用仓库中不存在的旧工作流名。
@@ -159,14 +160,15 @@ revision 8 and candidate/fallback Profiles remain ineligible for Stable.
 ## Nightly 同步与构建
 
 官方 `flutter-nightly.yml` 每天 UTC 00:00（香港时间 08:00）启动。
-`upstream-nightly.yml` 每天 UTC 02:23（香港时间 10:23）检查官方成功完成的构建，
-避开整点调度，但不保证无延迟。手动和自动构建都在解析阶段选择最新成功的官方运行，
+`upstream-nightly.yml` 每小时 UTC 第 41 分钟检查，并在 07:17、19:17 UTC 补充探测，
+但不保证无延迟。手动和自动构建都在解析阶段选择最新成功的官方运行，
 不等待当天运行，不提供运行 ID/SHA 输入；选定后锁定运行 ID 和完整源码 SHA，供下游统一使用。
 GitHub 定时任务可能延迟，因此使用官方运行状态而非猜测完成时间。
 官方计划见 https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-nightly.yml 。
 
 来源绑定官方仓库、默认分支、工作流路径、成功状态、运行 ID 和完整 40 位 SHA；
 不使用上游可能滞后的 `nightly` 标签，也不追逐尚未成功构建的最新 master。
+版本选择先匹配精确 Patch Profile：1.5.1 等 v1/v2 退役映射直接跳过；未知版本回退 v3 或明确标记不可发布的候选版本，只在该成功 Nightly 运行的原始 SHA 上调用只读 `compat-check.yml`，不进入 Nightly 全平台构建、生产签名或 Draft。`resolve`、`dedup`、`aggregate` 还会独立校验一次；兼容性成功不自动授予 Stable/Nightly 构建资格。已准入的 1.5.3 / v3 仍须通过逐补丁及构建接口校验；若上游 SHA 的源码有冲突，流程必须失败并保留诊断证据。
 例如官方运行 40146600534 对应源码 SHA `1297da6d186e58d9096be24072ae3998cdbbf8fe`；
 上游 Release 的 tag 与运行源码 SHA 应分别看待。
 
@@ -176,8 +178,8 @@ Android 仍仅 Standard。Windows ARM64 作为实验性目标由平台矩阵默�
 DRM/Wayland 实验构建已作为默认开启的子流程接入，保留独立审核策略和资格结果，不冒充普通 Standard 目标。
 v1/v2 的强制关闭软件渲染策略由 Common 层继承。未知构建接口继续阻断。
 
-自动路由仅从本仓库 main 执行，按官方上游 SHA、所选 patchset 的 Common/SOS 补丁哈希、
-发布模式、Wayland 策略和签名模式去重；自定义提交 SHA 与官方运行 ID 只作为来源记录，
+自动路由仅从本仓库 main 执行，按官方上游 SHA、所选 patchset 的 Common/SOS 补丁哈希
+去重；自定义提交 SHA 与官方运行 ID 只作为来源记录，
 不会因无关仓库提交或同一源码的上游重跑而重复构建。
 手动 Nightly 也在源码解析后执行相同检查。相同身份仍在运行或已成功时跳过；
 失败最多自动尝试三次。上游 SHA、所选补丁内容或相关构建策略变化会形成新身份。

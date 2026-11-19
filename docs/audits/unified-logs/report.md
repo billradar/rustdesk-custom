@@ -2,6 +2,14 @@
 
 Status: DRAFT; READY FOR REVIEW: NO. This is development evidence, not a release, device-validation or WSS-fix claim.
 
+## Nightly patch-context repair (v3.9; 2026-11-19)
+
+Compatibility run [44510913873](https://github.com/billradar/rustdesk-custom/actions/runs/44510913873) stopped Standard and SOS on `0009-unified-diagnostic-logs.patch`, `src/server/connection.rs:5306`, using official SHA `dcb6291116158c7cbd9cb40b5a5c5f7986468904`. Relative to the formal 1.5.3 SHA `95cca3f661f635b3cc85c04935fe8d96d8f432ef`, upstream added `#[cfg(windows)] self.privacy_preparation.take();` between `self.closed = true;` and the voice-call cleanup comment. The old hunk required immediate adjacency and failed at `git apply --check`.
+
+The v3.9 fix changes only the context of the existing typed session-disconnect insertion: it now anchors on the unchanged voice-call comments. On newer Windows upstream, the existing privacy cleanup stays immediately after `self.closed` and before the diagnostic event; on official 1.5.3, the resulting code is unchanged. No cleanup statement, diagnostic payload, public API, source variant policy or runtime feature was removed.
+
+Read-only checks on the formal 1.5.3 SHA, failed Nightly SHA and newer official master SHA `c50ae975128e3061ee5c209f4eb8fb4a2605380f` confirmed success for the revised `connection.rs` hunk; the failing Nightly hunk was independently reproduced before changing it. Independent sparse upstream worktrees then passed sequential root Common `0002–0009` application and SOS `0001–0003` application on all three SHAs. Unchanged `0001` and `0010` were also applied successfully to the shared locked hbb_common SHA `fae47e024dd83cef6aaecde0aa7d11731df11649`. The diagnostic adapter source contract passed. Full native compilation, Flutter/Android clients and physical-device testing remain unverified; a successful source patch check does not establish Nightly build/release readiness. New patch content is tracked by the reviewed v3.9 revision and Common digest in `patchsets/v3/patchset.json`.
+
 ## Identity and read-only audit
 
 Custom base `83bbff7a047eae5a2fdc57026c779050c02c8063`; official 1.5.3 `95cca3f661f635b3cc85c04935fe8d96d8f432ef`; hbb_common `fae47e024dd83cef6aaecde0aa7d11731df11649`. The pre-implementation [design](design.md) records the original audit. Actual installed Android APK identity remains UNKNOWN; #262 is not resolved by these source changes.

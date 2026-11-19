@@ -19,7 +19,7 @@ except ImportError:
 from scripts.release.router_retry_policy import decide, requested_force_retry
 from scripts.release.coordinator_lite import from_hashes as lite_identity, patchset_sha256
 from scripts.upstream.resolve import api
-from scripts.upstream.patchsets import patchset_for_version, patch_hash
+from scripts.upstream.patchsets import profile_for_version, patch_hash
 
 REPO = 'billradar/rustdesk-custom'
 OFFICIAL = 'rustdesk/rustdesk'
@@ -65,7 +65,7 @@ def discover(run_id='', allow_retired_skip=False):
     cargo = api(f'repos/{OFFICIAL}/contents/Cargo.toml?ref={sha}')
     version = tomllib.loads(base64.b64decode(cargo['content']).decode())['package']['version']
     try:
-        patchset = patchset_for_version(version, channel='nightly')
+        selection = profile_for_version(version, channel='nightly')
     except ValueError as error:
         # Match Stable's distinction between historical mappings and new-build
         # admission: an archived profile is valid history, not buildable input.
@@ -78,9 +78,29 @@ def discover(run_id='', allow_retired_skip=False):
                     official_run_url=run['html_url'], dedup_state='RETIRED_PROFILE',
                     skip_reason=str(error), build_needed=False)
     return dict(channel='nightly', upstream_repository=OFFICIAL, upstream_sha=sha,
-                upstream_ref=sha, upstream_tag='', upstream_version=version, patchset=patchset,
+                upstream_ref=sha, upstream_tag='', upstream_version=version,
+                patchset=selection['selected'], **selection,
                 official_run_id=str(run['id']), official_run_url=run['html_url'],
-                common_patch_hash=patch_hash('common', patchset), sos_patch_hash=patch_hash('sos', patchset))
+                common_patch_hash=patch_hash('common', selection['selected']),
+                sos_patch_hash=patch_hash('sos', selection['selected']))
+
+
+def require_nightly_build_profile(data):
+    """Re-evaluate the canonical Profile at every Nightly build/release entrypoint.
+
+    Compatibility-only selections are valid for read-only CI checks, never
+    for build, production signing, aggregation or Draft creation. Do not trust
+    a flag supplied in a discovery artifact to grant build admission.
+    """
+    selection = profile_for_version(data['upstream_version'], channel='nightly')
+    if data.get('patchset') != selection['selected']:
+        raise ValueError('Nightly patchset differs from selected Patch Profile')
+    if selection['compatibility_test_only']:
+        raise ValueError('Compatibility-test-only Patch Profile cannot enter a Nightly build or Draft')
+    for key in ('profile', 'fallback', 'compatibility_test_only', 'stable_allowed'):
+        if key in data and data[key] != selection[key]:
+            raise ValueError('Nightly discovery Patch Profile policy mismatch: ' + key)
+    return selection
 
 
 def nightly_identity(data, release_mode=None, wayland='true', signing='false'):
@@ -241,7 +261,7 @@ def annotate_history(rows, upstream_sha=None):
         if not legacy and not new:
             continue
         data = discovery_from_run(row)
-        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN', 'DISPLAY_MISMATCH'):
+        if data and data.get('dedup_state') in ('ACTIVE', 'SUCCESS', 'COOLDOWN', 'DISPLAY_MISMATCH', 'PROFILE_REJECTED'):
             row['_nightly_identity_skipped'] = True
             continue
         if (not data or (row['_upstream_sha'] and data['upstream_sha'] != row['_upstream_sha'])
@@ -268,6 +288,7 @@ def route(data):
     if (os.environ.get('GITHUB_REF') != 'refs/heads/main'
             or os.environ.get('GITHUB_EVENT_NAME') not in ('schedule', 'workflow_dispatch')):
         raise ValueError('Nightly router requires trusted main context')
+    require_nightly_build_profile(data)
     force_retry = requested_force_retry()
     rows = []
     for page in range(1, 11):
@@ -336,6 +357,8 @@ def dedup():
     signing = os.environ.get('ANDROID_PRODUCTION_SIGNING_ENABLED', 'false').lower()
     if mode not in ('dry-run', 'draft') or wayland not in ('true', 'false') or signing not in ('true', 'false'):
         raise ValueError('Invalid Nightly dedup configuration')
+    require_nightly_build_profile(dict(upstream_version=os.environ['UPSTREAM_VERSION'],
+                                      patchset=os.environ['PATCHSET']))
     force_retry = requested_force_retry()
     if force_retry and mode == 'dry-run':
         raise ValueError('force_retry is not valid for dry-run')
@@ -402,6 +425,10 @@ def save(data):
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             for k, v in data.items():
+                if isinstance(v, bool):
+                    v = str(v).lower()
+                elif not isinstance(v, str):
+                    raise ValueError('Invalid Nightly output field: ' + k)
                 if '\n' in v or '\r' in v:
                     raise ValueError('Unsafe Nightly output')
                 f.write(k + '=' + v + '\n')
@@ -447,6 +474,7 @@ def aggregate(root, discovery):
                     upstream_repository=OFFICIAL)
     if any(data.get(k) != v for k, v in required.items()):
         raise ValueError('Nightly discovery identity mismatch')
+    require_nightly_build_profile(data)
     mode = os.environ.get('RELEASE_MODE', 'dry-run')
     if mode not in ('dry-run', 'draft'):
         raise ValueError('Unsupported Nightly release mode')
@@ -722,13 +750,23 @@ def main(argv=None):
                 data['dedup_state'] = 'DISPLAY_MISMATCH'
                 save(data)
                 raise
+            try:
+                require_nightly_build_profile(data)
+            except ValueError as error:
+                data['dedup_state'] = 'PROFILE_REJECTED'
+                data['skip_reason'] = str(error)
+                save(data)
+                raise
         else:
             # The scheduled/manual Router must resolve once, then pass this
             # immutable source identity to the downstream Resolve workflow.
             data = discover(allow_retired_skip=(a.mode == 'route'))
+        if a.mode == 'route' and data.get('compatibility_test_only'):
+            data.update(dedup_state='COMPATIBILITY_TEST_ONLY', build_needed=False,
+                        skip_reason='Compatibility-test-only Patch Profile: run exact-source CI; no Nightly build or Draft')
         save(data)
         if a.mode == 'route':
-            if data.get('dedup_state') == 'RETIRED_PROFILE':
+            if data.get('dedup_state') in ('RETIRED_PROFILE', 'COMPATIBILITY_TEST_ONLY'):
                 print('Nightly route skipped: ' + data['skip_reason'])
                 return
             route(data)
