@@ -9,8 +9,8 @@
 | Below 1.5.0 | legacy-pre-1.5 | v1 (archived) | Forbidden for new builds |
 | 1.5.0 | rd-1.5.0 | v2.8 (archived) | Forbidden for new builds |
 | 1.5.1 | rd-1.5.1 | v2.8 (archived) | Forbidden for new builds |
-| 1.5.3 | rd-1.5.3 | v3 (currently revision 8) | Explicit formal-release admission; existing gates apply |
-| Unadapted versions, including 1.5.2 | latest_maintained | v3 (currently revision 8) | Forbidden; compatibility test only |
+| 1.5.3 | rd-1.5.3 | v3 (currently revision 9) | Explicit formal-release admission; existing gates apply |
+| Unadapted versions, including 1.5.2 | latest_maintained | v3 (currently revision 9) | Forbidden; compatibility test only |
 
 The historical 1.5.3 candidate commit `05b9f2d8919b5cdfaa0bb3280601a02881556a42` from compatibility run 42572512338 established the isolated v3.1 patch baseline; it was not a release tag. Official release `1.5.3` now points to `95cca3f661f635b3cc85c04935fe8d96d8f432ef`, and the separately audited formal `rd-1.5.3` Profile was admitted with those v3.1 patch bytes. Revision v3.2 later corrected the RPM updater selector; further append-only revisions are documented in `patchsets/v3/CHANGELOG.md`. The old `rd-1.5.3-candidate` registry entry remains Stable-forbidden. `latest_maintained` now names the formal Profile, but unknown-version fallback is still forbidden in Stable regardless of that Profile’s own eligibility. No 1.5.2 source snapshot or release is approved by this change. Unknown-version fallback means “try the latest maintained patchset and report compatibility”; it does not promise applicability or support.
 

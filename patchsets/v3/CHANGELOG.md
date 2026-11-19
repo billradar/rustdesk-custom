@@ -21,6 +21,43 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 
 ## Revision history
 
+### v3.9 — content-change
+
+Scope: common
+
+Reason: Repair the v3 unified-logs patch context after upstream inserted Windows privacy cleanup between the original on_close anchor and voice-call comments; retain exact source semantics and fail-closed patch checks.
+
+#### Added
+
+
+#### Changed
+
+
+#### Fixed
+
+- Anchor the typed session-disconnect event at the unchanged voice-call comment block, keeping it after upstream Windows privacy cleanup where present.
+
+#### Removed
+
+
+#### Security
+
+
+#### Compatibility
+
+- Preserve the upstream cfg(windows) privacy_preparation.take() call introduced after self.closed on the newer Nightly source, without altering the official 1.5.3 behavior.
+
+References: https://github.com/billradar/rustdesk-custom/pull/271
+
+Upstream compatibility: Common 0002-0009 and SOS 0001-0003 applied sequentially on official RustDesk 1.5.3 SHA 95cca3f661f635b3cc85c04935fe8d96d8f432ef, failed Nightly SHA dcb6291116158c7cbd9cb40b5a5c5f7986468904 and newer master SHA c50ae975128e3061ee5c209f4eb8fb4a2605380f; the unchanged hbb_common patches are independently gated.
+
+Known limitations: Source-level patch application only; full native/Flutter/Android builds, signed packages, remote-session runtime and later upstream commits remain unverified.
+
+Allocation base: `a440eae00ac8b7711dcd73da6e30fdcdd69099b2`
+
+- common: `9b97db05d65b3cc69bac2c11204635cc56172e0066b72f43e81d5a0deaa1b26a` → `96c198122eb8053deac05c7d22a08af8503701b2fb63aa2f94564bc8296dd3d2`
+- sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`
+
 ### v3.8 — content-change
 
 Scope: common

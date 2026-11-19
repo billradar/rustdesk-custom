@@ -6082,10 +6082,7 @@ diff --git a/src/server/connection.rs b/src/server/connection.rs
                  Some(message::Union::TerminalAction(action)) => {
                      #[cfg(not(any(target_os = "android", target_os = "ios")))]
                      allow_err!(self.handle_terminal_action(action).await);
-@@ -5306,6 +5407,14 @@
-             return;
-         }
-         self.closed = true;
+@@ -5309,6 +5410,14 @@
 +        hbb_common::radar_diagnostics::DiagnosticContext::current_or_new().event(
 +            hbb_common::radar_diagnostics::Action::SessionLifetime,
 +            hbb_common::radar_diagnostics::Module::Session,
@@ -6097,6 +6094,9 @@ diff --git a/src/server/connection.rs b/src/server/connection.rs
          // If voice A,B -> C, and A,B has voice call
          // B disconnects, C will reset the voice call input.
          //
+         // It may be acceptable, because it's not a common case,
+         // and it's immediately known when the input device changes.
+         // C can change the input device manually in cm interface.
 @@ -5443,6 +5552,10 @@
      }
  
