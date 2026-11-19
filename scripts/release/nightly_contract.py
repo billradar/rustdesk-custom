@@ -160,7 +160,7 @@ class NightlyTests(unittest.TestCase):
         for mode, event in [('resolve', 'workflow_dispatch'), ('route', 'schedule'), ('route', 'workflow_dispatch')]:
             with self.subTest(mode=mode, event=event), patch.dict(os.environ, GITHUB_EVENT_NAME=event), patch.object(nightly, 'discover', return_value={'upstream_sha': 'b'*40}) as discover, patch.object(nightly, 'save') as save, patch.object(nightly, 'route') as route:
                 nightly.main([mode])
-                discover.assert_called_once_with()
+                discover.assert_called_once_with(**({'allow_retired_skip': True} if mode == 'route' else {}))
                 save.assert_called_once_with({'upstream_sha': 'b'*40})
                 self.assertEqual(route.call_count, int(mode == 'route'))
 
