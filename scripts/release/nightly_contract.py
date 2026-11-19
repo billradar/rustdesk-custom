@@ -555,7 +555,7 @@ class NightlyTests(unittest.TestCase):
                          '${{ steps.selection.outputs.compatibility_test_only }}')
         compatibility=w['jobs']['compatibility']
         self.assertEqual(compatibility['if'], "needs.route.outputs.compatibility_test_only == 'true'")
-        self.assertEqual(compatibility['permissions'], {'contents': 'read'})
+        self.assertEqual(compatibility['permissions'], {'contents': 'read', 'actions': 'read'})
         self.assertEqual(compatibility['uses'], './.github/workflows/compat-check.yml')
         self.assertEqual(compatibility['with']['channel'], 'ci')
         self.assertEqual(compatibility['with']['upstream_sha'], '${{ needs.route.outputs.upstream_sha }}')
