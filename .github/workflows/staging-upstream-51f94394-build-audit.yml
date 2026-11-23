@@ -45,6 +45,29 @@ jobs:
           bash scripts/source/prepare.sh "$REVIEWED_SHA" .work/review-source/old
           bash scripts/source/prepare.sh "$CANDIDATE_SHA" .work/review-source/candidate
           bash scripts/source/prepare.sh "$NEW_MAIN_SHA" .work/review-source/new
+      - name: Record exact official Linux platform signatures for candidate review
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.platform.platform_adapter import inspect
+          rows=[]
+          for source in ('candidate','new'):
+              root=Path('.work/review-source')/source
+              for arch in ('x86_64','aarch64'):
+                  profile,_=inspect(root,'linux',arch)
+                  if profile['official_disabled']:
+                      raise ValueError('Official Linux job is disabled')
+                  item={'source':source,'arch':arch,'runner':profile['runner'],
+                        'signature':profile['signature'],
+                        'upstream_sha':__import__('subprocess').check_output(
+                            ['git','-C',str(root),'rev-parse','HEAD'],text=True).strip()}
+                  rows.append(item)
+                  print('LINUX_PLATFORM_SIGNATURE '+json.dumps(item,sort_keys=True))
+          (Path('.work/review-source')/'linux-platform-signatures.json').write_text(
+              json.dumps(rows,indent=2)+'\\n')
+          PY
       - name: Reproduce matching adapter signatures and reject implicit DRM stock packaging
         run: |
           set -euo pipefail
