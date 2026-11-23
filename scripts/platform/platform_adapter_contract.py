@@ -36,6 +36,48 @@ class RecipeTests(unittest.TestCase):
                         tree, 'cargo build --locked --lib --features ' + feature +
                         '\n' + package_stock + ' --no-drm')
 
+    def test_exact_source_linux_opt_out_recipe_transformation(self):
+        original = """
+cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste,drm,drm-wake --release
+check_rpm_drm() {
+  if [[ "$1" == *something* ]]; then
+    echo 'upstream DRM assert'
+  fi
+}
+python3 ./build.py --flutter --skip-cargo
+check_rpm_drm "$name"
+check_rpm_drm "$name"
+"""
+        known = '51f94394ce61e1f3d26229565c326b2862cbdd1f'
+        with tempfile.TemporaryDirectory() as temp:
+            tree = Path(temp)
+            (tree/'build.py').write_text("parser.add_argument('--no-drm')\n")
+            with patch('subprocess.check_output', return_value=known):
+                adapted = adapter.adapt_stock_linux_recipe(tree, original)
+            self.assertIn('--features hwcodec,flutter,unix-file-copy-paste --release', adapted)
+            self.assertNotIn('--features hwcodec,flutter,unix-file-copy-paste,drm', adapted)
+            self.assertIn('python3 ./build.py --flutter --skip-cargo --no-drm', adapted)
+            self.assertNotIn('check_rpm_drm()', adapted)
+            self.assertNotIn('check_rpm_drm "$name"', adapted)
+            self.assertEqual(adapted.count('stock RPM validated after extraction'), 2)
+            self.assertIn('stock Linux source contains prebuilt libdrmtap', adapted)
+            self.assertTrue(adapter.guard_stock_linux_drm_recipe(tree, adapted))
+            with patch('subprocess.check_output', return_value='a'*40):
+                with self.assertRaisesRegex(ValueError, 'unreviewed source'):
+                    adapter.adapt_stock_linux_recipe(tree, original)
+            for drift in (original.replace('drm,drm-wake', 'drm'),
+                          original.replace('check_rpm_drm "$name"', ':', 1),
+                          original.replace('python3 ./build.py --flutter --skip-cargo',
+                                           'python3 ./build.py --flutter --skip-cargo --no-drm')):
+                with patch('subprocess.check_output', return_value=known):
+                    with self.assertRaisesRegex(ValueError, 'no longer matches'):
+                        adapter.adapt_stock_linux_recipe(tree, drift)
+            # The reviewed legacy default-off source retains its original recipe.
+            (tree/'build.py').write_text("parser.add_argument('--drm')\n")
+            legacy = 'cargo build --features hwcodec,flutter\npython3 ./build.py --flutter --skip-cargo'
+            with patch('subprocess.check_output', side_effect=AssertionError('legacy must not need SHA lookup')):
+                self.assertEqual(adapter.adapt_stock_linux_recipe(tree, legacy), legacy)
+
     def test_linux_ci_tests_render_and_execute_only_on_x64(self):
         source = '''if [[ "${{ matrix.job.arch }}" == "x86_64" && "${{ inputs.upload-artifact }}" == "false" ]]; then
 echo RUN_FLUTTER_TESTS
