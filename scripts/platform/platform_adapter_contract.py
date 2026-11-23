@@ -10,6 +10,66 @@ from scripts.platform import platform_adapter as adapter
 
 
 class RecipeTests(unittest.TestCase):
+    def test_exact_linux_ci_candidate_and_release_denials(self):
+        import json
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            (root/'metadata/platform').mkdir(parents=True)
+            (root/'Cargo.toml').write_text('[package]\nversion = "1.5.3"\n')
+            (root/'metadata/platform/adapter-profiles.json').write_text(
+                json.dumps({'approved':{'linux':[]}}))
+            row={'id':'test-linux','source_sha':'a'*40,'upstream_version':'1.5.3',
+                 'platform':'linux','signature':'b'*64,'ci_only':True,
+                 'stable_allowed':False,'architectures':['x86_64','aarch64'],
+                 'runners':{'x86_64':'ubuntu-22.04','aarch64':'ubuntu-22.04-arm'}}
+            registry=root/'metadata/platform/ci-candidates.json'
+            registry.write_text(json.dumps({'schema':'platform-ci-candidates-v1',
+                                            'candidates':[row]}))
+            profile={'signature':'b'*64,'platform':'linux','runner':'ubuntu-22.04',
+                     'official_disabled':False,'tools':{}}
+            with patch.object(adapter,'ROOT',root),patch.object(
+                    adapter,'inspect',return_value=(profile,{})):
+                with patch.object(adapter.subprocess,'check_output',return_value='a'*40):
+                    result,_=adapter.check(root,'linux','x86_64',channel='ci')
+                    self.assertTrue(result['ci_candidate_only'])
+                    self.assertFalse(result['stable_allowed'])
+                    self.assertEqual(result['candidate_source_sha'],'a'*40)
+                    for channel in ('stable','nightly'):
+                        with self.subTest(channel=channel),self.assertRaisesRegex(ValueError,'unreviewed official'):
+                            adapter.check(root,'linux','x86_64',channel=channel)
+                    with patch.dict('os.environ',{'BUILD_FLAVOR':'unattended-wayland'}):
+                        with self.assertRaisesRegex(ValueError,'unattended Wayland'):
+                            adapter.check(root,'linux','x86_64',channel='ci')
+                    with self.assertRaisesRegex(ValueError,'Linux Standard/SOS only'):
+                        adapter.check(root,'android','x86_64',channel='ci')
+                    for change in ({'signature':'c'*64},{'upstream_version':'1.5.2'},
+                                   {'ci_only':False},{'stable_allowed':True},
+                                   {'runners':{'x86_64':'ubuntu-latest','aarch64':'ubuntu-22.04-arm'}}):
+                        registry.write_text(json.dumps({'schema':'platform-ci-candidates-v1',
+                                                        'candidates':[dict(row,**change)]}))
+                        with self.assertRaisesRegex(ValueError,'candidate drift'):
+                            adapter.check(root,'linux','x86_64',channel='ci')
+                    registry.write_text(json.dumps({'schema':'platform-ci-candidates-v1',
+                                                    'candidates':[row]}))
+                with patch.object(adapter.subprocess,'check_output',return_value='d'*40):
+                    with self.assertRaisesRegex(ValueError,'unreviewed exact'):
+                        adapter.check(root,'linux','x86_64',channel='ci')
+
+    def test_real_linux_ci_candidates_not_formally_approved(self):
+        import json
+        registry=json.loads((adapter.ROOT/'metadata/platform/ci-candidates.json').read_text())
+        approved=json.loads((adapter.ROOT/'metadata/platform/adapter-profiles.json').read_text())
+        self.assertEqual(registry['schema'],'platform-ci-candidates-v1')
+        self.assertEqual({r['source_sha'] for r in registry['candidates']},
+                         {'9724512429b053be04cdb843345e99ddcccdb80e',
+                          '51f94394ce61e1f3d26229565c326b2862cbdd1f'})
+        for row in registry['candidates']:
+            self.assertTrue(row['ci_only'])
+            self.assertFalse(row['stable_allowed'])
+            self.assertEqual(row['signature'],
+                             'f6d8ac081d2552bfbe3d57b24997fbd8f1f2d2677cf6f738a3fc6c671f89c795')
+            self.assertNotIn(row['signature'],approved['approved']['linux'])
+
     def test_stock_linux_recipe_never_inherits_implicit_drm(self):
         """Ordinary Standard/SOS artifacts must not silently include the DRM backend."""
         with tempfile.TemporaryDirectory() as temp:
