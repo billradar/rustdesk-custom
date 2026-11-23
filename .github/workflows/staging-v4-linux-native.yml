@@ -43,6 +43,14 @@ jobs:
         with:
           toolchain: '1.75.0'
           targets: ${{ matrix.target }}
+          components: rustfmt
+      - name: Verify Rust formatter for exact compiler toolchain
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          cargo fmt --version
+          rustup component list --installed | grep -E '^rustfmt-'
       - name: Install native build libraries (no credentials)
         run: |
           set -euo pipefail
