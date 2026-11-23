@@ -11,6 +11,9 @@ on:
       - 'scripts/platform/wayland_contract.py'
       - 'metadata/build/adapter-profiles.json'
       - 'metadata/build/adapter-ci-candidates.json'
+      - 'metadata/platform/ci-candidates.json'
+      - 'scripts/platform/platform_adapter.py'
+      - 'scripts/platform/platform_adapter_contract.py'
       - 'scripts/build/build_adapter.py'
       - 'scripts/build/build_adapter_contract.py'
       - 'docs/upstream-interface-reviews/main-51f94394-drm-review.md'
@@ -111,6 +114,47 @@ jobs:
               echo 'STOP: candidate unexpectedly admitted to Stable' >&2
               exit 1
             fi
+          done
+      - name: CI-only Linux x64/arm64 platform admission, script rendering and release denials
+        run: |
+          set -euo pipefail
+          python3 -m scripts.platform.platform_adapter_contract
+          for source in candidate new; do
+            tree=".work/review-source/$source"
+            for arch in x86_64 aarch64; do
+              output=".work/review-source/$source-$arch"
+              python3 scripts/platform/platform_adapter.py "$tree" \
+                --platform linux --arch "$arch" --channel ci \
+                --linux-scripts "$output" --output "$output-profile.json"
+              python3 - "$output-profile.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1]))
+          assert value['ci_candidate_only'] is True
+          assert value['stable_allowed'] is False
+          assert value['platform_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          PY
+              bash -n "$output/install.sh"
+              bash -n "$output/build.sh"
+              grep -Fq -- '--no-drm' "$output/build.sh"
+              if python3 scripts/platform/platform_adapter.py "$tree" \
+                  --platform linux --arch "$arch" --channel stable \
+                  --output "$output-stable.json"; then
+                echo "STOP: Linux candidate admitted Stable" >&2
+                exit 1
+              fi
+              if python3 scripts/platform/platform_adapter.py "$tree" \
+                  --platform linux --arch "$arch" --channel nightly \
+                  --output "$output-nightly.json"; then
+                echo "STOP: Linux candidate admitted Nightly" >&2
+                exit 1
+              fi
+              if BUILD_FLAVOR=unattended-wayland python3 scripts/platform/platform_adapter.py "$tree" \
+                  --platform linux --arch "$arch" --channel ci \
+                  --output "$output-wayland.json"; then
+                echo "STOP: Linux candidate admitted unattended Wayland" >&2
+                exit 1
+              fi
+            done
           done
       - name: Retain comparison evidence for review
         if: always()
