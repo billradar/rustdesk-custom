@@ -269,7 +269,7 @@ jobs:
 
         '
     - name: Run actual hbb_common WSS failure-policy unit test
-      if: env.PATCHSET == 'v3'
+      if: env.PATCHSET == 'v3' || env.PATCHSET == 'v4'
       shell: bash
       run: |
         set -euo pipefail
