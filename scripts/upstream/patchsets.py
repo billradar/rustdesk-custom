@@ -126,7 +126,9 @@ def select(sha=None, source=None, report=None, upstream_ref=None, version=None, 
         selected_version = match.group(1) if match else None
     if not selected_version:
         raise ValueError('Upstream version/ref required for static patchset selection')
-    profile = profile_for_version(selected_version, channel or os.environ.get("BUILD_CHANNEL", "ci"), source_sha=sha if sha and SHA.fullmatch(sha) else None)
+    if sha and not SHA.fullmatch(sha):
+        raise ValueError('Invalid official source SHA')
+    profile = profile_for_version(selected_version, channel or os.environ.get("BUILD_CHANNEL", "ci"), source_sha=sha or None)
     selected = profile["selected"]
     data = {'upstream_version': str(selected_version).lstrip('v'),
             'upstream_ref': upstream_ref or str(selected_version),
