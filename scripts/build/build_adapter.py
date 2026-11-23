@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reviewed exact-source build profiles. Unknown critical definitions fail closed."""
-import argparse, hashlib, json, os, re
+import argparse, hashlib, json, os, re, subprocess
 from pathlib import Path
 import yaml
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,20 +61,59 @@ def inspect(tree):
              'source_sbom_requested':'generate-sbom' in build['jobs']}
     return profile, critical
 
-def check(tree):
+def _official_sha(tree):
+    """Use the actual checked-out source commit, never a claimed branch/version."""
+    sha=subprocess.check_output(
+        ['git','-C',str(Path(tree)),'rev-parse','HEAD'],text=True).strip()
+    if not re.fullmatch(r'[0-9a-f]{40}',sha):
+        raise ValueError('BUILD_COMPATIBILITY=FAIL: invalid official source SHA')
+    return sha
+
+
+def _ci_candidate(tree, profile):
+    registry=json.loads((ROOT/'metadata/build/adapter-ci-candidates.json').read_text())
+    if registry.get('schema')!='build-adapter-ci-candidates-v1':
+        raise ValueError('BUILD_COMPATIBILITY=FAIL: invalid candidate manifest schema')
+    source_sha=_official_sha(tree)
+    for row in registry.get('candidates',[]):
+        if row.get('source_sha')!=source_sha:
+            continue
+        if (row.get('ci_only') is not True or row.get('stable_allowed') is not False
+                or row.get('upstream_version')!=profile['upstream_version']
+                or row.get('signature')!=profile['signature']
+                or not re.fullmatch(r'[0-9a-f]{64}',row.get('signature',''))
+                or not re.fullmatch(r'[a-zA-Z0-9-]+',row.get('id',''))):
+            raise ValueError('BUILD_COMPATIBILITY=FAIL: source-specific CI candidate drift')
+        return row
+    raise ValueError('BUILD_COMPATIBILITY=FAIL: unknown critical official Windows/bridge/build interface; review in staging')
+
+
+def check(tree,channel='stable'):
+    """Only explicit CI may validate a candidate; Stable remains fail-closed."""
+    if channel not in ('ci','stable'):
+        raise ValueError('BUILD_COMPATIBILITY=FAIL: invalid adapter channel')
     profile,critical=inspect(tree)
     known=json.loads((ROOT/'metadata/build/adapter-profiles.json').read_text())
     approved=next((p for p in known['profiles'] if p['signature']==profile['signature']),None)
-    if approved is None: raise ValueError('BUILD_COMPATIBILITY=FAIL: unknown critical official Windows/bridge/build interface; review in staging')
-    profile['reviewed_profile']=approved['id']; profile['Build Compatibility']='PASS'
+    if approved is None:
+        if channel!='ci':
+            raise ValueError('BUILD_COMPATIBILITY=FAIL: unknown critical official Windows/bridge/build interface; review in staging')
+        candidate=_ci_candidate(tree,profile)
+        profile.update(reviewed_profile=candidate['id'],ci_candidate_only=True,
+                       stable_allowed=False,candidate_source_sha=candidate['source_sha'],
+                       adapter_review_status='CI_CANDIDATE_NOT_RELEASE_APPROVED')
+    else:
+        profile['reviewed_profile']=approved['id']
+        profile['ci_candidate_only']=False
+    profile['Build Compatibility']='PASS'
     return profile
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('tree',type=Path);parser.add_argument('--output',type=Path,required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('tree',type=Path);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--channel',choices=('ci','stable'),default='stable')
     args=parser.parse_args()
     args.output.parent.mkdir(parents=True,exist_ok=True)
     try:
-        result=check(args.tree)
+        result=check(args.tree,channel=args.channel)
     except Exception as e:
         failure={'Build Compatibility':'FAIL','reason':str(e)}
         # Keep a machine-readable review packet for unknown upstream signatures. This is diagnostic

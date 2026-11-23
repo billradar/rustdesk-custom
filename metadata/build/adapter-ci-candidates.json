@@ -1,0 +1,23 @@
+{
+  "schema": "build-adapter-ci-candidates-v1",
+  "candidates": [
+    {
+      "id": "rd-153-97245124-ci-only",
+      "source_sha": "9724512429b053be04cdb843345e99ddcccdb80e",
+      "upstream_version": "1.5.3",
+      "signature": "1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741",
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45183119802
+    },
+    {
+      "id": "rd-153-51f94394-ci-only",
+      "source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "upstream_version": "1.5.3",
+      "signature": "1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741",
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45183119714
+    }
+  ]
+}
