@@ -20,6 +20,7 @@ jobs:
         variant: [standard, sos]
     env:
       PYTHONPATH: .
+      PATCHSET: v4
       NEW_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       HBB_SHA: 450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb
     steps:
