@@ -86,6 +86,11 @@ jobs:
       - name: Compile actual patched RustDesk Linux library without DRM
         run: |
           set -euo pipefail
+          # GitHub Actions run steps use separate shells: re-export fictional
+          # compile-time settings here rather than passing production secrets.
+          source scripts/validation/test_config.sh
+          test "$RUSTDESK_ID_SERVER" = test.invalid
+          test -n "$RUSTDESK_KEY"
           cd .work/native/source
           cargo check --locked --lib --features hwcodec,flutter,unix-file-copy-paste 2>&1 | tee ../cargo-native.log
       - name: Retain safe compiler text diagnostics only
