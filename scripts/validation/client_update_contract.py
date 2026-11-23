@@ -32,7 +32,7 @@ def source_contract(tree, generation="v3"):
     policy = (tree / "src/custom_update/policy.rs").read_text(encoding='utf-8')
     if policy != patch_file(generation, "src/custom_update/policy.rs"):
         raise ValueError("Client update package policy differs from selected patchset")
-    if generation == 'v3':
+    if generation in ('v3','v4'):
         for name in ('Cargo.toml','Cargo.lock','src/lib.rs'):
             relative='libs/custom_update_manifest/'+name
             if (tree/relative).read_text()!=patch_file(generation,relative):
