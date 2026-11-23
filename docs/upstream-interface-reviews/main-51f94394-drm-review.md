@@ -34,3 +34,17 @@ A separate, explicit, reviewed adaptation of the source-specific Linux build rec
 ## Latest-source candidate Patch Profile routing
 
 The dedicated [CI-only source probe](https://github.com/billradar/rustdesk-custom/actions/runs/45180782944) passed all v4 Standard/SOS patches and the isolated native helper/configuration validation against `51f94394`. This is sufficient to register an explicit **candidate-only** v4 Patch Profile for that exact SHA. It does **not** approve the default-on DRM build adapter, release qualification, runtime compatibility, or Stable. The production patch application gate now independently verifies the exact source SHA and v4 hashes for both `97245124` and `51f94394`.
+
+## Ordinary Linux build recipe: candidate implementation
+
+The source-bound recipe adapter (`scripts/platform/platform_adapter.py`) now recognizes **only** the two inspected default-on DRM upstream commits `97245124` and `51f94394`. It does not approve either critical-interface signature. Once a separate platform build review admits the source, the ordinary Linux recipe will:
+
+1. Compile `hwcodec,flutter,unix-file-copy-paste` **without** `drm` or `drm-wake`.
+2. Query the upstream `build.py --flutter --hwcodec --unix-file-copy-paste --no-drm --print-features` and require exactly the expected non-DRM feature list *before* native compilation.
+3. Package via `build.py --flutter --skip-cargo --hwcodec --unix-file-copy-paste --no-drm`, never silently relying on a changeable default.
+4. Reject stale prebuilt `libdrmtap.so.0.*` before the stock build; remove the upstream's DRM-only RPM assertions in this exact reviewed recipe, retaining the normal RPM packaging commands.
+5. Verify actual extracted DEB **and** RPM contents with `validate_stock_linux_payload`: no `libdrmtap.so*` file/symlink and no `libdrmtap` or `drm-wake` binary marker in the packaged Rust library.
+
+Changes to the exact Cargo command, packaging command, upstream source SHA, or RPM assertion layout fail closed. The separate unattended-wayland lane remains unchanged; its existing pinned policy, distinct package identity, feature/test requirements and publication restriction still apply.
+
+**Evidence:** The [CI-only build interface staging run](https://github.com/billradar/rustdesk-custom/actions/runs/45182961358) passed source comparison, direct official feature-resolver checks on x86_64/aarch64, ordinary package payload regression tests and Wayland isolation contracts. These were recipe and synthetic payload tests; they are **not** full DEB/RPM builds or native runtime validation. The platform signature registry and the critical build-adapter registry remain unchanged. Do not promote Stable or release on the basis of these checks alone.
