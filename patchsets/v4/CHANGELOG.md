@@ -25,7 +25,7 @@ Content revisions are independent of RustDesk versions. Legacy release allocatio
 
 Scope: common, sos
 
-Reason: Create an isolated SHA-specific v4 compatibility candidate without modifying v3 or approving Stable.
+Reason: Create an isolated SHA-specific v4 compatibility candidate without modifying v3 or approving Stable. Fix WSS macro resolution found by native hbb_common Cargo check.
 
 #### Added
 
@@ -36,6 +36,7 @@ Reason: Create an isolated SHA-specific v4 compatibility candidate without modif
 #### Fixed
 
 - Rebase hbb_common TCP/DNS/proxy diagnostic events onto the upstream 450cc1d7 error-preserving FramedStream implementation.
+- Qualify the strict managed-WSS fail-closed error macro so hbb_common compiles without an unimported bail macro.
 
 #### Removed
 
@@ -55,5 +56,5 @@ Known limitations: No claim of whole patchset applicability, native compilation,
 
 Allocation base: `54127ffd79e567c6c4b1d386a7d9770560ef395a`
 
-- common: `47089990ecd806ca3ffe4b92c88cdd175186ba0f86480d6f2a6f5936731e604a` → `47089990ecd806ca3ffe4b92c88cdd175186ba0f86480d6f2a6f5936731e604a`
+- common: `707ac52e1ae2b95a31a21c31fb2c383895c060549f84475ea6017437bc264623` → `707ac52e1ae2b95a31a21c31fb2c383895c060549f84475ea6017437bc264623`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`

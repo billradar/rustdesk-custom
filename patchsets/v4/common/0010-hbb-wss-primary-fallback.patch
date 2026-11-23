@@ -245,7 +245,7 @@ diff --git a/src/websocket.rs b/src/websocket.rs
 +        let connector =
 +            Self::get_connector(&tls_type, danger_accept_invalid_cert.unwrap_or(false))?;
 +        if radar_wss_policy::strict_managed_url(url) && connector.is_none() {
-+            bail!("Strict WSS TLS verifier unavailable");
++            crate::bail!("Strict WSS TLS verifier unavailable");
 +        }
          let result = if let Some(proxy_conf) = proxy_conf {
              let host = request.uri().host().ok_or_else(|| {
