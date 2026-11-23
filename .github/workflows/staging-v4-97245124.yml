@@ -76,3 +76,32 @@ jobs:
           grep -q 'Action::DnsResolve' .work/v4/source/libs/hbb_common/src/tcp.rs
           grep -q 'Action::ProxyConnect' .work/v4/source/libs/hbb_common/src/tcp.rs
           echo 'Patch application and upstream TCP error preservation: PASS'
+
+  hbb-native-check:
+    name: Check v4 hbb_common native Rust compilation (no publish)
+    needs: patch-check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: .
+      UPSTREAM_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.work/v4/target
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Prepare exact source and apply isolated v4 Common
+        run: |
+          set -euo pipefail
+          UPSTREAM_EXPECTED_SHA="$UPSTREAM_SHA" bash scripts/source/prepare.sh "$UPSTREAM_SHA" .work/v4/source
+          source scripts/validation/test_config.sh
+          bash scripts/source/apply_patches.sh .work/v4/source standard
+      - name: Cargo-check hbb_common using official root lockfile
+        run: |
+          set -euo pipefail
+          source scripts/validation/test_config.sh
+          rustc --version
+          cargo --version
+          cargo check --manifest-path .work/v4/source/Cargo.toml --package hbb_common --lib --locked
