@@ -1,0 +1,41 @@
+{
+  "schema": "platform-ci-candidates-v1",
+  "candidates": [
+    {
+      "id": "linux-153-97245124-ci",
+      "source_sha": "9724512429b053be04cdb843345e99ddcccdb80e",
+      "upstream_version": "1.5.3",
+      "platform": "linux",
+      "signature": "f6d8ac081d2552bfbe3d57b24997fbd8f1f2d2677cf6f738a3fc6c671f89c795",
+      "architectures": [
+        "x86_64",
+        "aarch64"
+      ],
+      "runners": {
+        "x86_64": "ubuntu-22.04",
+        "aarch64": "ubuntu-22.04-arm"
+      },
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45191836760
+    },
+    {
+      "id": "linux-153-51f94394-ci",
+      "source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "upstream_version": "1.5.3",
+      "platform": "linux",
+      "signature": "f6d8ac081d2552bfbe3d57b24997fbd8f1f2d2677cf6f738a3fc6c671f89c795",
+      "architectures": [
+        "x86_64",
+        "aarch64"
+      ],
+      "runners": {
+        "x86_64": "ubuntu-22.04",
+        "aarch64": "ubuntu-22.04-arm"
+      },
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45191836760
+    }
+  ]
+}
