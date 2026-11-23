@@ -1,0 +1,836 @@
+diff --git a/flutter/lib/utils/api_failover_policy.dart b/flutter/lib/utils/api_failover_policy.dart
+new file mode 100644
+index 0000000..6159a12
+--- /dev/null
++++ b/flutter/lib/utils/api_failover_policy.dart
+@@ -0,0 +1,3 @@
++// Configured by v3 source preparation; empty disables failover.
++const customApiPrimaryOrigin = "";
++const customApiFallbackOrigin = "";
+diff --git a/flutter/lib/utils/http_service.dart b/flutter/lib/utils/http_service.dart
+index 9c9624b..a7526b6 100644
+--- a/flutter/lib/utils/http_service.dart
++++ b/flutter/lib/utils/http_service.dart
+@@ -1,4 +1,6 @@
+ import 'dart:convert';
++import 'package:uuid/uuid.dart';
++import 'api_failover_policy.dart';
+ import 'package:flutter/foundation.dart';
+ import 'package:flutter_hbb/consts.dart';
+ import 'package:http/http.dart' as http;
+@@ -8,6 +10,20 @@ export 'package:http/http.dart' show Response;
+ 
+ enum HttpMethod { get, post, put, delete }
+ 
++bool _sameApiOrigin(Uri left, Uri right) {
++  if (left.scheme != right.scheme || left.port != right.port) return false;
++  if (left.host.contains(':') && right.host.contains(':')) {
++    try {
++      return listEquals(
++          Uri.parseIPv6Address(left.host), Uri.parseIPv6Address(right.host));
++    } on FormatException {
++      return false;
++    }
++  }
++  return left.host == right.host;
++}
++
++
+ class HttpService {
+   Future<http.Response> sendRequest(
+     Uri url,
+@@ -28,19 +44,41 @@ class HttpService {
+           !(enableFlutterHttpOnRust || await bind.mainGetProxyStatus());
+     }
+ 
++    // v3 built-in API uses the same Rust selector as background synchronization.
++    // The logical origin stays unchanged for account/token storage.
++    final builtInApi = !isWeb && !kIsWeb && customApiFallbackOrigin.isNotEmpty
++        ? Uri.tryParse(await bind.mainGetApiServer())
++        : null;
++    final managedApi = !isWeb &&
++        !kIsWeb &&
++        builtInApi != null &&
++        builtInApi.scheme == 'https' &&
++        customApiFallbackOrigin.isNotEmpty &&
++        _sameApiOrigin(builtInApi, Uri.parse(customApiPrimaryOrigin)) &&
++        url.scheme == 'https' &&
++        _sameApiOrigin(url, builtInApi) &&
++        url.path.startsWith('/api/');
++    if (managedApi) useFlutterHttp = false;
++
+     if (useFlutterHttp) {
+       return await _pollFlutterHttp(url, method, headers: headers, body: body);
+     }
+ 
++    // The existing bridge keys responses by URL. A private fragment gives every
++    // request an independent polling key across isolates without changing HTTP
++    // path/query, SNI or Host; fragments are never sent to the server.
++    final requestUrl = managedApi
++        ? url.replace(fragment: 'rd-api-request-${const Uuid().v4()}').toString()
++        : url.toString();
+     String headersJson = jsonEncode(headers);
+     String methodName = method.toString().split('.').last;
+     await bind.mainHttpRequest(
+-        url: url.toString(),
++        url: requestUrl,
+         method: methodName.toLowerCase(),
+         body: body,
+         header: headersJson);
+ 
+-    var resJson = await _pollForResponse(url.toString());
++    var resJson = await _pollForResponse(requestUrl);
+     return _parseHttpResponse(resJson);
+   }
+ 
+diff --git a/src/common.rs b/src/common.rs
+index d9d486d..fb0b9e8 100644
+--- a/src/common.rs
++++ b/src/common.rs
+@@ -1606,22 +1606,47 @@ fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
+ 
+ /// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
+ async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u16, String)> {
+-    let proxy_conf = Config::get_socks();
+-    let tls_url = get_url_for_tls(url, &proxy_conf);
+-    let tls_type = get_cached_tls_type(tls_url);
+-    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+-    let response = post_request_(
+-        url,
+-        tls_url,
+-        body.to_owned(),
+-        header,
+-        tls_type,
+-        danger_accept_invalid_cert,
+-        danger_accept_invalid_cert,
+-    )
+-    .await?;
++    let response = if crate::hbbs_http::api_failover::handles(url) {
++        let mut headers = reqwest::header::HeaderMap::new();
++        for entry in parse_simple_header(header) {
++            headers.insert(
++                reqwest::header::HeaderName::from_bytes(entry.name.as_bytes())?,
++                entry.value.parse()?,
++            );
++        }
++        headers.insert(reqwest::header::CONTENT_TYPE, "application/json".parse()?);
++        crate::hbbs_http::api_failover::send(
++            url,
++            reqwest::Method::POST,
++            headers,
++            Some(body.to_owned()),
++        )
++        .await
++        .map_err(|e| anyhow!(e))?
++    } else {
++        let proxy_conf = Config::get_socks();
++        let tls_url = get_url_for_tls(url, &proxy_conf);
++        let tls_type = get_cached_tls_type(tls_url);
++        let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
++        post_request_(
++            url,
++            tls_url,
++            body.to_owned(),
++            header,
++            tls_type,
++            danger_accept_invalid_cert,
++            danger_accept_invalid_cert,
++        )
++        .await?
++    };
+     let status = response.status().as_u16();
+-    let text = response.text().await?;
++    let text = if crate::hbbs_http::api_failover::handles(url) {
++        crate::hbbs_http::api_failover::read_text(url, response)
++            .await
++            .map_err(|e| anyhow!(e))?
++    } else {
++        response.text().await?
++    };
+     Ok((status, text))
+ }
+ 
+@@ -1684,6 +1709,10 @@ where
+ /// - 4xx responses are returned as-is (server is reachable, business logic error).
+ /// - If fallback also fails, returns the original HTTP result (text or error).
+ pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
++    if crate::hbbs_http::api_failover::handles(&url) {
++        return Ok(post_request_http(&url, &body, header).await?.1);
++    }
++
+     with_tcp_proxy_fallback(
+         &url,
+         "POST",
+@@ -1718,6 +1747,9 @@ pub async fn post_request_with_status(
+     body: String,
+     header: &str,
+ ) -> ResultType<(u16, String)> {
++    if crate::hbbs_http::api_failover::handles(&url) {
++        return post_request_http(&url, &body, header).await;
++    }
+     if should_use_raw_tcp_for_api(&url) {
+         return post_request_via_tcp_proxy_status(&url, &body, header).await;
+     }
+@@ -1965,21 +1997,34 @@ async fn http_request_http(
+     body: Option<String>,
+     header: &str,
+ ) -> ResultType<(u16, String)> {
+-    let proxy_conf = Config::get_socks();
+-    let tls_url = get_url_for_tls(url, &proxy_conf);
+-    let tls_type = get_cached_tls_type(tls_url);
+-    let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
+-    let response = get_http_response_async(
+-        url,
+-        tls_url,
+-        method,
+-        body,
+-        header,
+-        tls_type,
+-        danger_accept_invalid_cert,
+-        danger_accept_invalid_cert,
+-    )
+-    .await?;
++    let response = if crate::hbbs_http::api_failover::handles(url) {
++        let mut headers = reqwest::header::HeaderMap::new();
++        for entry in parse_json_header_entries(header)? {
++            headers.insert(
++                reqwest::header::HeaderName::from_bytes(entry.name.as_bytes())?,
++                entry.value.parse()?,
++            );
++        }
++        crate::hbbs_http::api_failover::send(url, method.parse()?, headers, body)
++            .await
++            .map_err(|e| anyhow!(e))?
++    } else {
++        let proxy_conf = Config::get_socks();
++        let tls_url = get_url_for_tls(url, &proxy_conf);
++        let tls_type = get_cached_tls_type(tls_url);
++        let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
++        get_http_response_async(
++            url,
++            tls_url,
++            method,
++            body,
++            header,
++            tls_type,
++            danger_accept_invalid_cert,
++            danger_accept_invalid_cert,
++        )
++        .await?
++    };
+     // Serialize response headers
+     let mut response_headers = Map::new();
+     for (key, value) in response.headers() {
+@@ -1987,7 +2032,13 @@ async fn http_request_http(
+     }
+ 
+     let status_code = response.status().as_u16();
+-    let response_body = response.text().await?;
++    let response_body = if crate::hbbs_http::api_failover::handles(url) {
++        crate::hbbs_http::api_failover::read_text(url, response)
++            .await
++            .map_err(|e| anyhow!(e))?
++    } else {
++        response.text().await?
++    };
+ 
+     // Construct the JSON object
+     let mut result = Map::new();
+@@ -2009,6 +2060,13 @@ pub async fn http_request_sync(
+     body: Option<String>,
+     header: String,
+ ) -> ResultType<String> {
++    if crate::hbbs_http::api_failover::handles(&url) {
++        return Ok(
++            http_request_http(&url, &method.to_ascii_uppercase(), body, &header)
++                .await?
++                .1,
++        );
++    }
+     with_tcp_proxy_fallback(
+         &url,
+         &method,
+diff --git a/src/hbbs_http.rs b/src/hbbs_http.rs
+index e33c811..414dfcb 100644
+--- a/src/hbbs_http.rs
++++ b/src/hbbs_http.rs
+@@ -4,8 +4,31 @@ use serde_json::{Map, Value};
+ 
+ #[cfg(feature = "flutter")]
+ pub mod account;
++pub mod api_failover;
+ pub mod downloader;
+ mod http_client;
++
++fn api_failover_proxy() -> Result<Option<reqwest::Proxy>, String> {
++    use hbb_common::{
++        config::Config,
++        proxy::{Proxy, ProxyScheme},
++    };
++    let Some(conf) = Config::get_socks() else {
++        return Ok(None);
++    };
++    let proxy = Proxy::from_conf(&conf, None).map_err(|_| "Invalid API proxy configuration")?;
++    let address = match &proxy.intercept {
++        ProxyScheme::Http { host, .. } => format!("http://{host}"),
++        ProxyScheme::Https { host, .. } => format!("https://{host}"),
++        ProxyScheme::Socks5 { addr, .. } => format!("socks5://{addr}"),
++    };
++    let mut result = reqwest::Proxy::all(address).map_err(|_| "Invalid API proxy")?;
++    if let Some(auth) = proxy.intercept.maybe_auth() {
++        result = result.basic_auth(auth.username(), auth.password());
++    }
++    Ok(Some(result))
++}
++
+ pub mod record_upload;
+ pub mod sync;
+ pub use http_client::{
+diff --git a/src/hbbs_http/account.rs b/src/hbbs_http/account.rs
+index 634c953..40bc82c 100644
+--- a/src/hbbs_http/account.rs
++++ b/src/hbbs_http/account.rs
+@@ -153,7 +153,9 @@ impl OidcSession {
+         }
+         // This URL is used to detect the appropriate TLS implementation for the server.
+         let login_option_url = format!("{}/api/login-options", api_server);
+-        let _ = create_http_client_with_url(&login_option_url);
++        if !super::api_failover::handles(&login_option_url) {
++            let _ = create_http_client_with_url(&login_option_url);
++        }
+         write_guard.warmed_api_server = Some(api_server.to_owned());
+     }
+ 
+diff --git a/src/hbbs_http/api_failover.rs b/src/hbbs_http/api_failover.rs
+new file mode 100644
+index 0000000..9583fe4
+--- /dev/null
++++ b/src/hbbs_http/api_failover.rs
+@@ -0,0 +1,413 @@
++//! v3 only. Logical API identity stays primary; only the transport URL changes.
++use hbb_common::tokio;
++use reqwest::{header::HeaderMap, Client, Method, Response, Url};
++use std::{
++    sync::{Mutex, OnceLock},
++    time::{Duration, Instant},
++};
++
++const CONNECT: Duration = Duration::from_secs(2);
++const REQUEST: Duration = Duration::from_secs(12);
++const COOLDOWN: Duration = Duration::from_secs(15);
++const PRIMARY: &str = env!("RUSTDESK_API_SERVER");
++// Version-scoped Actions policy; frozen before prepared-source inventory.
++include!("api_failover_policy.rs");
++
++#[derive(Clone, Copy, Debug, PartialEq)]
++enum Phase {
++    Primary,
++    PrimaryUnavailable,
++    Fallback,
++    RecoveryProbe,
++}
++struct State {
++    phase: Phase,
++    retry_at: Option<Instant>,
++    generation: u64,
++}
++static STATE: OnceLock<Mutex<State>> = OnceLock::new();
++fn state() -> &'static Mutex<State> {
++    STATE.get_or_init(|| {
++        Mutex::new(State {
++            phase: Phase::Primary,
++            retry_at: None,
++            generation: 0,
++        })
++    })
++}
++
++fn origin(value: &str) -> Option<Url> {
++    let u = Url::parse(value).ok()?;
++    (u.scheme() == "https"
++        && u.host_str().is_some()
++        && u.username().is_empty()
++        && u.password().is_none()
++        && u.path() == "/"
++        && u.query().is_none()
++        && u.fragment().is_none())
++    .then_some(u)
++}
++fn endpoints() -> Option<(Url, Url)> {
++    let primary = origin(PRIMARY)?;
++    if primary.origin() != origin(PROFILE_PRIMARY)?.origin() {
++        return None;
++    }
++    let fallback = origin(PROFILE_FALLBACK)?;
++    (primary.origin() != fallback.origin()).then_some((primary, fallback))
++}
++
++pub fn handles(value: &str) -> bool {
++    let Some((primary, _)) = endpoints() else {
++        return false;
++    };
++    let Ok(u) = Url::parse(value) else {
++        return false;
++    };
++    u.origin() == primary.origin()
++        && u.username().is_empty()
++        && u.password().is_none()
++        && u.path().starts_with("/api/")
++}
++
++fn rewrite(value: &str, endpoint: &Url) -> Result<Url, String> {
++    let mut u = Url::parse(value).map_err(|_| "Invalid API URL")?;
++    u.set_host(endpoint.host_str())
++        .map_err(|_| "Invalid API host")?;
++    u.set_port(endpoint.port())
++        .map_err(|_| "Invalid API port")?;
++    Ok(u)
++}
++
++// Configure the user's proxy explicitly, or use a direct client. No environment
++// proxy, TLS cache, certificate bypass, redirects, or raw protocol fallback.
++async fn client(endpoint: &Url, primary: bool) -> Result<Client, String> {
++    client_with_proxy(endpoint, primary, super::api_failover_proxy()?).await
++}
++
++async fn client_with_proxy(
++    endpoint: &Url,
++    primary: bool,
++    proxy: Option<reqwest::Proxy>,
++) -> Result<Client, String> {
++    let started = Instant::now();
++    let mut builder = Client::builder()
++        .no_proxy()
++        .use_rustls_tls()
++        .https_only(true)
++        .redirect(reqwest::redirect::Policy::none())
++        .connect_timeout(CONNECT)
++        .timeout(REQUEST);
++    if let Some(proxy) = proxy {
++        // Respect explicit proxy configuration without guessing network type or
++        // rejecting primary in advance. The HTTP library performs proxy DNS/TLS.
++        builder = builder.proxy(proxy);
++    } else if primary {
++        let host = endpoint.host_str().ok_or("Missing API host")?;
++        let port = endpoint.port_or_known_default().ok_or("Missing API port")?;
++        // Url::host_str() retains brackets for IPv6 literals. IP literals do
++        // not go through DNS; their HTTPS certificate still needs an IP SAN.
++        let literal = host
++            .trim_start_matches('[')
++            .trim_end_matches(']')
++            .parse::<std::net::IpAddr>();
++        let addrs: Vec<_> = match literal {
++            Ok(std::net::IpAddr::V6(ip)) => vec![std::net::SocketAddr::new(ip.into(), port)],
++            Ok(std::net::IpAddr::V4(_)) => Vec::new(),
++            Err(_) => tokio::time::timeout(CONNECT, tokio::net::lookup_host((host, port)))
++                .await
++                .map_err(|_| "Primary DNS timeout")?
++                .map_err(|_| "Primary DNS unavailable")?
++                .filter(|addr| addr.is_ipv6())
++                .collect(),
++        };
++        if addrs.is_empty() {
++            return Err("Primary has no IPv6 address".into());
++        }
++        builder = builder.resolve_to_addrs(host, &addrs);
++    }
++    // DNS above and TCP/TLS below share one connection preparation budget.
++    // A small nonzero remainder avoids library-specific zero-timeout semantics.
++    let remaining = CONNECT
++        .checked_sub(started.elapsed())
++        .filter(|remaining| !remaining.is_zero())
++        .ok_or("API connection preparation timeout")?;
++    builder
++        .connect_timeout(remaining)
++        .build()
++        .map_err(|_| "Cannot build strict API client".into())
++}
++
++// Rustls certificate/handshake validation failures are carried as InvalidData
++// io errors by reqwest's connector. Conservatively make all such TLS errors
++// terminal, including negotiation failures we cannot distinguish safely.
++// Never classify by formatted error text (it can include sensitive URLs).
++fn tls_security_error(error: &reqwest::Error) -> bool {
++    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
++    while let Some(error) = source {
++        if let Some(io) = error.downcast_ref::<std::io::Error>() {
++            if io.kind() == std::io::ErrorKind::InvalidData {
++                return true;
++            }
++            // io::Error::source can skip its boxed inner error itself. Inspect
++            // get_ref first to retain nested rustls InvalidData wrappers.
++            source = io
++                .get_ref()
++                .map(|inner| inner as &(dyn std::error::Error + 'static));
++        } else {
++            source = error.source();
++        }
++    }
++    false
++}
++
++// Body failures occur after send() returned headers. They affect only future
++// requests: the current operation is never replayed, regardless of its method.
++pub async fn read_text(value: &str, response: Response) -> Result<String, String> {
++    let (primary, _) = endpoints().ok_or("API failover is not configured")?;
++    if !handles(value) {
++        return Err("URL is outside managed API policy".into());
++    }
++    read_text_for(response, &primary).await
++}
++
++async fn read_text_for(response: Response, primary: &Url) -> Result<String, String> {
++    let was_primary = response.url().origin() == primary.origin();
++    match response.text().await {
++        Ok(text) => Ok(text),
++        Err(_) => {
++            if was_primary {
++                hbb_common::log::warn!(
++                    "API Primary response-body failure; current request not replayed"
++                );
++                unavailable();
++            }
++            Err("API response body failed; outcome unknown, not replayed".into())
++        }
++    }
++}
++
++fn unavailable() {
++    let mut s = state().lock().unwrap();
++    s.generation = s.generation.wrapping_add(1);
++    s.phase = Phase::PrimaryUnavailable;
++    s.retry_at = Some(Instant::now() + COOLDOWN);
++    // Logs contain only endpoint role/reason category, never URL/query/headers/body.
++    hbb_common::log::info!(
++        "API PrimaryUnavailable: transport failure; future requests use fallback"
++    );
++    s.phase = Phase::Fallback;
++}
++
++async fn use_primary(primary: &Url) -> Result<bool, String> {
++    let generation = {
++        let mut s = state().lock().unwrap();
++        if s.phase == Phase::Primary {
++            return Ok(true);
++        }
++        // Expired leases can be reclaimed if a caller cancelled its probe.
++        if matches!(s.phase, Phase::Fallback | Phase::RecoveryProbe)
++            && s.retry_at.is_some_and(|at| Instant::now() >= at)
++        {
++            s.phase = Phase::RecoveryProbe;
++            s.generation = s.generation.wrapping_add(1);
++            s.retry_at = Some(Instant::now() + Duration::from_secs(10));
++            Some(s.generation)
++        } else {
++            None
++        }
++    };
++    if let Some(generation) = generation {
++        let mut primary = primary.clone();
++        primary.set_path("/api/login-options");
++        // No credentials, no body, no redirects, no session restart. Any HTTP
++        // status proves transport reachability; business status is not failover.
++        let probe = match client(&primary, true).await {
++            Ok(c) => match c.head(primary).timeout(CONNECT).send().await {
++                Ok(_) => Ok(true),
++                Err(error) if tls_security_error(&error) => {
++                    hbb_common::log::error!(
++                        "API RecoveryProbe TLS security/negotiation failure; operation stopped"
++                    );
++                    Err("API primary TLS validation/negotiation failed during recovery; operation stopped".to_owned())
++                }
++                Err(_) => Ok(false),
++            },
++            Err(_) => Ok(false),
++        };
++        let ok = matches!(&probe, Ok(true));
++        let mut s = state().lock().unwrap();
++        // A concurrent primary failure may have invalidated this probe.
++        if s.phase == Phase::RecoveryProbe && s.generation == generation {
++            s.phase = if ok { Phase::Primary } else { Phase::Fallback };
++            s.retry_at = Some(Instant::now() + COOLDOWN);
++            hbb_common::log::info!(
++                "API RecoveryProbe: {}",
++                if ok { "Primary" } else { "Fallback" }
++            );
++        }
++        // Publish a bounded lease outcome before propagating security errors;
++        // no business operation from this caller is sent to either endpoint.
++        probe?;
++        return Ok(s.phase == Phase::Primary);
++    }
++    Ok(false)
++}
++
++pub async fn send(
++    value: &str,
++    method: Method,
++    headers: HeaderMap,
++    body: Option<String>,
++) -> Result<Response, String> {
++    if !handles(value) {
++        return Err("URL is outside managed API policy".into());
++    }
++    send_for(
++        endpoints().ok_or("API failover is not configured")?,
++        value,
++        method,
++        headers,
++        body,
++    )
++    .await
++}
++
++async fn send_for(
++    (primary, fallback): (Url, Url),
++    value: &str,
++    method: Method,
++    headers: HeaderMap,
++    body: Option<String>,
++) -> Result<Response, String> {
++    if headers.contains_key(reqwest::header::HOST) {
++        return Err("Explicit API Host header is unsupported".into());
++    }
++    if use_primary(&primary).await? {
++        hbb_common::log::info!(
++            "API endpoint=Primary origin={}",
++            primary.origin().ascii_serialization()
++        );
++        // Client/DNS errors occur before any HTTP request is sent.
++        if let Ok(c) = client(&primary, true).await {
++            let mut req = c
++                .request(method.clone(), rewrite(value, &primary)?)
++                .headers(headers.clone());
++            if let Some(b) = body.as_ref() {
++                req = req.body(b.clone());
++            }
++            match req.send().await {
++                Ok(resp) => return Ok(resp), // 401/403/5xx are never replayed.
++                Err(e) if tls_security_error(&e) => {
++                    hbb_common::log::error!(
++                        "API Primary TLS security/negotiation failure; fallback suppressed"
++                    );
++                    return Err(
++                        "API primary TLS validation/negotiation failed; fallback suppressed".into(),
++                    );
++                }
++                Err(e) if e.is_connect() => {} // HTTP request was not sent.
++                Err(_) => {
++                    unavailable();
++                    return Err("API primary request failed after connection; outcome unknown, not replayed".into());
++                }
++            }
++        }
++        unavailable();
++    }
++    hbb_common::log::info!(
++        "API endpoint=Fallback origin={}",
++        fallback.origin().ascii_serialization()
++    );
++    let c = client(&fallback, false).await?;
++    let mut req = c
++        .request(method, rewrite(value, &fallback)?)
++        .headers(headers);
++    if let Some(b) = body {
++        req = req.body(b);
++    }
++    req.send()
++        .await
++        .map_err(|_| "API fallback request failed; not replayed".into())
++}
++
++// Snapshot the explicit proxy together with the selected endpoint. A proxy's
++// remote_addr is never an origin address and must not be pinned as the backend.
++pub struct RecordingEndpoint {
++    pub url: String,
++    addr: Option<std::net::SocketAddr>,
++    proxy: Option<reqwest::Proxy>,
++}
++impl RecordingEndpoint {
++    pub fn client(&self) -> Result<reqwest::blocking::Client, String> {
++        let mut builder = reqwest::blocking::Client::builder()
++            .no_proxy()
++            .use_rustls_tls()
++            .https_only(true)
++            .redirect(reqwest::redirect::Policy::none())
++            .connect_timeout(CONNECT)
++            .timeout(REQUEST);
++        if let Some(proxy) = self.proxy.clone() {
++            builder = builder.proxy(proxy);
++        } else if let Some(addr) = self.addr {
++            let url = Url::parse(&self.url).map_err(|_| "Invalid recording API URL")?;
++            builder = builder.resolve(url.host_str().ok_or("Missing API host")?, addr);
++        }
++        builder
++            .build()
++            .map_err(|_| "Cannot build strict recording API client".into())
++    }
++}
++
++// This remains a safe HEAD selection followed by a distinct single upload,
++// not connection racing or reuse of the HEAD connection.
++#[tokio::main(flavor = "current_thread")]
++pub async fn recording_endpoint(value: &str) -> Result<RecordingEndpoint, String> {
++    recording_endpoint_for(
++        value,
++        endpoints().ok_or("API failover is not configured")?,
++        super::api_failover_proxy()?,
++    )
++    .await
++}
++
++async fn recording_endpoint_for(
++    value: &str,
++    (mut primary, fallback): (Url, Url),
++    proxy: Option<reqwest::Proxy>,
++) -> Result<RecordingEndpoint, String> {
++    if use_primary(&primary).await? {
++        primary.set_path("/api/login-options");
++        if let Ok(c) = client_with_proxy(&primary, true, proxy.clone()).await {
++            match c.head(primary.clone()).timeout(CONNECT).send().await {
++                Ok(response) => {
++                    let addr = if proxy.is_some() {
++                        None
++                    } else {
++                        response.remote_addr().filter(|addr| addr.is_ipv6())
++                    };
++                    // TLS success through the user's proxy is sufficient; its
++                    // TCP peer family says nothing about the API server family.
++                    if proxy.is_some() || addr.is_some() {
++                        return Ok(RecordingEndpoint {
++                            url: rewrite(value, &primary)?.to_string(),
++                            addr,
++                            proxy,
++                        });
++                    }
++                }
++                Err(error) if tls_security_error(&error) => {
++                    return Err(
++                        "API primary TLS validation/negotiation failed; fallback suppressed".into(),
++                    );
++                }
++                Err(_) => {}
++            }
++        }
++        unavailable();
++    }
++    Ok(RecordingEndpoint {
++        url: rewrite(value, &fallback)?.to_string(),
++        addr: None,
++        proxy,
++    })
++}
+diff --git a/src/hbbs_http/api_failover_policy.rs b/src/hbbs_http/api_failover_policy.rs
+new file mode 100644
+index 0000000..64fde37
+--- /dev/null
++++ b/src/hbbs_http/api_failover_policy.rs
+@@ -0,0 +1,3 @@
++// Configured by v3 source preparation; empty disables failover.
++const PROFILE_PRIMARY: &str = "";
++const PROFILE_FALLBACK: &str = "";
+diff --git a/src/hbbs_http/record_upload.rs b/src/hbbs_http/record_upload.rs
+index ac51d5c..8906a1b 100644
+--- a/src/hbbs_http/record_upload.rs
++++ b/src/hbbs_http/record_upload.rs
+@@ -32,7 +32,32 @@ pub fn run(rx: Receiver<RecordState>) {
+         );
+         // This URL is used for TLS connectivity testing and fallback detection.
+         let login_option_url = format!("{}/api/login-options", &api_server);
+-        let client = create_http_client_with_url(&login_option_url);
++        let client = if super::api_failover::handles(&login_option_url) {
++            let mut builder = Client::builder()
++                .no_proxy()
++                .use_rustls_tls()
++                .https_only(true)
++                .redirect(reqwest::redirect::Policy::none())
++                .connect_timeout(Duration::from_secs(3))
++                .timeout(Duration::from_secs(12));
++            match super::api_failover_proxy() {
++                Ok(Some(proxy)) => builder = builder.proxy(proxy),
++                Ok(None) => {}
++                Err(_) => {
++                    log::error!("Invalid recording API proxy");
++                    return;
++                }
++            }
++            match builder.build() {
++                Ok(client) => client,
++                Err(_) => {
++                    log::error!("Cannot build strict recording API client");
++                    return;
++                }
++            }
++        } else {
++            create_http_client_with_url(&login_option_url)
++        };
+         let mut uploader = RecordUploader {
+             client,
+             api_server,
+@@ -95,21 +120,33 @@ impl RecordUploader {
+         Q: Serialize + ?Sized,
+         B: Into<Body>,
+     {
+-        match self
+-            .client
+-            .post(format!("{}/api/record", self.api_server))
+-            .query(query)
+-            .body(body)
+-            .send()
+-        {
++        let mut endpoint = format!("{}/api/record", self.api_server);
++        let managed = super::api_failover::handles(&endpoint);
++        let mut client = self.client.clone();
++        if managed {
++            let selected = super::api_failover::recording_endpoint(&endpoint)
++                .map_err(|e| hbb_common::anyhow::anyhow!(e))?;
++            client = selected.client().map_err(|e| hbb_common::anyhow::anyhow!(e))?;
++            endpoint = selected.url;
++        }
++        match client.post(endpoint).query(query).body(body).send() {
+             Ok(resp) => {
++                if managed && !resp.status().is_success() {
++                    bail!("Recording API returned HTTP {}", resp.status().as_u16());
++                }
+                 if let Ok(m) = resp.json::<Map<String, serde_json::Value>>() {
+                     if let Some(e) = m.get("error") {
++                        if managed {
++                            bail!("Recording API returned a business error");
++                        }
+                         bail!(e.to_string());
+                     }
+                 }
+                 Ok(())
+             }
++            Err(_) if managed => {
++                bail!("Recording API request failed; outcome unknown, not replayed")
++            }
+             Err(e) => bail!(e.to_string()),
+         }
+     }
+diff --git a/src/ui_interface.rs b/src/ui_interface.rs
+index 995d6d0..bedee6c 100644
+--- a/src/ui_interface.rs
++++ b/src/ui_interface.rs
+@@ -927,10 +927,18 @@ pub fn http_request(url: String, method: String, body: Option<String>, header: S
+ 
+ #[inline]
+ pub fn get_async_http_status(url: String) -> Option<String> {
+-    match ASYNC_HTTP_STATUS.lock().unwrap().get(&url) {
+-        None => None,
+-        Some(_str) => Some(_str.to_string()),
++    let mut statuses = ASYNC_HTTP_STATUS.lock().unwrap();
++    let response = statuses.get(&url).cloned();
++    if crate::hbbs_http::api_failover::handles(&url)
++        && url::Url::parse(&url)
++            .ok()
++            .and_then(|u| u.fragment().map(str::to_owned))
++            .is_some_and(|fragment| fragment.starts_with("rd-api-request-"))
++        && response.as_deref().is_some_and(|value| value != " ")
++    {
++        statuses.remove(&url);
+     }
++    response
+ }
+ 
+ #[inline]

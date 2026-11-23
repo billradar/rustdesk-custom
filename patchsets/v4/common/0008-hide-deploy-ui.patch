@@ -1,0 +1,70 @@
+diff --git a/flutter/lib/common/deploy_policy.dart b/flutter/lib/common/deploy_policy.dart
+new file mode 100644
+index 0000000..f51bf33
+--- /dev/null
++++ b/flutter/lib/common/deploy_policy.dart
+@@ -0,0 +1,3 @@
++// Radar Remote v3 UI policy. This does not disable device provisioning APIs,
++// CLI operations, installation, updates, services, or release automation.
++const bool kRadarDeployUiEnabled = false;
+diff --git a/flutter/lib/main.dart b/flutter/lib/main.dart
+index 3404717..a6b4e4f 100644
+--- a/flutter/lib/main.dart
++++ b/flutter/lib/main.dart
+@@ -1,3 +1,4 @@
++import 'common/deploy_policy.dart';
+ import 'common/branding.dart';
+ import 'dart:async';
+ import 'dart:convert';
+@@ -559,7 +560,7 @@ _registerEventHandler() {
+       reloadAllWindows();
+     });
+   }
+-  if (isAndroid) {
++  if (kRadarDeployUiEnabled && isAndroid) {
+     platformFFI.registerEventHandler(
+         'android_needs_deploy', 'android_needs_deploy', (_) async {
+       WidgetsBinding.instance.addPostFrameCallback((_) {
+diff --git a/flutter/lib/mobile/pages/settings_page.dart b/flutter/lib/mobile/pages/settings_page.dart
+index c369e7a..c72a864 100644
+--- a/flutter/lib/mobile/pages/settings_page.dart
++++ b/flutter/lib/mobile/pages/settings_page.dart
+@@ -1,3 +1,4 @@
++import '../../common/deploy_policy.dart';
+ import '../../common/branding.dart';
+ import '../../common/widgets/custom_update.dart';
+ import 'dart:async';
+@@ -790,7 +791,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+                 onPressed: (context) {
+                   changeSocks5Proxy();
+                 }),
+-          if (isAndroid && !bind.isOutgoingOnly())
++          if (kRadarDeployUiEnabled && isAndroid && !bind.isOutgoingOnly())
+             SettingsTile(
+                 title: Text(translate('Deploy')),
+                 leading: Icon(Icons.cloud_upload),
+diff --git a/flutter/lib/mobile/widgets/deploy_dialog.dart b/flutter/lib/mobile/widgets/deploy_dialog.dart
+index 522172a..5766ee5 100644
+--- a/flutter/lib/mobile/widgets/deploy_dialog.dart
++++ b/flutter/lib/mobile/widgets/deploy_dialog.dart
+@@ -1,3 +1,4 @@
++import '../../common/deploy_policy.dart';
+ import 'package:flutter/material.dart';
+ import 'package:get/get.dart';
+ 
+@@ -7,6 +8,7 @@ import '../../models/platform_model.dart';
+ const _deployDialogTag = 'android-deploy-device';
+ 
+ void showDeployPromptDialog() {
++  if (!kRadarDeployUiEnabled) return;
+   gFFI.dialogManager.dismissByTag(_deployDialogTag);
+   gFFI.dialogManager.show<bool>((setState, close, context) {
+     submit() => close(true);
+@@ -28,6 +30,7 @@ void showDeployPromptDialog() {
+ }
+ 
+ void showDeployDialog() {
++  if (!kRadarDeployUiEnabled) return;
+   gFFI.dialogManager.dismissByTag(_deployDialogTag);
+   final tokenController = TextEditingController();
+   final idController = TextEditingController();

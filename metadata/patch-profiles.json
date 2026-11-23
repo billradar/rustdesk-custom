@@ -21,6 +21,10 @@
     "rd-1.5.3": {
       "patchset": "v3",
       "stable_allowed": true
+    },
+    "rd-1.5.3-97245124-candidate": {
+      "patchset": "v4",
+      "stable_allowed": false
     }
   },
   "exact_versions": {
@@ -33,5 +37,10 @@
     "v2"
   ],
   "archive_root": "archive/abandoned-patchsets",
-  "exact_sources": {}
+  "exact_sources": {
+    "9724512429b053be04cdb843345e99ddcccdb80e": {
+      "version": "1.5.3",
+      "profile": "rd-1.5.3-97245124-candidate"
+    }
+  }
 }
