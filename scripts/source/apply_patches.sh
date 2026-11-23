@@ -16,7 +16,9 @@ version = re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
                     (Path(sys.argv[3]) / 'Cargo.toml').read_text(), re.M)
 if not version:
     raise ValueError('Numeric source version required before patching')
-require_selection(version.group(1), sys.argv[2], os.environ.get('BUILD_CHANNEL', 'ci'))
+import subprocess
+source_sha = subprocess.check_output(['git', '-C', sys.argv[3], 'rev-parse', 'HEAD'], text=True).strip()
+require_selection(version.group(1), sys.argv[2], os.environ.get('BUILD_CHANNEL', 'ci'), source_sha=source_sha)
 PYCODE
 apply_one() {
     local patch=$1 target=$2
