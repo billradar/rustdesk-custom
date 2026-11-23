@@ -10,6 +10,9 @@ on:
       - 'scripts/platform/wayland.py'
       - 'scripts/platform/wayland_contract.py'
       - 'metadata/build/adapter-profiles.json'
+      - 'metadata/build/adapter-ci-candidates.json'
+      - 'scripts/build/build_adapter.py'
+      - 'scripts/build/build_adapter_contract.py'
       - 'docs/upstream-interface-reviews/main-51f94394-drm-review.md'
   workflow_dispatch: {}
 permissions:
@@ -61,6 +64,31 @@ jobs:
           assert all(item['native_cargo_drm_disabled'] and item['package_no_drm_explicit'] and item['stale_library_refused'] for item in reported['adapted_stock_linux'].values())
           print('Non-approving build interface review: PASS, signature remains blocked')
           PY
+      - name: Validate exact-source CI candidate and reject Stable channel
+        run: |
+          set -euo pipefail
+          python3 scripts/build/build_adapter_contract.py
+          for name in candidate new; do
+            if [[ "$name" == candidate ]]; then expected="$CANDIDATE_SHA"; else expected="$NEW_MAIN_SHA"; fi
+            tree=".work/review-source/$name"
+            test "$(git -C "$tree" rev-parse HEAD)" = "$expected"
+            python3 scripts/build/build_adapter.py "$tree" \
+              --channel ci --output ".work/review-source/$name-candidate-report.json"
+            python3 - ".work/review-source/$name-candidate-report.json" "$expected" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          assert data['Build Compatibility']=='PASS'
+          assert data['ci_candidate_only'] is True
+          assert data['stable_allowed'] is False
+          assert data['candidate_source_sha']==sys.argv[2]
+          assert data['adapter_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          PY
+            if python3 scripts/build/build_adapter.py "$tree" \
+                --channel stable --output ".work/review-source/$name-stable-rejection.json"; then
+              echo 'STOP: candidate unexpectedly admitted to Stable' >&2
+              exit 1
+            fi
+          done
       - name: Retain comparison evidence for review
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
