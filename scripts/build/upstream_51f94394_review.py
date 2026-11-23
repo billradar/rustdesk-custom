@@ -87,6 +87,15 @@ def review(old, candidate, current):
         guard_stock_linux_drm_recipe(current, adapted)
         if adapted == original:
             raise ValueError('Latest Linux stock recipe was not adapted')
+        expected_features = 'hwcodec,flutter,unix-file-copy-paste'
+        actual_features = subprocess.check_output(
+            ['python3', 'build.py', '--flutter', '--hwcodec',
+             '--unix-file-copy-paste', '--no-drm', '--print-features'],
+            cwd=current, text=True).strip()
+        if actual_features != expected_features:
+            raise ValueError('Official no-DRM feature resolver no longer matches stock Cargo features')
+        if 'STOCK_FEATURES=$(python3 ./build.py' not in adapted:
+            raise ValueError('Stock recipe does not verify upstream feature resolver before compiling')
         if '--features hwcodec,flutter,unix-file-copy-paste --release' not in adapted:
             raise ValueError('Native stock Cargo features are not explicitly DRM-free')
         if '--no-drm' not in adapted or 'check_rpm_drm "$name"' in adapted:
@@ -96,7 +105,8 @@ def review(old, candidate, current):
         transformed[arch] = {'stock_recipe_safe': True,
                              'native_cargo_drm_disabled': True,
                              'package_no_drm_explicit': True,
-                             'stale_library_refused': 'stock Linux source contains prebuilt libdrmtap' in adapted}
+                             'stale_library_refused': 'stock Linux source contains prebuilt libdrmtap' in adapted,
+                             'upstream_feature_resolver': actual_features}
     if not all(p['stale_library_refused'] for p in transformed.values()):
         raise ValueError('Stock RPM prebuilt library contamination is unchecked')
     return {
