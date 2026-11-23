@@ -70,7 +70,7 @@ class ClientUpdateTests(unittest.TestCase):
         from scripts.release.qualification import plan
         from scripts.release.naming import native_package_name,windows_installer_name
         from scripts.platform.wayland import package_name
-        for generation in ('v2','v3'):
+        for generation in ('v2','v3','v4'):
             cases=[]
             for target in plan('stable')['selected']:
                 os_name=target['platform'];arch=target['arch'];variant=target['variant']
@@ -218,7 +218,7 @@ class ClientUpdateTests(unittest.TestCase):
         compiler = RUSTC or shutil.which("rustc")
         if not compiler:
             self.skipTest("rustc unavailable; CI preflight executes this policy")
-        for generation in ('v2','v3'):
+        for generation in ('v2','v3','v4'):
             with tempfile.TemporaryDirectory() as directory:
                 tree = Path(directory)
                 policy = tree / "policy.rs"
