@@ -6,6 +6,9 @@ on:
       - 'scripts/build/upstream_51f94394_review.py'
       - 'scripts/platform/platform_adapter.py'
       - 'scripts/platform/platform_adapter_contract.py'
+      - 'scripts/platform/platform_package.py'
+      - 'scripts/platform/wayland.py'
+      - 'scripts/platform/wayland_contract.py'
       - 'metadata/build/adapter-profiles.json'
       - 'docs/upstream-interface-reviews/main-51f94394-drm-review.md'
   workflow_dispatch: {}
@@ -30,8 +33,9 @@ jobs:
       - name: Verify code and stock Linux DRM guard regression
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/platform/platform_adapter.py scripts/build/upstream_51f94394_review.py
+          python3 -m py_compile scripts/platform/platform_adapter.py scripts/platform/platform_package.py scripts/build/upstream_51f94394_review.py
           python3 -m scripts.platform.platform_adapter_contract
+          python3 -m scripts.platform.wayland_contract
       - name: Prepare immutable official source snapshots
         run: |
           set -euo pipefail
@@ -53,6 +57,8 @@ jobs:
           known=json.loads(Path('metadata/build/adapter-profiles.json').read_text())
           assert not any(p['signature']==reported['new_main_signature'] for p in known['profiles']), 'STAGING ONLY: source is already approved; review staging policy'
           assert reported['decision'].startswith('HOLD:')
+          assert set(reported['adapted_stock_linux']) == {'x86_64', 'aarch64'}
+          assert all(item['native_cargo_drm_disabled'] and item['package_no_drm_explicit'] and item['stale_library_refused'] for item in reported['adapted_stock_linux'].values())
           print('Non-approving build interface review: PASS, signature remains blocked')
           PY
       - name: Retain comparison evidence for review
