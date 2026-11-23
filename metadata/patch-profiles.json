@@ -32,5 +32,6 @@
     "v1",
     "v2"
   ],
-  "archive_root": "archive/abandoned-patchsets"
+  "archive_root": "archive/abandoned-patchsets",
+  "exact_sources": {}
 }
