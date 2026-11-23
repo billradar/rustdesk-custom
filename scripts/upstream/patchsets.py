@@ -8,7 +8,8 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[2]
-SHA = re.compile(r'^[0-9a-f]{40}
+SHA = re.compile(r'^[0-9a-f]{40}$')
+VERSION = re.compile(r'^(?:v)?([0-9]+)\.([0-9]+)\.([0-9]+)$')
 PATCHSET_V1 = 'v1'
 PATCHSET_V2 = 'v2'
 V2_BOUNDARY = (1, 5, 0)
