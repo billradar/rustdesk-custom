@@ -78,6 +78,32 @@ check_rpm_drm "$name"
             with patch('subprocess.check_output', side_effect=AssertionError('legacy must not need SHA lookup')):
                 self.assertEqual(adapter.adapt_stock_linux_recipe(tree, legacy), legacy)
 
+    def test_stock_linux_deb_rpm_payload_must_not_contain_drm(self):
+        from scripts.platform.platform_package import validate_stock_linux_payload
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            lib = root / 'usr/share/rustdesk/lib/librustdesk.so'
+            lib.parent.mkdir(parents=True)
+            lib.write_bytes(b'non-DRM test native library')
+            validate_stock_linux_payload(root)
+            for value in (b'/usr/lib/rustdesk/libdrmtap.so.0',
+                          b'enable-drm-display-wake'):
+                with self.subTest(value=value):
+                    lib.write_bytes(b'header' + value + b'trailer')
+                    with self.assertRaisesRegex(ValueError, 'enables DRM capture'):
+                        validate_stock_linux_payload(root)
+            lib.write_bytes(b'non-DRM test native library')
+            capture = root / 'usr/lib/rustdesk/libdrmtap.so.0.5.12'
+            capture.parent.mkdir(parents=True)
+            capture.write_bytes(b'prebuilt capture library')
+            with self.assertRaisesRegex(ValueError, 'bundles libdrmtap'):
+                validate_stock_linux_payload(root)
+            capture.unlink()
+            symlink = capture.parent/'libdrmtap.so.0'
+            symlink.symlink_to('libdrmtap.so.0.5.12')
+            with self.assertRaisesRegex(ValueError, 'bundles libdrmtap'):
+                validate_stock_linux_payload(root)
+
     def test_linux_ci_tests_render_and_execute_only_on_x64(self):
         source = '''if [[ "${{ matrix.job.arch }}" == "x86_64" && "${{ inputs.upload-artifact }}" == "false" ]]; then
 echo RUN_FLUTTER_TESTS
