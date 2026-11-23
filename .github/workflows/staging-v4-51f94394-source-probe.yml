@@ -75,5 +75,6 @@ jobs:
               apply_candidate "$PWD/$patch" "$tree"
             done
           fi
+          source scripts/validation/test_config.sh
           python3 scripts/source/verify_source.py "$tree" "${{ matrix.variant }}" --automation
           echo "Candidate patch applicability: PASS (not a source approval)"
