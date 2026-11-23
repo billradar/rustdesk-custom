@@ -9,6 +9,7 @@ from scripts.upstream.patchset_version import current, SCHEMA as VERSION_SEMANTI
 from scripts.release.production import assets, REPOSITORY
 from scripts.release.naming import windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
+CI_BASELINE=ROOT/'metadata/build/ci-upstream-baseline.json'
 
 def outputs(data):
     Path('.work').mkdir(exist_ok=True)
@@ -178,6 +179,32 @@ def release_preflight(data, *, dry_run=False):
                 build_identity=current_identity,custom_repository_sha=value['custom_repository_sha'])
     return data
 
+def ci_baseline():
+    """Reviewable, immutable default upstream for repository CI (not a release approval)."""
+    baseline=json.loads(CI_BASELINE.read_text())
+    required={'schema','repository','upstream_sha','upstream_version','patchset',
+              'evidence_run_id','evidence_url','validation'}
+    if not isinstance(baseline,dict) or set(baseline)!=required:
+        raise ValueError('Invalid reviewed CI upstream baseline manifest')
+    if baseline['schema']!='ci-upstream-baseline-v1' or baseline['repository']!='rustdesk/rustdesk':
+        raise ValueError('Unexpected CI upstream baseline schema or repository')
+    if not isinstance(baseline['upstream_sha'],str) or not re.fullmatch(r'[0-9a-f]{40}',baseline['upstream_sha']):
+        raise ValueError('CI upstream baseline requires a full immutable SHA')
+    if not isinstance(baseline['upstream_version'],str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',baseline['upstream_version']):
+        raise ValueError('Invalid CI upstream baseline version')
+    if not isinstance(baseline['evidence_run_id'],int) or baseline['evidence_run_id']<=0:
+        raise ValueError('Missing prior passing CI evidence')
+    if baseline['evidence_url']!=f"https://github.com/billradar/rustdesk-custom/actions/runs/{baseline['evidence_run_id']}":
+        raise ValueError('CI baseline evidence does not match run ID')
+    if baseline['validation']!='completed-success-2026-11-17':
+        raise ValueError('CI baseline evidence status requires review')
+    selected=require_selection(baseline['upstream_version'],baseline['patchset'],channel='ci')
+    if selected['compatibility_test_only'] or not selected['stable_allowed']:
+        raise ValueError('Default CI baseline requires an explicitly maintained Patch Profile')
+    verify(baseline['patchset'])
+    return baseline
+
+
 def resolve(channel,ref='',discovery_only=False):
     if channel not in ('ci','stable'):
         raise ValueError('Unsupported channel here; use the verified official-run Nightly resolver')
@@ -185,10 +212,23 @@ def resolve(channel,ref='',discovery_only=False):
         data=choose_stable(ref)
         data['upstream_ref']=data['upstream_tag']
     else:
-        repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
-        chosen=ref or branch
-        data={'upstream_sha':resolve_ref(chosen),'upstream_branch':chosen,'upstream_ref':chosen,
-              'upstream_tag':'','build_needed':True,'draft_needed':False}
+        # Normal PR/main CI uses a previously passing, reviewed source commit.
+        # Explicit --ref remains available for manual/ad-hoc checks and is used
+        # by the separately scheduled upstream-main compatibility workflow.
+        if ref:
+            chosen=ref
+            actual_sha=resolve_ref(chosen)
+            source_policy='explicit-upstream-ref'
+        else:
+            baseline=ci_baseline()
+            chosen=baseline['upstream_sha']
+            actual_sha=resolve_ref(chosen)
+            if actual_sha!=baseline['upstream_sha']:
+                raise ValueError('Pinned CI upstream source identity mismatch')
+            source_policy='reviewed-ci-baseline'
+        data={'upstream_sha':actual_sha,'upstream_branch':chosen,'upstream_ref':chosen,
+              'upstream_tag':'','build_needed':True,'draft_needed':False,
+              'ci_source_policy':source_policy}
     data['channel']=channel;outputs(data)
 
 def validate_prepared(infos,folders):

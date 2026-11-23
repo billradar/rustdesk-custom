@@ -1,0 +1,10 @@
+{
+  "schema": "ci-upstream-baseline-v1",
+  "repository": "rustdesk/rustdesk",
+  "upstream_sha": "54416dcaa127d209f2cfbdc4b08235bae78ccfe6",
+  "upstream_version": "1.5.3",
+  "patchset": "v3",
+  "evidence_run_id": 44107538838,
+  "evidence_url": "https://github.com/billradar/rustdesk-custom/actions/runs/44107538838",
+  "validation": "completed-success-2026-11-17"
+}

@@ -6,7 +6,7 @@ env:
     inputs:
       upstream_ref:
         type: string
-        description: Stable upstream version
+        description: 'Optional upstream ref/SHA; blank uses reviewed CI baseline (latest main checked separately)'
         default: ''
       force_rebuild:
         type: boolean
@@ -16,6 +16,8 @@ env:
         type: string
         description: Internal source marker for Action-created CI
         default: manual
+  # Ordinary repository CI uses the immutable SHA from metadata/build/ci-upstream-baseline.json.
+  # The separate upstream-main-compatibility workflow monitors the moving HEAD.
   pull_request:
   push:
     branches:
