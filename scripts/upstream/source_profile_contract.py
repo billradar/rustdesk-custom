@@ -8,6 +8,7 @@ from scripts.upstream import patchsets
 
 SHA = "9724512429b053be04cdb843345e99ddcccdb80e"
 OLD = "6aec3069aec486ad7df07429a0a1ee411fc8d73a"
+APPROVED = "95cca3f661f635b3cc85c04935fe8d96d8f432ef"
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
@@ -25,7 +26,10 @@ def main():
                 "rd-1.5.3-sha-candidate": {"patchset": "v4", "stable_allowed": False}
             },
             "exact_versions": {"1.5.3": "rd-1.5.3"},
-            "exact_sources": {SHA: {"version": "1.5.3", "profile": "rd-1.5.3-sha-candidate"}}
+            "exact_sources": {
+                SHA: {"version": "1.5.3", "profile": "rd-1.5.3-sha-candidate"},
+                APPROVED: {"version": "1.5.3", "profile": "rd-1.5.3"},
+            }
         }
         (root / "metadata" / "patch-profiles.json").write_text(json.dumps(registry))
         with patch.object(patchsets, "ROOT", root):
@@ -34,6 +38,16 @@ def main():
             assert new["compatibility_test_only"] and not new["stable_allowed"]
             old = patchsets.profile_for_version("1.5.3", "ci", source_sha=OLD)
             assert old["selected"] == "v3" and not old["source_match"]
+            assert old["fallback"] and old["compatibility_test_only"]
+            assert not old["stable_allowed"]
+            reviewed = patchsets.profile_for_version("1.5.3", "stable", source_sha=APPROVED)
+            assert reviewed["selected"] == "v3" and reviewed["source_match"]
+            assert reviewed["stable_allowed"] and not reviewed["fallback"]
+            try:
+                patchsets.profile_for_version("1.5.3", "stable", source_sha=OLD)
+                raise AssertionError("Unknown same-version source unexpectedly allowed Stable")
+            except ValueError as exc:
+                assert "Stable requires" in str(exc)
             assert patchsets.profile_for_version("1.5.3", "ci")["selected"] == "v3"
             try:
                 patchsets.profile_for_version("1.5.3", "stable", source_sha=SHA)

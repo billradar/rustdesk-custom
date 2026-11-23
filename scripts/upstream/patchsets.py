@@ -48,7 +48,11 @@ def profile_for_version(version, channel='ci', source_sha=None):
     source_entry = registry.get('exact_sources', {}).get(source_sha) if source_sha else None
     if source_entry is not None and source_entry['version'] != normalized:
         raise ValueError('Exact source Profile version mismatch')
-    profile_id = source_entry['profile'] if source_entry else registry['exact_versions'].get(normalized)
+    # A same-version but unreviewed source is not an approved Stable profile.
+    # It can test the newest maintained generation, but only as a fallback.
+    unknown_source = source_sha is not None and source_entry is None
+    profile_id = (source_entry['profile'] if source_entry else
+                  None if unknown_source else registry['exact_versions'].get(normalized))
     fallback = profile_id is None and numeric >= V2_BOUNDARY
     if profile_id is None:
         profile_id = 'legacy-pre-1.5' if numeric < V2_BOUNDARY else registry['latest_maintained']

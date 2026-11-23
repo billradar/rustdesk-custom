@@ -41,6 +41,10 @@
     "9724512429b053be04cdb843345e99ddcccdb80e": {
       "version": "1.5.3",
       "profile": "rd-1.5.3-97245124-candidate"
+    },
+    "95cca3f661f635b3cc85c04935fe8d96d8f432ef": {
+      "version": "1.5.3",
+      "profile": "rd-1.5.3"
     }
   }
 }
