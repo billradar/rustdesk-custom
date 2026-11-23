@@ -1,0 +1,115 @@
+name: Staging upstream 97245124 audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-upstream-97245124.yml'
+      - 'docs/upstream-interface-reviews/adapter-97245124-20261123.md'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      UPSTREAM_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      REVIEWED_SHA: 6aec3069aec486ad7df07429a0a1ee411fc8d73a
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install -r requirements.txt
+      - name: Prepare exact official upstream snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/source/prepare.sh "$REVIEWED_SHA" .work/staging/old
+          bash scripts/source/prepare.sh "$UPSTREAM_SHA" .work/staging/new
+      - name: Reproduce signature and produce critical-field diff (never approve)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          from scripts.build.build_adapter import inspect
+          old, old_critical = inspect('.work/staging/old')
+          new, new_critical = inspect('.work/staging/new')
+          diffs = {'tools': {}, 'files': {}, 'windows_job_changed': old_critical['windows_job'] != new_critical['windows_job']}
+          for key in old_critical['tools']:
+              if old_critical['tools'][key] != new_critical['tools'][key]:
+                  diffs['tools'][key] = {'old': old_critical['tools'][key], 'new': new_critical['tools'][key]}
+          for key in old_critical['files']:
+              if old_critical['files'][key] != new_critical['files'][key]:
+                  diffs['files'][key] = {'old': old_critical['files'][key], 'new': new_critical['files'][key]}
+          profiles = json.loads(Path('metadata/build/adapter-profiles.json').read_text())['profiles']
+          approved = next(x for x in profiles if x['id'] == 'reviewed-151-6aec30')
+          assert old['signature'] == approved['signature'], 'Reviewed baseline does not reproduce'
+          assert old_critical['files'] == approved['critical']['files']
+          assert old_critical['tools'] == approved['critical']['tools']
+          assert not diffs['tools'] and not diffs['windows_job_changed']
+          assert list(diffs['files']) == ['build.py'], 'Unexpected critical interface drift'
+          assert not any(p['signature'] == new['signature'] for p in profiles), 'Unexpected unreviewed signature approval'
+          packet = {'reviewed_sha': '6aec3069aec486ad7df07429a0a1ee411fc8d73a',
+                    'observed_sha': '9724512429b053be04cdb843345e99ddcccdb80e',
+                    'old_profile': old, 'new_profile': new, 'critical_diff': diffs,
+                    'status': 'SIGNATURE_DRIFT_REPRODUCED_NOT_APPROVED'}
+          Path('.work/staging/signature-diff.json').write_text(json.dumps(packet, indent=2)+'\n')
+          print(json.dumps(packet, indent=2))
+          PY
+      - name: Review Linux DRM default and enforce explicit opt-out in staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast, json
+          from pathlib import Path
+          old=Path('.work/staging/old/build.py').read_text()
+          new=Path('.work/staging/new/build.py').read_text()
+          assert "'--drm'" in old or '"--drm"' in old, 'Expected old DRM opt-in not found'
+          assert "'--no-drm'" in new or '"--no-drm"' in new, 'Expected new DRM opt-out not found'
+          ast.parse(new)
+          assert "args.no_drm" in new and "features.append('drm')" in new
+          report={'old_flag':'--drm','new_flag':'--no-drm','risk':'Linux Flutter DRM feature defaults changed',
+                  'decision':'BLOCK automatic approval pending actual packaging/feature tests'}
+          Path('.work/staging/drm-review.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(json.dumps(report,indent=2))
+          PY
+      - name: Select CI Patch Profile without bypassing adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --source .work/staging/new --channel ci --report .work/staging/patch-profile.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.upstream.patchsets import verify
+          data=json.loads(Path('.work/staging/patch-profile.json').read_text())
+          assert data['overall']=='STATIC_SELECTION_PASS'
+          verify(data['selected'])
+          assert data['stable_allowed'] is False or data['fallback'] is False
+          print('Patch profile selected and hashes verified:',data['selected'])
+          PY
+      - name: Verify patch applicability for both variants (no build or publish)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source scripts/validation/test_config.sh
+          export PATCHSET="$(python3 -c "import json;print(json.load(open('.work/staging/patch-profile.json'))['selected'])")"
+          for variant in standard sos; do
+            tree=".work/staging/$variant"
+            cp -a .work/staging/new "$tree"
+            bash scripts/source/apply_patches.sh "$tree" "$variant"
+            python3 scripts/source/verify_source.py "$tree" "$variant" --automation
+          done
+      - name: Preserve evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: staging-upstream-97245124-${{ github.run_id }}
+          path: |
+            .work/staging/*.json
+            .work/staging/*.log
+          if-no-files-found: warn
+          retention-days: 14
