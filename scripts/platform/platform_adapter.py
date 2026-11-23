@@ -58,29 +58,37 @@ def render(text,profile):
  return s
 
 def guard_stock_linux_drm_recipe(tree, recipe):
- # A stock Standard/SOS Linux package must not silently inherit the upstream
- # opt-out DRM policy. Unattended Wayland has a separate reviewed package path.
- source = (Path(tree) / 'build.py').read_text()
- commands = [line.strip() for line in recipe.splitlines()
-             if line.strip() and not line.lstrip().startswith('#')]
- for command in commands:
-  if re.search(r'\\bcargo\\s+build\\b', command) and re.search(
-          r'--features(?:=|\\s+)[^\\n]*(?<![\\w-])drm(?:-wake)?(?![\\w-])', command):
-   raise ValueError('BUILD_COMPAT: stock Linux recipe enables DRM; separate unattended flavor review required')
-  if re.search(r'(?:python3\\s+)?\\.?/?build\\.py\\s+--flutter\\b', command):
-   if '--drm' in command:
-    raise ValueError('BUILD_COMPAT: stock Linux recipe explicitly requests DRM')
-   if "'--no-drm'" in source and '--no-drm' not in command:
-    raise ValueError('BUILD_COMPAT: new upstream defaults DRM on; stock Linux requires explicit --no-drm')
- return True
+    """Reject silent DRM capture in ordinary Linux packages.
 
-def linux_scripts(tree,arch,out):
- p,j=check(tree,'linux',arch);s=next(s for s in j['steps'] if s.get('name')=='Build rustdesk' and 'with' in s);out.mkdir(parents=True,exist_ok=True)
- (out/'install.sh').write_text('set -euo pipefail\n'+render(s['with']['install'],p))
- run=render(s['with']['run'],p)
- guard_stock_linux_drm_recipe(tree,run)
- (out/'build.sh').write_text('set -euo pipefail\ncd /workspace\n'+run+'\n')
- return p
+    The unattended Wayland flavor is separately built and provenance-gated.
+    """
+    source = (Path(tree) / 'build.py').read_text()
+    commands = [line.strip() for line in recipe.splitlines()
+                if line.strip() and not line.lstrip().startswith('#')]
+    for command in commands:
+        if (re.search(r'\bcargo\s+build\b', command)
+                and re.search(r'--features(?:=|\s+)[^\n]*(?<![\w-])drm(?:-wake)?(?![\w-])',
+                              command)):
+            raise ValueError('BUILD_COMPAT: stock Linux recipe enables DRM; separate unattended flavor review required')
+        if re.search(r'(?:python3\s+)?\.?/?build\.py\s+--flutter\b', command):
+            if '--drm' in command:
+                raise ValueError('BUILD_COMPAT: stock Linux recipe explicitly requests DRM')
+            if "'--no-drm'" in source and '--no-drm' not in command:
+                raise ValueError('BUILD_COMPAT: new upstream defaults DRM on; stock Linux requires explicit --no-drm')
+    return True
+
+
+def linux_scripts(tree, arch, out):
+    p, job = check(tree, 'linux', arch)
+    step = next(s for s in job['steps'] if s.get('name') == 'Build rustdesk' and 'with' in s)
+    run = render(step['with']['run'], p)
+    guard_stock_linux_drm_recipe(tree, run)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'install.sh').write_text('set -euo pipefail\n' + render(step['with']['install'], p))
+    (out / 'build.sh').write_text('set -euo pipefail\ncd /workspace\n' + run + '\n')
+    return p
+
+
 def parse_args(argv=None):
  a=argparse.ArgumentParser();a.add_argument('tree',type=Path);a.add_argument('--platform',required=True,choices=JOBS);a.add_argument('--arch',required=True);a.add_argument('--output',type=Path,required=True);a.add_argument('--linux-scripts',type=Path)
  return a.parse_args(argv)
