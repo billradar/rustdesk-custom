@@ -104,7 +104,7 @@ def adapt_stock_linux_recipe(tree, script):
     patched = patched.replace('check_rpm_drm "$name"',
                               ': # stock RPM validated after extraction')
     patched = patched.replace(native, native_stock).replace(
-        packaging, packaging + ' --no-drm')
+        packaging, packaging + ' --hwcodec --unix-file-copy-paste --no-drm')
     # Fail if stale prebuilts might still be picked up by RPM specs. The
     # stock recipe must not build or package the pinned DRM capture library.
     checked = """if compgen -G '/workspace/third_party/libdrmtap/build-pkg/libdrmtap.so.0.*' > /dev/null; then
@@ -112,7 +112,14 @@ def adapt_stock_linux_recipe(tree, script):
   exit 1
 fi
 """
-    patched = patched.replace(native_stock, checked + native_stock)
+    features_preflight = """# Keep the actual upstream flag resolver aligned with the separately compiled native library.
+STOCK_FEATURES=$(python3 ./build.py --flutter --hwcodec --unix-file-copy-paste --no-drm --print-features)
+if [[ "$STOCK_FEATURES" != 'hwcodec,flutter,unix-file-copy-paste' ]]; then
+  echo 'BUILD_COMPAT: upstream stock feature list changed or DRM is enabled' >&2
+  exit 1
+fi
+"""
+    patched = patched.replace(native_stock, checked + features_preflight + native_stock)
     guard_stock_linux_drm_recipe(tree, patched)
     if 'check_rpm_drm "$name"' in patched or '--features hwcodec,flutter,unix-file-copy-paste,drm' in patched:
         raise ValueError('BUILD_COMPAT: partial DRM transformation')
