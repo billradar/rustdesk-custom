@@ -99,7 +99,7 @@ def contracts(tree, variant, patchset=None):
     update_source_contract(tree, patchset)
     from scripts.validation.branding_contract import source_contract as branding_source_contract
     branding_source_contract(tree)
-    if patchset == 'v3':
+    if patchset in ('v3','v4'):
         from scripts.validation.deploy_ui_contract import source_contract as deploy_source_contract
         deploy_source_contract(tree)
         from scripts.validation.diagnostic_logs import source_contract as logs_source_contract
@@ -212,7 +212,7 @@ def main():
                      '--source', str(tree), '--dart', 'dart'], log)
                 from scripts.validation.deploy_ui_contract import FILES as deploy_files
                 from scripts.validation.diagnostic_logs import FILES as logs_files
-                analysis_files = FILES + (deploy_files + logs_files if os.environ.get('PATCHSET') == 'v3' else [])
+                analysis_files = FILES + (deploy_files + logs_files if os.environ.get('PATCHSET') in ('v3','v4') else [])
                 # Only error severity fails. Upstream lint warnings remain in logs.
                 with log.open('a', encoding='utf-8') as stream:
                     analysis_start = stream.tell()
