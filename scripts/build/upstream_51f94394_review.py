@@ -7,7 +7,8 @@ from pathlib import Path
 
 from scripts.build.build_adapter import CRITICAL_FILES, inspect as inspect_build
 from scripts.platform.platform_adapter import (
-    guard_stock_linux_drm_recipe, inspect as inspect_platform, render
+    adapt_stock_linux_recipe, guard_stock_linux_drm_recipe,
+    inspect as inspect_platform, render
 )
 
 REVIEWED = '6aec3069aec486ad7df07429a0a1ee411fc8d73a'
@@ -23,8 +24,8 @@ def checked_sha(tree, wanted):
         raise ValueError(f'Incorrect official source: {actual}, expected {wanted}')
 
 
-def stock_recipe(tree):
-    profile, job = inspect_platform(tree, 'linux', 'x86_64')
+def stock_recipe(tree, arch='x86_64'):
+    profile, job = inspect_platform(tree, 'linux', arch)
     step = next(s for s in job['steps']
                 if s.get('name') == 'Build rustdesk' and 'with' in s)
     return render(step['with']['run'], profile)
@@ -77,6 +78,27 @@ def review(old, candidate, current):
         rejected = str(exc)
     else:
         raise ValueError('FAIL: new upstream Linux stock recipe silently admits DRM')
+    # A safe stock recipe must disable capture at *both* Cargo compile and
+    # build.py packaging. The same reviewed transform serves x64 and ARM64.
+    transformed = {}
+    for arch in ('x86_64', 'aarch64'):
+        original = stock_recipe(current, arch)
+        adapted = adapt_stock_linux_recipe(current, original)
+        guard_stock_linux_drm_recipe(current, adapted)
+        if adapted == original:
+            raise ValueError('Latest Linux stock recipe was not adapted')
+        if '--features hwcodec,flutter,unix-file-copy-paste --release' not in adapted:
+            raise ValueError('Native stock Cargo features are not explicitly DRM-free')
+        if '--no-drm' not in adapted or 'check_rpm_drm "$name"' in adapted:
+            raise ValueError('Stock packaging still inherits DRM')
+        if '--features hwcodec,flutter,unix-file-copy-paste,drm' in adapted:
+            raise ValueError('Stock native build still compiles DRM')
+        transformed[arch] = {'stock_recipe_safe': True,
+                             'native_cargo_drm_disabled': True,
+                             'package_no_drm_explicit': True,
+                             'stale_library_refused': 'stock Linux source contains prebuilt libdrmtap' in adapted}
+    if not all(p['stale_library_refused'] for p in transformed.values()):
+        raise ValueError('Stock RPM prebuilt library contamination is unchecked')
     return {
         'kind': 'non-approving-static-build-interface-review',
         'reviewed_sha': REVIEWED,
@@ -89,6 +111,7 @@ def review(old, candidate, current):
         'toolchain_unchanged': True,
         'linux_drm_default_changed': True,
         'ordinary_linux_recipe_guard': rejected,
+        'adapted_stock_linux': transformed,
         'approved_adapter_signature': False,
         'stable_release_allowed': False,
         'decision': 'HOLD: separate source/profile approval, DRM packaging compatibility and native target tests required',
