@@ -134,6 +134,7 @@ jobs:
         python3 -m scripts.validation.api_policy_contract
         python3 -m scripts.validation.wss_failover_policy_contract
         python3 -m scripts.upstream.patch_profiles_contract
+        python3 -m py_compile scripts/upstream/patchsets.py scripts/upstream/source_profile_contract.py
         python3 -m scripts.upstream.source_profile_contract
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.build.updater_dependencies_contract
