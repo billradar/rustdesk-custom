@@ -1,53 +1,100 @@
-# v4 TCP diagnostic migration candidate — review-only
-# Official hbb_common: rustdesk/hbb_common@450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb
-# This patch is intentionally NOT part of a selectable patchset.
-# Preserve upstream last_error and anyhow::Context propagation.
 diff --git a/src/tcp.rs b/src/tcp.rs
 --- a/src/tcp.rs
 +++ b/src/tcp.rs
-@@ -122,8 +122,28 @@
-         local_addr: Option<SocketAddr>,
-         ms_timeout: u64,
-     ) -> ResultType<Self> {
+@@ -119,38 +119,58 @@
+-    pub async fn new<T: ToSocketAddrs + std::fmt::Display>(
+-        remote_addr: T,
+-        local_addr: Option<SocketAddr>,
+-        ms_timeout: u64,
+-    ) -> ResultType<Self> {
+-        let mut last_error = None;
+-        for remote_addr in lookup_host(&remote_addr).await? {
+-            let local = if let Some(addr) = local_addr {
+-                addr
+-            } else {
+-                crate::config::Config::get_any_listen_addr(remote_addr.is_ipv4())
+-            };
+-            let result: ResultType<_> = async {
+-                let socket = new_socket(local, true)?;
+-                Ok(super::timeout(ms_timeout, socket.connect(remote_addr)).await??)
+-            }
+-            .await;
+-            match result {
+-                Ok(stream) => {
+-                    stream.set_nodelay(true).ok();
+-                    let addr = stream.local_addr()?;
+-                    return Ok(Self(
+-                        Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
+-                        addr,
+-                        None,
+-                        0,
+-                    ));
+-                }
+-                Err(err) => last_error = Some(err),
+-            }
+-        }
+-        if let Some(err) = last_error {
+-            let message = format!("Failed to connect to {remote_addr}: {err}");
+-            return Err(err.context(message));
+-        }
+-        bail!(format!("Failed to connect to {remote_addr}"));
+-    }
+-
++    pub async fn new<T: ToSocketAddrs + std::fmt::Display>(
++        remote_addr: T,
++        local_addr: Option<SocketAddr>,
++        ms_timeout: u64,
++    ) -> ResultType<Self> {
 +        use crate::radar_diagnostics::{Action, Code, Kind, Module};
 +        let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++        diagnostic.event(Action::TcpConnect, Module::Network, Kind::Attempt, Code::None, None, None);
++        let result: ResultType<Self> = diagnostic.instrument(Action::TcpConnect, async {
++            let mut last_error = None;
++            diagnostic.event(Action::DnsResolve, Module::Network, Kind::Attempt, Code::None, None, None);
++            let resolved = lookup_host(&remote_addr).await;
++            diagnostic.event(
++                Action::DnsResolve, Module::Network,
++                if resolved.is_ok() { Kind::Completed } else { Kind::Failed },
++                if resolved.is_ok() { Code::None } else { Code::Dns },
++                None, None,
++            );
++            for remote_addr in resolved? {
++                let local = if let Some(addr) = local_addr {
++                    addr
++                } else {
++                    crate::config::Config::get_any_listen_addr(remote_addr.is_ipv4())
++                };
++                let result: ResultType<_> = async {
++                    let socket = new_socket(local, true)?;
++                    Ok(super::timeout(ms_timeout, socket.connect(remote_addr)).await??)
++                }
++                .await;
++                match result {
++                    Ok(stream) => {
++                        stream.set_nodelay(true).ok();
++                        let addr = stream.local_addr()?;
++                        return Ok(Self(
++                            Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
++                            addr,
++                            None,
++                            0,
++                        ));
++                    }
++                    Err(err) => last_error = Some(err),
++                }
++            }
++            if let Some(err) = last_error {
++                let message = format!("Failed to connect to {remote_addr}: {err}");
++                return Err(err.context(message));
++            }
++            bail!(format!("Failed to connect to {remote_addr}"));
++        }).await;
 +        diagnostic.event(
-+            Action::TcpConnect,
-+            Module::Network,
-+            Kind::Attempt,
-+            Code::None,
-+            None,
-+            None,
++            Action::TcpConnect, Module::Network,
++            if result.is_ok() { Kind::Completed } else { Kind::Failed },
++            if result.is_ok() { Code::None } else { Code::Unknown },
++            None, None,
 +        );
-+        let diagnostic_result: ResultType<Self> = diagnostic
-+            .instrument(Action::TcpConnect, async {
-         let mut last_error = None;
-+        diagnostic.event(
-+            Action::DnsResolve,
-+            Module::Network,
-+            Kind::Attempt,
-+            Code::None,
-+            None,
-+            None,
-+        );
-         for remote_addr in lookup_host(&remote_addr).await? {
-             let local = if let Some(addr) = local_addr {
-                 addr
-@@ -157,6 +177,27 @@
-             return Err(err.context(message));
-         }
-         bail!(format!("Failed to connect to {remote_addr}"));
-+            })
-+            .await;
-+        diagnostic.event(
-+            Action::TcpConnect,
-+            Module::Network,
-+            if diagnostic_result.is_ok() { Kind::Completed } else { Kind::Failed },
-+            if diagnostic_result.is_ok() { Code::None } else { Code::Unknown },
-+            None,
-+            None,
-+        );
-+        diagnostic_result
-     }
- 
-     pub async fn connect<'t, T>(
++        result
++    }
++
