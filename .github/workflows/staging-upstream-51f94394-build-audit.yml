@@ -1,0 +1,65 @@
+name: Staging upstream 51f94394 build interface audit
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-upstream-51f94394-build-audit.yml'
+      - 'scripts/build/upstream_51f94394_review.py'
+      - 'scripts/platform/platform_adapter.py'
+      - 'scripts/platform/platform_adapter_contract.py'
+      - 'metadata/build/adapter-profiles.json'
+      - 'docs/upstream-interface-reviews/main-51f94394-drm-review.md'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  build-interface-audit:
+    name: Inspect official source and Linux DRM policy (no approval)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: .
+      REVIEWED_SHA: 6aec3069aec486ad7df07429a0a1ee411fc8d73a
+      CANDIDATE_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      NEW_MAIN_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install pinned repository analysis dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Verify code and stock Linux DRM guard regression
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/platform/platform_adapter.py scripts/build/upstream_51f94394_review.py
+          python3 -m scripts.platform.platform_adapter_contract
+      - name: Prepare immutable official source snapshots
+        run: |
+          set -euo pipefail
+          bash scripts/source/prepare.sh "$REVIEWED_SHA" .work/review-source/old
+          bash scripts/source/prepare.sh "$CANDIDATE_SHA" .work/review-source/candidate
+          bash scripts/source/prepare.sh "$NEW_MAIN_SHA" .work/review-source/new
+      - name: Reproduce matching adapter signatures and reject implicit DRM stock packaging
+        run: |
+          set -euo pipefail
+          python3 -m scripts.build.upstream_51f94394_review \
+            --old .work/review-source/old \
+            --candidate .work/review-source/candidate \
+            --current .work/review-source/new \
+            --report .work/review-source/main-51f94394-build-audit.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          reported=json.loads(Path('.work/review-source/main-51f94394-build-audit.json').read_text())
+          known=json.loads(Path('metadata/build/adapter-profiles.json').read_text())
+          assert not any(p['signature']==reported['new_main_signature'] for p in known['profiles']), 'STAGING ONLY: source is already approved; review staging policy'
+          assert reported['decision'].startswith('HOLD:')
+          print('Non-approving build interface review: PASS, signature remains blocked')
+          PY
+      - name: Retain comparison evidence for review
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: build-adapter-drm-review-51f94394
+          path: .work/review-source/*.json
+          if-no-files-found: warn
+          retention-days: 14
