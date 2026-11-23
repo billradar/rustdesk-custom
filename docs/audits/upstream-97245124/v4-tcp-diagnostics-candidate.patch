@@ -1,0 +1,53 @@
+# v4 TCP diagnostic migration candidate — review-only
+# Official hbb_common: rustdesk/hbb_common@450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb
+# This patch is intentionally NOT part of a selectable patchset.
+# Preserve upstream last_error and anyhow::Context propagation.
+diff --git a/src/tcp.rs b/src/tcp.rs
+--- a/src/tcp.rs
++++ b/src/tcp.rs
+@@ -122,8 +122,28 @@
+         local_addr: Option<SocketAddr>,
+         ms_timeout: u64,
+     ) -> ResultType<Self> {
++        use crate::radar_diagnostics::{Action, Code, Kind, Module};
++        let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++        diagnostic.event(
++            Action::TcpConnect,
++            Module::Network,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
++        let diagnostic_result: ResultType<Self> = diagnostic
++            .instrument(Action::TcpConnect, async {
+         let mut last_error = None;
++        diagnostic.event(
++            Action::DnsResolve,
++            Module::Network,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
+         for remote_addr in lookup_host(&remote_addr).await? {
+             let local = if let Some(addr) = local_addr {
+                 addr
+@@ -157,6 +177,27 @@
+             return Err(err.context(message));
+         }
+         bail!(format!("Failed to connect to {remote_addr}"));
++            })
++            .await;
++        diagnostic.event(
++            Action::TcpConnect,
++            Module::Network,
++            if diagnostic_result.is_ok() { Kind::Completed } else { Kind::Failed },
++            if diagnostic_result.is_ok() { Code::None } else { Code::Unknown },
++            None,
++            None,
++        );
++        diagnostic_result
+     }
+ 
+     pub async fn connect<'t, T>(
