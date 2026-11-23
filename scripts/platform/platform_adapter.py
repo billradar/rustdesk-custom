@@ -88,7 +88,8 @@ def adapt_stock_linux_recipe(tree, script):
     native = 'cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste,drm,drm-wake --release'
     native_stock = 'cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release'
     packaging = 'python3 ./build.py --flutter --skip-cargo'
-    if (script.count(native) != 1 or script.count(packaging) != 1
+    commands = [line.strip() for line in script.splitlines()]
+    if (commands.count(native) != 1 or commands.count(packaging) != 1
             or script.count('check_rpm_drm "$name"') != 2
             or script.count('check_rpm_drm() {') != 1):
         raise ValueError('BUILD_COMPAT: default-on DRM Linux recipe no longer matches reviewed commands')
