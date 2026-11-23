@@ -57,6 +57,68 @@ def render(text,profile):
  if '${{' in s:raise ValueError('BUILD_COMPAT: unresolved recipe expression')
  return s
 
+
+# Only these precisely inspected official source revisions have the default-on
+# DRM packaging interface. This is a CI recipe adaptation, NOT build approval.
+STOCK_DRM_OPT_OUT_SHAS = frozenset({
+    '9724512429b053be04cdb843345e99ddcccdb80e',
+    '51f94394ce61e1f3d26229565c326b2862cbdd1f',
+})
+
+
+def adapt_stock_linux_recipe(tree, script):
+    """Return an explicit no-DRM recipe for ordinary Linux artifacts.
+
+    Never change the upstream source or the separate unattended-wayland recipe.
+    An unknown or altered upstream recipe fails closed instead of being patched
+    heuristically. The platform's own signature review remains mandatory.
+    """
+    from subprocess import check_output
+
+    tree = Path(tree)
+    build_script = (tree / 'build.py').read_text()
+    if "'--no-drm'" not in build_script:
+        guard_stock_linux_drm_recipe(tree, script)
+        return script  # Historical default-off upstream; leave untouched.
+
+    upstream_sha = check_output(
+        ['git', '-C', str(tree), 'rev-parse', 'HEAD'], text=True).strip()
+    if upstream_sha not in STOCK_DRM_OPT_OUT_SHAS:
+        raise ValueError('BUILD_COMPAT: unreviewed source cannot transform Linux DRM defaults')
+    native = 'cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste,drm,drm-wake --release'
+    native_stock = 'cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste --release'
+    packaging = 'python3 ./build.py --flutter --skip-cargo'
+    if (script.count(native) != 1 or script.count(packaging) != 1
+            or script.count('check_rpm_drm "$name"') != 2
+            or script.count('check_rpm_drm() {') != 1):
+        raise ValueError('BUILD_COMPAT: default-on DRM Linux recipe no longer matches reviewed commands')
+
+    # The official RPM-specific DRM assertion is intentionally removed for
+    # ordinary packages, not disabled globally. The RPM payload is checked
+    # independently by platform_package.validate().
+    pattern = r'(?m)^check_rpm_drm\(\) \{\n(?:.*\n)*?^\}\n'
+    patched, replacements = re.subn(pattern, '', script)
+    if replacements != 1:
+        raise ValueError('BUILD_COMPAT: unreviewed RPM DRM test body')
+    patched = patched.replace('check_rpm_drm "$name"',
+                              ': # stock RPM validated after extraction')
+    patched = patched.replace(native, native_stock).replace(
+        packaging, packaging + ' --no-drm')
+    # Fail if stale prebuilts might still be picked up by RPM specs. The
+    # stock recipe must not build or package the pinned DRM capture library.
+    checked = """if compgen -G '/workspace/third_party/libdrmtap/build-pkg/libdrmtap.so.0.*' > /dev/null; then
+  echo 'BUILD_COMPAT: stock Linux source contains prebuilt libdrmtap' >&2
+  exit 1
+fi
+"""
+    patched = patched.replace(native_stock, checked + native_stock)
+    guard_stock_linux_drm_recipe(tree, patched)
+    if 'check_rpm_drm "$name"' in patched or '--features hwcodec,flutter,unix-file-copy-paste,drm' in patched:
+        raise ValueError('BUILD_COMPAT: partial DRM transformation')
+    return patched
+
+
+
 def guard_stock_linux_drm_recipe(tree, recipe):
     """Reject silent DRM capture in ordinary Linux packages.
 
@@ -81,7 +143,7 @@ def guard_stock_linux_drm_recipe(tree, recipe):
 def linux_scripts(tree, arch, out):
     p, job = check(tree, 'linux', arch)
     step = next(s for s in job['steps'] if s.get('name') == 'Build rustdesk' and 'with' in s)
-    run = render(step['with']['run'], p)
+    run = adapt_stock_linux_recipe(tree, render(step['with']['run'], p))
     guard_stock_linux_drm_recipe(tree, run)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'install.sh').write_text('set -euo pipefail\n' + render(step['with']['install'], p))
