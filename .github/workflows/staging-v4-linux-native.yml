@@ -11,6 +11,8 @@ on:
   workflow_dispatch: {}
 permissions:
   contents: read
+  # The called compatibility workflow's report job needs Actions artifact read.
+  actions: read
 jobs:
   # The same reviewed official Bridge pipeline used by the primary CI,
   # including the exact source/signature/profile checks.
