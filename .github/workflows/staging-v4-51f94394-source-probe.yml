@@ -1,0 +1,79 @@
+name: Staging v4 against upstream 51f94394 (CI-only applicability)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-v4-51f94394-source-probe.yml'
+      - 'patchsets/v4/**'
+      - 'scripts/upstream/patchsets.py'
+      - 'scripts/source/verify_source.py'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  dry-run:
+    name: Probe v4 patches against 51f94394 (${{ matrix.variant }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [standard, sos]
+    env:
+      PYTHONPATH: .
+      NEW_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      HBB_SHA: 450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Confirm v4 metadata and unknown-source release isolation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from scripts.upstream.patchsets import profile_for_version, verify
+          verify('v4')
+          profile=profile_for_version('1.5.3','ci',source_sha='51f94394ce61e1f3d26229565c326b2862cbdd1f')
+          assert profile['fallback'] and not profile['stable_allowed']
+          try:
+              profile_for_version('1.5.3','stable',source_sha='51f94394ce61e1f3d26229565c326b2862cbdd1f')
+              raise AssertionError('Unknown source admitted into Stable')
+          except ValueError as exc:
+              assert 'Stable requires' in str(exc)
+          print('Unknown upstream source remains CI-only; v4 is a detached static trial')
+          PY
+      - name: Prepare official source, with no credentials or release controls
+        run: |
+          set -euo pipefail
+          bash scripts/source/prepare.sh "$NEW_SHA" .work/source-probe/source
+          test "$(git -C .work/source-probe/source rev-parse HEAD)" = "$NEW_SHA"
+          test "$(git -C .work/source-probe/source/libs/hbb_common rev-parse HEAD)" = "$HBB_SHA"
+      - name: Probe candidate v4 patch applicability without selecting or approving it
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree=.work/source-probe/source
+          mkdir -p .work/source-probe
+          apply_candidate() {
+            local patch="$1" target="$2"
+            printf 'Checking candidate %s against source %s\n' "$(basename "$patch")" "$NEW_SHA"
+            if ! git -C "$target" apply --check "$patch"; then
+              echo "STOP: candidate patch $(basename "$patch") does not apply; production Patch Profile remains unchanged" >&2
+              return 1
+            fi
+            git -C "$target" apply "$patch"
+          }
+          for patch in patchsets/v4/common/*.patch; do
+            target="$tree"
+            case "$(basename "$patch")" in
+              0001-hbb-server-defaults.patch|0010-hbb-wss-primary-fallback.patch)
+                target="$tree/libs/hbb_common" ;;
+            esac
+            apply_candidate "$PWD/$patch" "$target"
+          done
+          if [[ "${{ matrix.variant }}" == sos ]]; then
+            for patch in patchsets/v4/sos/*.patch; do
+              apply_candidate "$PWD/$patch" "$tree"
+            done
+          fi
+          python3 scripts/source/verify_source.py "$tree" "${{ matrix.variant }}" --automation
+          echo "Candidate patch applicability: PASS (not a source approval)"
