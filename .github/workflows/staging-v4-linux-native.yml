@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/staging-v4-linux-native.yml'
+      - 'scripts/build/linux.sh'
+      - 'scripts/build/linux_ci_contract.py'
       - 'metadata/platform/ci-candidates.json'
       - 'scripts/platform/platform_adapter.py'
       - 'patchsets/v4/**'
@@ -10,7 +12,17 @@ on:
 permissions:
   contents: read
 jobs:
+  # The same reviewed official Bridge pipeline used by the primary CI,
+  # including the exact source/signature/profile checks.
+  compatibility:
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      channel: ci
   native:
+    needs: compatibility
     name: Real Rust Linux ${{ matrix.arch }} Standard check (no publication)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
@@ -40,7 +52,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install repository validation prerequisites
-        run: python3 -m pip install -r requirements.txt
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m scripts.build.linux_ci_contract
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: '1.75.0'
@@ -67,10 +81,28 @@ jobs:
       - name: Prepare and patch exact official upstream
         run: |
           set -euo pipefail
-          source scripts/validation/test_config.sh
           bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
           bash scripts/source/apply_patches.sh .work/native/source standard
           python3 scripts/source/verify_source.py .work/native/source standard --automation
+      # Download the Bridge generated within this exact workflow run, then use
+      # Stable's existing source/SHA/hash-verified restoration implementation.
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: test-bridge-${{ github.run_id }}
+          path: .work/native/bridge
+      - name: Restore and hash-check official Bridge before native build
+        run: |
+          set -euo pipefail
+          python3 scripts/release/package.py restore-bridge .work/native/source .work/native/bridge
+          test -s .work/native/source/src/bridge_generated.rs
+          test -s .work/native/source/src/bridge_generated.io.rs
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          info=json.loads(Path('.work/native/bridge/bridge-info.json').read_text())
+          assert info['upstream_sha']=='51f94394ce61e1f3d26229565c326b2862cbdd1f'
+          print('Same-run official Bridge restored with SHA/hash verification')
+          PY
       - name: Require source-bound Linux CI adapter, never release qualification
         id: profile
         env:
@@ -112,7 +144,7 @@ jobs:
           vcpkgDirectory: /opt/artifacts/vcpkg
           vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
           doNotCache: true
-      - name: Verify official vcpkg identity and install source manifest
+      - name: Verify official vcpkg identity before shared Stable core
         env:
           EXPECTED_VCPKG: ${{ steps.profile.outputs.vcpkg }}
           EXPECTED_TRIPLET: ${{ steps.profile.outputs.triplet }}
@@ -125,29 +157,18 @@ jobs:
           import json,sys
           from pathlib import Path
           manifest=json.loads(Path(sys.argv[1]).read_text())
-          expected=sys.argv[2]
-          assert manifest['vcpkg-configuration']['default-registry']['baseline']==expected
+          assert manifest['vcpkg-configuration']['default-registry']['baseline']==sys.argv[2]
           assert sys.argv[3] in ('x64-linux','arm64-linux')
-          print('Official vcpkg baseline and triplet match reviewed platform profile')
           PY
-          "$VCPKG_ROOT/vcpkg" install --triplet "$EXPECTED_TRIPLET" \
-            --x-install-root="$VCPKG_ROOT/installed" --x-manifest-root="$source_root"
-          test -d "$VCPKG_ROOT/installed/$EXPECTED_TRIPLET/include"
-          test -d "$VCPKG_ROOT/installed/$EXPECTED_TRIPLET/lib"
-          for lib in avcodec avformat avutil; do
-            test -f "$VCPKG_ROOT/installed/$EXPECTED_TRIPLET/lib/lib${lib}.a"
-          done
-      - name: Compile actual patched RustDesk Linux library without DRM
+      - name: Shared Stable Linux core CI probe (no package or publication)
+        env:
+          PLATFORM_ARCH: ${{ matrix.arch }}
+          VARIANT: standard
+          PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/native/source
+          BUILD_CONFIGURATION: CI_TEST
         run: |
           set -euo pipefail
-          # GitHub Actions run steps use separate shells: re-export fictional
-          # compile-time settings here rather than passing production secrets.
-          source scripts/validation/test_config.sh
-          test "$RUSTDESK_ID_SERVER" = test.invalid
-          test -n "$RUSTDESK_KEY"
-          test -x "$VCPKG_ROOT/vcpkg"
-          cd .work/native/source
-          cargo check --locked --lib --features hwcodec,flutter,unix-file-copy-paste 2>&1 | tee ../cargo-native.log
+          bash scripts/build/linux.sh
       - name: Retain safe compiler text diagnostics only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
