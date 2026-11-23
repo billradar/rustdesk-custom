@@ -30,3 +30,7 @@ Our project intentionally distinguishes the ordinary Linux Standard/SOS distribu
 ## Missing admission evidence
 
 A separate, explicit, reviewed adaptation of the source-specific Linux build recipe is required, with both native build features and the packaging flag aligned. Ordinary DEB/RPM/Arch packaging, the unattended-wayland build, generated bridge/API/Flutter compatibility, and cross-platform tests must be independently validated on the later upstream SHA before any release approval. The staging workflow is **diagnostic only**: passing it does not grant general build or Stable eligibility.
+
+## Latest-source candidate Patch Profile routing
+
+The dedicated [CI-only source probe](https://github.com/billradar/rustdesk-custom/actions/runs/45180782944) passed all v4 Standard/SOS patches and the isolated native helper/configuration validation against `51f94394`. This is sufficient to register an explicit **candidate-only** v4 Patch Profile for that exact SHA. It does **not** approve the default-on DRM build adapter, release qualification, runtime compatibility, or Stable. The production patch application gate now independently verifies the exact source SHA and v4 hashes for both `97245124` and `51f94394`.

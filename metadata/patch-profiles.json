@@ -25,6 +25,10 @@
     "rd-1.5.3-97245124-candidate": {
       "patchset": "v4",
       "stable_allowed": false
+    },
+    "rd-1.5.3-51f94394-candidate": {
+      "patchset": "v4",
+      "stable_allowed": false
     }
   },
   "exact_versions": {
@@ -45,6 +49,10 @@
     "95cca3f661f635b3cc85c04935fe8d96d8f432ef": {
       "version": "1.5.3",
       "profile": "rd-1.5.3"
+    },
+    "51f94394ce61e1f3d26229565c326b2862cbdd1f": {
+      "version": "1.5.3",
+      "profile": "rd-1.5.3-51f94394-candidate"
     }
   }
 }

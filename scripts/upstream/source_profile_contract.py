@@ -9,6 +9,7 @@ from scripts.upstream import patchsets
 SHA = "9724512429b053be04cdb843345e99ddcccdb80e"
 OLD = "6aec3069aec486ad7df07429a0a1ee411fc8d73a"
 APPROVED = "95cca3f661f635b3cc85c04935fe8d96d8f432ef"
+NEW_MAIN = "51f94394ce61e1f3d26229565c326b2862cbdd1f"
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
@@ -29,6 +30,7 @@ def main():
             "exact_sources": {
                 SHA: {"version": "1.5.3", "profile": "rd-1.5.3-sha-candidate"},
                 APPROVED: {"version": "1.5.3", "profile": "rd-1.5.3"},
+                NEW_MAIN: {"version": "1.5.3", "profile": "rd-1.5.3-sha-candidate"},
             }
         }
         (root / "metadata" / "patch-profiles.json").write_text(json.dumps(registry))
@@ -36,6 +38,9 @@ def main():
             new = patchsets.profile_for_version("1.5.3", "ci", source_sha=SHA)
             assert new["selected"] == "v4" and new["source_match"]
             assert new["compatibility_test_only"] and not new["stable_allowed"]
+            updated = patchsets.profile_for_version("1.5.3", "ci", source_sha=NEW_MAIN)
+            assert updated["selected"] == "v4" and updated["source_match"]
+            assert updated["compatibility_test_only"] and not updated["stable_allowed"]
             old = patchsets.profile_for_version("1.5.3", "ci", source_sha=OLD)
             assert old["selected"] == "v3" and not old["source_match"]
             assert old["fallback"] and old["compatibility_test_only"]
