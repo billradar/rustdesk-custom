@@ -1,0 +1,98 @@
+name: Staging v4 Linux native Rust compile (no publish)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-v4-linux-native.yml'
+      - 'metadata/platform/ci-candidates.json'
+      - 'scripts/platform/platform_adapter.py'
+      - 'patchsets/v4/**'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Real Rust Linux ${{ matrix.arch }} Standard check (no publication)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install repository validation prerequisites
+        run: python3 -m pip install -r requirements.txt
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+          targets: ${{ matrix.target }}
+      - name: Install native build libraries (no credentials)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev libssl-dev pkg-config \
+            libgtk-3-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev \
+            libxdo-dev libpulse-dev libasound2-dev libva-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            protobuf-compiler nasm ninja-build libdbus-1-dev
+      - name: Prepare and patch exact official upstream
+        run: |
+          set -euo pipefail
+          source scripts/validation/test_config.sh
+          bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
+          bash scripts/source/apply_patches.sh .work/native/source standard
+          python3 scripts/source/verify_source.py .work/native/source standard --automation
+      - name: Require source-bound Linux CI adapter, never release qualification
+        env:
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_RUNNER: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          python3 scripts/platform/platform_adapter.py .work/native/source \
+            --platform linux --arch "$ARCH" --channel ci \
+            --linux-scripts .work/native/recipe --output .work/native/platform-profile.json
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=json.loads(Path('.work/native/platform-profile.json').read_text())
+          assert p['runner']==os.environ['EXPECTED_RUNNER']
+          assert p['ci_candidate_only'] is True and p['stable_allowed'] is False
+          assert p['platform_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          recipe=Path('.work/native/recipe/build.sh').read_text()
+          assert 'hwcodec,flutter,unix-file-copy-paste --release' in recipe
+          assert 'hwcodec,flutter,unix-file-copy-paste,drm' not in recipe
+          assert '--no-drm' in recipe
+          PY
+          bash -n .work/native/recipe/build.sh
+      - name: Compile actual patched RustDesk Linux library without DRM
+        run: |
+          set -euo pipefail
+          cd .work/native/source
+          cargo check --locked --lib --features hwcodec,flutter,unix-file-copy-paste 2>&1 | tee ../cargo-native.log
+      - name: Retain safe compiler text diagnostics only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v4-linux-native-${{ matrix.arch }}-compile-report
+          path: .work/native/cargo-native.log
+          if-no-files-found: warn
+          retention-days: 7
