@@ -10,6 +10,32 @@ from scripts.platform import platform_adapter as adapter
 
 
 class RecipeTests(unittest.TestCase):
+    def test_stock_linux_recipe_never_inherits_implicit_drm(self):
+        """Ordinary Standard/SOS artifacts must not silently include the DRM backend."""
+        with tempfile.TemporaryDirectory() as temp:
+            tree = Path(temp)
+            build = tree / 'build.py'
+            compile_stock = 'cargo build --locked --lib --features hwcodec,flutter --release'
+            package_stock = 'python3 ./build.py --flutter --skip-cargo'
+            build.write_text("parser.add_argument('--drm')\n")
+            self.assertTrue(adapter.guard_stock_linux_drm_recipe(
+                tree, compile_stock + '\n' + package_stock))
+            with self.assertRaisesRegex(ValueError, 'explicitly requests DRM'):
+                adapter.guard_stock_linux_drm_recipe(
+                    tree, compile_stock + '\n' + package_stock + ' --drm')
+            build.write_text("parser.add_argument('--no-drm')\n")
+            with self.assertRaisesRegex(ValueError, 'requires explicit --no-drm'):
+                adapter.guard_stock_linux_drm_recipe(
+                    tree, compile_stock + '\n' + package_stock)
+            self.assertTrue(adapter.guard_stock_linux_drm_recipe(
+                tree, compile_stock + '\n' + package_stock + ' --no-drm'))
+            for feature in ('drm', 'drm-wake', 'hwcodec,flutter,drm,drm-wake'):
+                with self.subTest(feature=feature), self.assertRaisesRegex(
+                        ValueError, 'stock Linux recipe enables DRM'):
+                    adapter.guard_stock_linux_drm_recipe(
+                        tree, 'cargo build --locked --lib --features ' + feature +
+                        '\n' + package_stock + ' --no-drm')
+
     def test_linux_ci_tests_render_and_execute_only_on_x64(self):
         source = '''if [[ "${{ matrix.job.arch }}" == "x86_64" && "${{ inputs.upload-artifact }}" == "false" ]]; then
 echo RUN_FLUTTER_TESTS
