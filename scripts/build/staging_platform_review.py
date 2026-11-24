@@ -55,7 +55,7 @@ def review(platform, root):
                 'cmake': profile['cmake'],
                 'approved_signature_present': profile['signature'] in registry['approved'].get(platform, []),
                 'file_hashes': {p: sha256(tree / p) for p in files},
-                'job': job,
+                'job': json.loads(json.dumps(job)),
                 'tools': profile['tools'],
             }
     result = []
