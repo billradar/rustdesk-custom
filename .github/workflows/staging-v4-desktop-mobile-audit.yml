@@ -1,0 +1,52 @@
+name: Staging v4 Windows Android macOS interface review (no publish)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-v4-desktop-mobile-audit.yml'
+      - 'scripts/build/staging_platform_review.py'
+      - 'scripts/platform/**'
+      - 'scripts/build/**'
+      - 'metadata/platform/**'
+      - 'patchsets/v4/**'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  review:
+    name: Review official ${{ matrix.platform }} interfaces (CI only)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows, android, macos]
+    env:
+      PYTHONPATH: .
+      PLATFORM: ${{ matrix.platform }}
+      REVIEWED_SHA: 6aec3069aec486ad7df07429a0a1ee411fc8d73a
+      CANDIDATE_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      NEW_MAIN_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install repository review dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Fetch immutable official snapshots
+        run: |
+          set -euo pipefail
+          UPSTREAM_EXPECTED_SHA="$REVIEWED_SHA" bash scripts/source/prepare.sh "$REVIEWED_SHA" .work/platform-review/old
+          UPSTREAM_EXPECTED_SHA="$CANDIDATE_SHA" bash scripts/source/prepare.sh "$CANDIDATE_SHA" .work/platform-review/candidate
+          UPSTREAM_EXPECTED_SHA="$NEW_MAIN_SHA" bash scripts/source/prepare.sh "$NEW_MAIN_SHA" .work/platform-review/current
+      - name: Compare reviewed and candidate interfaces without granting release admission
+        run: |
+          set -euo pipefail
+          python3 -m scripts.build.staging_platform_review "$PLATFORM" .work/platform-review
+      - name: Retain interface evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v4-${{ matrix.platform }}-interface-review
+          path: .work/platform-review/reports/*.json
+          if-no-files-found: warn
+          retention-days: 14
