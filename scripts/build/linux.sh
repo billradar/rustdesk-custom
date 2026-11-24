@@ -13,9 +13,10 @@ case "$configuration" in
     }
     python3 scripts/signing/production_config.py inputs
     ;;
-  CI_TEST)
-    # CI uses the same official platform/vcpkg/recipe path as Stable, but
-    # never runs the package, signing, Docker release or publication steps.
+  CI_TEST|CI_PACKAGE_TEST)
+    # Both CI modes share Stable's exact platform/vcpkg/recipe preparation.
+    # CI_PACKAGE_TEST builds test-only packages, but never runs production
+    # qualification, signing or artifact publication.
     [[ "${BUILD_CHANNEL:-}" == ci && "${PATCHSET:-}" == v4 &&
        "${GITHUB_ACTIONS:-}" == true &&
        ( "${GITHUB_EVENT_NAME:-}" == pull_request ||
@@ -52,7 +53,7 @@ PY
     ;;
 esac
 python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --channel "${BUILD_CHANNEL:-stable}" --output .work/platform-profile.json --linux-scripts .work/linux-recipe
-if [[ "$configuration" == CI_TEST ]]; then
+if [[ "$configuration" == CI_TEST || "$configuration" == CI_PACKAGE_TEST ]]; then
   python3 - <<'PY'
 import json
 from pathlib import Path
@@ -98,12 +99,21 @@ case "$PLATFORM_ARCH" in
  *) exit 1 ;;
 esac
 printf 'FROM %s\nCOPY install.sh /install.sh\nRUN bash /install.sh\n' "$image" > .work/linux-recipe/Dockerfile
-docker build --tag "rustdesk-build-$PLATFORM_ARCH-$GITHUB_RUN_ID" .work/linux-recipe
+docker build --tag "rustdesk-build-$PLATFORM_ARCH-$VARIANT-$GITHUB_RUN_ID" .work/linux-recipe
 # Forward only client build inputs, by environment name. No GitHub token or CI credentials.
 args=()
 for n in RUSTDESK_ID_SERVER RUSTDESK_RELAY_SERVER RUSTDESK_API_SERVER RUSTDESK_KEY RUSTDESK_PASSWORD;do args+=(-e "$n");done
-docker run --rm "${args[@]}" -v "$source:/workspace" -v "$root:/custom:ro" -v "$root/.work/linux-recipe:/recipe:ro" -v /opt/artifacts:/opt/artifacts "rustdesk-build-$PLATFORM_ARCH-$GITHUB_RUN_ID" bash /recipe/build.sh
+docker run --rm "${args[@]}" -v "$source:/workspace" -v "$root:/custom:ro" -v "$root/.work/linux-recipe:/recipe:ro" -v /opt/artifacts:/opt/artifacts "rustdesk-build-$PLATFORM_ARCH-$VARIANT-$GITHUB_RUN_ID" bash /recipe/build.sh
 sudo chown -R "$(id -u):$(id -g)" "$source"
+if [[ "$configuration" == CI_PACKAGE_TEST ]]; then
+  # Never call production_config/platform_package.create for fictional binaries.
+  # Verify actual DEB/RPM payloads in an isolated, non-publishing CI context.
+  python3 -m scripts.build.linux_ci_package \
+    --tree "$source" --arch "$PLATFORM_ARCH" --variant "$VARIANT" \
+    --output "$root/.work/native/package-report.json"
+  echo 'BUILD_COMPAT: CI-only Linux package smoke PASS, not release eligible'
+  exit 0
+fi
 # Run the native ABI gate on the reviewed native runner with explicit runtime dependencies.
 # The Ubuntu 18.04 container remains the official compiler/package environment.
 python3 scripts/platform/platform_package.py create --tree "$source" --platform linux --arch "$PLATFORM_ARCH" --variant "$VARIANT"
