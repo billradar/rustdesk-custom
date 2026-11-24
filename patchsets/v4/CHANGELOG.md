@@ -37,6 +37,7 @@ Reason: Create an isolated SHA-specific v4 compatibility candidate without modif
 
 - Rebase hbb_common TCP/DNS/proxy diagnostic events onto the upstream 450cc1d7 error-preserving FramedStream implementation.
 - Qualify the strict managed-WSS fail-closed error macro so hbb_common compiles without an unimported bail macro.
+- Move Android diagnostic native events to upstream's stable ffi.FFI JNI namespace so custom package names and the official JNI gate remain compatible.
 
 #### Removed
 
@@ -56,5 +57,5 @@ Known limitations: No claim of whole patchset applicability, native compilation,
 
 Allocation base: `54127ffd79e567c6c4b1d386a7d9770560ef395a`
 
-- common: `707ac52e1ae2b95a31a21c31fb2c383895c060549f84475ea6017437bc264623` → `707ac52e1ae2b95a31a21c31fb2c383895c060549f84475ea6017437bc264623`
+- common: `c430596825e4902a1b1a36dac5330aca9a88cbc552fabed01a109b5a9b495835` → `c430596825e4902a1b1a36dac5330aca9a88cbc552fabed01a109b5a9b495835`
 - sos: `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813` → `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`

@@ -1,0 +1,2 @@
+# Keep patch syntax and blank context lines unchanged on Windows.
+*.patch text eol=lf

@@ -95,16 +95,14 @@ diff --git a/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/Diagnos
 new file mode 100644
 --- /dev/null
 +++ b/flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/DiagnosticLog.kt
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,18 @@
 +package com.carriez.flutter_hbb
 +
 +/** Typed metadata adapter. Never format message, tag, throwable or stack to storage. */
 +@androidx.annotation.Keep
 +object DiagnosticLog {
-+    @androidx.annotation.Keep
-+    private external fun nativeEvent(level: Int)
 +    private fun event(level: Int): Int {
-+        try { nativeEvent(level) } catch (_: UnsatisfiedLinkError) { /* Rust not loaded yet. */ }
++        try { ffi.FFI.diagnosticNativeEvent(level) } catch (_: UnsatisfiedLinkError) { /* Rust not loaded yet. */ }
 +        when (level) {
 +            1 -> android.util.Log.e("RadarDiagnostics", "Native error (details omitted)")
 +            2 -> android.util.Log.w("RadarDiagnostics", "Native warning (details omitted)")
@@ -5304,7 +5302,7 @@ diff --git a/src/platform/android_log.rs b/src/platform/android_log.rs
  }
 +
 +#[no_mangle]
-+pub extern "system" fn Java_com_carriez_flutter_1hbb_DiagnosticLog_nativeEvent(
++pub extern "system" fn Java_ffi_FFI_diagnosticNativeEvent(
 +    _env: jni::JNIEnv,
 +    _instance: jni::objects::JObject,
 +    level: jni::sys::jint,
@@ -6119,3 +6117,12 @@ diff --git a/src/server/connection.rs b/src/server/connection.rs
          // Drop stale errors for cancelled/unknown jobs
          if !self.cm_read_job_ids.remove(&id) {
              log::debug!(
+diff --git a/flutter/android/app/src/main/kotlin/ffi.kt b/flutter/android/app/src/main/kotlin/ffi.kt
+--- a/flutter/android/app/src/main/kotlin/ffi.kt
++++ b/flutter/android/app/src/main/kotlin/ffi.kt
+@@ -30,4 +30,5 @@
+     external fun isServiceClipboardEnabled(): Boolean
+     external fun setDocumentLogsEnabled(enabled: Boolean)
+     external fun setInputServiceOpen(open: Boolean)
++    @androidx.annotation.Keep external fun diagnosticNativeEvent(level: Int)
+ }

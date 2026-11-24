@@ -67,6 +67,9 @@ jobs:
             .work/python/bin/python -m pip install -r requirements.txt
             echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
           fi
+      - name: Windows canonical source checkout line endings
+        if: matrix.platform == 'windows'
+        run: git config --global core.autocrlf false
       - name: Prepare exact official source and public fixture patches
         run: |
           source scripts/validation/test_config.sh
