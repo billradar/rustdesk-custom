@@ -72,6 +72,30 @@ class LinuxCoreContracts(unittest.TestCase):
         self.assertIn('test -s "$source/src/bridge_generated.rs"', code)
         self.assertIn('test -f "$VCPKG_ROOT/installed/$triplet/lib/libavcodec.a"', code)
 
+    def test_ci_package_mode_retains_all_nonrelease_restrictions(self):
+        result = self.invoke(BUILD_CONFIGURATION='CI_PACKAGE_TEST')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('CI source must be the isolated staging tree', result.stdout)
+        for invalid in (
+            {'BUILD_CHANNEL': 'stable'},
+            {'BUILD_CHANNEL': 'nightly'},
+            {'PATCHSET': 'v3'},
+            {'GITHUB_EVENT_NAME': 'push'},
+            {'BUILD_FLAVOR': 'unattended-wayland'},
+            {'VARIANT': 'unreviewed'},
+        ):
+            with self.subTest(invalid=invalid):
+                outcome = self.invoke(BUILD_CONFIGURATION='CI_PACKAGE_TEST', **invalid)
+                self.assertNotEqual(outcome.returncode, 0)
+                self.assertIn('CI Linux probe context forbidden', outcome.stdout)
+
+    def test_package_smoke_isolated_from_production_qualification(self):
+        source = SCRIPT.read_text()
+        self.assertIn('python3 -m scripts.build.linux_ci_package', source)
+        self.assertIn('if [[ "$configuration" == CI_PACKAGE_TEST ]]', source)
+        self.assertIn('scripts/platform/platform_package.py create', source)
+        self.assertIn('FICTIONAL', (ROOT / 'scripts/build/linux_ci_package.py').read_text())
+
 
 if __name__ == '__main__':
     unittest.main()
