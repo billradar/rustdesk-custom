@@ -1,0 +1,210 @@
+name: Staging v4 Linux Standard and SOS DEB/RPM package smoke (no publish)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-v4-linux-packages.yml'
+      - 'scripts/build/linux_ci_package.py'
+      - 'scripts/build/linux.sh'
+      - 'scripts/build/linux_ci_contract.py'
+      - 'metadata/platform/ci-candidates.json'
+      - 'scripts/platform/platform_adapter.py'
+      - 'patchsets/v4/**'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  # The called compatibility workflow's report job needs Actions artifact read.
+  actions: read
+jobs:
+  # The same reviewed official Bridge pipeline used by the primary CI,
+  # including the exact source/signature/profile checks.
+  compatibility:
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      channel: ci
+  native:
+    needs: compatibility
+    name: Real DEB/RPM Linux ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - arch: x86_64
+            variant: standard
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: x86_64
+            variant: sos
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: aarch64
+            variant: standard
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - arch: aarch64
+            variant: sos
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '2'
+      RUST_BACKTRACE: '1'
+      # Use the same vcpkg root as the existing Stable platform builder.
+      VCPKG_ROOT: /opt/artifacts/vcpkg
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install repository validation prerequisites
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m scripts.build.linux_ci_contract
+          python3 -m py_compile scripts/build/linux_ci_package.py
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.75.0'
+          targets: ${{ matrix.target }}
+          components: rustfmt
+      - name: Verify Rust formatter for exact compiler toolchain
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo --version
+          cargo fmt --version
+          rustup component list --installed | grep -E '^rustfmt-'
+      - name: Free ephemeral runner space before official Docker/Flutter package build
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
+          df -h
+      - name: Install native build libraries (no credentials)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake libclang-dev libssl-dev pkg-config \
+            libunwind-dev libgtk-3-dev libx11-dev libxfixes-dev libxi-dev libxtst-dev \
+            libxdo-dev libpulse-dev libasound2-dev libva-dev libdrm-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            protobuf-compiler nasm ninja-build libdbus-1-dev
+      - name: Prepare and patch exact official upstream
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          # Patch application requires compile-time fixture values; steps
+          # have independent shells, so source them explicitly here too.
+          source scripts/validation/test_config.sh
+          test "$RUSTDESK_ID_SERVER" = test.invalid
+          bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
+          bash scripts/source/apply_patches.sh .work/native/source "$VARIANT"
+          python3 scripts/source/verify_source.py .work/native/source "$VARIANT" --automation
+      # Download the Bridge generated within this exact workflow run, then use
+      # Stable's existing source/SHA/hash-verified restoration implementation.
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: test-bridge-${{ github.run_id }}
+          path: .work/native/bridge
+      - name: Restore and hash-check official Bridge before native build
+        run: |
+          set -euo pipefail
+          python3 scripts/release/package.py restore-bridge .work/native/source .work/native/bridge
+          test -s .work/native/source/src/bridge_generated.rs
+          test -s .work/native/source/src/bridge_generated.io.rs
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          info=json.loads(Path('.work/native/bridge/bridge-info.json').read_text())
+          assert info['upstream_sha']=='51f94394ce61e1f3d26229565c326b2862cbdd1f'
+          print('Same-run official Bridge restored with SHA/hash verification')
+          PY
+      - name: Require source-bound Linux CI adapter, never release qualification
+        id: profile
+        env:
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_RUNNER: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          python3 scripts/platform/platform_adapter.py .work/native/source \
+            --platform linux --arch "$ARCH" --channel ci \
+            --linux-scripts .work/native/recipe --output .work/native/platform-profile.json
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=json.loads(Path('.work/native/platform-profile.json').read_text())
+          assert p['runner']==os.environ['EXPECTED_RUNNER']
+          assert p['ci_candidate_only'] is True and p['stable_allowed'] is False
+          assert p['platform_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          recipe=Path('.work/native/recipe/build.sh').read_text()
+          assert 'hwcodec,flutter,unix-file-copy-paste --release' in recipe
+          assert 'hwcodec,flutter,unix-file-copy-paste,drm' not in recipe
+          assert '--no-drm' in recipe
+          PY
+          bash -n .work/native/recipe/build.sh
+      # Stable build-platform.yml and the official flutter-build.yml use this
+      # same locked vcpkg checkout, triplet and ARM64 CMake prerequisite.
+      # Do not substitute system FFmpeg or invent a dummy VCPKG_ROOT.
+      - name: Official ARM64 vcpkg CMake prerequisite
+        if: matrix.arch == 'aarch64'
+        env:
+          CMAKE_VERSION: ${{ steps.profile.outputs.cmake }}
+        run: |
+          set -euo pipefail
+          test -n "$CMAKE_VERSION"
+          python3 -m pip install "cmake==$CMAKE_VERSION"
+          cmake --version
+      - name: Setup official pinned vcpkg (same action as Stable)
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
+          doNotCache: true
+      - name: Verify official vcpkg identity before shared Stable core
+        env:
+          EXPECTED_VCPKG: ${{ steps.profile.outputs.vcpkg }}
+          EXPECTED_TRIPLET: ${{ steps.profile.outputs.triplet }}
+        run: |
+          set -euo pipefail
+          source_root="$PWD/.work/native/source"
+          test -x "$VCPKG_ROOT/vcpkg"
+          test "$(git -C "$VCPKG_ROOT" rev-parse HEAD)" = "$EXPECTED_VCPKG"
+          python3 - "$source_root/vcpkg.json" "$EXPECTED_VCPKG" "$EXPECTED_TRIPLET" <<'PY'
+          import json,sys
+          from pathlib import Path
+          manifest=json.loads(Path(sys.argv[1]).read_text())
+          assert manifest['vcpkg-configuration']['default-registry']['baseline']==sys.argv[2]
+          assert sys.argv[3] in ('x64-linux','arm64-linux')
+          PY
+      - name: Build real DEB/RPM using Stable Linux core (CI fixture, no publication)
+        env:
+          PLATFORM_ARCH: ${{ matrix.arch }}
+          VARIANT: ${{ matrix.variant }}
+          PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/native/source
+          BUILD_CONFIGURATION: CI_PACKAGE_TEST
+        run: |
+          set -euo pipefail
+          bash scripts/build/linux.sh
+      - name: Delete fictional CI packages from job workspace
+        if: always()
+        run: |
+          # Test archives are not and must never be distributable release assets.
+          rm -f .work/native/source/rustdesk*.deb .work/native/source/rustdesk*.rpm
+      - name: Retain safe metadata and hash evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v4-linux-deb-rpm-${{ matrix.arch }}-${{ matrix.variant }}-smoke-report
+          path: .work/native/package-report.json
+          if-no-files-found: warn
+          retention-days: 7
