@@ -1,4 +1,4 @@
-name: Staging v4 Linux native Rust compile (no publish)
+name: Staging v4 Linux Standard and SOS Rust compile (no publish)
 on:
   pull_request:
     paths:
@@ -25,7 +25,7 @@ jobs:
       channel: ci
   native:
     needs: compatibility
-    name: Real Rust Linux ${{ matrix.arch }} Standard check (no publication)
+    name: Real Rust Linux ${{ matrix.arch }} ${{ matrix.variant }} check (no publication)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     strategy:
@@ -34,9 +34,19 @@ jobs:
       matrix:
         include:
           - arch: x86_64
+            variant: standard
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: x86_64
+            variant: sos
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
           - arch: aarch64
+            variant: standard
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - arch: aarch64
+            variant: sos
             runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
     env:
@@ -81,6 +91,8 @@ jobs:
             libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             protobuf-compiler nasm ninja-build libdbus-1-dev
       - name: Prepare and patch exact official upstream
+        env:
+          VARIANT: ${{ matrix.variant }}
         run: |
           set -euo pipefail
           # Patch application requires compile-time fixture values; steps
@@ -88,8 +100,8 @@ jobs:
           source scripts/validation/test_config.sh
           test "$RUSTDESK_ID_SERVER" = test.invalid
           bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
-          bash scripts/source/apply_patches.sh .work/native/source standard
-          python3 scripts/source/verify_source.py .work/native/source standard --automation
+          bash scripts/source/apply_patches.sh .work/native/source "$VARIANT"
+          python3 scripts/source/verify_source.py .work/native/source "$VARIANT" --automation
       # Download the Bridge generated within this exact workflow run, then use
       # Stable's existing source/SHA/hash-verified restoration implementation.
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
@@ -169,7 +181,7 @@ jobs:
       - name: Shared Stable Linux core CI probe (no package or publication)
         env:
           PLATFORM_ARCH: ${{ matrix.arch }}
-          VARIANT: standard
+          VARIANT: ${{ matrix.variant }}
           PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/native/source
           BUILD_CONFIGURATION: CI_TEST
         run: |
@@ -179,7 +191,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: v4-linux-native-${{ matrix.arch }}-compile-report
+          name: v4-linux-native-${{ matrix.arch }}-${{ matrix.variant }}-compile-report
           path: .work/native/cargo-native.log
           if-no-files-found: warn
           retention-days: 7
