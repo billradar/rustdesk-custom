@@ -78,6 +78,7 @@ jobs:
           retention-days: 7
   package:
     needs: [compatibility, macos-arm64-bridge]
+    if: ${{ always() && !cancelled() && needs.compatibility.result == 'success' }}
     name: Fixture ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240

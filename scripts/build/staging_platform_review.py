@@ -53,7 +53,7 @@ def review(platform, root):
                         raise ValueError('CI candidate admitted production channel')
                 # The Mac ARM Flutter/Bridge transformation has a separate
                 # policy. Do not bypass or broaden it here.
-                if not (platform == 'macos' and arch == 'aarch64'):
+                if not (platform == 'macos' and arch == 'aarch64') or label == 'current':
                     check(tree, platform, arch, channel='ci')
             files = tuple(FILES) + (ANDROID_FILES if platform == 'android' else ())
             rows[label, arch] = {
@@ -70,7 +70,7 @@ def review(platform, root):
                 'cargo_ndk': profile['cargo_ndk'],
                 'cmake': profile['cmake'],
                 'ci_interface_candidate_verified': label != 'old',
-                'mac_arm_secondary_review_required': label != 'old' and platform == 'macos' and arch == 'aarch64',
+                'mac_arm_secondary_review_required': label == 'candidate' and platform == 'macos' and arch == 'aarch64',
                 'approved_signature_present': profile['signature'] in registry['approved'].get(platform, []),
                 'file_hashes': {p: sha256(tree / p) for p in files},
                 'job': json.loads(json.dumps(job)),
