@@ -1,0 +1,195 @@
+name: Staging v4 desktop mobile real package smoke (no publish)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/staging-v4-desktop-mobile-packages.yml'
+      - 'scripts/build/**'
+      - 'scripts/platform/**'
+      - 'metadata/platform/**'
+      - 'patchsets/v4/**'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compatibility:
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      channel: ci
+  package:
+    needs: compatibility
+    name: Fixture ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: windows, arch: x86_64, variant: standard, runner: windows-2022}
+          - {platform: windows, arch: x86_64, variant: sos, runner: windows-2022}
+          - {platform: android, arch: aarch64, variant: standard, runner: ubuntu-24.04}
+          - {platform: android, arch: armv7, variant: standard, runner: ubuntu-24.04}
+          - {platform: android, arch: x86_64, variant: standard, runner: ubuntu-24.04}
+          - {platform: macos, arch: x86_64, variant: standard, runner: macos-26-intel}
+          - {platform: macos, arch: x86_64, variant: sos, runner: macos-26-intel}
+          - {platform: macos, arch: aarch64, variant: standard, runner: macos-26}
+          - {platform: macos, arch: aarch64, variant: sos, runner: macos-26}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      BUILD_CONFIGURATION: 'TEST ONLY'
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      UPSTREAM_VERSION: '1.5.3'
+      ARTIFACT_IDENTITY: '1.5.3'
+      PLATFORM: ${{ matrix.platform }}
+      PLATFORM_ARCH: ${{ matrix.arch }}
+      VARIANT: ${{ matrix.variant }}
+      EXPECTED_RUNNER: ${{ matrix.runner }}
+      PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/native/source
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install reviewed parser dependencies
+        run: |
+          python3 -m venv .work/python
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            .work/python/Scripts/python.exe -m pip install -r requirements.txt
+            echo "$PWD/.work/python/Scripts" >> "$GITHUB_PATH"
+          else
+            .work/python/bin/python -m pip install -r requirements.txt
+            echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
+          fi
+      - name: Prepare exact official source and public fixture patches
+        run: |
+          source scripts/validation/test_config.sh
+          bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
+          bash scripts/source/apply_patches.sh .work/native/source "$VARIANT"
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: test-bridge-${{ github.run_id }}
+          path: .work/native/bridge
+      - name: Restore and hash-check same-run official Bridge
+        run: python3 scripts/release/package.py restore-bridge .work/native/source .work/native/bridge
+      - name: Require exact platform candidate and secondary Mac ARM recipe policy
+        id: profile
+        run: |
+          # The dedicated Mac ARM Flutter 3.44/Bridge policy must pass separately.
+          # Never build ARM64 with the legacy shared Bridge. If the secondary
+          # policy is not yet admitted, fail closed with its diagnostics.
+          python3 scripts/platform/platform_adapter.py .work/native/source --platform "$PLATFORM" --arch "$PLATFORM_ARCH" --channel ci --output .work/native/profile.json
+          if [[ "$PLATFORM" == macos && "$PLATFORM_ARCH" == aarch64 ]]; then
+            echo 'BUILD_COMPAT: dedicated Flutter 3.44 CI Bridge still required; refusing legacy Bridge' >&2
+            exit 1
+          fi
+          source scripts/build/platform_ci_guard.sh
+      - name: Resolve reviewed Windows build tools and helper pin
+        if: matrix.platform == 'windows'
+        id: windows-profile
+        run: python3 scripts/build/build_adapter.py .work/native/source --channel ci --output .work/native/windows-profile.json
+      - uses: ./.github/actions/install-llvm
+        if: matrix.platform == 'windows'
+        with:
+          version: ${{ steps.windows-profile.outputs.llvm }}
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: ${{ steps.profile.outputs.flutter }}
+          channel: stable
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ steps.profile.outputs.rust }}
+          targets: ${{ steps.profile.outputs.target }}
+          components: rustfmt
+      - name: Validate fixture source configuration
+        run: |
+          source scripts/validation/test_config.sh
+          python3 scripts/source/verify_source.py .work/native/source "$VARIANT" --automation
+      - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
+        if: matrix.platform == 'windows'
+      - name: Windows official custom Flutter engine (same Stable recipe)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter precache --windows
+          if ($LASTEXITCODE -ne 0) { throw 'flutter precache failed' }
+          $sdk = Split-Path (Split-Path (Get-Command flutter).Source)
+          $engine = Join-Path $sdk 'bin/cache/artifacts/engine/windows-x64-release'
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile .work/engine.zip
+          Expand-Archive .work/engine.zip .work/engine
+          Copy-Item .work/engine/* $engine -Recurse -Force
+          $hash = (Get-FileHash .work/engine.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "ENGINE_ARCHIVE_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Apply Windows official Flutter SDK patch
+        if: matrix.platform == 'windows'
+        run: |
+          sdk=$(dirname "$(dirname "$(command -v flutter)")")
+          patch="$PWD/.work/native/source/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          git -C "$sdk" apply --check "$patch"
+          git -C "$sdk" apply "$patch"
+      - name: Windows pinned native helper
+        if: matrix.platform == 'windows'
+        env:
+          HELPER_SHA: ${{ steps.windows-profile.outputs.helper_commit }}
+        run: |
+          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
+          git -C .work/topmost checkout --detach "$HELPER_SHA"
+          test "$(git -C .work/topmost rev-parse HEAD)" = "$HELPER_SHA"
+          MSBuild.exe .work/topmost/WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=x64 -p:TargetVersion=Windows10
+          python3 -c 'from scripts.build.windows_arm64 import pe; pe(".work/topmost/WindowInjection/x64/Release/WindowInjection.dll","x86_64")'
+      - name: Android official host dependencies
+        if: matrix.platform == 'android'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake curl gcc-multilib g++-multilib libayatana-appindicator3-dev libasound2-dev libc6-dev libclang-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgtk-3-dev libpulse-dev libva-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxdo-dev libxfixes-dev llvm-dev nasm ninja-build openjdk-17-jdk-headless pkg-config tree wget
+          export JAVA_HOME="${JAVA_HOME_17_X64:?}"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          python3 -m scripts.platform.android_sdk --tree .work/native/source --flutter "$FLUTTER_ROOT" --sdk "$ANDROID_HOME"
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        if: matrix.platform == 'android'
+        id: ndk
+        with:
+          ndk-version: ${{ steps.profile.outputs.ndk }}
+          add-to-path: true
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: ${{ matrix.platform == 'windows' && 'C:\vcpkg' || matrix.platform == 'macos' && format('{0}/.work/vcpkg', github.workspace) || '/opt/artifacts/vcpkg' }}
+          vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
+          doNotCache: true
+      - name: Windows official vcpkg manifest install
+        if: matrix.platform == 'windows'
+        working-directory: .work/native/source
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
+      - name: Shared Stable build core with fictional fixture only
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          source scripts/validation/test_config.sh
+          if [[ "$PLATFORM" == windows ]]; then
+            export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
+            bash "scripts/build/$VARIANT.sh" "$UPSTREAM_EXPECTED_SHA"
+            python3 -m scripts.build.platform_ci_report .work/native/source windows x86_64 "$VARIANT"
+          else
+            bash "scripts/build/$PLATFORM.sh"
+          fi
+      - name: Remove installable fixture packages and source from runner
+        if: always()
+        run: rm -rf -- .work/native/source artifacts
+      - name: Retain metadata evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v4-fixture-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.variant }}-report
+          path: .work/native/package-report.json
+          if-no-files-found: warn
+          retention-days: 7
