@@ -68,6 +68,10 @@ def _ci_platform_candidate(tree,p,platform,arch):
 def check(tree,platform,arch,channel=None):
  channel=channel or os.environ.get('BUILD_CHANNEL','stable')
  if channel not in ('ci','stable','nightly'):raise ValueError('BUILD_COMPAT: invalid platform channel')
+ if platform=='macos' and arch=='aarch64' and (Path(tree)/'macos-arm64-ci-transform.json').exists():
+  if channel!='ci':raise ValueError('BUILD_COMPAT: Mac ARM CI receipt is not release approved')
+  from scripts.build.macos_arm64_ci import verified
+  return verified(tree)
  if platform=='macos' and arch=='aarch64' and (Path(tree)/'macos-arm64-transform.json').exists():
   from scripts.build.macos_arm64 import verified
   return verified(tree)
@@ -79,7 +83,10 @@ def check(tree,platform,arch,channel=None):
   p=_ci_platform_candidate(tree,p,platform,arch)
  else:p['ci_candidate_only']=False
  if platform=='macos' and arch=='aarch64' and p['tools'].get('FLUTTER_MACOS_ARM_VERSION'):
-  from scripts.build.macos_arm64 import check_profile
+  if channel=='ci' and p.get('ci_candidate_only'):
+   from scripts.build.macos_arm64_ci import check_profile
+  else:
+   from scripts.build.macos_arm64 import check_profile
   p=check_profile(tree,p)
  return p,j
 

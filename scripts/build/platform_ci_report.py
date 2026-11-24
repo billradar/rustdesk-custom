@@ -38,6 +38,9 @@ def main():
         subprocess.run([str(tools[-1]),'verify',str(package)],check=True)
         packages=[package]
     elif platform=='macos':
+        if arch=='aarch64':
+            from scripts.build.macos_arm64_ci import verified
+            verified(tree,post_build=True)
         package=only(tree.glob('rustdesk*unsigned.dmg'))
         app=tree/'flutter/build/macos/Build/Products/Release/RustDesk.app'
         native=only(app.rglob('liblibrustdesk.dylib'))
