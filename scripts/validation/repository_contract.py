@@ -92,7 +92,8 @@ def is_non_functional_document(path: Path) -> bool:
 
 
 def check_functional_root_structure(files: list[Path], errors: list[str]) -> None:
-    canonical_functional_root = {"requirements.txt"}
+    # Git attributes pin patch LF on Windows; keep all other root files restricted.
+    canonical_functional_root = {"requirements.txt", ".gitattributes"}
     for entry in ROOT.iterdir():
         if not entry.is_file() or is_non_functional_document(entry):
             continue
