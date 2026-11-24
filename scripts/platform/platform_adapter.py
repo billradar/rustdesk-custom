@@ -27,10 +27,20 @@ def inspect(tree,platform,arch):
  result={'platform':platform,'architecture':arch,'runner':runner,'upstream_runner':upstream_runner,'target':row.get('target'),'triplet':row.get('vcpkg-triplet'),'official_matrix':row,'signature':digest(identity),'rust':env.get('MAC_RUST_VERSION') if platform=='macos' else env['RUST_VERSION'],'flutter':env.get('ANDROID_FLUTTER_VERSION') if platform=='android' else env.get('FLUTTER_MACOS_ARM_VERSION',env['FLUTTER_VERSION']) if platform=='macos' and arch=='aarch64' else env['FLUTTER_VERSION'],'vcpkg':env['VCPKG_COMMIT_ID'],'ndk':env.get('NDK_VERSION'),'cargo_ndk':env.get('CARGO_NDK_VERSION'),'cmake':env.get('VCPKG_CMAKE_VERSION',''),'official_disabled':job.get('if') is False,'tools':env}
  return result,job
 
-def _ci_linux_candidate(tree,p,platform,arch):
- """Allow exact reviewed Linux source+signature for CI tests only."""
- if platform!='linux' or p['platform']!='linux' or arch not in ('x86_64','aarch64'):
-  raise ValueError('BUILD_COMPAT: CI candidate permission is Linux Standard/SOS only')
+CI_PLATFORM_RUNNERS = {
+ 'linux': {'x86_64':'ubuntu-22.04','aarch64':'ubuntu-22.04-arm'},
+ 'windows': {'x86_64':'windows-2022'},
+ 'android': {'aarch64':'ubuntu-24.04','armv7':'ubuntu-24.04','x86_64':'ubuntu-24.04'},
+ 'macos': {'x86_64':'macos-26-intel','aarch64':'macos-26'},
+}
+
+def _ci_platform_candidate(tree,p,platform,arch):
+ """Exact source+platform+signature admission, never a production approval."""
+ expected=CI_PLATFORM_RUNNERS.get(platform,{})
+ if p['platform']!=platform or arch not in expected:
+  raise ValueError('BUILD_COMPAT: unsupported CI platform or architecture')
+ if platform=='android' and os.environ.get('VARIANT','standard')!='standard':
+  raise ValueError('BUILD_COMPAT: Android SOS forbidden')
  if os.environ.get('BUILD_FLAVOR')=='unattended-wayland':
   raise ValueError('BUILD_COMPAT: CI candidate cannot approve unattended Wayland')
  sha=subprocess.check_output(['git','-C',str(Path(tree)),'rev-parse','HEAD'],text=True).strip()
@@ -38,19 +48,18 @@ def _ci_linux_candidate(tree,p,platform,arch):
  registry=json.loads((ROOT/'metadata/platform/ci-candidates.json').read_text())
  if registry.get('schema')!='platform-ci-candidates-v1' or not isinstance(registry.get('candidates'),list):
   raise ValueError('BUILD_COMPAT: invalid platform candidate registry')
- matches=[e for e in registry['candidates'] if e.get('source_sha')==sha]
- if len(matches)!=1:raise ValueError('BUILD_COMPAT: unreviewed exact official Linux source')
+ matches=[e for e in registry['candidates'] if e.get('source_sha')==sha and e.get('platform')==platform]
+ if len(matches)!=1:raise ValueError('BUILD_COMPAT: unreviewed exact official platform source')
  row=matches[0]
  v=re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',(Path(tree)/'Cargo.toml').read_text(),re.M)
- expected={'x86_64':'ubuntu-22.04','aarch64':'ubuntu-22.04-arm'}
  if (not v or row.get('upstream_version')!=v.group(1)
      or row.get('ci_only') is not True or row.get('stable_allowed') is not False
-     or row.get('platform')!='linux' or row.get('signature')!=p['signature']
+     or row.get('platform')!=platform or row.get('signature')!=p['signature']
      or not re.fullmatch('[0-9a-f]{64}',row.get('signature',''))
-     or row.get('architectures')!=['x86_64','aarch64']
+     or row.get('architectures')!=list(expected)
      or row.get('runners')!=expected or p['runner']!=expected[arch]
      or not re.fullmatch('[A-Za-z0-9_-]+',row.get('id',''))):
-  raise ValueError('BUILD_COMPAT: source-specific Linux platform candidate drift')
+  raise ValueError('BUILD_COMPAT: source-specific platform candidate drift')
  p.update(ci_candidate_only=True,stable_allowed=False,candidate_source_sha=sha,
           platform_review_status='CI_CANDIDATE_NOT_RELEASE_APPROVED')
  return p
@@ -67,7 +76,7 @@ def check(tree,platform,arch,channel=None):
  if p['signature'] not in known['approved'].get(platform,[]):
   if channel!='ci':
    raise ValueError('BUILD_COMPAT: unreviewed official '+platform+' build interface; observed signature='+p['signature'])
-  p=_ci_linux_candidate(tree,p,platform,arch)
+  p=_ci_platform_candidate(tree,p,platform,arch)
  else:p['ci_candidate_only']=False
  if platform=='macos' and arch=='aarch64' and p['tools'].get('FLUTTER_MACOS_ARM_VERSION'):
   from scripts.build.macos_arm64 import check_profile

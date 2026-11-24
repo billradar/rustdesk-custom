@@ -32,6 +32,8 @@ jobs:
           persist-credentials: false
       - name: Install repository review dependencies
         run: python3 -m pip install -r requirements.txt
+      - name: Verify exact-source candidate and release-denial contracts
+        run: python3 -m scripts.platform.platform_adapter_contract
       - name: Fetch immutable official snapshots
         run: |
           set -euo pipefail
