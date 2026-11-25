@@ -93,6 +93,24 @@ def check_profile(tree, profile):
     return approved(profile)
 
 
+def review_profile(tree, profile):
+    """Review the newer dedicated Bridge and exact three-file transformation.
+
+    The Windows ARM64 policy is not authority for this Mac recipe. Reuse the
+    candidate's pinned official inputs, but do not issue a production receipt.
+    """
+    from scripts.build import macos_arm64_ci as candidate, recipe_admission
+    require(profile.get('production_recipe_approved') is True and profile.get('release_eligible') is False,
+            'Mac formal review admission missing')
+    actual=candidate.source_sha(tree)
+    require(profile.get('recipe_admission_source_sha')==actual,'Mac review source mismatch')
+    reviewed=candidate.check_profile(tree,profile)
+    recipe_admission.check_platform(reviewed,'macos','aarch64')
+    return dict(reviewed,reviewed_transform_inputs=list(candidate.TRANSFORMS),
+                reviewed_bridge_inputs=list(candidate.BRIDGE_FILES),
+                production_receipt_qualified=False)
+
+
 def profile(tree):
     from scripts.platform.platform_adapter import check
     return check(tree,'macos','aarch64')[0]

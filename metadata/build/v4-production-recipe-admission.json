@@ -1,0 +1,263 @@
+{
+  "schema": "production-recipe-admission-v1",
+  "decision": "APPROVED_FOR_FORMAL_BUILD_VALIDATION",
+  "authorization": "repository owner authorized production recipe admission; no publication or merge",
+  "upstream_repository": "rustdesk/rustdesk",
+  "upstream_version": "1.5.3",
+  "patchset": "v4",
+  "revision": 1,
+  "patch_hashes": {
+    "common": "c430596825e4902a1b1a36dac5330aca9a88cbc552fabed01a109b5a9b495835",
+    "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+  },
+  "evidence_custom_head_sha": "f397a7855c9f9189f023d6a7be3c3eaf028ce20d",
+  "fixture_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+  "successor_comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c",
+  "workflow_runs": [
+    {
+      "run_id": 45538522437,
+      "name": "API failover transport compatibility",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522473,
+      "name": "Mac ARM64 Flutter recipe compatibility",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522516,
+      "name": "Staging v4 Windows Android macOS interface review (no publish)",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522535,
+      "name": "CI - Patch and Build compatibility",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522669,
+      "name": "Staging v4 upstream 97245124 patch applicability",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522677,
+      "name": "Action runtime compatibility",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522710,
+      "name": "Staging upstream 51f94394 build interface audit",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522799,
+      "name": "Staging v4 Linux Standard and SOS DEB/RPM package smoke (no publish)",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522827,
+      "name": "Staging v4 Linux Standard and SOS Rust compile (no publish)",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538522871,
+      "name": "Staging v4 desktop mobile real package smoke (no publish)",
+      "result": "PASS"
+    },
+    {
+      "run_id": 45538523604,
+      "name": "Staging v4 against upstream 51f94394 (CI-only applicability)",
+      "result": "PASS"
+    }
+  ],
+  "targets": {
+    "android-aarch64-standard": {
+      "run_id": 45538522871,
+      "job_id": 138954954980,
+      "report_artifact_id": 14990395506,
+      "report_artifact_name": "v4-fixture-android-aarch64-standard-report",
+      "report_archive_digest": "sha256:435bc5a1c3b2c7d247cc64a2a38bd330cc239df4eba1f5340a4bb55128c49a6b",
+      "result": "PASS"
+    },
+    "android-armv7-standard": {
+      "run_id": 45538522871,
+      "job_id": 138954954968,
+      "report_artifact_id": 14989992181,
+      "report_artifact_name": "v4-fixture-android-armv7-standard-report",
+      "report_archive_digest": "sha256:04d61417084fbdcaa7bcec3a73b9095e7e0cdb67f460efa6cdbf8d117fdd9b6d",
+      "result": "PASS"
+    },
+    "android-x86_64-standard": {
+      "run_id": 45538522871,
+      "job_id": 138954955088,
+      "report_artifact_id": 14990645876,
+      "report_artifact_name": "v4-fixture-android-x86_64-standard-report",
+      "report_archive_digest": "sha256:fd68fa46b6c2097fdc1e690157f8d31530c435c36a51029c5f50464d97f55106",
+      "result": "PASS"
+    },
+    "linux-aarch64-sos": {
+      "run_id": 45538522799,
+      "job_id": 138954401970,
+      "report_artifact_id": 14992430670,
+      "report_artifact_name": "v4-linux-deb-rpm-aarch64-sos-smoke-report",
+      "report_archive_digest": "sha256:6f2de9b013fd4836d5eaf694153eba6f7e9ccf90641c9e3a6c2cad351ac7e5d0",
+      "result": "PASS"
+    },
+    "linux-aarch64-standard": {
+      "run_id": 45538522799,
+      "job_id": 138954401931,
+      "report_artifact_id": 14991711950,
+      "report_artifact_name": "v4-linux-deb-rpm-aarch64-standard-smoke-report",
+      "report_archive_digest": "sha256:f8ad3534a93e6751a7540cceb61d6e61c9cea7901d9803c7a7502e251df75ef8",
+      "result": "PASS"
+    },
+    "linux-x86_64-sos": {
+      "run_id": 45538522799,
+      "job_id": 138954402059,
+      "report_artifact_id": 14990093198,
+      "report_artifact_name": "v4-linux-deb-rpm-x86_64-sos-smoke-report",
+      "report_archive_digest": "sha256:09ea6a751bccdf39f138ce89693d8cdb5252aa9af80beb5693f58bac080b1e89",
+      "result": "PASS"
+    },
+    "linux-x86_64-standard": {
+      "run_id": 45538522799,
+      "job_id": 138954401980,
+      "report_artifact_id": 14990191691,
+      "report_artifact_name": "v4-linux-deb-rpm-x86_64-standard-smoke-report",
+      "report_archive_digest": "sha256:10b25893a612ac32a70559a282e1dc8cf51bb16a04817c311da79abe2a5ded66",
+      "result": "PASS"
+    },
+    "macos-aarch64-sos": {
+      "run_id": 45538522871,
+      "job_id": 138954954937,
+      "report_artifact_id": 14990881533,
+      "report_artifact_name": "v4-fixture-macos-aarch64-sos-report",
+      "report_archive_digest": "sha256:b4ff40c6f1c3fedf86d65cdb0886cab8dbf31cceaeb268c299b5c2808d629e58",
+      "result": "PASS"
+    },
+    "macos-aarch64-standard": {
+      "run_id": 45538522871,
+      "job_id": 138954954956,
+      "report_artifact_id": 14989514516,
+      "report_artifact_name": "v4-fixture-macos-aarch64-standard-report",
+      "report_archive_digest": "sha256:16f09ff4b0611495700712ee349c2105957ec143260c28ad4a17f0a6a3385887",
+      "result": "PASS"
+    },
+    "macos-x86_64-sos": {
+      "run_id": 45538522871,
+      "job_id": 138954955000,
+      "report_artifact_id": 14990634762,
+      "report_artifact_name": "v4-fixture-macos-x86_64-sos-report",
+      "report_archive_digest": "sha256:845c4b35f48f69175f3eb1b13f6e1a180081d82358ee650878a60dfaebba6c48",
+      "result": "PASS"
+    },
+    "macos-x86_64-standard": {
+      "run_id": 45538522871,
+      "job_id": 138954954938,
+      "report_artifact_id": 14992645676,
+      "report_artifact_name": "v4-fixture-macos-x86_64-standard-report",
+      "report_archive_digest": "sha256:4f9904668814a8186235a56b20808dee29ad5be37db317846b367a2a36966a7e",
+      "result": "PASS"
+    },
+    "windows-x86_64-sos": {
+      "run_id": 45538522871,
+      "job_id": 138954955075,
+      "report_artifact_id": 14991266901,
+      "report_artifact_name": "v4-fixture-windows-x86_64-sos-report",
+      "report_archive_digest": "sha256:aeb78613cdfea4ae57fb11a64ae8ad092b5ad55239cc4a319936df95efaff051",
+      "result": "PASS"
+    },
+    "windows-x86_64-standard": {
+      "run_id": 45538522871,
+      "job_id": 138954955052,
+      "report_artifact_id": 14990357602,
+      "report_artifact_name": "v4-fixture-windows-x86_64-standard-report",
+      "report_archive_digest": "sha256:db720eecd683d06d0c2a5e344ffd11f7aa3e8daea4de8913adfa7760204ad0c8",
+      "result": "PASS"
+    }
+  },
+  "sources": {
+    "51f94394ce61e1f3d26229565c326b2862cbdd1f": {
+      "qualification": "FIXTURE_PACKAGE_PASS",
+      "fixture_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "build_signature": "1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741",
+      "platforms": {
+        "linux": {
+          "signature": "f6d8ac081d2552bfbe3d57b24997fbd8f1f2d2677cf6f738a3fc6c671f89c795",
+          "runners": {
+            "x86_64": "ubuntu-22.04",
+            "aarch64": "ubuntu-22.04-arm"
+          }
+        },
+        "windows": {
+          "signature": "9e9e7f594356c21b475ad59269e20164e6efbe703ff9bb91ff87dd40f2174f93",
+          "runners": {
+            "x86_64": "windows-2022"
+          }
+        },
+        "android": {
+          "signature": "40553a91353d090f3ffb2d4e78b593557d7d54e47dee79fab538d999825c1b3b",
+          "runners": {
+            "aarch64": "ubuntu-24.04",
+            "armv7": "ubuntu-24.04",
+            "x86_64": "ubuntu-24.04"
+          }
+        },
+        "macos": {
+          "signature": "4ce88d3e563be3c68b19dd2286cc053304774d6aab74b4373ad56fa4056ec433",
+          "runners": {
+            "x86_64": "macos-26-intel",
+            "aarch64": "macos-26"
+          }
+        }
+      }
+    },
+    "a0c0963c483fc8f1aeed4547787d1673adcb583c": {
+      "qualification": "UNCHANGED_BUILD_INPUTS_AND_MAIN_CI_PASS",
+      "fixture_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "build_signature": "1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741",
+      "platforms": {
+        "linux": {
+          "signature": "f6d8ac081d2552bfbe3d57b24997fbd8f1f2d2677cf6f738a3fc6c671f89c795",
+          "runners": {
+            "x86_64": "ubuntu-22.04",
+            "aarch64": "ubuntu-22.04-arm"
+          }
+        },
+        "windows": {
+          "signature": "9e9e7f594356c21b475ad59269e20164e6efbe703ff9bb91ff87dd40f2174f93",
+          "runners": {
+            "x86_64": "windows-2022"
+          }
+        },
+        "android": {
+          "signature": "40553a91353d090f3ffb2d4e78b593557d7d54e47dee79fab538d999825c1b3b",
+          "runners": {
+            "aarch64": "ubuntu-24.04",
+            "armv7": "ubuntu-24.04",
+            "x86_64": "ubuntu-24.04"
+          }
+        },
+        "macos": {
+          "signature": "4ce88d3e563be3c68b19dd2286cc053304774d6aab74b4373ad56fa4056ec433",
+          "runners": {
+            "x86_64": "macos-26-intel",
+            "aarch64": "macos-26"
+          }
+        }
+      }
+    }
+  },
+  "release_eligible": false,
+  "production_signing": "NOT_TESTED",
+  "runtime_ui": "NOT_TESTED",
+  "real_remote_session": "NOT_TESTED",
+  "excluded": [
+    "windows-aarch64-standard",
+    "windows-aarch64-sos",
+    "unattended-wayland",
+    "android-sos",
+    "ios",
+    "web"
+  ]
+}

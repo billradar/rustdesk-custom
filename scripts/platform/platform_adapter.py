@@ -65,9 +65,11 @@ def _ci_platform_candidate(tree,p,platform,arch):
  return p
 
 
-def check(tree,platform,arch,channel=None):
+def check(tree,platform,arch,channel=None,*,recipe_review=False):
  channel=channel or os.environ.get('BUILD_CHANNEL','stable')
- if channel not in ('ci','stable','nightly'):raise ValueError('BUILD_COMPAT: invalid platform channel')
+ if channel not in ('ci','stable','nightly') or (recipe_review and channel not in ('stable','nightly')):raise ValueError('BUILD_COMPAT: invalid platform channel')
+ if recipe_review and ((Path(tree)/'macos-arm64-ci-transform.json').exists() or (Path(tree)/'macos-arm64-transform.json').exists()):
+  raise ValueError('BUILD_COMPAT: recipe review requires pristine recipe inputs, not a transformation receipt')
  if platform=='macos' and arch=='aarch64' and (Path(tree)/'macos-arm64-ci-transform.json').exists():
   if channel!='ci':raise ValueError('BUILD_COMPAT: Mac ARM CI receipt is not release approved')
   from scripts.build.macos_arm64_ci import verified
@@ -78,16 +80,23 @@ def check(tree,platform,arch,channel=None):
  p,j=inspect(tree,platform,arch);known=json.loads((ROOT/'metadata/platform/adapter-profiles.json').read_text())
  if p['official_disabled']:raise ValueError('BUILD_COMPAT: official job is disabled')
  if p['signature'] not in known['approved'].get(platform,[]):
-  if channel!='ci':
+  if channel!='ci' and not recipe_review:
    raise ValueError('BUILD_COMPAT: unreviewed official '+platform+' build interface; observed signature='+p['signature'])
   p=_ci_platform_candidate(tree,p,platform,arch)
+  if recipe_review:
+   from scripts.build.recipe_admission import check_platform
+   p=check_platform(p,platform,arch)
  else:p['ci_candidate_only']=False
  if platform=='macos' and arch=='aarch64' and p['tools'].get('FLUTTER_MACOS_ARM_VERSION'):
-  if channel=='ci' and p.get('ci_candidate_only'):
-   from scripts.build.macos_arm64_ci import check_profile
+  if recipe_review and p.get('production_recipe_approved'):
+   from scripts.build.macos_arm64 import review_profile
+   p=review_profile(tree,p)
   else:
-   from scripts.build.macos_arm64 import check_profile
-  p=check_profile(tree,p)
+   if channel=='ci' and p.get('ci_candidate_only'):
+    from scripts.build.macos_arm64_ci import check_profile
+   else:
+    from scripts.build.macos_arm64 import check_profile
+   p=check_profile(tree,p)
  return p,j
 
 def render(text,profile):

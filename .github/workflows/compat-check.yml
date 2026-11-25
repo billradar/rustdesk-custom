@@ -100,6 +100,9 @@ jobs:
     - id: adapter
       name: Fail-closed official build adapter
       run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json --channel "${{ inputs.channel }}"
+    - name: Review explicitly admitted production recipes (no release authority)
+      if: inputs.channel == 'ci'
+      run: python3 -m scripts.build.recipe_admission .work/official --if-admitted --output .work/production-recipe-review.json
     - id: selection
       name: Select version Patch Profile (Stable forbids fallback)
       run: 'source scripts/validation/test_config.sh
@@ -113,7 +116,9 @@ jobs:
         name: patchset-selection-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: '.work/patchset-selection.json
 
-          .work/build-profile.json'
+          .work/build-profile.json
+
+          .work/production-recipe-review.json'
         if-no-files-found: warn
   contracts:
     name: Validate repository architecture contracts
@@ -138,6 +143,7 @@ jobs:
         python3 -m scripts.upstream.source_profile_contract
         python3 -m scripts.upstream.ci_source_successor_contract
         python3 -m scripts.release.candidate_evidence_contract
+        python3 -m scripts.build.recipe_admission_contract
         python3 -m scripts.source.source_integration_contract
         python3 -m scripts.release.candidate_evidence
         python3 scripts/build/build_adapter_contract.py

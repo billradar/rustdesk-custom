@@ -88,20 +88,23 @@ def _ci_candidate(tree, profile):
     raise ValueError('BUILD_COMPATIBILITY=FAIL: unknown critical official Windows/bridge/build interface; review in staging')
 
 
-def check(tree,channel='stable'):
-    """Only explicit CI may validate a candidate; Stable remains fail-closed."""
-    if channel not in ('ci','stable'):
+def check(tree,channel='stable',*,recipe_review=False):
+    """Production recipe review is explicit; ordinary Stable remains fail-closed."""
+    if channel not in ('ci','stable') or (recipe_review and channel!='stable'):
         raise ValueError('BUILD_COMPATIBILITY=FAIL: invalid adapter channel')
     profile,critical=inspect(tree)
     known=json.loads((ROOT/'metadata/build/adapter-profiles.json').read_text())
     approved=next((p for p in known['profiles'] if p['signature']==profile['signature']),None)
     if approved is None:
-        if channel!='ci':
+        if channel!='ci' and not recipe_review:
             raise ValueError('BUILD_COMPATIBILITY=FAIL: unknown critical official Windows/bridge/build interface; review in staging')
         candidate=_ci_candidate(tree,profile)
         profile.update(reviewed_profile=candidate['id'],ci_candidate_only=True,
                        stable_allowed=False,candidate_source_sha=candidate['source_sha'],
                        adapter_review_status='CI_CANDIDATE_NOT_RELEASE_APPROVED')
+        if recipe_review:
+            from scripts.build.recipe_admission import check_build
+            profile=check_build(candidate,profile)
     else:
         profile['reviewed_profile']=approved['id']
         profile['ci_candidate_only']=False
