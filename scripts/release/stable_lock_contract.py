@@ -22,7 +22,7 @@ class LockTests(unittest.TestCase):
             ANDROID_PRODUCTION_SIGNING_ENABLED='false', STABLE_LOCK_REQUIRED='true'), clear=True)
         self.env.start()
         self.addCleanup(self.env.stop)
-        self.data = dict(channel='stable', version='1.5.3', upstream_sha='b'*40,
+        self.data = dict(channel='stable', version='1.5.3', upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef',
                          upstream_tag='1.5.3', upstream_ref='1.5.3')
 
     def create(self):

@@ -84,11 +84,11 @@ def require_release_tag(row, version):
     if not tag: raise ValueError('Existing Build Identity has invalid revision tag')
     return tag
 
-def next_patch_revision(version, patchset):
+def next_patch_revision(version, patchset, source_sha=None):
     """Current Patchset content revision; never allocate from GitHub Releases."""
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
         raise ValueError('Invalid Stable upstream version')
-    require_selection(version, patchset, channel='stable')
+    require_selection(version, patchset, channel='stable', source_sha=source_sha)
     if not PATCHSET_RE.fullmatch(patchset):
         raise ValueError('Invalid Patchset version namespace')
     try:
@@ -123,7 +123,7 @@ def release_preflight(data, *, dry_run=False):
     if not PATCHSET_RE.fullmatch(data.get("patchset","")): raise ValueError("Invalid patchset")
     if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
         raise ValueError('Locked stable ref mismatch')
-    require_selection(data['version'], data['patchset'], channel='stable')
+    require_selection(data['version'], data['patchset'], channel='stable', source_sha=data['upstream_sha'])
     custom_sha=os.environ.get('GITHUB_SHA','')
     if not re.fullmatch(r'[0-9a-f]{40}',custom_sha): raise ValueError('Stable preflight requires the exact custom repository SHA')
     wayland_included,wayland_policy_sha256=wayland_identity()
@@ -137,7 +137,7 @@ def release_preflight(data, *, dry_run=False):
                                     signing_enabled)
     # Immutable tag is the reviewed Patchset content revision, not an
     # incrementing Release count. Historical tags retain original semantics.
-    revision = next_patch_revision(data['version'], data['patchset'])
+    revision = next_patch_revision(data['version'], data['patchset'], source_sha=data['upstream_sha'])
     if 'patch_revision' in data and data['patch_revision'] != revision:
         raise ValueError('Locked Patchset content revision drift')
     data['patch_revision'] = data['revision'] = data['patchset_version'] = revision
@@ -234,7 +234,7 @@ def draft(root):
     if any(i['channel']!='stable' for i in infos.values()):raise ValueError('Only stable creates drafts')
     _,directory=assets(root)
     info=infos['standard']
-    expected_version=next_patch_revision(info['upstream_version'], info['patchset'])
+    expected_version=next_patch_revision(info['upstream_version'], info['patchset'], source_sha=info['upstream_sha'])
     if info['patch_revision'] != expected_version:
         raise ValueError('Artifact Patchset content revision changed before draft')
     tag=f'v{info["upstream_tag"].lstrip("v")}-custom.{expected_version}'

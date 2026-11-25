@@ -14,7 +14,23 @@ ROOT = Path(__file__).resolve().parents[2]
 CURRENT_V3 = "v3." + str(json.loads((ROOT / "patchsets/v3/patchset.json").read_text())["revision"])
 
 
+def synthetic_reviewed_profile(test):
+    # Existing synthetic dedup/run fixtures use placeholder SHA values. Bind
+    # those fixture identities to the reviewed v3 policy; the separate source
+    # routing contract exercises real and unknown SHA values without mocks.
+    real = nightly.profile_for_version
+    def fixture(version, channel='ci', source_sha=None):
+        if version == '1.5.3' and source_sha in ('a'*40, 'b'*40, 'c'*40):
+            source_sha = '95cca3f661f635b3cc85c04935fe8d96d8f432ef'
+        return real(version, channel, source_sha=source_sha)
+    mock = patch.object(nightly, 'profile_for_version', side_effect=fixture)
+    mock.start(); test.addCleanup(mock.stop)
+
+
 class NightlyTests(unittest.TestCase):
+    def setUp(self):
+        synthetic_reviewed_profile(self)
+
     def run_fixture(self):
         return dict(status='completed', conclusion='success', head_branch='master', event='schedule',
                     path='.github/workflows/flutter-nightly.yml', head_repository={'full_name':nightly.OFFICIAL},
@@ -583,6 +599,7 @@ class NightlyDraftTests(unittest.TestCase):
         (internal/a.BUNDLE).write_text('{}')
 
     def setUp(self):
+        synthetic_reviewed_profile(self)
         from scripts.release import attestation as a
         reader=patch.object(a,'read_release',side_effect=lambda *args,**kw:self.verified_manifest)
         reader.start();self.addCleanup(reader.stop)

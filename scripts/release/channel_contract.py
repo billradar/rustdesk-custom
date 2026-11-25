@@ -31,7 +31,7 @@ class StablePatchsetNotesContract(unittest.TestCase):
             asset=destination/'client.apk'
             asset.write_bytes(b'validated test asset')
             info=dict(channel='stable',upstream_tag='v1.5.3',
-                      upstream_version='1.5.3',upstream_sha='a'*40,
+                      upstream_version='1.5.3',upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef',
                       patchset='v3',patch_revision=CURRENT_V3,
                       common_patch_hash=channel.patch_hash('common','v3'),
                       custom_repository_sha='b'*40,

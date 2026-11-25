@@ -48,6 +48,11 @@ def profile_for_version(version, channel='ci', source_sha=None):
     source_entry = registry.get('exact_sources', {}).get(source_sha) if source_sha else None
     if source_entry is not None and source_entry['version'] != normalized:
         raise ValueError('Exact source Profile version mismatch')
+    # Retired versions must not become buildable via the unknown-SHA fallback.
+    if source_entry is None:
+        version_profile = registry['exact_versions'].get(normalized)
+        if version_profile:
+            require_active(registry['profiles'][version_profile]['patchset'])
     # A same-version but unreviewed source is not an approved Stable profile.
     # It can test the newest maintained generation, but only as a fallback.
     unknown_source = source_sha is not None and source_entry is None
@@ -77,8 +82,8 @@ def profile_for_version(version, channel='ci', source_sha=None):
                 stable_allowed=not fallback and profile['stable_allowed'])
 
 
-def patchset_for_version(version, channel='ci'):
-    return profile_for_version(version, channel)['selected']
+def patchset_for_version(version, channel='ci', source_sha=None):
+    return profile_for_version(version, channel, source_sha=source_sha)['selected']
 
 
 def require_selection(version, selected, channel='ci', source_sha=None):
@@ -122,7 +127,7 @@ def verify(name):
     return data
 
 def select(sha=None, source=None, report=None, upstream_ref=None, version=None, channel=None):
-    """Resolve a numeric version Profile; SHA and applicability never select it."""
+    """Resolve exact SHA first; otherwise use a version-only compatibility profile."""
     selected_version = version or upstream_ref
     if not selected_version and source:
         match = re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
@@ -149,7 +154,7 @@ def select(sha=None, source=None, report=None, upstream_ref=None, version=None, 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('sha', nargs='?', help='Retained for compatibility; never used for selection')
+    parser.add_argument('sha', nargs='?', help='Exact official source commit; required by release routing')
     parser.add_argument('--source', type=Path, help='Read numeric Cargo version when --version/--ref is absent')
     parser.add_argument('--report', default='.work/patchset-selection.json')
     parser.add_argument('--ref', default='')
