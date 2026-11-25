@@ -1,5 +1,7 @@
 """Formal recipe admission never grants Stable/Nightly release authorization."""
 import copy
+import json
+import yaml
 import os
 from pathlib import Path
 import tempfile
@@ -10,6 +12,36 @@ from scripts.platform import platform_adapter
 from scripts.upstream import patchsets
 
 class RecipeAdmissionContract(unittest.TestCase):
+    def test_report_serialization_handles_real_yaml_matrix_keys(self):
+        row=yaml.safe_load('arch: aarch64\non: macos-26\ntarget: aarch64-apple-darwin\n')
+        self.assertIn(True,row)
+        report={'result':'PASS','release_eligible':False,
+                'platforms':{'macos-aarch64':{'official_matrix':row,'production_recipe_approved':True}}}
+        before=copy.deepcopy(report)
+        encoded=admission.serialize_report(report)
+        decoded=json.loads(encoded)
+        self.assertEqual(decoded['platforms']['macos-aarch64']['official_matrix'],
+                         {'arch':'aarch64','true':'macos-26','target':'aarch64-apple-darwin'})
+        self.assertEqual(report,before)
+        self.assertIs(decoded['release_eligible'],False)
+        self.assertEqual(encoded,admission.serialize_report(report))
+
+    def test_report_serialization_rejects_key_collisions(self):
+        with self.assertRaisesRegex(ValueError,'duplicate normalized report key'):
+            admission.serialize_report({'official_matrix':{True:'runner','true':'other'}})
+
+    def test_cli_writes_normalized_report(self):
+        report={'result':'PASS','release_eligible':False,'platforms':{'windows-x86_64':{
+            'official_matrix':{True:'windows-2022','arch':'x86_64'}}}}
+        with tempfile.TemporaryDirectory() as td:
+            output=Path(td)/'review.json'
+            with patch.object(admission,'inspect_source',return_value=report), \
+                 patch('sys.argv',['recipe_admission',td,'--output',str(output)]):
+                admission.main()
+            self.assertEqual(json.loads(output.read_text())['platforms']['windows-x86_64']
+                             ['official_matrix']['true'],'windows-2022')
+            self.assertFalse(json.loads(output.read_text())['release_eligible'])
+
     def test_exact_scope_and_patch_revision(self):
         record=admission.validate(admission.read())
         self.assertEqual(len(record['targets']),13)

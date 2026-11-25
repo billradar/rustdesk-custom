@@ -135,6 +135,24 @@ def inspect_source(tree, *, if_admitted=False):
             'common_build':common,'platforms':platforms,'release_eligible':False,
             'next_gate':'FORMAL_DRY_RUN_WITH_PREPARED_SOURCE_AND_PRODUCTION_RECEIPTS'}
 
+def serialize_report(report):
+    """Normalize YAML mapping keys for the report, not the in-memory recipe.
+
+    PyYAML's YAML 1.1 loader can parse the official matrix key "on" as
+    True. Use the same JSON key conversion as platform_adapter.inspect
+    before sorting; reject collisions instead of silently dropping fields.
+    """
+    def unique_pairs(pairs):
+        result={}
+        for key,value in pairs:
+            require(key not in result,'duplicate normalized report key: '+key)
+            result[key]=value
+        return result
+
+    normalized=json.loads(json.dumps(report),object_pairs_hook=unique_pairs)
+    return json.dumps(normalized,indent=2,sort_keys=True)+'\n'
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('tree',type=Path)
@@ -143,7 +161,7 @@ def main():
     args=parser.parse_args()
     report=inspect_source(args.tree,if_admitted=args.if_admitted)
     args.output.parent.mkdir(parents=True,exist_ok=True)
-    args.output.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+    args.output.write_text(serialize_report(report),encoding='utf-8')
     print('Production recipe review: '+report['result']+' (release authorization unchanged)')
 
 if __name__=='__main__':
