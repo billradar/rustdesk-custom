@@ -56,13 +56,9 @@ jobs:
         env:
           CARGO_EXPAND: ${{ steps.profile.outputs.cargo_expand }}
           FRB: ${{ steps.profile.outputs.frb }}
+          BRIDGE_FLUTTER: ${{ steps.profile.outputs.bridge_flutter }}
         run: |
-          cargo install cargo-expand --version "$CARGO_EXPAND" --locked
-          cargo install flutter_rust_bridge_codegen --version "$FRB" --features uuid --locked
-          bash .github/patches/apply_flutter_3.44_source_patches.sh
-          (cd flutter && flutter pub get)
-          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
-          cp flutter/macos/Runner/bridge_generated.h flutter/ios/Runner/bridge_generated.h
+          bash "$GITHUB_WORKSPACE/scripts/build/generate_flutter344_bridge.sh"
           cd "$GITHUB_WORKSPACE"
           python3 -m scripts.build.macos_arm64_ci bridge-info .work/mac-arm-ci-bridge
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -111,8 +111,8 @@ jobs:
         CUSTOM_APP_ICON_PATH: ${{ vars.CUSTOM_APP_ICON_PATH || '' }}
         CUSTOM_TRAY_ICON_PATH: ${{ vars.CUSTOM_TRAY_ICON_PATH || '' }}
       run: python3 -m scripts.source.branding --output .work/branding-input.json --repository "$GITHUB_REPOSITORY"
-    - name: Freeze v3 public API endpoints from Actions variables
-      if: inputs.patchset == 'v3'
+    - name: Freeze public API endpoints from Actions variables
+      if: contains(fromJSON('["v3","v4"]'), inputs.patchset)
       env:
         RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
         RUSTDESK_API_FALLBACK_SERVER: ${{ vars.RUSTDESK_API_FALLBACK_SERVER || '' }}
@@ -165,8 +165,8 @@ jobs:
     - name: Prepare Common once and fork independent variant sources
       run: |
         python3 scripts/source/prepared_source.py prepare           --base .work/official           --output .work/prepared           --ref "$UPSTREAM_REF"           --sha "$UPSTREAM_EXPECTED_SHA"           --patchset "$PATCHSET"           --bridge .work/bridge-source
-    - name: Check frozen v3 API policy matches across variants
-      if: inputs.patchset == 'v3'
+    - name: Check frozen API policy matches across variants
+      if: contains(fromJSON('["v3","v4"]'), inputs.patchset)
       run: |
         python3 - <<'PY'
         import json

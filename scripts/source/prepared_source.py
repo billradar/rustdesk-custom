@@ -34,7 +34,7 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if not identity_path.is_file():raise ValueError('Client update identity missing')
     update_identity=json.loads(identity_path.read_text(encoding='utf-8'))
     from scripts.upstream.patchsets import require_selection
-    require_selection(manifest['upstream_version'], patchset, update_identity['channel'])
+    require_selection(manifest['upstream_version'], patchset, update_identity['channel'], source_sha=sha)
     if update_identity!=manifest.get('client_update_identity'):
         raise ValueError('Client update identity differs from prepared-source manifest')
     if any(update_identity[k]!=manifest[v] for k,v in
@@ -46,7 +46,7 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
     if not branding_path.is_file() or hashlib.sha256(branding_path.read_bytes()).hexdigest()!=manifest.get('branding_sha256'):
         raise ValueError('Branding snapshot differs from prepared-source identity')
     load_branding(branding_path,manifest['custom_repository'])
-    if patchset == 'v3':
+    if patchset in ('v3', 'v4'):
         from scripts.source.api_policy import verify as verify_api_policy
         verify_api_policy(tree, manifest.get('api_policy_sha256'), os.environ.get('RUSTDESK_API_SERVER'))
     from scripts.source.update_identity import verify_about_identity
@@ -88,7 +88,7 @@ def prepare(base,output,ref,sha,name,bridge):
     if not re.fullmatch('[0-9a-f]{40}',sha):raise ValueError('Exact SHA required')
     profile=check(base)
     from scripts.upstream.patchsets import require_selection
-    require_selection(profile['upstream_version'], name, os.environ['BUILD_CHANNEL'])
+    require_selection(profile['upstream_version'], name, os.environ['BUILD_CHANNEL'], source_sha=sha)
     os.environ['PATCHSET']=name
     output.mkdir(parents=True,exist_ok=False)
     common=output/'common'
@@ -96,7 +96,7 @@ def prepare(base,output,ref,sha,name,bridge):
     shutil.copytree(base,common,symlinks=True)
     run('bash',ROOT/'scripts/source/apply_patches.sh',common,'standard')
     api_digest = None
-    if name == 'v3':
+    if name in ('v3', 'v4'):
         from scripts.source.api_policy import apply as apply_api_policy, load as load_api_policy, resolve as resolve_api_policy
         policy_path = os.environ.get('API_POLICY_INPUT_PATH')
         policy = load_api_policy(policy_path) if policy_path else resolve_api_policy('', '')
@@ -135,7 +135,7 @@ def prepare(base,output,ref,sha,name,bridge):
                   'branding_sha256':branding_sha256,
                   'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   'build_adapter_signature':profile['signature'],'files':inventory(tree)}
-        if name == 'v3':
+        if name in ('v3', 'v4'):
             manifest['api_policy_sha256'] = api_digest
         (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n', encoding='utf-8')
         verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'])
