@@ -16,6 +16,7 @@ from scripts.release.qualification import build_release_body
 from scripts.validation.cm_window_contract import new_file
 
 ROOT = Path(__file__).resolve().parents[2]
+APPROVED_SOURCE = "95cca3f661f635b3cc85c04935fe8d96d8f432ef"
 CURRENT_V3 = "v3." + str(json.loads((ROOT / "patchsets/v3/patchset.json").read_text())["revision"])
 PATCH = "common/0005-custom-release-updates.patch"
 
@@ -168,7 +169,7 @@ class ClientUpdateTests(unittest.TestCase):
             about = tree / 'flutter/lib/common/custom_about_identity.dart'
             about.parent.mkdir(parents=True)
             about.write_text("", encoding='utf-8')
-            args = dict(repository="fork-owner/custom-client", version="1.5.3", sha="a" * 40, variant="standard", run="123",
+            args = dict(repository="fork-owner/custom-client", version="1.5.3", sha=APPROVED_SOURCE, variant="standard", run="123",
                         channel="stable", revision=CURRENT_V3)
             self.assertEqual(write_identity(tree, **args)["revision"], CURRENT_V3)
             self.assertEqual(json.loads(destination.read_text(encoding='utf-8'))["variant"], "standard")
@@ -197,7 +198,7 @@ class ClientUpdateTests(unittest.TestCase):
                 for channel,revision,version in [('stable',CURRENT_V3,'1.5.3-custom.' + CURRENT_V3),
                                                   ('nightly','','1.5.3-custom.' + CURRENT_V3 + '-nightly'),('ci','','1.5.3-custom.' + CURRENT_V3 + '-ci')]:
                     with self.subTest(variant=variant,channel=channel):
-                        data=write_identity(tree,repository='owner/repo',version='1.5.3',sha='a'*40,
+                        data=write_identity(tree,repository='owner/repo',version='1.5.3',sha=APPROVED_SOURCE,
                                             variant=variant,run='123',channel=channel,revision=revision)
                         before=native.read_bytes()
                         self.assertIn('"'+version+'"',about.read_text())

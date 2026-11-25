@@ -144,6 +144,90 @@
       "ci_only": true,
       "stable_allowed": false,
       "evidence_run_id": 45346909945
+    },
+    {
+      "id": "linux-153-a0c0963c-ci",
+      "source_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+      "upstream_version": "1.5.3",
+      "platform": "linux",
+      "signature": "f6d8ac081d2552bfbe3d57b24997fbd8f1f2d2677cf6f738a3fc6c671f89c795",
+      "architectures": [
+        "x86_64",
+        "aarch64"
+      ],
+      "runners": {
+        "x86_64": "ubuntu-22.04",
+        "aarch64": "ubuntu-22.04-arm"
+      },
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45191836760,
+      "evidence_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "evidence_scope": "UNCHANGED_BUILD_INPUTS_FROM_REVIEWED_SOURCE",
+      "source_comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c"
+    },
+    {
+      "id": "windows-153-a0c0963c-ci",
+      "source_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+      "upstream_version": "1.5.3",
+      "platform": "windows",
+      "signature": "9e9e7f594356c21b475ad59269e20164e6efbe703ff9bb91ff87dd40f2174f93",
+      "architectures": [
+        "x86_64"
+      ],
+      "runners": {
+        "x86_64": "windows-2022"
+      },
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45346909945,
+      "evidence_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "evidence_scope": "UNCHANGED_BUILD_INPUTS_FROM_REVIEWED_SOURCE",
+      "source_comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c"
+    },
+    {
+      "id": "android-153-a0c0963c-ci",
+      "source_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+      "upstream_version": "1.5.3",
+      "platform": "android",
+      "signature": "40553a91353d090f3ffb2d4e78b593557d7d54e47dee79fab538d999825c1b3b",
+      "architectures": [
+        "aarch64",
+        "armv7",
+        "x86_64"
+      ],
+      "runners": {
+        "aarch64": "ubuntu-24.04",
+        "armv7": "ubuntu-24.04",
+        "x86_64": "ubuntu-24.04"
+      },
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45346909945,
+      "evidence_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "evidence_scope": "UNCHANGED_BUILD_INPUTS_FROM_REVIEWED_SOURCE",
+      "source_comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c"
+    },
+    {
+      "id": "macos-153-a0c0963c-ci",
+      "source_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+      "upstream_version": "1.5.3",
+      "platform": "macos",
+      "signature": "4ce88d3e563be3c68b19dd2286cc053304774d6aab74b4373ad56fa4056ec433",
+      "architectures": [
+        "x86_64",
+        "aarch64"
+      ],
+      "runners": {
+        "x86_64": "macos-26-intel",
+        "aarch64": "macos-26"
+      },
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45346909945,
+      "evidence_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "evidence_scope": "UNCHANGED_BUILD_INPUTS_FROM_REVIEWED_SOURCE",
+      "source_comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c"
     }
   ]
 }

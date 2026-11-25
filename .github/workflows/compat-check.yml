@@ -136,6 +136,7 @@ jobs:
         python3 -m scripts.upstream.patch_profiles_contract
         python3 -m py_compile scripts/upstream/patchsets.py scripts/upstream/source_profile_contract.py
         python3 -m scripts.upstream.source_profile_contract
+        python3 -m scripts.upstream.ci_source_successor_contract
         python3 -m scripts.release.candidate_evidence_contract
         python3 -m scripts.source.source_integration_contract
         python3 -m scripts.release.candidate_evidence

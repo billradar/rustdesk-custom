@@ -1,7 +1,8 @@
 """Exact-source macOS ARM64 v4 fixture recipe; never a release approval.
 
 The production macos_arm64 policy and receipt format are deliberately unchanged.
-Only this reviewed upstream commit may use the candidate Flutter 3.44 recipe.
+Only reviewed exact upstream commits may use the candidate Flutter 3.44 recipe.
+The real-package fixture worker remains pinned to SOURCE.
 """
 import argparse
 import hashlib
@@ -18,6 +19,8 @@ from scripts.build import build_adapter, macos_arm64 as stable
 from scripts.platform import platform_adapter as adapter
 
 SOURCE = '51f94394ce61e1f3d26229565c326b2862cbdd1f'
+# a0c0963c adds only PR template/evidence files; all recipe blobs are unchanged.
+REVIEWED_SOURCES = frozenset((SOURCE, 'a0c0963c483fc8f1aeed4547787d1673adcb583c'))
 PLATFORM_SIGNATURE = '4ce88d3e563be3c68b19dd2286cc053304774d6aab74b4373ad56fa4056ec433'
 BRIDGE_SIGNATURE = '1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741'
 # Git object identities observed directly at the frozen official commit.
@@ -76,7 +79,8 @@ def context(tree, *, worker=False):
 def check_profile(tree, p, *, original_tree=None):
     """Check both existing candidate registries and the exact dedicated recipe."""
     tree=Path(tree); recipe=Path(original_tree) if original_tree is not None else tree
-    require(source_sha(tree)==SOURCE and p.get('candidate_source_sha')==SOURCE and
+    actual=source_sha(tree)
+    require(actual in REVIEWED_SOURCES and p.get('candidate_source_sha')==actual and
             p.get('ci_candidate_only') is True and p.get('stable_allowed') is False and
             p.get('platform')=='macos' and p.get('architecture')=='aarch64' and
             p.get('signature')==PLATFORM_SIGNATURE and
@@ -85,7 +89,7 @@ def check_profile(tree, p, *, original_tree=None):
     b,_=build_adapter.inspect(recipe)
     require(b['signature']==BRIDGE_SIGNATURE, 'unknown common bridge interface')
     row=build_adapter._ci_candidate(tree,b)
-    require(row['source_sha']==SOURCE, 'bridge candidate source mismatch')
+    require(row['source_sha']==actual, 'bridge candidate source mismatch')
     workflow=yaml.safe_load((recipe/'.github/workflows/bridge.yml').read_text())
     dedicated=[r for r in workflow['jobs']['generate_bridge']['strategy']['matrix']['job']
                if r['artifact-name']=='bridge-artifact-flutter-3.44']

@@ -1,0 +1,29 @@
+{
+  "schema": "ci-source-equivalence-review-v1",
+  "upstream_repository": "rustdesk/rustdesk",
+  "base_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+  "candidate_source_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+  "comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c",
+  "base_leaf_entries": 1111,
+  "candidate_leaf_entries": 1113,
+  "changed_entries": [
+    {
+      "path": ".github/pull_request_template.md",
+      "before": null,
+      "after": "100644:9a827bcd3d62fc9f9532a27ffaabc7e485d34d68"
+    },
+    {
+      "path": ".github/workflows/pr-evidence-check.yml",
+      "before": null,
+      "after": "100644:88c207a7ad94a89e816781e18e33b3a7a7d71f7d"
+    }
+  ],
+  "comparison_method": "complete recursive Git tree leaf mode/object identity comparison; no truncation",
+  "inherited_fixture_evidence": [
+    45413020202,
+    45413020081
+  ],
+  "candidate_actual_package_status": "NOT_TESTED",
+  "ci_only": true,
+  "stable_allowed": false
+}

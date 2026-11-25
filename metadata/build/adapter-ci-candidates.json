@@ -18,6 +18,18 @@
       "ci_only": true,
       "stable_allowed": false,
       "evidence_run_id": 45183119714
+    },
+    {
+      "id": "rd-153-a0c0963c-ci-only",
+      "source_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+      "upstream_version": "1.5.3",
+      "signature": "1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741",
+      "ci_only": true,
+      "stable_allowed": false,
+      "evidence_run_id": 45183119714,
+      "evidence_source_sha": "51f94394ce61e1f3d26229565c326b2862cbdd1f",
+      "evidence_scope": "UNCHANGED_BUILD_INPUTS_FROM_REVIEWED_SOURCE",
+      "source_comparison": "https://github.com/rustdesk/rustdesk/compare/51f94394ce61e1f3d26229565c326b2862cbdd1f...a0c0963c483fc8f1aeed4547787d1673adcb583c"
     }
   ]
 }

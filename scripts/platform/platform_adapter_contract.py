@@ -62,8 +62,9 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(registry['schema'],'platform-ci-candidates-v1')
         self.assertEqual({r['source_sha'] for r in registry['candidates']},
                          {'9724512429b053be04cdb843345e99ddcccdb80e',
-                          '51f94394ce61e1f3d26229565c326b2862cbdd1f'})
-        self.assertEqual(len(registry['candidates']), 8)
+                          '51f94394ce61e1f3d26229565c326b2862cbdd1f',
+                          'a0c0963c483fc8f1aeed4547787d1673adcb583c'})
+        self.assertEqual(len(registry['candidates']), 12)
         self.assertEqual({(r['source_sha'],r['platform']) for r in registry['candidates']},
                          {(sha,platform) for sha in {r['source_sha'] for r in registry['candidates']}
                           for platform in adapter.CI_PLATFORM_RUNNERS})
