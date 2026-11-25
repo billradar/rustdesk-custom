@@ -18,9 +18,14 @@ def inventory(tree):
         elif p.is_file():result[relative.as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()
     return result
 
-def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
+def verify_tree(tree,variant,sha,patchset,custom_sha,run_id,*,formal_validation=False):
     require_active(patchset)
     manifest=json.loads((tree/'source-manifest.json').read_text(encoding='utf-8'))
+    if formal_validation:
+        from scripts.build.formal_validation import verify_manifest
+        verify_manifest(manifest)
+    elif 'formal_validation' in manifest:
+        raise ValueError('Formal validation source cannot enter a release worker')
     expected={'variant':variant,'upstream_sha':sha,'patchset':patchset,'custom_repository_sha':custom_sha,
               'prepare_workflow_run':str(run_id),'upstream_repository':'rustdesk/rustdesk'}
     for k,v in expected.items():
@@ -51,7 +56,10 @@ def verify_tree(tree,variant,sha,patchset,custom_sha,run_id):
         verify_api_policy(tree, manifest.get('api_policy_sha256'), os.environ.get('RUSTDESK_API_SERVER'))
     from scripts.source.update_identity import verify_about_identity
     verify_about_identity(tree)
-    contracts(tree,variant,patchset);check(tree)
+    contracts(tree,variant,patchset)
+    profile=check(tree,recipe_review=True) if formal_validation else check(tree)
+    if formal_validation and profile['signature']!=manifest['build_adapter_signature']:
+        raise ValueError('Formal prepared source build signature mismatch')
     return manifest
 
 # Public upstream TLS integration-test key, never a deployment credential.
@@ -81,12 +89,17 @@ def scan_prepared_source(tree):
                              + ' (value withheld)') from None
 
 
-def prepare(base,output,ref,sha,name,bridge):
+def prepare(base,output,ref,sha,name,bridge,*,formal_validation=False):
     verify(name)
     if git(base,'rev-parse','HEAD')!=sha or git(base,'status','--porcelain','--ignore-submodules=none'):
         raise ValueError('Prepare requires clean exact official source')
     if not re.fullmatch('[0-9a-f]{40}',sha):raise ValueError('Exact SHA required')
-    profile=check(base)
+    formal_marker=None
+    if formal_validation:
+        from scripts.build.formal_validation import context
+        formal_marker=context(sha)
+        if name!='v4':raise ValueError('Formal validation requires v4')
+    profile=check(base,recipe_review=True) if formal_validation else check(base)
     from scripts.upstream.patchsets import require_selection
     require_selection(profile['upstream_version'], name, os.environ['BUILD_CHANNEL'], source_sha=sha)
     os.environ['PATCHSET']=name
@@ -100,6 +113,8 @@ def prepare(base,output,ref,sha,name,bridge):
         from scripts.source.api_policy import apply as apply_api_policy, load as load_api_policy, resolve as resolve_api_policy
         policy_path = os.environ.get('API_POLICY_INPUT_PATH')
         policy = load_api_policy(policy_path) if policy_path else resolve_api_policy('', '')
+        if formal_validation and policy != resolve_api_policy('https://api.test.invalid','https://fallback.api.test.invalid'):
+            raise ValueError('Formal validation requires fictional API origins')
         api_digest = apply_api_policy(common, policy)
     for variant in ('standard','sos'):
         tree=output/variant;shutil.copytree(common,tree,symlinks=True)
@@ -121,6 +136,10 @@ def prepare(base,output,ref,sha,name,bridge):
                        revision=os.environ.get('CLIENT_PATCH_REVISION', ''))
         from scripts.source.branding import load as load_branding, apply as apply_branding
         branding=load_branding(os.environ.get('BRANDING_INPUT_PATH'),os.environ['GITHUB_REPOSITORY'])
+        if formal_validation:
+            from scripts.source.branding import resolve as resolve_branding
+            if branding!=resolve_branding({},os.environ['GITHUB_REPOSITORY']):
+                raise ValueError('Formal validation requires default public branding')
         branding_sha256=apply_branding(tree,branding)
         scan_prepared_source(tree)
         if profile['source_sbom_requested']:
@@ -137,8 +156,9 @@ def prepare(base,output,ref,sha,name,bridge):
                   'build_adapter_signature':profile['signature'],'files':inventory(tree)}
         if name in ('v3', 'v4'):
             manifest['api_policy_sha256'] = api_digest
+        if formal_marker is not None:manifest['formal_validation']=formal_marker
         (tree/'source-manifest.json').write_text(json.dumps(manifest,sort_keys=True,indent=2)+'\n', encoding='utf-8')
-        verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'])
+        verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'],formal_validation=formal_validation)
         bundle=output/('prepared-'+variant);bundle.mkdir()
         archive=bundle/'source.tar.gz'
         with tarfile.open(archive,'w:gz') as tar:tar.add(tree,arcname='source')
@@ -146,7 +166,7 @@ def prepare(base,output,ref,sha,name,bridge):
         (bundle/'SHA256SUMS').write_text(hashlib.sha256(archive.read_bytes()).hexdigest()+'  source.tar.gz\n', encoding='utf-8')
     shutil.rmtree(common)
 
-def unpack(bundle,destination,variant,sha,name):
+def unpack(bundle,destination,variant,sha,name,*,formal_validation=False):
     archive=bundle/'source.tar.gz';digest=hashlib.sha256(archive.read_bytes()).hexdigest()
     if (bundle/'SHA256SUMS').read_text(encoding='utf-8')!=digest+'  source.tar.gz\n':raise ValueError('Prepared archive checksum mismatch')
     destination.mkdir(parents=True,exist_ok=False)
@@ -167,7 +187,7 @@ def unpack(bundle,destination,variant,sha,name):
             tar.extract(m,destination)
     tree=destination/'source'
     if (bundle/'source-manifest.json').read_bytes()!=(tree/'source-manifest.json').read_bytes():raise ValueError('Source manifest copy differs')
-    verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'])
+    verify_tree(tree,variant,sha,name,os.environ['GITHUB_SHA'],os.environ['GITHUB_RUN_ID'],formal_validation=formal_validation)
     print('Prepared source checksum/inventory/identity: PASS')
     return tree
 
@@ -175,6 +195,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='mode',required=True)
     a=sub.add_parser('prepare');a.add_argument('--base',type=Path,required=True);a.add_argument('--output',type=Path,required=True);a.add_argument('--ref',required=True);a.add_argument('--sha',required=True);a.add_argument('--patchset',required=True);a.add_argument('--bridge',type=Path,required=True)
     a=sub.add_parser('unpack');a.add_argument('--bundle',type=Path,required=True);a.add_argument('--destination',type=Path,required=True);a.add_argument('--variant',choices=['standard','sos'],required=True);a.add_argument('--sha',required=True);a.add_argument('--patchset',required=True)
+    for command in sub.choices.values():command.add_argument('--formal-validation',action='store_true')
     a=p.parse_args()
-    if a.mode=='prepare':prepare(a.base,a.output,a.ref,a.sha,a.patchset,a.bridge)
-    else:unpack(a.bundle,a.destination,a.variant,a.sha,a.patchset)
+    if a.mode=='prepare':prepare(a.base,a.output,a.ref,a.sha,a.patchset,a.bridge,formal_validation=a.formal_validation)
+    else:unpack(a.bundle,a.destination,a.variant,a.sha,a.patchset,formal_validation=a.formal_validation)

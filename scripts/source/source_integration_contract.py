@@ -35,7 +35,9 @@ class SourceIntegrationContract(unittest.TestCase):
         steps=w['jobs']['prepare']['steps']
         for title in ('Freeze public API endpoints from Actions variables','Check frozen API policy matches across variants'):
             step=next(s for s in steps if s.get('name')==title)
-            self.assertEqual(step['if'], """contains(fromJSON('["v3","v4"]'), inputs.patchset)""")
+            expected="""contains(fromJSON('["v3","v4"]'), inputs.patchset)"""
+            if title.startswith('Freeze'):expected='!inputs.formal_validation && '+expected
+            self.assertEqual(step['if'],expected)
         self.assertFalse(patchsets.profile_for_version('1.5.3','ci',source_sha=SHA)['stable_allowed'])
 
     def test_ci_and_stable_bridge_use_same_generator_but_separate_receipts(self):

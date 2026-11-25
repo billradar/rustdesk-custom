@@ -19,6 +19,15 @@ jobs:
       upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       channel: ci
+  formal-prepare:
+    name: Validate existing formal prepared-source pipeline (no production credentials)
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      formal_validation: true
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      patchset: v4
+      channel: ci
   macos-arm64-bridge:
     name: Generate exact-source Flutter 3.44 CI bridge
     runs-on: ubuntu-22.04

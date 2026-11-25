@@ -145,6 +145,7 @@ jobs:
         python3 -m scripts.release.candidate_evidence_contract
         python3 -m scripts.build.recipe_admission_contract
         python3 -m scripts.source.source_integration_contract
+        python3 -m scripts.source.formal_source_contract
         python3 -m scripts.release.candidate_evidence
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.build.updater_dependencies_contract

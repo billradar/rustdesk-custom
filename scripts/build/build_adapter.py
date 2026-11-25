@@ -113,10 +113,11 @@ def check(tree,channel='stable',*,recipe_review=False):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('tree',type=Path);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--channel',choices=('ci','stable'),default='stable')
+    parser.add_argument('--recipe-review',action='store_true',help='Explicit formal recipe inspection, not release authorization')
     args=parser.parse_args()
     args.output.parent.mkdir(parents=True,exist_ok=True)
     try:
-        result=check(args.tree,channel=args.channel)
+        result=check(args.tree,channel=args.channel,recipe_review=args.recipe_review)
     except Exception as e:
         failure={'Build Compatibility':'FAIL','reason':str(e)}
         # Keep a machine-readable review packet for unknown upstream signatures. This is diagnostic

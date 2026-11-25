@@ -45,7 +45,7 @@ class PolicyContract(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         workflow = yaml.safe_load((root / '.github/workflows/prepare-source.yml').read_text())
         step = next(s for s in workflow['jobs']['prepare']['steps'] if s.get('name') == 'Freeze public API endpoints from Actions variables')
-        self.assertEqual(step['if'], """contains(fromJSON('["v3","v4"]'), inputs.patchset)""")
+        self.assertEqual(step['if'], """!inputs.formal_validation && contains(fromJSON('["v3","v4"]'), inputs.patchset)""")
         self.assertEqual(step['env']['RUSTDESK_API_SERVER'], '${{ vars.RUSTDESK_API_SERVER }}')
         self.assertEqual(step['env']['RUSTDESK_API_FALLBACK_SERVER'], "${{ vars.RUSTDESK_API_FALLBACK_SERVER || '' }}")
         for generation in ('v3', 'v4'):
