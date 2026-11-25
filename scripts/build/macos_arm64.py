@@ -111,8 +111,45 @@ def review_profile(tree, profile):
                 production_receipt_qualified=False)
 
 
-def profile(tree):
+def formal_original(tree):
+    from scripts.build import formal_validation as formal, macos_arm64_ci as candidate, recipe_admission
+    formal.context(candidate.source_sha(tree))
+    p,job=candidate.original(tree,reviewed_source=True)
+    p=recipe_admission.check_platform(p,'macos','aarch64')
+    return dict(p,reviewed_transform_inputs=list(candidate.TRANSFORMS),
+                reviewed_bridge_inputs=list(candidate.BRIDGE_FILES),production_receipt_qualified=False),job
+
+
+def formal_approved(p,manifest):
+    from scripts.build import formal_validation as formal, macos_arm64_ci as candidate, recipe_admission
+    marker=formal.verify_manifest(manifest)
+    require(p.get('candidate_source_sha')==manifest['upstream_sha'] and
+            p.get('recipe_admission_source_sha')==manifest['upstream_sha'] and
+            p.get('production_recipe_approved') is True and p.get('release_eligible') is False and
+            p.get('production_receipt_qualified') is False and p.get('stable_allowed') is False and
+            p.get('platform')=='macos' and p.get('architecture')=='aarch64' and
+            p.get('macos_flutter344') is True and p.get('bridge_signature')==candidate.BRIDGE_SIGNATURE and
+            all(p.get(k)==v for k,v in (candidate.TOOLS|candidate.BRIDGE_TOOLS).items()) and
+            p.get('reviewed_transform_inputs')==list(candidate.TRANSFORMS) and
+            p.get('reviewed_bridge_inputs')==list(candidate.BRIDGE_FILES) and
+            p.get('patch_sha256')==manifest['files'].get(bridge_recipe.PATCH) and
+            p.get('source_workflow_sha256')==manifest['files'].get('.github/workflows/flutter-build.yml'),
+            'Formal Mac ARM recipe/source identity mismatch')
+    recipe_admission.check_platform(p,'macos','aarch64')
+    return marker,list(candidate.INPUTS)
+
+
+def normalized_profile(p):
+    from scripts.build.recipe_admission import serialize_report
+    return json.loads(serialize_report(p))
+
+
+def profile(tree, *, formal_validation=False):
     from scripts.platform.platform_adapter import check
+    if formal_validation:
+        from scripts.build import formal_validation as formal, macos_arm64_ci as candidate
+        formal.context(candidate.source_sha(tree))
+        return check(tree,'macos','aarch64',channel='stable',recipe_review=True)[0]
     return check(tree,'macos','aarch64')[0]
 
 
@@ -145,7 +182,14 @@ def verify_sdk(profile):
     require(sdk.get('frameworkVersion')==profile['flutter'], 'Mac ARM Flutter SDK mismatch')
 
 
-def bridge_info(tree):
+def bridge_info(tree, *, formal_validation=False):
+    if formal_validation:
+        p,_=formal_original(tree)
+        info={'upstream_sha':p['recipe_admission_source_sha'],'custom_sha':os.environ['GITHUB_SHA'],
+              'workflow_run':os.environ['GITHUB_RUN_ID'],'flutter':p['bridge_flutter'],
+              'patch_sha256':p['patch_sha256'],'files':{n:sha(Path(tree)/n) for n in BRIDGE_FILES}}
+        (Path(tree)/BRIDGE_INFO).write_text(json.dumps(info,sort_keys=True,indent=2)+'\n')
+        return
     p,_=original(tree)
     bridge_recipe.bridge_info(tree)
     src=Path(tree)/'arm64-bridge-info.json';info=read(src)
@@ -165,9 +209,14 @@ def verify_bridge(info, p, manifest):
     require(set(info['files'])==set(BRIDGE_FILES), 'Incomplete Mac bridge inventory')
 
 
-def transform(tree, bridge):
-    tree,bridge=Path(tree),Path(bridge);p=profile(tree);approved(p);verify_sdk(p)
-    require(not (tree/RECEIPT).exists(), 'Mac source was already transformed')
+def transform(tree, bridge, *, formal_validation=False):
+    tree,bridge=Path(tree),Path(bridge)
+    if formal_validation:
+        p=profile(tree,formal_validation=True)
+    else:
+        p=profile(tree);approved(p)
+    verify_sdk(p)
+    require(not (tree/RECEIPT).exists() and not (tree/'macos-arm64-ci-transform.json').exists(), 'Mac source was already transformed')
     require(not bridge.is_symlink(), 'Symlinked Mac bridge directory')
     inventory={p.relative_to(bridge).as_posix() for p in bridge.rglob('*') if p.is_file() or p.is_symlink()}
     require(inventory==set(BRIDGE_FILES)|{BRIDGE_INFO}, 'Unexpected Mac bridge artifact inventory')
@@ -176,33 +225,56 @@ def transform(tree, bridge):
             and manifest['custom_repository_sha']==os.environ['GITHUB_SHA']
             and str(manifest['prepare_workflow_run'])==os.environ['GITHUB_RUN_ID']
             and manifest['variant'] in ('standard','sos'), 'Mac transformation source context mismatch')
+    if formal_validation:
+        marker,inputs=formal_approved(p,manifest)
+        expected,_=formal_original(tree)
+        require(normalized_profile(p)==normalized_profile(expected),'Formal Mac recipe differs from exact Git source')
+    else:
+        require('formal_validation' not in manifest,'Formal source cannot acquire production receipt')
+        inputs=INPUTS
     verify_bridge(info,p,manifest)
-    before={name:sha(tree/name) for name in INPUTS}
-    require(all(before[n]==manifest['files'].get(n) for n in INPUTS), 'Mac transformation input drift')
+    before={name:sha(tree/name) for name in inputs}
+    require(all(before[n]==manifest['files'].get(n) for n in inputs), 'Mac transformation input drift')
     require(all(sha(bridge/n)==info['files'][n] for n in BRIDGE_FILES), 'Mac bridge content drift')
     bridge_recipe.apply(tree)
+    if formal_validation:
+        require(all(sha(tree/n)!=before[n] for n in p['reviewed_transform_inputs']),
+                'Incomplete formal Mac transformation')
     for name in BRIDGE_FILES:
         shutil.copy2(bridge/name,tree/name)
     receipt={'schema_version':1,'profile':p,'upstream_sha':manifest['upstream_sha'],
              'variant':manifest['variant'],'source_manifest_sha256':sha(tree/'source-manifest.json'),
-             'bridge':info,'before':before,'after':{name:sha(tree/name) for name in INPUTS}}
+             'bridge':info,'before':before,'after':{name:sha(tree/name) for name in inputs}}
+    if formal_validation:
+        receipt.update(schema_version=2,profile=normalized_profile(p),formal_validation=marker,release_eligible=False)
     (tree/RECEIPT).write_text(json.dumps(receipt,sort_keys=True,indent=2)+'\n')
-    verified(tree)
+    if formal_validation:verified(tree,formal_validation=True)
+    else:verified(tree)
 
 
-def receipt_checks(receipt, manifest, manifest_sha):
-    require(set(receipt)=={'schema_version','profile','upstream_sha','variant',
-                          'source_manifest_sha256','bridge','before','after'}
-            and type(receipt['schema_version']) is int and receipt['schema_version']==1,
-            'Unknown Mac transformation schema')
-    p=approved(receipt['profile'])
+def receipt_checks(receipt, manifest, manifest_sha, *, formal_validation=False):
+    fields={'schema_version','profile','upstream_sha','variant','source_manifest_sha256','bridge','before','after'}
+    if formal_validation:
+        require(set(receipt)==fields|{'formal_validation','release_eligible'} and
+                type(receipt['schema_version']) is int and receipt['schema_version']==2 and
+                receipt['release_eligible'] is False,'Unknown formal Mac transformation schema')
+        p=receipt['profile'];marker,inputs=formal_approved(p,manifest)
+        require(receipt['formal_validation']==marker,'Formal Mac receipt approval drift')
+    else:
+        require(set(receipt)==fields and type(receipt['schema_version']) is int and
+                receipt['schema_version']==1 and 'formal_validation' not in manifest,
+                'Unknown Mac transformation schema or formal validation receipt')
+        p=approved(receipt['profile']);inputs=INPUTS
     require(receipt['source_manifest_sha256']==manifest_sha
             and receipt['upstream_sha']==manifest['upstream_sha']
             and receipt['variant']==manifest['variant'], 'Mac source receipt identity mismatch')
-    require(set(receipt['before'])==set(INPUTS) and set(receipt['after'])==set(INPUTS),
+    require(set(receipt['before'])==set(inputs) and set(receipt['after'])==set(inputs),
             'Mac transformation inventory mismatch')
-    require(all(receipt['before'][n]==manifest['files'].get(n) for n in INPUTS),
+    require(all(receipt['before'][n]==manifest['files'].get(n) for n in inputs),
             'Mac transformation before-state mismatch')
+    if formal_validation:
+        require(all(receipt['before'][n]!=receipt['after'][n] for n in p['reviewed_transform_inputs']),
+                'Incomplete formal Mac transformation receipt')
     verify_bridge(receipt['bridge'],p,manifest)
     require(all(receipt['after'][n]==receipt['bridge']['files'][n] for n in BRIDGE_FILES),
             'Mac transformed bridge mismatch')
@@ -218,18 +290,22 @@ def protected_digest(tree, name, *, post_build=False):
     return digest
 
 
-def verified(tree, *, post_build=False):
+def verified(tree, *, post_build=False, formal_validation=False):
     tree=Path(tree);receipt=read(tree/RECEIPT);manifest=read(tree/'source-manifest.json')
-    p=receipt_checks(receipt,manifest,sha(tree/'source-manifest.json'))
+    p=receipt_checks(receipt,manifest,sha(tree/'source-manifest.json'),formal_validation=formal_validation)
     require(manifest['upstream_sha']==os.environ['UPSTREAM_EXPECTED_SHA']
             and manifest['custom_repository_sha']==os.environ['GITHUB_SHA']
             and str(manifest['prepare_workflow_run'])==os.environ['GITHUB_RUN_ID'],
             'Mac receipt belongs to another worker context')
-    expected,job=original(tree)
+    if formal_validation:
+        expected,job=formal_original(tree);expected=normalized_profile(expected)
+        inputs=p['reviewed_transform_inputs']+BRIDGE_FILES
+    else:
+        expected,job=original(tree);inputs=INPUTS
     require(p==expected, 'Mac receipt differs from exact official recipe')
-    require(all(receipt['after'][n]==sha(tree/n) for n in INPUTS), 'Mac transformed source drift')
+    require(all(receipt['after'][n]==sha(tree/n) for n in inputs), 'Mac transformed source drift')
     from scripts.platform.platform_adapter import FILES
-    for name in set(FILES+['.github/workflows/flutter-build.yml',bridge_recipe.PATCH])-set(INPUTS):
+    for name in set(FILES+['.github/workflows/flutter-build.yml',bridge_recipe.PATCH])-set(inputs):
         digest=protected_digest(tree,name,post_build=post_build)
         require(digest==manifest['files'].get(name), 'Mac protected recipe input drift: '+name)
     verify_sdk(p)
@@ -262,13 +338,17 @@ def validate_receipt(folder, info):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('mode',choices=('profile','bridge-info','transform'))
-    parser.add_argument('tree',type=Path);parser.add_argument('--bridge',type=Path);args=parser.parse_args()
-    if args.mode=='bridge-info':bridge_info(args.tree)
+    parser=argparse.ArgumentParser();parser.add_argument('mode',choices=('profile','bridge-info','transform','verify'))
+    parser.add_argument('tree',type=Path);parser.add_argument('--bridge',type=Path)
+    parser.add_argument('--formal-validation',action='store_true');args=parser.parse_args()
+    if args.mode=='bridge-info':bridge_info(args.tree,formal_validation=args.formal_validation)
     elif args.mode=='transform':
-        require(args.bridge is not None,'Mac bridge input required');transform(args.tree,args.bridge)
+        require(args.bridge is not None,'Mac bridge input required');transform(args.tree,args.bridge,formal_validation=args.formal_validation)
+    elif args.mode=='verify':
+        verified(args.tree,formal_validation=args.formal_validation)
+        print('Mac source and bridge receipt: PASS')
     else:
-        p=profile(args.tree);required=p.get('macos_flutter344') is True
+        p=profile(args.tree,formal_validation=args.formal_validation);required=p.get('macos_flutter344') is True
         outputs={'required':str(required).lower()}
         if required:outputs.update({k:p[k] for k in ('flutter','bridge_flutter','bridge_rust','cargo_expand','frb')})
         if os.environ.get('GITHUB_OUTPUT'):

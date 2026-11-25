@@ -70,6 +70,7 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/build/generate_flutter344_bridge.sh"
           cd "$GITHUB_WORKSPACE"
           python3 -m scripts.build.macos_arm64_ci bridge-info .work/mac-arm-ci-bridge
+          python3 -m scripts.build.macos_arm64 bridge-info .work/mac-arm-ci-bridge --formal-validation
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: macos-arm64-ci-bridge-${{ github.run_id }}
@@ -81,8 +82,19 @@ jobs:
             .work/mac-arm-ci-bridge/macos-arm64-ci-bridge-info.json
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-arm64-formal-bridge-${{ github.run_id }}
+          path: |
+            .work/mac-arm-ci-bridge/src/bridge_generated*.rs
+            .work/mac-arm-ci-bridge/flutter/lib/generated_bridge*.dart
+            .work/mac-arm-ci-bridge/flutter/macos/Runner/bridge_generated.h
+            .work/mac-arm-ci-bridge/flutter/ios/Runner/bridge_generated.h
+            .work/mac-arm-ci-bridge/macos-arm64-bridge-info.json
+          if-no-files-found: error
+          retention-days: 7
   package:
-    needs: [compatibility, macos-arm64-bridge]
+    needs: [compatibility, macos-arm64-bridge, formal-prepare]
     if: ${{ always() && !cancelled() && needs.compatibility.result == 'success' }}
     name: Fixture ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
     runs-on: ${{ matrix.runner }}
@@ -182,6 +194,34 @@ jobs:
           brew install gnu-sed
           export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
           python3 -m scripts.build.macos_arm64_ci transform .work/native/source --bridge .work/native/mac-arm-bridge
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        with:
+          name: ${{ matrix.variant == 'standard' && needs.formal-prepare.outputs.standard_artifact || needs.formal-prepare.outputs.sos_artifact }}
+          path: .work/formal-mac/bundle
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        with:
+          name: macos-arm64-formal-bridge-${{ github.run_id }}
+          path: .work/formal-mac/bridge
+      - name: Verify formal Mac ARM prepared-source transformation receipt
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        run: |
+          source scripts/validation/test_config.sh
+          export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
+          python3 scripts/source/prepared_source.py unpack --bundle .work/formal-mac/bundle --destination .work/formal-mac/input --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --formal-validation
+          python3 -m scripts.build.macos_arm64 transform .work/formal-mac/input/source --bridge .work/formal-mac/bridge --formal-validation
+          python3 -m scripts.build.macos_arm64 verify .work/formal-mac/input/source --formal-validation
+          mkdir -p .work/formal-mac/report
+          cp .work/formal-mac/input/source/{source-manifest.json,macos-arm64-transform.json} .work/formal-mac/report/
+          rm -rf -- .work/formal-mac/input .work/formal-mac/bundle .work/formal-mac/bridge
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        with:
+          name: v4-formal-mac-arm64-${{ matrix.variant }}-receipt
+          path: .work/formal-mac/report
+          if-no-files-found: error
+          retention-days: 7
       - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
         if: matrix.platform == 'windows'
       - name: Windows official custom Flutter engine (same Stable recipe)
@@ -255,7 +295,7 @@ jobs:
           fi
       - name: Remove installable fixture packages and source from runner
         if: always()
-        run: rm -rf -- .work/native/source artifacts
+        run: rm -rf -- .work/native/source .work/formal-mac/input .work/formal-mac/bundle .work/formal-mac/bridge artifacts
       - name: Retain metadata evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

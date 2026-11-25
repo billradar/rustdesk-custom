@@ -108,10 +108,11 @@ def check_profile(tree, p, *, original_tree=None):
 def profile(tree):
     return adapter.check(tree,'macos','aarch64',channel='ci')[0]
 
-def original(tree):
+def original(tree, *, reviewed_source=False):
     """Reconstruct untransformed recipe from the worker's immutable Git HEAD."""
     tree=Path(tree)
-    require(source_sha(tree)==SOURCE,'source HEAD changed')
+    actual=source_sha(tree)
+    require(actual in REVIEWED_SOURCES if reviewed_source else actual==SOURCE,'source HEAD changed')
     names=set(adapter.FILES+build_adapter.CRITICAL_FILES)|set(PINNED_BLOBS)
     with tempfile.TemporaryDirectory(prefix='mac-arm-ci-recipe-') as tmp:
         root=Path(tmp)
