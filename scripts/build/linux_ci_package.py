@@ -55,6 +55,10 @@ def validate(tree, arch, variant):
         or run('git', '-C', str(tree), 'rev-parse', 'HEAD') != PINNED_UPSTREAM
     ):
         raise ValueError('BUILD_COMPAT: CI-only package verifier context forbidden')
+    formal=None
+    if os.environ.get('FORMAL_VALIDATION')=='true':
+        from scripts.build.formal_validation import worker_identity
+        formal=worker_identity(tree,variant)
     # The official Docker recipe builds this native release library and then
     # packages its Flutter bundle. Check the actual binary and archives.
     library = tree / 'target/release/liblibrustdesk.so'
@@ -125,6 +129,7 @@ def validate(tree, arch, variant):
         'variant': variant,
         'package_count': len(info),
         'packages': info,
+        **({'formal_source_evidence':formal} if formal is not None else {}),
     }
 
 

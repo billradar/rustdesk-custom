@@ -298,7 +298,7 @@ def verified(tree, *, post_build=False, formal_validation=False):
             and str(manifest['prepare_workflow_run'])==os.environ['GITHUB_RUN_ID'],
             'Mac receipt belongs to another worker context')
     if formal_validation:
-        expected,job=formal_original(tree);expected=normalized_profile(expected)
+        original_profile,job=formal_original(tree);expected=normalized_profile(original_profile)
         inputs=p['reviewed_transform_inputs']+BRIDGE_FILES
     else:
         expected,job=original(tree);inputs=INPUTS
@@ -309,7 +309,8 @@ def verified(tree, *, post_build=False, formal_validation=False):
         digest=protected_digest(tree,name,post_build=post_build)
         require(digest==manifest['files'].get(name), 'Mac protected recipe input drift: '+name)
     verify_sdk(p)
-    return p,job
+    # Preserve upstream YAML matrix key types for recipe rendering.
+    return (original_profile if formal_validation else p),job
 
 
 def requires_receipt(info, manifest):

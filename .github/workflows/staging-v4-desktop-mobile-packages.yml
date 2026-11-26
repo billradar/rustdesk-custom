@@ -95,7 +95,7 @@ jobs:
           retention-days: 7
   package:
     needs: [compatibility, macos-arm64-bridge, formal-prepare]
-    if: ${{ always() && !cancelled() && needs.compatibility.result == 'success' }}
+    if: ${{ always() && !cancelled() && needs.compatibility.result == 'success' && needs.formal-prepare.result == 'success' }}
     name: Fixture ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
@@ -120,6 +120,7 @@ jobs:
       PATCHSET: v4
       BUILD_CHANNEL: ci
       BUILD_CONFIGURATION: 'TEST ONLY'
+      FORMAL_VALIDATION: 'true'
       UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       UPSTREAM_VERSION: '1.5.3'
       ARTIFACT_IDENTITY: '1.5.3'
@@ -145,17 +146,15 @@ jobs:
       - name: Windows canonical source checkout line endings
         if: matrix.platform == 'windows'
         run: git config --global core.autocrlf false
-      - name: Prepare exact official source and public fixture patches
-        run: |
-          source scripts/validation/test_config.sh
-          bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
-          bash scripts/source/apply_patches.sh .work/native/source "$VARIANT"
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
-          name: test-bridge-${{ github.run_id }}
-          path: .work/native/bridge
-      - name: Restore and hash-check same-run official Bridge
-        run: python3 scripts/release/package.py restore-bridge .work/native/source .work/native/bridge
+          name: ${{ matrix.variant == 'standard' && needs.formal-prepare.outputs.standard_artifact || needs.formal-prepare.outputs.sos_artifact }}
+          path: .work/formal-bundle
+      - name: Unpack formal prepared source before actual native build
+        run: |
+          source scripts/validation/test_config.sh
+          python3 scripts/source/prepared_source.py unpack --bundle .work/formal-bundle --destination .work/native --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --formal-validation
+          rm -rf -- .work/formal-bundle
       - name: Require exact platform candidate and secondary Mac ARM recipe policy
         id: profile
         run: |
@@ -185,36 +184,18 @@ jobs:
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
         with:
-          name: macos-arm64-ci-bridge-${{ github.run_id }}
+          name: macos-arm64-formal-bridge-${{ github.run_id }}
           path: .work/native/mac-arm-bridge
-      - name: Apply and verify dedicated Mac ARM Flutter 3.44 transformation
+      - name: Apply formal Mac ARM transformation to the actual build source
         if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
         run: |
           source scripts/validation/test_config.sh
           brew install gnu-sed
           export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
-          python3 -m scripts.build.macos_arm64_ci transform .work/native/source --bridge .work/native/mac-arm-bridge
-      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
-        with:
-          name: ${{ matrix.variant == 'standard' && needs.formal-prepare.outputs.standard_artifact || needs.formal-prepare.outputs.sos_artifact }}
-          path: .work/formal-mac/bundle
-      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
-        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
-        with:
-          name: macos-arm64-formal-bridge-${{ github.run_id }}
-          path: .work/formal-mac/bridge
-      - name: Verify formal Mac ARM prepared-source transformation receipt
-        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
-        run: |
-          source scripts/validation/test_config.sh
-          export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
-          python3 scripts/source/prepared_source.py unpack --bundle .work/formal-mac/bundle --destination .work/formal-mac/input --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --formal-validation
-          python3 -m scripts.build.macos_arm64 transform .work/formal-mac/input/source --bridge .work/formal-mac/bridge --formal-validation
-          python3 -m scripts.build.macos_arm64 verify .work/formal-mac/input/source --formal-validation
+          python3 -m scripts.build.macos_arm64 transform .work/native/source --bridge .work/native/mac-arm-bridge --formal-validation
+          python3 -m scripts.build.macos_arm64 verify .work/native/source --formal-validation
           mkdir -p .work/formal-mac/report
-          cp .work/formal-mac/input/source/{source-manifest.json,macos-arm64-transform.json} .work/formal-mac/report/
-          rm -rf -- .work/formal-mac/input .work/formal-mac/bundle .work/formal-mac/bridge
+          cp .work/native/source/{source-manifest.json,macos-arm64-transform.json} .work/formal-mac/report/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
         with:
@@ -295,7 +276,7 @@ jobs:
           fi
       - name: Remove installable fixture packages and source from runner
         if: always()
-        run: rm -rf -- .work/native/source .work/formal-mac/input .work/formal-mac/bundle .work/formal-mac/bridge artifacts
+        run: rm -rf -- .work/native/source .work/formal-bundle .work/native/mac-arm-bridge artifacts
       - name: Retain metadata evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

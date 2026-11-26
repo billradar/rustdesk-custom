@@ -23,6 +23,10 @@ def main():
             or tree!=Path('.work/native/source').resolve()
             or (platform,arch,variant)!=(os.environ['PLATFORM'],os.environ['PLATFORM_ARCH'],os.environ['VARIANT'])):
         raise ValueError('Not an isolated fixture build')
+    formal=None
+    if os.environ.get('FORMAL_VALIDATION')=='true':
+        from scripts.build.formal_validation import worker_identity
+        formal=worker_identity(tree,variant)
     if platform=='android':
         package=only((tree/'signed-apk').glob('*.apk'))
         abi={'aarch64':'arm64-v8a','armv7':'armeabi-v7a','x86_64':'x86_64'}[arch]
@@ -39,8 +43,13 @@ def main():
         packages=[package]
     elif platform=='macos':
         if arch=='aarch64':
-            from scripts.build.macos_arm64_ci import verified
-            verified(tree,post_build=True)
+            if formal is not None:
+                from scripts.build.macos_arm64 import verified
+                verified(tree,post_build=True,formal_validation=True)
+                formal['macos_arm64_receipt_sha256']=hashlib.sha256((tree/'macos-arm64-transform.json').read_bytes()).hexdigest()
+            else:
+                from scripts.build.macos_arm64_ci import verified
+                verified(tree,post_build=True)
         package=only(tree.glob('rustdesk*unsigned.dmg'))
         app=tree/'flutter/build/macos/Build/Products/Release/RustDesk.app'
         native=only(app.rglob('liblibrustdesk.dylib'))
@@ -69,6 +78,7 @@ def main():
         'upstream_sha':os.environ['UPSTREAM_EXPECTED_SHA'],
         'packages':[{'name':p.name,'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in packages],
         'native_architecture':'PASS','fixture_configuration_markers':'PASS',
+        **({'formal_source_evidence':formal} if formal is not None else {}),
     },indent=2)+'\n')
     print('CI package metadata and native payload verification: PASS (no publication)')
 

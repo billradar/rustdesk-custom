@@ -68,14 +68,19 @@ def _ci_platform_candidate(tree,p,platform,arch):
 def check(tree,platform,arch,channel=None,*,recipe_review=False):
  channel=channel or os.environ.get('BUILD_CHANNEL','stable')
  if channel not in ('ci','stable','nightly') or (recipe_review and channel not in ('stable','nightly')):raise ValueError('BUILD_COMPAT: invalid platform channel')
+ formal_worker=False
+ if os.environ.get('FORMAL_VALIDATION')=='true' and channel=='ci':
+  from scripts.build.formal_validation import worker_identity
+  worker_identity(tree);formal_worker=True
  if recipe_review and ((Path(tree)/'macos-arm64-ci-transform.json').exists() or (Path(tree)/'macos-arm64-transform.json').exists()):
   raise ValueError('BUILD_COMPAT: recipe review requires pristine recipe inputs, not a transformation receipt')
  if platform=='macos' and arch=='aarch64' and (Path(tree)/'macos-arm64-ci-transform.json').exists():
-  if channel!='ci':raise ValueError('BUILD_COMPAT: Mac ARM CI receipt is not release approved')
+  if channel!='ci' or formal_worker:raise ValueError('BUILD_COMPAT: Mac ARM CI receipt is not release approved or formal worker evidence')
   from scripts.build.macos_arm64_ci import verified
   return verified(tree)
  if platform=='macos' and arch=='aarch64' and (Path(tree)/'macos-arm64-transform.json').exists():
   from scripts.build.macos_arm64 import verified
+  if formal_worker:return verified(tree,formal_validation=True)
   return verified(tree)
  p,j=inspect(tree,platform,arch);known=json.loads((ROOT/'metadata/platform/adapter-profiles.json').read_text())
  if p['official_disabled']:raise ValueError('BUILD_COMPAT: official job is disabled')
@@ -83,12 +88,12 @@ def check(tree,platform,arch,channel=None,*,recipe_review=False):
   if channel!='ci' and not recipe_review:
    raise ValueError('BUILD_COMPAT: unreviewed official '+platform+' build interface; observed signature='+p['signature'])
   p=_ci_platform_candidate(tree,p,platform,arch)
-  if recipe_review:
+  if recipe_review or formal_worker:
    from scripts.build.recipe_admission import check_platform
    p=check_platform(p,platform,arch)
  else:p['ci_candidate_only']=False
  if platform=='macos' and arch=='aarch64' and p['tools'].get('FLUTTER_MACOS_ARM_VERSION'):
-  if recipe_review and p.get('production_recipe_approved'):
+  if (recipe_review or formal_worker) and p.get('production_recipe_approved'):
    from scripts.build.macos_arm64 import review_profile
    p=review_profile(tree,p)
   else:

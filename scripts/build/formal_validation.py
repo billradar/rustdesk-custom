@@ -1,7 +1,10 @@
 """Explicit credential-free formal validation context; never authorizes releases."""
 import hashlib
+import json
 import os
+from pathlib import Path
 import re
+import subprocess
 from scripts.build import recipe_admission
 
 def require(ok,message):
@@ -13,7 +16,9 @@ def context(sha):
             os.environ.get('GITHUB_REPOSITORY')=='billradar/rustdesk-custom' and
             os.environ.get('GITHUB_EVENT_NAME') in ('pull_request','workflow_dispatch') and
             os.environ.get('BUILD_CHANNEL')=='ci' and
-            os.environ.get('BUILD_CONFIGURATION')=='TEST ONLY' and
+            (os.environ.get('BUILD_CONFIGURATION')=='TEST ONLY' or
+             (os.environ.get('BUILD_CONFIGURATION')=='CI_PACKAGE_TEST' and
+              os.environ.get('FORMAL_VALIDATION')=='true' and os.environ.get('PLATFORM')=='linux')) and
             os.environ.get('PATCHSET')=='v4' and
             os.environ.get('UPSTREAM_EXPECTED_SHA')==sha and
             os.environ.get('CLIENT_RELEASE_IDENTITY','false')=='false' and
@@ -41,3 +46,25 @@ def verify_manifest(manifest):
     require(manifest.get('build_adapter_signature')==recipe_admission.source(sha)['build_signature'],
             'prepared build signature changed')
     return manifest['formal_validation']
+
+def worker_identity(tree, variant=None):
+    """Full inventory is verified during unpack; bind later build/report checks to that source manifest."""
+    tree=Path(tree).resolve()
+    require(os.environ.get('FORMAL_VALIDATION')=='true' and
+            tree==Path('.work/native/source').resolve(),
+            'explicit isolated formal worker required')
+    path=tree/'source-manifest.json'
+    require(path.is_file() and not path.is_symlink(),'formal source manifest required')
+    manifest=json.loads(path.read_bytes())
+    marker=verify_manifest(manifest)
+    variant=variant or os.environ.get('VARIANT')
+    require(variant in ('standard','sos') and manifest.get('variant')==variant and
+            subprocess.check_output(['git','-C',str(tree),'rev-parse','HEAD'],text=True).strip()==marker['upstream_sha'],
+            'formal worker source or variant mismatch')
+    from scripts.upstream.patchsets import patch_hash
+    require(manifest.get('common_patch_hash')==patch_hash('common','v4') and
+            manifest.get('sos_patch_hash')==(patch_hash('sos','v4') if variant=='sos' else None),
+            'formal worker patch content mismatch')
+    return dict(formal_validation=marker,
+                source_manifest_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                variant=variant,release_eligible=False)

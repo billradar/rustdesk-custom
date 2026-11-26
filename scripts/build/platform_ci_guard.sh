@@ -25,6 +25,10 @@ b=check_build(tree,channel='ci')
 for value in (p,b):
     assert value.get('ci_candidate_only') is True and value.get('stable_allowed') is False
 assert p['runner']==os.environ['EXPECTED_RUNNER']
+if os.environ.get('FORMAL_VALIDATION')=='true':
+    from scripts.build.formal_validation import worker_identity
+    worker_identity(tree)
+    assert p.get('production_recipe_approved') is True and p.get('release_eligible') is False
 assert os.environ['RUSTDESK_ID_SERVER']=='test.invalid'
 print('CI fixture source, platform and build signatures: PASS (not release approved)')
 PY

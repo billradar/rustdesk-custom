@@ -52,6 +52,10 @@ PY
     exit 1
     ;;
 esac
+if [[ "${FORMAL_VALIDATION:-}" == true ]]; then
+    [[ "$configuration" == CI_PACKAGE_TEST && "${PLATFORM:-}" == linux ]] || exit 1
+    python3 -c 'import os; from scripts.build.formal_validation import worker_identity; worker_identity(os.environ["PREPARED_SOURCE_DIR"])'
+fi
 python3 scripts/platform/platform_adapter.py "$source" --platform linux --arch "$PLATFORM_ARCH" --channel "${BUILD_CHANNEL:-stable}" --output .work/platform-profile.json --linux-scripts .work/linux-recipe
 if [[ "$configuration" == CI_TEST || "$configuration" == CI_PACKAGE_TEST ]]; then
   python3 - <<'PY'
@@ -62,6 +66,9 @@ if (profile.get('ci_candidate_only') is not True or
     profile.get('stable_allowed') is not False or
     profile.get('platform_review_status')!='CI_CANDIDATE_NOT_RELEASE_APPROVED'):
     raise ValueError('BUILD_COMPAT: CI candidate cannot claim release approval')
+import os
+if os.environ.get('FORMAL_VALIDATION')=='true' and (profile.get('production_recipe_approved') is not True or profile.get('release_eligible') is not False):
+    raise ValueError('BUILD_COMPAT: formal Linux recipe approval missing')
 PY
 fi
 triplet=$(python3 -c 'import json;print(json.load(open(".work/platform-profile.json"))["triplet"])')
