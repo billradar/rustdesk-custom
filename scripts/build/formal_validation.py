@@ -11,6 +11,13 @@ def require(ok,message):
     if not ok:
         raise ValueError('FORMAL_VALIDATION: '+message)
 
+def admission_digest():
+    # Git for Windows can materialize tracked JSON with CRLF before the
+    # worker disables autocrlf. Bind content, not checkout newline style.
+    # Preserve every other byte; a changed policy still invalidates evidence.
+    return hashlib.sha256(recipe_admission.POLICY.read_bytes().replace(b'\r\n',b'\n')).hexdigest()
+
+
 def context(sha):
     require(os.environ.get('GITHUB_ACTIONS')=='true' and
             os.environ.get('GITHUB_REPOSITORY')=='billradar/rustdesk-custom' and
@@ -32,12 +39,18 @@ def context(sha):
             'configuration':'TEST ONLY','upstream_sha':sha,
             'custom_repository_sha':os.environ['GITHUB_SHA'],
             'workflow_run':os.environ['GITHUB_RUN_ID'],
-            'admission_sha256':hashlib.sha256(recipe_admission.POLICY.read_bytes()).hexdigest()}
+            'admission_sha256':admission_digest()}
 
 def verify_manifest(manifest):
     sha=manifest['upstream_sha']
-    require(manifest.get('formal_validation')==context(sha) and
-            manifest.get('patchset')=='v4' and
+    expected=context(sha)
+    actual=manifest.get('formal_validation')
+    require(isinstance(actual,dict),'formal source marker missing')
+    require(set(actual)==set(expected),'formal source marker schema mismatch')
+    for key,value in expected.items():
+        require(type(actual[key]) is type(value) and actual[key]==value,
+                'formal source marker mismatch: '+key)
+    require(manifest.get('patchset')=='v4' and
             manifest.get('custom_repository')==os.environ['GITHUB_REPOSITORY'] and
             manifest.get('custom_repository_sha')==os.environ['GITHUB_SHA'] and
             manifest.get('prepare_workflow_run')==os.environ['GITHUB_RUN_ID'] and

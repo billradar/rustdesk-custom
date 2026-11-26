@@ -39,6 +39,24 @@ class FormalSourceContract(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'cannot enter a release worker'):
                     prepared_source.verify_tree(tree,'standard',SHA,'v4','b'*40,'123')
 
+    def test_admission_digest_is_cross_platform_but_content_bound(self):
+        original=recipe_admission.POLICY.read_bytes().replace(b'\r\n',b'\n')
+        with tempfile.TemporaryDirectory() as td:
+            policy=Path(td)/'admission.json'
+            with patch.object(recipe_admission,'POLICY',policy),patch.dict(os.environ,ENV,clear=True):
+                policy.write_bytes(original)
+                marker=formal.context(SHA)
+                manifest={'formal_validation':marker,'upstream_sha':SHA,'patchset':'v4',
+                          'custom_repository':ENV['GITHUB_REPOSITORY'],'custom_repository_sha':ENV['GITHUB_SHA'],
+                          'prepare_workflow_run':'123','client_update_identity':{'channel':'ci'},
+                          'build_adapter_signature':recipe_admission.source(SHA)['build_signature']}
+                policy.write_bytes(original.replace(b'\n',b'\r\n'))
+                self.assertEqual(formal.verify_manifest(manifest),marker)
+                # Harmless JSON whitespace is still a policy byte change; only EOL is normalized.
+                policy.write_bytes(original+b' ')
+                with self.assertRaisesRegex(ValueError,'marker mismatch: admission_sha256'):
+                    formal.verify_manifest(manifest)
+
     def test_existing_reusable_workflow_is_isolated(self):
         w=yaml.safe_load((ROOT/'.github/workflows/prepare-source.yml').read_text())
         self.assertFalse(w['on']['workflow_call']['inputs']['formal_validation']['default']
