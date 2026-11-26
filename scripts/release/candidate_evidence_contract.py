@@ -9,7 +9,7 @@ from scripts.upstream import patchsets
 
 APPROVED='95cca3f661f635b3cc85c04935fe8d96d8f432ef'
 CANDIDATES=('9724512429b053be04cdb843345e99ddcccdb80e', evidence.SOURCE,
-            'a0c0963c483fc8f1aeed4547787d1673adcb583c')
+            'a0c0963c483fc8f1aeed4547787d1673adcb583c', '45e34a69239c2c2467fd02af8ee97263ff26ef23')
 
 class CandidateEvidenceContract(unittest.TestCase):
     def setUp(self):

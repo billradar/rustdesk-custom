@@ -25,7 +25,7 @@ class EntryContract(unittest.TestCase):
             self.assertEqual(entry.gate(env),recipe_admission.BASE)
             for key,value in [('RELEASE_MODE','draft'),('INCLUDE_WAYLAND','true'),('FORCE_RETRY','true'),
                               ('GITHUB_REF','refs/heads/main'),('GITHUB_EVENT_NAME','schedule'),
-                              ('FORMAL_SOURCE_SHA',recipe_admission.SUCCESSOR),('FORMAL_SOURCE_SHA',''),
+                              ('FORMAL_SOURCE_SHA',recipe_admission.SUCCESSOR),('FORMAL_SOURCE_SHA','45e34a69239c2c2467fd02af8ee97263ff26ef23'),('FORMAL_SOURCE_SHA',''),
                               ('REQUESTED_REF','1.5.3'),('OFFICIAL_RUN_ID','123'),('ROUTER_EXPECTED_SHA','a'*40),
                               ('GITHUB_WORKFLOW_REF','other')]:
                 with self.subTest(channel=channel,key=key),self.assertRaises(ValueError):

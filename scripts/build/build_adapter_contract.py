@@ -110,7 +110,8 @@ class AdapterContract(unittest.TestCase):
         self.assertEqual({r['source_sha'] for r in manifest['candidates']},
                          {'9724512429b053be04cdb843345e99ddcccdb80e',
                           '51f94394ce61e1f3d26229565c326b2862cbdd1f',
-                          'a0c0963c483fc8f1aeed4547787d1673adcb583c'})
+                          'a0c0963c483fc8f1aeed4547787d1673adcb583c',
+                          '45e34a69239c2c2467fd02af8ee97263ff26ef23'})
         for row in manifest['candidates']:
             self.assertTrue(row['ci_only'])
             self.assertFalse(row['stable_allowed'])

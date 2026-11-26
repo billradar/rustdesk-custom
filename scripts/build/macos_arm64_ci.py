@@ -19,8 +19,9 @@ from scripts.build import build_adapter, macos_arm64 as stable
 from scripts.platform import platform_adapter as adapter
 
 SOURCE = '51f94394ce61e1f3d26229565c326b2862cbdd1f'
-# a0c0963c adds only PR template/evidence files; all recipe blobs are unchanged.
-REVIEWED_SOURCES = frozenset((SOURCE, 'a0c0963c483fc8f1aeed4547787d1673adcb583c'))
+# a0c0963c changes PR files; 45e34a69 changes Italian translation only.
+# The exact build recipe blobs are unchanged; fixture workers remain pinned.
+REVIEWED_SOURCES = frozenset((SOURCE, 'a0c0963c483fc8f1aeed4547787d1673adcb583c', '45e34a69239c2c2467fd02af8ee97263ff26ef23'))
 PLATFORM_SIGNATURE = '4ce88d3e563be3c68b19dd2286cc053304774d6aab74b4373ad56fa4056ec433'
 BRIDGE_SIGNATURE = '1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741'
 # Git object identities observed directly at the frozen official commit.
