@@ -463,7 +463,7 @@ class NightlyTests(unittest.TestCase):
         self.assertIn("format('latest / {0}', github.sha)", w['run-name'])
         self.assertEqual(set(w['on']['workflow_dispatch']['inputs']), {
             'release_mode', 'include_wayland', 'force_retry', 'display_label',
-            'official_run_id', 'expected_sha'})
+            'official_run_id', 'expected_sha', 'formal_source_sha'})
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['type'], 'string')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['display_label']['default'], '')
         self.assertEqual(w['on']['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')

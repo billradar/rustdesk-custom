@@ -8,6 +8,11 @@ on:
       - 'metadata/platform/**'
       - 'patchsets/v4/**'
   workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      include_linux:
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -284,4 +289,63 @@ jobs:
           name: v4-fixture-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.variant }}-report
           path: .work/native/package-report.json
           if-no-files-found: warn
+          retention-days: 7
+
+  linux:
+    name: Reuse the same formal source pair for all four Linux targets
+    if: inputs.include_linux
+    needs: [compatibility, formal-prepare]
+    uses: ./.github/workflows/staging-v4-linux-packages.yml
+    with:
+      reuse_prepared: true
+      prepared_standard: ${{ needs.formal-prepare.outputs.standard_artifact }}
+      prepared_sos: ${{ needs.formal-prepare.outputs.sos_artifact }}
+  formal-summary:
+    name: Verify all thirteen same-run package reports (no release authority)
+    if: ${{ always() && !cancelled() && inputs.include_linux }}
+    needs: [compatibility, formal-prepare, macos-arm64-bridge, package, linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      BUILD_CONFIGURATION: 'TEST ONLY'
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - name: Reject incomplete target execution
+        env:
+          COMPAT: ${{ needs.compatibility.result }}
+          PREPARE: ${{ needs.formal-prepare.result }}
+          MAC_BRIDGE: ${{ needs.macos-arm64-bridge.result }}
+          DESKTOP_MOBILE: ${{ needs.package.result }}
+          LINUX: ${{ needs.linux.result }}
+        run: |
+          for result in "$COMPAT" "$PREPARE" "$MAC_BRIDGE" "$DESKTOP_MOBILE" "$LINUX"; do
+            test "$result" = success || exit 1
+          done
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install -r requirements.txt
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          pattern: v4-fixture-*-report
+          path: .work/formal-reports
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          pattern: v4-linux-deb-rpm-*-smoke-report
+          path: .work/formal-reports
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          pattern: v4-formal-mac-arm64-*-receipt
+          path: .work/formal-receipts
+      - run: python3 -m scripts.release.formal_entry aggregate --reports .work/formal-reports --receipts .work/formal-receipts --output .work/formal-dry-run.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: formal-v4-dry-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .work/formal-dry-run.json
+          if-no-files-found: error
           retention-days: 7

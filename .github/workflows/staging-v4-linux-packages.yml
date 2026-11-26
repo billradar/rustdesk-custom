@@ -10,6 +10,17 @@ on:
       - 'scripts/platform/platform_adapter.py'
       - 'patchsets/v4/**'
   workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      reuse_prepared:
+        type: boolean
+        default: false
+      prepared_standard:
+        type: string
+        default: ''
+      prepared_sos:
+        type: string
+        default: ''
 permissions:
   contents: read
   # The called compatibility workflow's report job needs Actions artifact read.
@@ -18,6 +29,7 @@ jobs:
   # The same reviewed official Bridge pipeline used by the primary CI,
   # including the exact source/signature/profile checks.
   compatibility:
+    if: '!inputs.reuse_prepared'
     uses: ./.github/workflows/compat-check.yml
     with:
       upstream_repository: rustdesk/rustdesk
@@ -25,6 +37,7 @@ jobs:
       upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       channel: ci
   formal-prepare:
+    if: '!inputs.reuse_prepared'
     name: Prepare formal Linux variant sources (no production credentials)
     uses: ./.github/workflows/prepare-source.yml
     with:
@@ -35,6 +48,9 @@ jobs:
       channel: ci
   native:
     needs: [compatibility, formal-prepare]
+    if: >-
+      always() && !cancelled() &&
+      (inputs.reuse_prepared || (needs.compatibility.result == 'success' && needs.formal-prepare.result == 'success'))
     name: Real DEB/RPM Linux ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
@@ -77,6 +93,13 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
+      - name: Require complete shared source pair for reusable invocation
+        if: inputs.reuse_prepared
+        env:
+          STANDARD_ARTIFACT: ${{ inputs.prepared_standard }}
+          SOS_ARTIFACT: ${{ inputs.prepared_sos }}
+        run: |
+          test -n "$STANDARD_ARTIFACT" && test -n "$SOS_ARTIFACT" && test "$STANDARD_ARTIFACT" != "$SOS_ARTIFACT"
       - name: Install repository validation prerequisites
         run: |
           python3 -m pip install -r requirements.txt
@@ -113,7 +136,7 @@ jobs:
             protobuf-compiler nasm ninja-build libdbus-1-dev
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
-          name: ${{ matrix.variant == 'standard' && needs.formal-prepare.outputs.standard_artifact || needs.formal-prepare.outputs.sos_artifact }}
+          name: ${{ matrix.variant == 'standard' && (inputs.reuse_prepared && inputs.prepared_standard || needs.formal-prepare.outputs.standard_artifact) || (inputs.reuse_prepared && inputs.prepared_sos || needs.formal-prepare.outputs.sos_artifact) }}
           path: .work/formal-bundle
       - name: Unpack formal prepared source before actual Linux build
         run: |
