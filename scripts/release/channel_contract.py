@@ -373,7 +373,15 @@ class ChannelPolicyTests(unittest.TestCase):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         self.assertIn('inputs.upstream_ref',tag['concurrency']['group'])
         inputs=tag['on']
-        self.assertEqual(set(inputs['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland', 'force_retry'})
+        self.assertEqual(set(inputs['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland', 'force_retry', 'formal_source_sha'})
+        formal = inputs['workflow_dispatch']['inputs']['formal_source_sha']
+        self.assertEqual(formal['type'], 'string')
+        self.assertEqual(formal['default'], '')
+        # A nonempty formal input must never enter the ordinary release graph.
+        for name in ('resolve', 'android-sign', 'aggregate', 'draft'):
+            self.assertIn("inputs.formal_source_sha == ''", tag['jobs'][name]['if'])
+        self.assertEqual(tag['jobs']['formal-dry-run']['needs'], 'formal-gate')
+        self.assertNotIn('secrets', tag['jobs']['formal-dry-run'])
         self.assertEqual(inputs['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
         self.assertIs(inputs['workflow_dispatch']['inputs']['force_retry']['default'], False)
         self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
