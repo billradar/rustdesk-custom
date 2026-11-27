@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[2]
+SHA = re.compile(r'^[0-9a-f]{40}$')
 VERSION = re.compile(r'^(?:v)?([0-9]+)\.([0-9]+)\.([0-9]+)$')
 PATCHSET_V1 = 'v1'
 PATCHSET_V2 = 'v2'
@@ -34,7 +35,7 @@ def require_active(name):
         raise ValueError('Retired Patchset ' + name + ': archived; new builds are forbidden')
 
 
-def profile_for_version(version, channel='ci'):
+def profile_for_version(version, channel='ci', source_sha=None):
     numeric = version_tuple(version)
     normalized = '.'.join(map(str, numeric))
     if channel not in ('ci', 'nightly', 'stable'):
@@ -42,7 +43,21 @@ def profile_for_version(version, channel='ci'):
     registry = json.loads((ROOT / 'metadata/patch-profiles.json').read_text())
     if registry['schema'] != 'patch-profiles-v1':
         raise ValueError('Unknown Patch Profile schema')
-    profile_id = registry['exact_versions'].get(normalized)
+    if source_sha is not None and not SHA.fullmatch(source_sha):
+        raise ValueError('Invalid official source SHA')
+    source_entry = registry.get('exact_sources', {}).get(source_sha) if source_sha else None
+    if source_entry is not None and source_entry['version'] != normalized:
+        raise ValueError('Exact source Profile version mismatch')
+    # Retired versions must not become buildable via the unknown-SHA fallback.
+    if source_entry is None:
+        version_profile = registry['exact_versions'].get(normalized)
+        if version_profile:
+            require_active(registry['profiles'][version_profile]['patchset'])
+    # A same-version but unreviewed source is not an approved Stable profile.
+    # It can test the newest maintained generation, but only as a fallback.
+    unknown_source = source_sha is not None and source_entry is None
+    profile_id = (source_entry['profile'] if source_entry else
+                  None if unknown_source else registry['exact_versions'].get(normalized))
     fallback = profile_id is None and numeric >= V2_BOUNDARY
     if profile_id is None:
         profile_id = 'legacy-pre-1.5' if numeric < V2_BOUNDARY else registry['latest_maintained']
@@ -62,16 +77,17 @@ def profile_for_version(version, channel='ci'):
         if not (folder / required).is_dir():
             raise RuntimeError('Selected patchset directory is incomplete: ' + str(folder / required))
     return dict(profile=profile_id, selected=selected, fallback=fallback,
+                source_match=bool(source_entry),
                 compatibility_test_only=fallback or not profile['stable_allowed'],
                 stable_allowed=not fallback and profile['stable_allowed'])
 
 
-def patchset_for_version(version, channel='ci'):
-    return profile_for_version(version, channel)['selected']
+def patchset_for_version(version, channel='ci', source_sha=None):
+    return profile_for_version(version, channel, source_sha=source_sha)['selected']
 
 
-def require_selection(version, selected, channel='ci'):
-    profile = profile_for_version(version, channel)
+def require_selection(version, selected, channel='ci', source_sha=None):
+    profile = profile_for_version(version, channel, source_sha=source_sha)
     if profile['selected'] != selected:
         raise ValueError('Patchset differs from selected Patch Profile')
     return profile
@@ -111,7 +127,7 @@ def verify(name):
     return data
 
 def select(sha=None, source=None, report=None, upstream_ref=None, version=None, channel=None):
-    """Resolve a numeric version Profile; SHA and applicability never select it."""
+    """Resolve exact SHA first; otherwise use a version-only compatibility profile."""
     selected_version = version or upstream_ref
     if not selected_version and source:
         match = re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
@@ -119,7 +135,9 @@ def select(sha=None, source=None, report=None, upstream_ref=None, version=None, 
         selected_version = match.group(1) if match else None
     if not selected_version:
         raise ValueError('Upstream version/ref required for static patchset selection')
-    profile = profile_for_version(selected_version, channel or os.environ.get("BUILD_CHANNEL", "ci"))
+    if sha and not SHA.fullmatch(sha):
+        raise ValueError("Invalid official source SHA")
+    profile = profile_for_version(selected_version, channel or os.environ.get("BUILD_CHANNEL", "ci"), source_sha=sha or None)
     selected = profile["selected"]
     data = {'upstream_version': str(selected_version).lstrip('v'),
             'upstream_ref': upstream_ref or str(selected_version),
@@ -136,7 +154,7 @@ def select(sha=None, source=None, report=None, upstream_ref=None, version=None, 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('sha', nargs='?', help='Retained for compatibility; never used for selection')
+    parser.add_argument('sha', nargs='?', help='Exact official source commit; required by release routing')
     parser.add_argument('--source', type=Path, help='Read numeric Cargo version when --version/--ref is absent')
     parser.add_argument('--report', default='.work/patchset-selection.json')
     parser.add_argument('--ref', default='')

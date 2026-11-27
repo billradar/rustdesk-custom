@@ -31,7 +31,7 @@ class StablePatchsetNotesContract(unittest.TestCase):
             asset=destination/'client.apk'
             asset.write_bytes(b'validated test asset')
             info=dict(channel='stable',upstream_tag='v1.5.3',
-                      upstream_version='1.5.3',upstream_sha='a'*40,
+                      upstream_version='1.5.3',upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef',
                       patchset='v3',patch_revision=CURRENT_V3,
                       common_patch_hash=channel.patch_hash('common','v3'),
                       custom_repository_sha='b'*40,
@@ -373,7 +373,15 @@ class ChannelPolicyTests(unittest.TestCase):
         tag=yaml.safe_load((ROOT/'.github/workflows/tag.yml').read_text())
         self.assertIn('inputs.upstream_ref',tag['concurrency']['group'])
         inputs=tag['on']
-        self.assertEqual(set(inputs['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland', 'force_retry'})
+        self.assertEqual(set(inputs['workflow_dispatch']['inputs']), {'upstream_ref', 'release_mode', 'include_wayland', 'force_retry', 'formal_source_sha'})
+        formal = inputs['workflow_dispatch']['inputs']['formal_source_sha']
+        self.assertEqual(formal['type'], 'string')
+        self.assertEqual(formal['default'], '')
+        # A nonempty formal input must never enter the ordinary release graph.
+        for name in ('resolve', 'android-sign', 'aggregate', 'draft'):
+            self.assertIn("inputs.formal_source_sha == ''", tag['jobs'][name]['if'])
+        self.assertEqual(tag['jobs']['formal-dry-run']['needs'], 'formal-gate')
+        self.assertNotIn('secrets', tag['jobs']['formal-dry-run'])
         self.assertEqual(inputs['workflow_dispatch']['inputs']['force_retry']['type'], 'boolean')
         self.assertIs(inputs['workflow_dispatch']['inputs']['force_retry']['default'], False)
         self.assertIn('inputs.include_wayland',tag['concurrency']['group'])
@@ -417,8 +425,12 @@ class ChannelPolicyTests(unittest.TestCase):
         self.assertIn('wayland=${{ inputs.include_wayland',tag)
         self.assertNotIn('compat-check.yml',tag)
         self.assertNotIn('verify_source.py',tag)
-        self.assertIn('Select Stable patchset by version boundary',tag)
-        self.assertIn('patchsets.py --version "$UPSTREAM_VERSION"',tag)
+        # Verify the actual SHA handoff, not merely the human-facing step name.
+        tag_workflow=yaml.safe_load(tag)
+        selection=next(s for s in tag_workflow['jobs']['resolve']['steps'] if s.get('id')=='patchset')
+        self.assertEqual(selection['env']['UPSTREAM_VERSION'], '${{ steps.resolve.outputs.version }}')
+        self.assertEqual(selection['env']['UPSTREAM_SHA'], '${{ steps.resolve.outputs.upstream_sha }}')
+        self.assertEqual(selection['run'], 'python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION" --channel stable "$UPSTREAM_SHA"')
         self.assertNotIn('--exact',tag)
         self.assertNotIn('ci-qualification',tag)
         self.assertTrue((ROOT/'.github/workflows/nightly.yml').exists())

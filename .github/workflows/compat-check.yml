@@ -99,7 +99,10 @@ jobs:
         bash scripts/source/prepare.sh "$UP_SHA" .work/official'
     - id: adapter
       name: Fail-closed official build adapter
-      run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
+      run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json --channel "${{ inputs.channel }}"
+    - name: Review explicitly admitted production recipes (no release authority)
+      if: inputs.channel == 'ci'
+      run: python3 -m scripts.build.recipe_admission .work/official --if-admitted --output .work/production-recipe-review.json
     - id: selection
       name: Select version Patch Profile (Stable forbids fallback)
       run: 'source scripts/validation/test_config.sh
@@ -113,7 +116,9 @@ jobs:
         name: patchset-selection-${{ github.run_id }}-attempt-${{ github.run_attempt }}
         path: '.work/patchset-selection.json
 
-          .work/build-profile.json'
+          .work/build-profile.json
+
+          .work/production-recipe-review.json'
         if-no-files-found: warn
   contracts:
     name: Validate repository architecture contracts
@@ -134,11 +139,23 @@ jobs:
         python3 -m scripts.validation.api_policy_contract
         python3 -m scripts.validation.wss_failover_policy_contract
         python3 -m scripts.upstream.patch_profiles_contract
+        python3 -m py_compile scripts/upstream/patchsets.py scripts/upstream/source_profile_contract.py
+        python3 -m scripts.upstream.source_profile_contract
+        python3 -m scripts.upstream.ci_source_successor_contract
+        python3 -m scripts.release.candidate_evidence_contract
+        python3 -m scripts.build.recipe_admission_contract
+        python3 -m scripts.source.source_integration_contract
+        python3 -m scripts.source.formal_source_contract
+        python3 -m scripts.release.candidate_evidence
         python3 scripts/build/build_adapter_contract.py
         python3 -m scripts.build.updater_dependencies_contract
         python3 -m scripts.platform.runner_migrations_contract
         python3 -m scripts.platform.platform_adapter_contract
         python3 -m scripts.build.macos_arm64_contract
+        python3 -m scripts.build.macos_arm64_ci_contract
+        python3 -m scripts.build.formal_mac_contract
+        python3 -m scripts.build.formal_worker_contract
+        python3 -m scripts.release.formal_entry_contract
         python3 scripts/platform/wayland_contract.py
         python3 scripts/release/production_contract.py
         python3 scripts/release/qualification_contract.py
@@ -146,6 +163,7 @@ jobs:
         python3 -m scripts.release.attestation_contract
         python3 -m scripts.release.publish_stable_contract
         python3 scripts/release/channel_contract.py
+        python3 -m scripts.release.ci_baseline_contract
         python3 -m scripts.release.content_contract
         python3 scripts/release/nightly_contract.py
         python3 -m scripts.release.stable_lock_contract
@@ -267,7 +285,7 @@ jobs:
 
         '
     - name: Run actual hbb_common WSS failure-policy unit test
-      if: env.PATCHSET == 'v3'
+      if: env.PATCHSET == 'v3' || env.PATCHSET == 'v4'
       shell: bash
       run: |
         set -euo pipefail

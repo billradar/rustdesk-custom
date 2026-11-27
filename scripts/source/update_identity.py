@@ -21,13 +21,13 @@ def write_identity(tree, *, repository, version, sha, variant, run, channel, rev
         raise ValueError("Non-release builds must not claim a Stable revision")
     from scripts.upstream.patchsets import patchset_for_version
     from scripts.release.content import inputs
-    content = inputs(patchset_for_version(version, channel=channel))
+    content = inputs(patchset_for_version(version, channel=channel, source_sha=sha))
     if channel == 'stable' and revision != content['patchset_version']:
         raise ValueError('Stable revision differs from version-controlled Patchset content')
     data = dict(repository=repository, version=version, revision=revision or None, upstream_sha=sha,
                 variant=variant, build_run=str(run), channel=channel, **content)
     data.update(repository_id=os.environ.get('GITHUB_REPOSITORY_ID'),repository_owner_id=os.environ.get('GITHUB_REPOSITORY_OWNER_ID'))
-    if content['patchset_version'].startswith('v3.') and any(
+    if content['patchset_version'].startswith(('v3.', 'v4.')) and any(
             not re.fullmatch(r'[1-9][0-9]*',str(data[key] or ''))
             for key in ('repository_id','repository_owner_id')):
         raise ValueError('Current updater requires numeric GitHub repository and owner IDs')

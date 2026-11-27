@@ -70,6 +70,56 @@ class AdapterContract(unittest.TestCase):
         with patch.object(adapter,'ROOT',self.root),self.assertRaisesRegex(ValueError,'unknown critical'):
             adapter.check(self.source)
 
+    def test_ci_candidate_exact_source_signature_version_and_stable_denial(self):
+        observed,_=adapter.inspect(self.source)
+        candidate={'id':'test-ci','source_sha':'c'*40,
+                   'signature':observed['signature'],'upstream_version':'1.5.1',
+                   'ci_only':True,'stable_allowed':False}
+        candidates=self.root/'metadata/build/adapter-ci-candidates.json'
+        candidates.write_text(json.dumps({'schema':'build-adapter-ci-candidates-v1',
+                                          'candidates':[candidate]}))
+        self.meta.write_text(json.dumps({'profiles':[]}))
+        with patch.object(adapter,'ROOT',self.root):
+            with patch.object(adapter,'_official_sha',return_value='c'*40):
+                profile=adapter.check(self.source,channel='ci')
+                self.assertEqual(profile['reviewed_profile'],'test-ci')
+                self.assertEqual(profile['adapter_review_status'],'CI_CANDIDATE_NOT_RELEASE_APPROVED')
+                self.assertTrue(profile['ci_candidate_only'])
+                self.assertFalse(profile['stable_allowed'])
+                for channel in ('stable',None):
+                    with self.assertRaisesRegex(ValueError,'unknown critical'):
+                        if channel:adapter.check(self.source,channel=channel)
+                        else:adapter.check(self.source)
+            with patch.object(adapter,'_official_sha',return_value='d'*40):
+                with self.assertRaisesRegex(ValueError,'unknown critical'):
+                    adapter.check(self.source,channel='ci')
+            for change in (dict(signature='a'*64),dict(upstream_version='1.5.3'),
+                           dict(ci_only=False),dict(stable_allowed=True)):
+                candidates.write_text(json.dumps(
+                    {'schema':'build-adapter-ci-candidates-v1','candidates':[dict(candidate,**change)]}))
+                with patch.object(adapter,'_official_sha',return_value='c'*40):
+                    with self.assertRaisesRegex(ValueError,'candidate drift'):
+                        adapter.check(self.source,channel='ci')
+            with self.assertRaisesRegex(ValueError,'invalid adapter channel'):
+                adapter.check(self.source,channel='nightly')
+
+    def test_real_ci_candidate_manifest_is_not_stable_approved(self):
+        manifest=json.loads((adapter.ROOT/'metadata/build/adapter-ci-candidates.json').read_text())
+        approved=json.loads((adapter.ROOT/'metadata/build/adapter-profiles.json').read_text())
+        self.assertEqual(manifest['schema'],'build-adapter-ci-candidates-v1')
+        self.assertEqual({r['source_sha'] for r in manifest['candidates']},
+                         {'9724512429b053be04cdb843345e99ddcccdb80e',
+                          '51f94394ce61e1f3d26229565c326b2862cbdd1f',
+                          'a0c0963c483fc8f1aeed4547787d1673adcb583c',
+                          '45e34a69239c2c2467fd02af8ee97263ff26ef23'})
+        for row in manifest['candidates']:
+            self.assertTrue(row['ci_only'])
+            self.assertFalse(row['stable_allowed'])
+            self.assertEqual(row['upstream_version'],'1.5.3')
+            self.assertEqual(row['signature'],'1af2302002908d0bbc7e7d3f6cc3ba20db6de1edd4d2ecd733e470c1dabb4741')
+            self.assertNotIn(row['signature'],{p['signature'] for p in approved['profiles']})
+
+
     def test_reviewed_template_profile_preserves_toolchain_and_critical_inputs(self):
         profiles=json.loads((adapter.ROOT/'metadata/build/adapter-profiles.json').read_text())['profiles']
         current=next(p for p in profiles if p['id']=='reviewed-151-94c321')

@@ -1,0 +1,4 @@
+# Keep patch syntax and blank context lines unchanged on Windows.
+*.patch text eol=lf
+# Preserve the formal recipe admission evidence digest across runner OSes.
+metadata/build/v4-production-recipe-admission.json text eol=lf

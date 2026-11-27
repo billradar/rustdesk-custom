@@ -4,6 +4,9 @@ env:
 'on':
   workflow_call:
     inputs:
+      formal_validation:
+        type: boolean
+        default: false
       client_release_identity:
         type: boolean
         default: false
@@ -45,6 +48,8 @@ jobs:
       sos_artifact: ${{ steps.identity.outputs.sos_artifact }}
       upstream_version: ${{ steps.identity.outputs.upstream_version }}
     env:
+      FORMAL_VALIDATION: ${{ inputs.formal_validation && 'true' || 'false' }}
+      BUILD_CONFIGURATION: ${{ inputs.formal_validation && 'TEST ONLY' || '' }}
       PATCHSET: ${{ inputs.patchset }}
       UPSTREAM_EXPECTED_SHA: ${{ inputs.upstream_sha }}
       UPSTREAM_REF: ${{ inputs.upstream_ref }}
@@ -59,7 +64,15 @@ jobs:
         persist-credentials: false
     - name: Install reviewed workflow parser
       run: python3 -m pip install -r requirements.txt
+    - name: Validate isolated formal source preparation
+      if: inputs.formal_validation
+      env:
+        INCLUDE_WAYLAND: ${{ inputs.build_wayland && 'true' || 'false' }}
+      run: |
+        test "$INCLUDE_WAYLAND" = false
+        python3 -c 'import os; from scripts.build.formal_validation import context; context(os.environ["UPSTREAM_EXPECTED_SHA"])'
     - name: Freeze public branding variables with defaults
+      if: '!inputs.formal_validation'
       env:
         CUSTOM_DISPLAY_NAME: ${{ vars.CUSTOM_DISPLAY_NAME || '' }}
         CUSTOM_ABOUT_TITLE: ${{ vars.CUSTOM_ABOUT_TITLE || '' }}
@@ -111,19 +124,34 @@ jobs:
         CUSTOM_APP_ICON_PATH: ${{ vars.CUSTOM_APP_ICON_PATH || '' }}
         CUSTOM_TRAY_ICON_PATH: ${{ vars.CUSTOM_TRAY_ICON_PATH || '' }}
       run: python3 -m scripts.source.branding --output .work/branding-input.json --repository "$GITHUB_REPOSITORY"
-    - name: Freeze v3 public API endpoints from Actions variables
-      if: inputs.patchset == 'v3'
+    - name: Freeze public API endpoints from Actions variables
+      if: '!inputs.formal_validation && contains(fromJSON(''["v3","v4"]''), inputs.patchset)'
       env:
         RUSTDESK_API_SERVER: ${{ vars.RUSTDESK_API_SERVER }}
         RUSTDESK_API_FALLBACK_SERVER: ${{ vars.RUSTDESK_API_FALLBACK_SERVER || '' }}
       run: python3 -m scripts.source.api_policy --output .work/api-policy-input.json
+    - name: Freeze fictional formal validation configuration
+      if: inputs.formal_validation
+      run: |
+        mkdir -p .work
+        python3 - <<'PY'
+        import json,os
+        from pathlib import Path
+        from scripts.source.branding import resolve as branding
+        from scripts.source.api_policy import resolve as api
+        Path('.work/branding-input.json').write_text(json.dumps(branding({},os.environ['GITHUB_REPOSITORY'])))
+        Path('.work/api-policy-input.json').write_text(json.dumps(api('https://api.test.invalid','https://fallback.api.test.invalid')))
+        PY
     - name: Reject abandoned Patchsets before fetching or building
       run: python3 -c 'import os; from scripts.upstream.patchsets import require_active; require_active(os.environ["PATCHSET"])'
     - name: Fetch exact official source
       run: bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/official
     - id: profile
       name: Resolve reviewed official bridge/build profile
-      run: python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json
+      run: |
+        args=()
+        if [[ "$FORMAL_VALIDATION" == true ]]; then args+=(--recipe-review); fi
+        python3 scripts/build/build_adapter.py .work/official --output .work/build-profile.json "${args[@]}"
     - name: Review all Nightly native target interfaces before bridge dependencies
       if: inputs.channel == 'nightly'
       run: python3 scripts/release/nightly.py preflight --tree .work/official
@@ -138,7 +166,7 @@ jobs:
         sudo apt-get install -y clang cmake libclang-dev libgtk-3-dev llvm-dev nasm ninja-build pkg-config
     - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: ${{ steps.profile.outputs.rust }}
+        toolchain: ${{ inputs.formal_validation && steps.profile.outputs.bridge_rust || steps.profile.outputs.rust }}
         components: rustfmt
     - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
       with:
@@ -164,9 +192,14 @@ jobs:
       uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610
     - name: Prepare Common once and fork independent variant sources
       run: |
-        python3 scripts/source/prepared_source.py prepare           --base .work/official           --output .work/prepared           --ref "$UPSTREAM_REF"           --sha "$UPSTREAM_EXPECTED_SHA"           --patchset "$PATCHSET"           --bridge .work/bridge-source
-    - name: Check frozen v3 API policy matches across variants
-      if: inputs.patchset == 'v3'
+        args=()
+        if [[ "$FORMAL_VALIDATION" == true ]]; then
+          source scripts/validation/test_config.sh
+          args+=(--formal-validation)
+        fi
+        python3 scripts/source/prepared_source.py prepare --base .work/official --output .work/prepared --ref "$UPSTREAM_REF" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --bridge .work/bridge-source "${args[@]}"
+    - name: Check frozen API policy matches across variants
+      if: contains(fromJSON('["v3","v4"]'), inputs.patchset)
       run: |
         python3 - <<'PY'
         import json

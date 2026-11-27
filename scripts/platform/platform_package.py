@@ -101,6 +101,7 @@ def validate(folder):
   with tempfile.TemporaryDirectory() as tmp:
    subprocess.run(['dpkg-deb','-x',str(deb),tmp],check=True)
    if unattended:validate_wayland_deb(deb,Path(tmp),i)
+   else:validate_stock_linux_payload(Path(tmp))
    native=list(Path(tmp).rglob('librustdesk.so'))
    if len(native)!=1 or sha(native[0])!=sha(libs[0]):raise ValueError('PACKAGE: Debian native library mismatch')
    for p in Path(tmp).rglob('*'):
@@ -118,10 +119,27 @@ def validate(folder):
     if reader.wait() or extractor.returncode:raise ValueError('PACKAGE: RPM extraction failed')
     native=list(Path(tmp).rglob('librustdesk.so'))
     if len(native)!=1:raise ValueError('PACKAGE: RPM native library missing')
+    if not unattended:validate_stock_linux_payload(Path(tmp))
     architecture(native[0].read_bytes(),'linux',i['architecture'])
     for p in Path(tmp).rglob('*'):
      if p.is_file() and not p.is_symlink():scan(p.read_bytes())
  return i
+
+def validate_stock_linux_payload(root):
+ """Verify ordinary Linux package payload has no unattended DRM capture backend.
+
+ This is an artifact check, independent of the requested Cargo flags, for
+ DEB and RPM archives after extracting their actual contents.
+ """
+ root=Path(root)
+ if any(p.name.startswith('libdrmtap.so') for p in root.rglob('*')):
+  raise ValueError('PACKAGE: stock Linux artifact bundles libdrmtap')
+ native=list(root.rglob('librustdesk.so'))
+ if len(native)!=1:raise ValueError('PACKAGE: ambiguous stock Linux native library')
+ data=native[0].read_bytes()
+ if b'/usr/lib/rustdesk/libdrmtap.so.0' in data or b'enable-drm-display-wake' in data:
+  raise ValueError('PACKAGE: stock Linux native library enables DRM capture or wake')
+
 
 def validate_wayland_deb(deb, root, info):
  from scripts.platform.wayland import POLICY,policy_for_pin,policy_for_tree

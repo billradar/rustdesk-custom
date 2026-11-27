@@ -179,6 +179,9 @@ class ProfileContract(unittest.TestCase):
             source.mkdir()
             (source / 'Cargo.toml').write_text('version = "1.5.3"\n')
             subprocess.run(['git', 'init', '-q', str(source)], check=True)
+            subprocess.run(['git', '-C', str(source), '-c', 'user.name=Contract',
+                            '-c', 'user.email=contract@example.invalid',
+                            'commit', '--allow-empty', '-qm', 'source fixture'], check=True)
             result = subprocess.run(['bash', str(root / 'scripts/source/apply_patches.sh'), str(source), 'sos'],
                                     env=dict(os.environ, PATCHSET='v3', BUILD_CHANNEL='ci', PYTHONPATH=str(root)),
                                     capture_output=True, text=True, cwd=root)

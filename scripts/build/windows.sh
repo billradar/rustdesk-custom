@@ -5,9 +5,18 @@ ref=${2:?Upstream ref required}
 [[ "$variant" == standard || "$variant" == sos ]] || exit 1
 [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* ]] || { echo 'Windows Git Bash is required.' >&2; exit 1; }
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+configuration=${BUILD_CONFIGURATION:-PRODUCTION}
+if [[ "${BUILD_CHANNEL:-stable}" == ci ]]; then
+    [[ "$configuration" == "TEST ONLY" && "${PLATFORM:-}" == windows && "${PLATFORM_ARCH:-}" == x86_64 && "$variant" == "${VARIANT:-}" ]] || exit 1
+    source "$root/scripts/build/platform_ci_guard.sh"
+else
+    [[ "$configuration" != "TEST ONLY" || "${BUILD_CHANNEL:-stable}" != ci ]] || exit 1
+fi
 python3 "$root/scripts/source/verify_source.py" --config-only
 mkdir -p "$root/.work" "$root/artifacts"
-if [[ -n "${PREPARED_SOURCE_DIR:-}" ]]; then
+if [[ "${BUILD_CHANNEL:-stable}" == ci ]]; then
+    workspace="$PREPARED_SOURCE_DIR"
+elif [[ -n "${PREPARED_SOURCE_DIR:-}" ]]; then
     workspace="$PREPARED_SOURCE_DIR"
     python3 - "$workspace" "$variant" <<'PYVERIFY'
 import os,sys

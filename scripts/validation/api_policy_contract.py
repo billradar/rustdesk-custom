@@ -1,4 +1,4 @@
-"""Configuration validation, frozen-source binding and v3-only Actions wiring."""
+"""Configuration validation, frozen-source binding and v3/v4 Actions wiring."""
 import json
 from pathlib import Path
 import tempfile
@@ -40,15 +40,16 @@ class PolicyContract(unittest.TestCase):
             other = policy.apply(tree, policy.resolve('https://primary.test.invalid', 'https://different.test.invalid'))
             self.assertNotEqual(digest, other)
 
-    def test_v3_workflow_reads_variables_without_production_literals(self):
+    def test_current_workflow_reads_variables_without_production_literals(self):
         import yaml
         root = Path(__file__).resolve().parents[2]
         workflow = yaml.safe_load((root / '.github/workflows/prepare-source.yml').read_text())
-        step = next(s for s in workflow['jobs']['prepare']['steps'] if s.get('name') == 'Freeze v3 public API endpoints from Actions variables')
-        self.assertEqual(step['if'], "inputs.patchset == 'v3'")
+        step = next(s for s in workflow['jobs']['prepare']['steps'] if s.get('name') == 'Freeze public API endpoints from Actions variables')
+        self.assertEqual(step['if'], """!inputs.formal_validation && contains(fromJSON('["v3","v4"]'), inputs.patchset)""")
         self.assertEqual(step['env']['RUSTDESK_API_SERVER'], '${{ vars.RUSTDESK_API_SERVER }}')
         self.assertEqual(step['env']['RUSTDESK_API_FALLBACK_SERVER'], "${{ vars.RUSTDESK_API_FALLBACK_SERVER || '' }}")
-        patch = (root / 'patchsets/v3/common/0007-api-failover.patch').read_text()
-        self.assertNotIn('houxnan.com', patch)
+        for generation in ('v3', 'v4'):
+            patch = (root / f'patchsets/{generation}/common/0007-api-failover.patch').read_text()
+            self.assertNotIn('houxnan.com', patch)
 
 if __name__ == '__main__': unittest.main()

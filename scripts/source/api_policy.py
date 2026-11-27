@@ -1,4 +1,4 @@
-"""Freeze Actions API endpoints into v3 prepared source, covered by its inventory."""
+"""Freeze Actions API endpoints into v3/v4 prepared source, covered by its inventory."""
 import argparse
 import hashlib
 import json
@@ -70,7 +70,7 @@ def apply(tree, value):
     for name, text in sources(value).items():
         path = tree / name
         if not path.is_file() or path.is_symlink():
-            raise ValueError('v3 API policy patch must exist before configuration')
+            raise ValueError('API policy patch must exist before configuration')
         path.write_text(text, encoding='utf-8', newline='\n')
     snapshot = tree / SNAPSHOT
     if snapshot.is_symlink():
@@ -101,4 +101,4 @@ if __name__ == '__main__':
     snapshot = resolve(os.environ.get('RUSTDESK_API_SERVER', ''), os.environ.get('RUSTDESK_API_FALLBACK_SERVER', ''))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(snapshot, sort_keys=True, indent=2) + '\n', encoding='utf-8')
-    print('v3 API policy frozen: ' + ('enabled' if snapshot['enabled'] else 'disabled (fallback variable empty)'))
+    print('API policy frozen: ' + ('enabled' if snapshot['enabled'] else 'disabled (fallback variable empty)'))

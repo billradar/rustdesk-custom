@@ -1,0 +1,279 @@
+diff --git a/src/radar_wss_generated.rs b/src/radar_wss_generated.rs
+new file mode 100644
+--- /dev/null
++++ b/src/radar_wss_generated.rs
+@@ -0,0 +1,3 @@
++// Replaced from frozen Actions API policy during v3 source preparation.
++const PROFILE_PRIMARY: &str = "";
++const PROFILE_FALLBACK: &str = "";
+diff --git a/src/radar_wss_policy.rs b/src/radar_wss_policy.rs
+new file mode 100644
+--- /dev/null
++++ b/src/radar_wss_policy.rs
+@@ -0,0 +1,169 @@
++//! WSS primary/fallback handshake policy for the verified own RustDesk endpoint.
++//! This module deliberately has no shared HTTP API state.
++use crate::{
++    config::{keys::OPTION_WEBSOCKET_PORT, use_ws, Config},
++    socket_client::split_host_port,
++};
++use std::io::{self, ErrorKind};
++
++include!("radar_wss_generated.rs");
++
++fn origins() -> Option<(url::Url, url::Url)> {
++    let primary = url::Url::parse(PROFILE_PRIMARY).ok()?;
++    let fallback = url::Url::parse(PROFILE_FALLBACK).ok()?;
++    if primary.scheme() != "https"
++        || fallback.scheme() != "https"
++        || primary.domain().is_none()
++        || fallback.domain().is_none()
++        || primary.domain() == fallback.domain()
++        || primary.port_or_known_default() != Some(443)
++        || fallback.port_or_known_default() != Some(443)
++        || primary.path() != "/"
++        || fallback.path() != "/"
++        || primary.username() != ""
++        || fallback.username() != ""
++        || primary.password().is_some()
++        || fallback.password().is_some()
++        || primary.query().is_some()
++        || fallback.query().is_some()
++        || primary.fragment().is_some()
++        || fallback.fragment().is_some()
++    {
++        return None;
++    }
++    Some((primary, fallback))
++}
++
++fn own_primary_host(host: &str) -> bool {
++    let Some((primary, _)) = origins() else {
++        return false;
++    };
++    let Some(primary_domain) = primary.domain() else {
++        return false;
++    };
++    if !host.trim_end_matches('.').eq_ignore_ascii_case(primary_domain) {
++        return false;
++    }
++    let configured = Config::get_rendezvous_server();
++    let configured_host = split_host_port(&configured)
++        .map(|(name, _)| name)
++        .unwrap_or(configured);
++    configured_host
++        .trim_end_matches('.')
++        .eq_ignore_ascii_case(primary_domain)
++}
++
++pub(super) fn prefer_wss(host: &str) -> bool {
++    Config::get_option("api-server").is_empty() && own_primary_host(host)
++}
++
++fn managed_config() -> bool {
++    use_ws()
++        && Config::get_option("api-server").is_empty()
++        && Config::get_option(OPTION_WEBSOCKET_PORT).is_empty()
++}
++
++fn valid_ws_url(candidate: &url::Url) -> bool {
++    candidate.scheme() == "wss"
++        && candidate.port_or_known_default() == Some(443)
++        && matches!(candidate.path(), "/ws/id" | "/ws/relay")
++        && candidate.username().is_empty()
++        && candidate.password().is_none()
++        && candidate.query().is_none()
++        && candidate.fragment().is_none()
++}
++
++pub(super) fn fallback_url(url: &str) -> Option<String> {
++    if !managed_config() {
++        return None;
++    }
++    let (primary, fallback) = origins()?;
++    let current = url::Url::parse(url).ok()?;
++    if !valid_ws_url(&current) {
++        return None;
++    }
++    let primary_domain = primary.domain()?;
++    if current.domain()? != primary_domain || !own_primary_host(primary_domain) {
++        return None;
++    }
++    // Only an unqualified own ID host and own same-host relay can reach this
++    // path through check_ws(). Never redirect an unrelated relay host.
++    Some(format!("wss://{}{}", fallback.domain()?, current.path()))
++}
++
++pub(super) fn strict_managed_url(url: &str) -> bool {
++    if !managed_config() {
++        return false;
++    }
++    let Some((primary, fallback)) = origins() else {
++        return false;
++    };
++    let Ok(candidate) = url::Url::parse(url) else {
++        return false;
++    };
++    if !valid_ws_url(&candidate) {
++        return false;
++    }
++    let Some(primary_domain) = primary.domain() else {
++        return false;
++    };
++    own_primary_host(primary_domain)
++        && matches!(candidate.domain(), Some(host) if host == primary_domain || Some(host) == fallback.domain())
++}
++
++fn retryable_io_kind(kind: ErrorKind, direct: bool) -> bool {
++    // Name-resolution failures commonly surface as ErrorKind::Other.
++    // Only direct sockets may use that broad IO class; an explicit proxy
++    // can report authentication/configuration errors in the same class.
++    (direct && kind == ErrorKind::Other)
++        || matches!(
++        kind,
++        ErrorKind::ConnectionRefused
++            | ErrorKind::ConnectionAborted
++            | ErrorKind::ConnectionReset
++            | ErrorKind::TimedOut
++            | ErrorKind::AddrNotAvailable
++            | ErrorKind::NotFound
++    )
++}
++
++pub(super) fn retryable_transport(error: &anyhow::Error, direct: bool) -> bool {
++    // A tungstenite TLS/HTTP/protocol failure is authoritative: never inspect
++    // nested IO errors or string messages to turn it into an eligible failure.
++    for source in error.chain() {
++        if let Some(ws) = source.downcast_ref::<tungstenite::Error>() {
++            return matches!(ws, tungstenite::Error::Io(io) if retryable_io_kind(io.kind(), direct));
++        }
++    }
++    error.chain().any(|source| {
++        source.is::<tokio::time::error::Elapsed>()
++            || source
++                .downcast_ref::<io::Error>()
++                .is_some_and(|io| retryable_io_kind(io.kind(), direct))
++    })
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn transport_classification_never_falls_back_on_http_or_tls() {
++        let redirect = tungstenite::Error::Http(Box::new(
++            tungstenite::http::Response::builder()
++                .status(301)
++                .body(Some(Vec::new()))
++                .unwrap(),
++        ));
++        assert!(!retryable_transport(&anyhow::Error::new(redirect), true));
++        let refused = anyhow::Error::new(io::Error::new(
++            ErrorKind::ConnectionRefused, "offline",
++        ));
++        assert!(retryable_transport(&refused, true));
++        assert!(retryable_transport(&refused, false));
++        let dns = anyhow::Error::new(io::Error::new(ErrorKind::Other, "dns error"));
++        assert!(retryable_transport(&dns, true));
++        assert!(!retryable_transport(&dns, false));
++        assert!(!retryable_transport(&anyhow::Error::msg("TLS certificate mismatch"), true));
++    }
++}
+diff --git a/src/websocket.rs b/src/websocket.rs
+--- a/src/websocket.rs
++++ b/src/websocket.rs
+@@ -33,7 +33,10 @@
+     client_async_tls_with_config, connect_async_tls_with_config,
+     tungstenite::protocol::Message as WsMessage, Connector, MaybeTlsStream, WebSocketStream,
+ };
+-use tungstenite::client::IntoClientRequest;
++use tungstenite::client::IntoClientRequest;
++
++#[path = "radar_wss_policy.rs"]
++mod radar_wss_policy;
+ 
+ /// tungstenite's own defaults. `set_max_packet_length` clamps to these, so `usize::MAX` puts the
+ /// transport back exactly where it started rather than above it.
+@@ -124,7 +127,39 @@
+         proxy_conf: Option<&Socks5Server>,
+         ms_timeout: u64,
+     ) -> ResultType<(WsStream, SocketAddr)> {
+-        let tls_type = get_cached_tls_type(url);
++        // A managed own WSS endpoint uses only strict certificate verification.
++        // Primary and fallback never share HTTP API health state or TLS cache.
++        if let Some(fallback) = radar_wss_policy::fallback_url(url) {
++            let primary = Self::try_connect(
++                url,
++                local_addr,
++                proxy_conf,
++                ms_timeout,
++                TlsType::Rustls,
++                true,
++                Some(false),
++                Some(false),
++            )
++            .await;
++            if let Err(error) = &primary {
++                if radar_wss_policy::retryable_transport(error, proxy_conf.is_none()) {
++                    log::warn!("Own WSS primary connection unavailable; trying configured backup");
++                    return Self::try_connect(
++                        &fallback,
++                        local_addr,
++                        proxy_conf,
++                        ms_timeout,
++                        TlsType::Rustls,
++                        true,
++                        Some(false),
++                        Some(false),
++                    )
++                    .await;
++                }
++            }
++            return primary;
++        }
++        let tls_type = get_cached_tls_type(url);
+         let is_tls_type_cached = tls_type.is_some();
+         let tls_type = tls_type.unwrap_or(TlsType::Rustls);
+         let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(&url);
+@@ -178,8 +213,11 @@
+         let request = url
+             .into_client_request()
+             .map_err(|e| Error::new(ErrorKind::Other, e))?;
+-        let connector =
+-            Self::get_connector(&tls_type, danger_accept_invalid_cert.unwrap_or(false))?;
++        let connector =
++            Self::get_connector(&tls_type, danger_accept_invalid_cert.unwrap_or(false))?;
++        if radar_wss_policy::strict_managed_url(url) && connector.is_none() {
++            crate::bail!("Strict WSS TLS verifier unavailable");
++        }
+         let result = if let Some(proxy_conf) = proxy_conf {
+             let host = request.uri().host().ok_or_else(|| {
+                 Error::new(ErrorKind::InvalidInput, "Invalid WebSocket URL: no host")
+@@ -312,8 +350,13 @@
+                     )
+                     .await
+                 }
+-                _ => {
+-                    log::error!(
++                _ => {
++                    if radar_wss_policy::strict_managed_url(url) {
++                        // Keep the typed tungstenite error for failover classification.
++                        // Never retry with danger_accept_invalid_certs on managed WSS.
++                        return Err(anyhow::Error::new(e));
++                    }
++                    log::error!(
+                         "WebSocket connection failed with tls_type {:?}: {}, {:?}",
+                         tls_type,
+                         url,
+@@ -581,7 +624,9 @@
+     };
+     let protocol = if is_domain {
+         let api_server = Config::get_option("api-server");
+-        if api_server.starts_with("https") {
++        if api_server.starts_with("https")
++            || (api_server.is_empty() && radar_wss_policy::prefer_wss(&endpoint_host))
++        {
+             "wss"
+         } else {
+             "ws"

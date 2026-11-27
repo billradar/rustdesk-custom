@@ -1,0 +1,359 @@
+name: Full platform build validation (no publication)
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/build-validation*.yml'
+      - '.github/workflows/prepare-source.yml'
+      - '.github/workflows/compat-check.yml'
+      - '.github/workflows/tag.yml'
+      - '.github/workflows/nightly.yml'
+      - 'scripts/build/**'
+      - 'scripts/platform/**'
+      - 'scripts/source/**'
+      - 'scripts/upstream/**'
+      - 'scripts/release/formal_entry*'
+      - 'metadata/build/**'
+      - 'metadata/platform/**'
+      - 'metadata/patch-profiles.json'
+      - 'patchsets/**'
+  workflow_call:
+    inputs:
+      include_linux:
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compatibility:
+    uses: ./.github/workflows/compat-check.yml
+    with:
+      upstream_repository: rustdesk/rustdesk
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      channel: ci
+  formal-prepare:
+    name: Validate existing formal prepared-source pipeline (no production credentials)
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      formal_validation: true
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      patchset: v4
+      channel: ci
+  macos-arm64-bridge:
+    name: Generate exact-source Flutter 3.44 CI bridge
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      BUILD_CONFIGURATION: 'TEST ONLY'
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install -r requirements.txt
+      - name: Fetch and check exact official dedicated Bridge recipe
+        id: profile
+        run: |
+          bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/mac-arm-ci-bridge
+          python3 -m scripts.build.macos_arm64_ci profile .work/mac-arm-ci-bridge
+      - name: Official Bridge prerequisites
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ca-certificates clang cmake curl gcc git g++ libclang-dev libgtk-3-dev llvm-dev nasm ninja-build pkg-config wget
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ steps.profile.outputs.bridge_rust }}
+          components: rustfmt
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: ${{ steps.profile.outputs.bridge_flutter }}
+          channel: stable
+      - name: Generate official Flutter 3.44 bridge
+        working-directory: .work/mac-arm-ci-bridge
+        env:
+          CARGO_EXPAND: ${{ steps.profile.outputs.cargo_expand }}
+          FRB: ${{ steps.profile.outputs.frb }}
+          BRIDGE_FLUTTER: ${{ steps.profile.outputs.bridge_flutter }}
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/build/generate_flutter344_bridge.sh"
+          cd "$GITHUB_WORKSPACE"
+          python3 -m scripts.build.macos_arm64_ci bridge-info .work/mac-arm-ci-bridge
+          python3 -m scripts.build.macos_arm64 bridge-info .work/mac-arm-ci-bridge --formal-validation
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-arm64-ci-bridge-${{ github.run_id }}
+          path: |
+            .work/mac-arm-ci-bridge/src/bridge_generated*.rs
+            .work/mac-arm-ci-bridge/flutter/lib/generated_bridge*.dart
+            .work/mac-arm-ci-bridge/flutter/macos/Runner/bridge_generated.h
+            .work/mac-arm-ci-bridge/flutter/ios/Runner/bridge_generated.h
+            .work/mac-arm-ci-bridge/macos-arm64-ci-bridge-info.json
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-arm64-formal-bridge-${{ github.run_id }}
+          path: |
+            .work/mac-arm-ci-bridge/src/bridge_generated*.rs
+            .work/mac-arm-ci-bridge/flutter/lib/generated_bridge*.dart
+            .work/mac-arm-ci-bridge/flutter/macos/Runner/bridge_generated.h
+            .work/mac-arm-ci-bridge/flutter/ios/Runner/bridge_generated.h
+            .work/mac-arm-ci-bridge/macos-arm64-bridge-info.json
+          if-no-files-found: error
+          retention-days: 7
+  package:
+    needs: [compatibility, macos-arm64-bridge, formal-prepare]
+    if: ${{ always() && !cancelled() && needs.compatibility.result == 'success' && needs.formal-prepare.result == 'success' }}
+    name: Fixture ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {platform: windows, arch: x86_64, variant: standard, runner: windows-2022}
+          - {platform: windows, arch: x86_64, variant: sos, runner: windows-2022}
+          - {platform: android, arch: aarch64, variant: standard, runner: ubuntu-24.04}
+          - {platform: android, arch: armv7, variant: standard, runner: ubuntu-24.04}
+          - {platform: android, arch: x86_64, variant: standard, runner: ubuntu-24.04}
+          - {platform: macos, arch: x86_64, variant: standard, runner: macos-26-intel}
+          - {platform: macos, arch: x86_64, variant: sos, runner: macos-26-intel}
+          - {platform: macos, arch: aarch64, variant: standard, runner: macos-26}
+          - {platform: macos, arch: aarch64, variant: sos, runner: macos-26}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      BUILD_CONFIGURATION: 'TEST ONLY'
+      FORMAL_VALIDATION: 'true'
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      UPSTREAM_VERSION: '1.5.3'
+      ARTIFACT_IDENTITY: '1.5.3'
+      PLATFORM: ${{ matrix.platform }}
+      PLATFORM_ARCH: ${{ matrix.arch }}
+      VARIANT: ${{ matrix.variant }}
+      EXPECTED_RUNNER: ${{ matrix.runner }}
+      PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/native/source
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install reviewed parser dependencies
+        run: |
+          python3 -m venv .work/python
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            .work/python/Scripts/python.exe -m pip install -r requirements.txt
+            echo "$PWD/.work/python/Scripts" >> "$GITHUB_PATH"
+          else
+            .work/python/bin/python -m pip install -r requirements.txt
+            echo "$PWD/.work/python/bin" >> "$GITHUB_PATH"
+          fi
+      - name: Windows canonical source checkout line endings
+        if: matrix.platform == 'windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          name: ${{ matrix.variant == 'standard' && needs.formal-prepare.outputs.standard_artifact || needs.formal-prepare.outputs.sos_artifact }}
+          path: .work/formal-bundle
+      - name: Unpack formal prepared source before actual native build
+        run: |
+          source scripts/validation/test_config.sh
+          python3 scripts/source/prepared_source.py unpack --bundle .work/formal-bundle --destination .work/native --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --formal-validation
+          rm -rf -- .work/formal-bundle
+      - name: Require exact platform candidate and secondary Mac ARM recipe policy
+        id: profile
+        run: |
+          python3 scripts/platform/platform_adapter.py .work/native/source --platform "$PLATFORM" --arch "$PLATFORM_ARCH" --channel ci --output .work/native/profile.json
+          source scripts/build/platform_ci_guard.sh
+      - name: Resolve reviewed Windows build tools and helper pin
+        if: matrix.platform == 'windows'
+        id: windows-profile
+        run: python3 scripts/build/build_adapter.py .work/native/source --channel ci --output .work/native/windows-profile.json
+      - uses: ./.github/actions/install-llvm
+        if: matrix.platform == 'windows'
+        with:
+          version: ${{ steps.windows-profile.outputs.llvm }}
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: ${{ steps.profile.outputs.flutter }}
+          channel: stable
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ steps.profile.outputs.rust }}
+          targets: ${{ steps.profile.outputs.target }}
+          components: rustfmt
+      - name: Validate fixture source configuration
+        run: |
+          source scripts/validation/test_config.sh
+          python3 scripts/source/verify_source.py .work/native/source "$VARIANT" --automation
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        with:
+          name: macos-arm64-formal-bridge-${{ github.run_id }}
+          path: .work/native/mac-arm-bridge
+      - name: Apply formal Mac ARM transformation to the actual build source
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        run: |
+          source scripts/validation/test_config.sh
+          brew install gnu-sed
+          export PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH"
+          python3 -m scripts.build.macos_arm64 transform .work/native/source --bridge .work/native/mac-arm-bridge --formal-validation
+          python3 -m scripts.build.macos_arm64 verify .work/native/source --formal-validation
+          mkdir -p .work/formal-mac/report
+          cp .work/native/source/{source-manifest.json,macos-arm64-transform.json} .work/formal-mac/report/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: matrix.platform == 'macos' && matrix.arch == 'aarch64'
+        with:
+          name: v4-formal-mac-arm64-${{ matrix.variant }}-receipt
+          path: .work/formal-mac/report
+          if-no-files-found: error
+          retention-days: 7
+      - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
+        if: matrix.platform == 'windows'
+      - name: Windows official custom Flutter engine (same Stable recipe)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter precache --windows
+          if ($LASTEXITCODE -ne 0) { throw 'flutter precache failed' }
+          $sdk = Split-Path (Split-Path (Get-Command flutter).Source)
+          $engine = Join-Path $sdk 'bin/cache/artifacts/engine/windows-x64-release'
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile .work/engine.zip
+          Expand-Archive .work/engine.zip .work/engine
+          Copy-Item .work/engine/* $engine -Recurse -Force
+          $hash = (Get-FileHash .work/engine.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "ENGINE_ARCHIVE_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Apply Windows official Flutter SDK patch
+        if: matrix.platform == 'windows'
+        run: |
+          sdk=$(dirname "$(dirname "$(command -v flutter)")")
+          patch="$PWD/.work/native/source/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          git -C "$sdk" apply --check "$patch"
+          git -C "$sdk" apply "$patch"
+      - name: Windows pinned native helper
+        if: matrix.platform == 'windows'
+        env:
+          HELPER_SHA: ${{ steps.windows-profile.outputs.helper_commit }}
+        run: |
+          git clone https://github.com/rustdesk-org/RustDeskTempTopMostWindow .work/topmost
+          git -C .work/topmost checkout --detach "$HELPER_SHA"
+          test "$(git -C .work/topmost rev-parse HEAD)" = "$HELPER_SHA"
+          MSBuild.exe .work/topmost/WindowInjection/WindowInjection.vcxproj -p:Configuration=Release -p:Platform=x64 -p:TargetVersion=Windows10
+          python3 -c 'from scripts.build.windows_arm64 import pe; pe(".work/topmost/WindowInjection/x64/Release/WindowInjection.dll","x86_64")'
+      - name: Android official host dependencies
+        if: matrix.platform == 'android'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake curl gcc-multilib g++-multilib libayatana-appindicator3-dev libasound2-dev libc6-dev libclang-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgtk-3-dev libpulse-dev libva-dev libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxdo-dev libxfixes-dev llvm-dev nasm ninja-build openjdk-17-jdk-headless pkg-config tree wget
+          export JAVA_HOME="${JAVA_HOME_17_X64:?}"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          python3 -m scripts.platform.android_sdk --tree .work/native/source --flutter "$FLUTTER_ROOT" --sdk "$ANDROID_HOME"
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779
+        if: matrix.platform == 'android'
+        id: ndk
+        with:
+          ndk-version: ${{ steps.profile.outputs.ndk }}
+          add-to-path: true
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: ${{ matrix.platform == 'windows' && 'C:\vcpkg' || matrix.platform == 'macos' && format('{0}/.work/vcpkg', github.workspace) || '/opt/artifacts/vcpkg' }}
+          vcpkgGitCommitId: ${{ steps.profile.outputs.vcpkg }}
+          doNotCache: true
+      - name: Windows official vcpkg manifest install
+        if: matrix.platform == 'windows'
+        working-directory: .work/native/source
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
+      - name: Shared Stable build core with fictional fixture only
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          source scripts/validation/test_config.sh
+          if [[ "$PLATFORM" == windows ]]; then
+            export RUSTDESK_TOPMOST_DLL="$(cygpath -w "$PWD/.work/topmost/WindowInjection/x64/Release/WindowInjection.dll")"
+            bash "scripts/build/$VARIANT.sh" "$UPSTREAM_EXPECTED_SHA"
+            python3 -m scripts.build.platform_ci_report .work/native/source windows x86_64 "$VARIANT"
+          else
+            bash "scripts/build/$PLATFORM.sh"
+          fi
+      - name: Remove installable fixture packages and source from runner
+        if: always()
+        run: rm -rf -- .work/native/source .work/formal-bundle .work/native/mac-arm-bridge artifacts
+      - name: Retain metadata evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v4-fixture-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.variant }}-report
+          path: .work/native/package-report.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  linux:
+    name: Reuse the same formal source pair for all four Linux targets
+    if: github.event_name == 'pull_request' || inputs.include_linux
+    needs: [compatibility, formal-prepare]
+    uses: ./.github/workflows/build-validation-linux.yml
+    with:
+      reuse_prepared: true
+      prepared_standard: ${{ needs.formal-prepare.outputs.standard_artifact }}
+      prepared_sos: ${{ needs.formal-prepare.outputs.sos_artifact }}
+  formal-summary:
+    name: Verify all thirteen same-run package reports (no release authority)
+    if: ${{ always() && !cancelled() && (github.event_name == 'pull_request' || inputs.include_linux) }}
+    needs: [compatibility, formal-prepare, macos-arm64-bridge, package, linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      BUILD_CONFIGURATION: 'TEST ONLY'
+      UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - name: Reject incomplete target execution
+        env:
+          COMPAT: ${{ needs.compatibility.result }}
+          PREPARE: ${{ needs.formal-prepare.result }}
+          MAC_BRIDGE: ${{ needs.macos-arm64-bridge.result }}
+          DESKTOP_MOBILE: ${{ needs.package.result }}
+          LINUX: ${{ needs.linux.result }}
+        run: |
+          for result in "$COMPAT" "$PREPARE" "$MAC_BRIDGE" "$DESKTOP_MOBILE" "$LINUX"; do
+            test "$result" = success || exit 1
+          done
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install -r requirements.txt
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          pattern: v4-fixture-*-report
+          path: .work/formal-reports
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          pattern: v4-linux-deb-rpm-*-smoke-report
+          path: .work/formal-reports
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
+        with:
+          pattern: v4-formal-mac-arm64-*-receipt
+          path: .work/formal-receipts
+      - run: python3 -m scripts.release.formal_entry aggregate --reports .work/formal-reports --receipts .work/formal-receipts --output .work/formal-dry-run.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: formal-v4-dry-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: .work/formal-dry-run.json
+          if-no-files-found: error
+          retention-days: 7

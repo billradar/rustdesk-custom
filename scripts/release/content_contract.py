@@ -91,10 +91,10 @@ class ContentContract(unittest.TestCase):
     def fixture(self):
         inputs=content.inputs('v3')
         common=channel.patch_hash('common','v3');sos=channel.patch_hash('sos','v3')
-        identity=channel.build_identity('a'*40,'v3',common,sos,wayland_included=False)
+        identity=channel.build_identity('95cca3f661f635b3cc85c04935fe8d96d8f432ef','v3',common,sos,wayland_included=False)
         tag='v1.5.3-custom.'+inputs['patchset_version']
         names=['update-manifest.json','release-attestation.json','rustdesk-1.5.3-standard-windows-x86_64.zip','rustdesk-1.5.3-sos-windows-x86_64.zip']
-        body='\n'.join(['Automation-State: complete','Upstream SHA: '+'a'*40,'Patch Set: v3',
+        body='\n'.join(['Automation-State: complete','Upstream SHA: '+'95cca3f661f635b3cc85c04935fe8d96d8f432ef','Patch Set: v3',
             'Common Patch Hash: '+common,'SOS Patch Hash: '+sos,'Patch Revision: '+inputs['patchset_version'],
             'Build Identity: '+identity,'Wayland Included: false','version_semantics=patchset-content-v1',
             'Asset Inventory: '+json.dumps(names)])
@@ -104,7 +104,7 @@ class ContentContract(unittest.TestCase):
     def test_same_tag_identity_reuses_existing_asset_gates(self):
         existing=self.fixture()
         data=dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
-                  upstream_sha='a'*40,patchset='v3')
+                  upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef',patchset='v3')
         with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false',ANDROID_PRODUCTION_SIGNING_ENABLED='false'),\
              patch.object(channel,'api',return_value=existing),\
              patch('scripts.release.stable_tag.commit_of',return_value='b'*40),\
@@ -117,7 +117,7 @@ class ContentContract(unittest.TestCase):
     def test_same_tag_different_identity_rejects_without_bump(self):
         existing=self.fixture();existing['body']=existing['body'].replace('Build Identity: ', 'Build Identity: '+'e'*64+'\nold=')
         data=dict(channel='stable',version='1.5.3',upstream_tag='1.5.3',upstream_ref='1.5.3',
-                  upstream_sha='a'*40,patchset='v3')
+                  upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef',patchset='v3')
         with patch.dict(os.environ,GITHUB_SHA='f'*40,INCLUDE_WAYLAND='false'),patch.object(channel,'api',return_value=existing),patch('scripts.release.attestation.read_release',side_effect=ValueError('Attested JSON identity mismatch')):
             with self.assertRaisesRegex(ValueError,'Attested JSON identity mismatch'):
                 channel.release_preflight(data)

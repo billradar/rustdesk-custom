@@ -107,7 +107,7 @@ def check_draft(release_id,tag,digest,allow_published=False):
     attestation.require_production_signing(value)
     from scripts.upstream.patchsets import require_selection
     from scripts.upstream.patchset_version import current
-    require_selection(value['upstream_version'],value['patchset'],channel='stable')
+    require_selection(value['upstream_version'],value['patchset'],channel='stable',source_sha=value['upstream_sha'])
     metadata=current(value['patchset'])
     revision=int(value['patch_revision'].rsplit('.',1)[1])
     entries=[e for e in metadata['versioning']['history'] if e['revision']==revision]

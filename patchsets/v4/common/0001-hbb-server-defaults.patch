@@ -1,0 +1,773 @@
+diff --git a/src/config.rs b/src/config.rs
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -117,8 +117,8 @@
+     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+ ];
+ 
+-pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.rustdesk.com"];
+-pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
++pub const RENDEZVOUS_SERVERS: &[&str] = &[env!("RUSTDESK_ID_SERVER")];
++pub const RS_PUB_KEY: &str = env!("RUSTDESK_KEY");
+ 
+ pub const RENDEZVOUS_PORT: i32 = 21116;
+ pub const RELAY_PORT: i32 = 21117;
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -11,6 +11,7 @@
+ webrtc = ["dep:webrtc"]
+ 
+ [dependencies]
++radar_diagnostics = { path = "../radar_diagnostics" }
+ # new flexi_logger failed on rustc 1.75
+ flexi_logger = { version = "0.27", features = ["async"] }
+ protobuf = { version = "3.7", features = ["with-bytes"] }
+diff --git a/src/config.rs b/src/config.rs
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -569,7 +569,10 @@
+     pub fn get_trusted_device_stores() -> crate::ResultType<(String, String)> {
+         let _lock = CONFIG2.read().unwrap();
+         let config: Self = try_load_path(Self::file())?;
+-        Ok((config.trusted_devices_v2()?.to_owned(), config.trusted_devices))
++        Ok((
++            config.trusted_devices_v2()?.to_owned(),
++            config.trusted_devices,
++        ))
+     }
+ 
+     pub fn has_trusted_devices_v2() -> crate::ResultType<bool> {
+@@ -694,36 +697,75 @@
+ pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + std::fmt::Debug>(
+     file: PathBuf,
+ ) -> T {
+-    let cfg = match confy::load_path(&file) {
+-        Ok(config) => config,
+-        Err(err) => {
+-            if let confy::ConfyError::GeneralLoadError(err) = &err {
+-                if err.kind() == std::io::ErrorKind::NotFound {
+-                    return T::default();
++    use crate::radar_diagnostics::{Action, Module};
++    let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++    let _diagnostic_lifetime = diagnostic.lifetime(Module::Config, Action::ConfigLoad);
++    diagnostic.enter(Action::ConfigLoad, || {
++        let cfg = match confy::load_path(&file) {
++            Ok(config) => config,
++            Err(err) => {
++                if let confy::ConfyError::GeneralLoadError(err) = &err {
++                    if err.kind() == std::io::ErrorKind::NotFound {
++                        return T::default();
++                    }
+                 }
+-            }
+-            log::error!("Failed to load config '{}': {}", file.display(), err);
+-            T::default()
+-        }
+-    };
+-    cfg
++                log::error!("Failed to load config '{}': {}", file.display(), err);
++                T::default()
++            }
++        };
++        cfg
++    })
+ }
+ 
+ #[inline]
+ pub fn store_path<T: serde::Serialize>(path: PathBuf, cfg: T) -> crate::ResultType<()> {
+-    #[cfg(not(windows))]
+-    {
+-        use std::os::unix::fs::PermissionsExt;
+-        Ok(confy::store_path_perms(
+-            path,
+-            cfg,
+-            fs::Permissions::from_mode(0o600),
+-        )?)
+-    }
+-    #[cfg(windows)]
+-    {
+-        Ok(confy::store_path(path, cfg)?)
+-    }
++    use crate::radar_diagnostics::{Action, Code, Kind, Module};
++    let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++    diagnostic.event(
++        Action::ConfigWrite,
++        Module::Config,
++        Kind::Attempt,
++        Code::None,
++        None,
++        None,
++    );
++    let diagnostic_result = diagnostic.enter(Action::ConfigWrite, || {
++        #[cfg(not(windows))]
++        {
++            use std::os::unix::fs::PermissionsExt;
++            Ok(confy::store_path_perms(
++                path,
++                cfg,
++                fs::Permissions::from_mode(0o600),
++            )?)
++        }
++        #[cfg(windows)]
++        {
++            Ok(confy::store_path(path, cfg)?)
++        }
++    });
++    match &diagnostic_result {
++        Ok(value) => {
++            let _ = value;
++            diagnostic.event(
++                Action::ConfigWrite,
++                Module::Config,
++                Kind::Completed,
++                Code::None,
++                None,
++                None,
++            );
++        }
++        Err(_) => diagnostic.event(
++            Action::ConfigWrite,
++            Module::Config,
++            Kind::Failed,
++            Code::Unknown,
++            None,
++            None,
++        ),
++    }
++    diagnostic_result
+ }
+ 
+ impl Config {
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,5 @@
++#[cfg(debug_assertions)]
++use std::io::Write as _;
+ pub mod compress;
+ pub mod protos;
+ pub use bytes;
+@@ -21,6 +23,7 @@
+ pub mod udp;
+ pub use env_logger;
+ pub use log;
++pub use radar_diagnostics;
+ pub mod bytes_codec;
+ pub use anyhow::{self, bail};
+ pub use futures_util;
+@@ -58,9 +61,9 @@
+ pub mod log_throttle;
+ pub mod rx_probe;
+ pub mod stream;
+-pub mod websocket;
+ #[cfg(feature = "webrtc")]
+ pub mod webrtc;
++pub mod websocket;
+ #[cfg(any(target_os = "android", target_os = "ios"))]
+ pub use rustls_platform_verifier;
+ pub use stream::Stream;
+@@ -68,9 +71,9 @@
+ pub mod tls;
+ pub mod verifier;
+ pub use async_recursion;
++pub use libloading;
+ #[cfg(target_os = "linux")]
+ pub use users;
+-pub use libloading;
+ #[cfg(target_os = "linux")]
+ pub use x11;
+ 
+@@ -424,7 +427,66 @@
+     }
+ }
+ 
++/// Android's file-transfer home is external storage. Diagnostics must instead use
++/// internal files storage next to PathProvider's application-documents directory.
++pub fn diagnostics_path() -> Option<std::path::PathBuf> {
++    #[cfg(target_os = "android")]
++    {
++        let app_dir = std::path::PathBuf::from(config::APP_DIR.read().unwrap().clone());
++        if !app_dir.is_absolute() || app_dir.file_name()? != "app_flutter" {
++            return None;
++        }
++        let path = app_dir.parent()?.join("files").join("diagnostics");
++        std::fs::create_dir_all(&path).ok()?;
++        std::fs::canonicalize(path).ok()
++    }
++    #[cfg(not(target_os = "android"))]
++    {
++        Some(config::Config::log_path().join("diagnostics"))
++    }
++}
++
++/// All app-managed legacy file output is metadata only. Never format record.args().
++pub fn diagnostic_format(
++    w: &mut dyn std::io::Write,
++    _now: &mut flexi_logger::DeferredNow,
++    record: &log::Record,
++) -> std::io::Result<()> {
++    if record.level() == log::Level::Error {
++        write!(
++            w,
++            "{} ERROR diagnostic event (details omitted)",
++            chrono::Utc::now().to_rfc3339()
++        )
++    } else {
++        Ok(())
++    }
++}
++
++#[cfg(not(debug_assertions))]
++struct DiagnosticWriter(flexi_logger::writers::FileLogWriter);
++#[cfg(not(debug_assertions))]
++impl flexi_logger::writers::LogWriter for DiagnosticWriter {
++    fn write(
++        &self,
++        now: &mut flexi_logger::DeferredNow,
++        record: &log::Record,
++    ) -> std::io::Result<()> {
++        radar_diagnostics::legacy(record);
++        if record.level() == log::Level::Error {
++            flexi_logger::writers::LogWriter::write(&self.0, now, record)
++        } else {
++            Ok(())
++        }
++    }
++    fn flush(&self) -> std::io::Result<()> {
++        flexi_logger::writers::LogWriter::flush(&self.0)
++    }
++}
+ pub fn init_log(_is_async: bool, _name: &str) -> Option<flexi_logger::LoggerHandle> {
++    if let Some(path) = diagnostics_path() {
++        let _ = radar_diagnostics::initialize(path);
++    }
+     static INIT: std::sync::Once = std::sync::Once::new();
+     #[allow(unused_mut)]
+     let mut logger_holder: Option<flexi_logger::LoggerHandle> = None;
+@@ -436,8 +498,17 @@
+         // is the one upstream signal that explains a session which never connected.
+         #[cfg(debug_assertions)]
+         {
+-            use env_logger::*;
+-            init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error,smithay_client_toolkit=warn"));
++            env_logger::Builder::new()
++                .filter_level(log::LevelFilter::Trace)
++                .format(|buf, record| {
++                    radar_diagnostics::legacy(record);
++                    if record.level() == log::Level::Error {
++                        writeln!(buf, "error event (details omitted)")
++                    } else {
++                        Ok(())
++                    }
++                })
++                .init();
+         }
+         #[cfg(not(debug_assertions))]
+         {
+@@ -452,32 +523,21 @@
+                 path.push(_name);
+             }
+             use flexi_logger::*;
+-            if let Ok(x) = Logger::try_with_env_or_str("debug,reqwest=warn,hyper_util=warn,rustls=warn,webrtc-sctp=warn,webrtc=warn,webrtc_ice::agent::agent_internal=error,webrtc::peer_connection=error,smithay_client_toolkit=warn") {
+-                logger_holder = x
+-                    .log_to_file(FileSpec::default().directory(path))
+-                    .write_mode(if _is_async {
+-                        WriteMode::Async
+-                    } else {
+-                        WriteMode::Direct
+-                    })
+-                    .format(opt_format)
+-                    .rotate(
+-                        // Size as well as age: rotating only daily lets one day's file grow
+-                        // without limit, so whoever can drive a hot log site — a peer sending
+-                        // malformed packets, a socket erroring in a retry loop — decides how
+-                        // much disk this uses. Bounding it here covers every call site at once.
+-                        Criterion::AgeOrSize(Age::Day, 16 * 1024 * 1024),
+-                        Naming::Timestamps,
+-                        // 90 files is ~90 days for any machine that stays under the
+-                        // size criterion — i.e. every ordinary install, on every platform this
+-                        // ships to. Raising it to protect the flood case would have bought little
+-                        // (a count cannot outrun a flood; only the rate limits at the log sites
+-                        // can) at the price of multiplying steady-state retention and disk for
+-                        // everyone.
+-                        Cleanup::KeepLogFiles(90),
+-                    )
+-                    .start()
+-                    .ok();
++            if let Ok(writer) = writers::FileLogWriter::builder(FileSpec::default().directory(path))
++                .format(diagnostic_format)
++                .rotate(
++                    Criterion::AgeOrSize(Age::Day, 16 * 1024 * 1024),
++                    Naming::Timestamps,
++                    Cleanup::KeepLogFiles(90),
++                )
++                .try_build()
++            {
++                logger_holder = Logger::try_with_str("trace").ok().and_then(|logger| {
++                    logger
++                        .log_to_writer(Box::new(DiagnosticWriter(writer)))
++                        .start()
++                        .ok()
++                });
+             }
+         }
+     });
+diff --git a/src/tcp.rs b/src/tcp.rs
+--- a/src/tcp.rs
++++ b/src/tcp.rs
+@@ -118,53 +118,152 @@
+ impl FramedStream {
+-    pub async fn new<T: ToSocketAddrs + std::fmt::Display>(
+-        remote_addr: T,
+-        local_addr: Option<SocketAddr>,
+-        ms_timeout: u64,
+-    ) -> ResultType<Self> {
+-        let mut last_error = None;
+-        for remote_addr in lookup_host(&remote_addr).await? {
+-            let local = if let Some(addr) = local_addr {
+-                addr
+-            } else {
+-                crate::config::Config::get_any_listen_addr(remote_addr.is_ipv4())
+-            };
+-            let result: ResultType<_> = async {
+-                let socket = new_socket(local, true)?;
+-                Ok(super::timeout(ms_timeout, socket.connect(remote_addr)).await??)
+-            }
+-            .await;
+-            match result {
+-                Ok(stream) => {
+-                    stream.set_nodelay(true).ok();
+-                    let addr = stream.local_addr()?;
+-                    return Ok(Self(
+-                        Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
+-                        addr,
+-                        None,
+-                        0,
+-                    ));
+-                }
+-                Err(err) => last_error = Some(err),
+-            }
+-        }
+-        if let Some(err) = last_error {
+-            let message = format!("Failed to connect to {remote_addr}: {err}");
+-            return Err(err.context(message));
+-        }
+-        bail!(format!("Failed to connect to {remote_addr}"));
+-    }
+-
+-    pub async fn connect<'t, T>(
+-        target: T,
+-        local_addr: Option<SocketAddr>,
+-        proxy_conf: &Socks5Server,
+-        ms_timeout: u64,
+-    ) -> ResultType<Self>
+-    where
+-        T: IntoTargetAddr<'t>,
+-    {
+-        let proxy = Proxy::from_conf(proxy_conf, Some(ms_timeout))?;
+-        proxy.connect::<T>(target, local_addr).await
+-    }
+-
++    pub async fn new<T: ToSocketAddrs + std::fmt::Display>(
++        remote_addr: T,
++        local_addr: Option<SocketAddr>,
++        ms_timeout: u64,
++    ) -> ResultType<Self> {
++        use crate::radar_diagnostics::{Action, Code, Kind, Module};
++        let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++        diagnostic.event(
++            Action::TcpConnect,
++            Module::Network,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
++        let diagnostic_result = diagnostic
++            .instrument(Action::TcpConnect, async {
++                diagnostic.event(
++                    Action::DnsResolve,
++                    Module::Network,
++                    Kind::Attempt,
++                    Code::None,
++                    None,
++                    None,
++                );
++                let resolved = lookup_host(&remote_addr).await;
++                match &resolved {
++                    Ok(_) => diagnostic.event(
++                        Action::DnsResolve,
++                        Module::Network,
++                        Kind::Completed,
++                        Code::None,
++                        None,
++                        None,
++                    ),
++                    Err(_) => diagnostic.event(
++                        Action::DnsResolve,
++                        Module::Network,
++                        Kind::Failed,
++                        Code::Dns,
++                        None,
++                        None,
++                    ),
++                }
++                let mut last_error = None;
++                for remote_addr in resolved? {
++                    let local = if let Some(addr) = local_addr {
++                        addr
++                    } else {
++                        crate::config::Config::get_any_listen_addr(remote_addr.is_ipv4())
++                    };
++                    let result: ResultType<_> = async {
++                        let socket = new_socket(local, true)?;
++                        Ok(super::timeout(ms_timeout, socket.connect(remote_addr)).await??)
++                    }
++                    .await;
++                    match result {
++                        Ok(stream) => {
++                            stream.set_nodelay(true).ok();
++                            let addr = stream.local_addr()?;
++                            return Ok(Self(
++                                Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
++                                addr,
++                                None,
++                                0,
++                            ));
++                        }
++                        Err(err) => last_error = Some(err),
++                    }
++                }
++                if let Some(err) = last_error {
++                    let message = format!("Failed to connect to {remote_addr}: {err}");
++                    return Err(err.context(message));
++                }
++                bail!(format!("Failed to connect to {remote_addr}"));
++            })
++            .await;
++        match &diagnostic_result {
++            Ok(value) => {
++                let _ = value;
++                diagnostic.event(
++                    Action::TcpConnect,
++                    Module::Network,
++                    Kind::Completed,
++                    Code::None,
++                    None,
++                    None,
++                );
++            }
++            Err(_) => diagnostic.event(
++                Action::TcpConnect,
++                Module::Network,
++                Kind::Failed,
++                Code::Unknown,
++                None,
++                None,
++            ),
++        }
++        diagnostic_result
++    }
++
++    pub async fn connect<'t, T>(
++        target: T,
++        local_addr: Option<SocketAddr>,
++        proxy_conf: &Socks5Server,
++        ms_timeout: u64,
++    ) -> ResultType<Self>
++    where
++        T: IntoTargetAddr<'t>,
++    {
++        use crate::radar_diagnostics::{Action, Code, Kind, Module};
++        let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++        diagnostic.event(
++            Action::ProxyConnect,
++            Module::Network,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
++        let diagnostic_result = diagnostic
++            .instrument(Action::ProxyConnect, async {
++                let proxy = Proxy::from_conf(proxy_conf, Some(ms_timeout))?;
++                proxy.connect::<T>(target, local_addr).await
++            })
++            .await;
++        match &diagnostic_result {
++            Ok(value) => {
++                let _ = value;
++                diagnostic.event(
++                    Action::ProxyConnect,
++                    Module::Network,
++                    Kind::Completed,
++                    Code::None,
++                    None,
++                    None,
++                );
++            }
++            Err(_) => diagnostic.event(
++                Action::ProxyConnect,
++                Module::Network,
++                Kind::Failed,
++                Code::Unknown,
++                None,
++                None,
++            ),
++        }
++        diagnostic_result
++    }
++
+     pub fn local_addr(&self) -> SocketAddr {
+diff --git a/src/udp.rs b/src/udp.rs
+--- a/src/udp.rs
++++ b/src/udp.rs
+@@ -32,14 +32,29 @@
+         });
+         let invalid_destination: SocketAddr = "[::1]:9".parse().unwrap();
+         assert!(sender.send(&response, invalid_destination).await.is_err());
+-        sender.send(&response, receiver.local_addr().unwrap()).await.unwrap();
++        sender
++            .send(&response, receiver.local_addr().unwrap())
++            .await
++            .unwrap();
+         let mut bytes = [0; 64];
+-        let (length, source) = crate::timeout(1000, receiver.recv_from(&mut bytes)).await.unwrap().unwrap();
++        let (length, source) = crate::timeout(1000, receiver.recv_from(&mut bytes))
++            .await
++            .unwrap()
++            .unwrap();
+         assert_eq!(&bytes[..length], response.write_to_bytes().unwrap());
+         assert_eq!(Some(source), original_address);
+-        assert!(sender.send_raw(b"bad destination", invalid_destination).await.is_err());
+-        sender.send_raw(b"next datagram", receiver.local_addr().unwrap()).await.unwrap();
+-        let (length, source) = crate::timeout(1000, receiver.recv_from(&mut bytes)).await.unwrap().unwrap();
++        assert!(sender
++            .send_raw(b"bad destination", invalid_destination)
++            .await
++            .is_err());
++        sender
++            .send_raw(b"next datagram", receiver.local_addr().unwrap())
++            .await
++            .unwrap();
++        let (length, source) = crate::timeout(1000, receiver.recv_from(&mut bytes))
++            .await
++            .unwrap()
++            .unwrap();
+         assert_eq!(&bytes[..length], b"next datagram");
+         assert_eq!(Some(source), original_address);
+     }
+@@ -87,14 +102,50 @@
+         reuse: bool,
+         buf_size: usize,
+     ) -> ResultType<Self> {
+-        let addr = lookup_host(&addr)
+-            .await?
+-            .next()
+-            .context("could not resolve to any address")?;
+-        Ok(Self::Direct(UdpFramed::new(
+-            UdpSocket::from_std(new_socket(addr, reuse, buf_size)?.into_udp_socket())?,
+-            BytesCodec::new(),
+-        )))
++        use crate::radar_diagnostics::{Action, Code, Kind, Module};
++        let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++        diagnostic.event(
++            Action::UdpBind,
++            Module::Network,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
++        let diagnostic_result = diagnostic
++            .instrument(Action::UdpBind, async {
++                let addr = lookup_host(&addr)
++                    .await?
++                    .next()
++                    .context("could not resolve to any address")?;
++                Ok(Self::Direct(UdpFramed::new(
++                    UdpSocket::from_std(new_socket(addr, reuse, buf_size)?.into_udp_socket())?,
++                    BytesCodec::new(),
++                )))
++            })
++            .await;
++        match &diagnostic_result {
++            Ok(value) => {
++                let _ = value;
++                diagnostic.event(
++                    Action::UdpBind,
++                    Module::Network,
++                    Kind::Completed,
++                    Code::None,
++                    None,
++                    None,
++                );
++            }
++            Err(_) => diagnostic.event(
++                Action::UdpBind,
++                Module::Network,
++                Kind::Failed,
++                Code::Unknown,
++                None,
++                None,
++            ),
++        }
++        diagnostic_result
+     }
+ 
+     pub async fn new_proxy<'a, 't, P: ToProxyAddrs, T: ToSocketAddrs>(
+diff --git a/src/verifier.rs b/src/verifier.rs
+--- a/src/verifier.rs
++++ b/src/verifier.rs
+@@ -98,6 +98,16 @@
+         ocsp_response: &[u8],
+         now: UnixTime,
+     ) -> Result<ServerCertVerified, TLSError> {
++        use crate::radar_diagnostics::{Action, Code, DiagnosticContext, Kind, Module};
++        let diagnostic = DiagnosticContext::current_or_new();
++        diagnostic.event(
++            Action::TlsHandshake,
++            Module::Tls,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
+         match self.primary.verify_server_cert(
+             end_entity,
+             intermediates,
+@@ -105,7 +115,17 @@
+             ocsp_response,
+             now,
+         ) {
+-            Ok(verified) => Ok(verified),
++            Ok(verified) => {
++                diagnostic.event(
++                    Action::TlsHandshake,
++                    Module::Tls,
++                    Kind::Completed,
++                    Code::None,
++                    None,
++                    None,
++                );
++                Ok(verified)
++            }
+             Err(primary_err) => {
+                 match self.fallback.verify_server_cert(
+                     end_entity,
+@@ -114,12 +134,30 @@
+                     ocsp_response,
+                     now,
+                 ) {
+-                    Ok(verified) => Ok(verified),
++                    Ok(verified) => {
++                        diagnostic.event(
++                            Action::TlsHandshake,
++                            Module::Tls,
++                            Kind::Completed,
++                            Code::None,
++                            None,
++                            None,
++                        );
++                        Ok(verified)
++                    }
+                     Err(fallback_err) => {
+                         log::error!(
+                             "Both primary and fallback verifiers failed to verify server certificate, primary error: {:?}, fallback error: {:?}",
+                             primary_err,
+                             fallback_err
++                        );
++                        diagnostic.event(
++                            Action::TlsHandshake,
++                            Module::Tls,
++                            Kind::Failed,
++                            Code::Certificate,
++                            None,
++                            None,
+                         );
+                         Err(primary_err)
+                     }
+diff --git a/src/websocket.rs b/src/websocket.rs
+--- a/src/websocket.rs
++++ b/src/websocket.rs
+@@ -152,6 +152,28 @@
+         danger_accept_invalid_cert: Option<bool>,
+         original_danger_accept_invalid_certs: Option<bool>,
+     ) -> ResultType<(WsStream, SocketAddr)> {
++        use crate::radar_diagnostics::{Action, Code, Kind, Module};
++        let diagnostic = crate::radar_diagnostics::DiagnosticContext::current_or_new();
++        diagnostic.event(
++            Action::WebsocketUpgrade,
++            Module::Websocket,
++            Kind::Attempt,
++            Code::None,
++            None,
++            None,
++        );
++        let diagnostic_result = diagnostic.instrument(Action::WebsocketUpgrade, async {
++        if let Some(engine) = crate::radar_diagnostics::global() {
++            engine.capture(
++                2,
++                crate::radar_diagnostics::Module::Websocket,
++                crate::radar_diagnostics::Kind::Attempt,
++                crate::radar_diagnostics::Code::None,
++                None,
++                Some(url),
++                None,
++            );
++        }
+         let ws_config = None;
+         let request = url
+             .into_client_request()
+@@ -209,6 +231,19 @@
+             .await?
+             .map(|(stream, _)| Either::Left(stream))
+         };
++        if let Some(engine) = crate::radar_diagnostics::global() {
++            use crate::radar_diagnostics::{Code, Kind, Module};
++            let (kind, code, status) = match &result {
++                Ok(_) => (Kind::Connected, Code::None, Some(101)),
++                Err(tungstenite::Error::Http(response)) => {
++                    (Kind::Failed, Code::Http, Some(response.status().as_u16()))
++                }
++                Err(tungstenite::Error::Tls(_)) => (Kind::Failed, Code::Tls, None),
++                Err(tungstenite::Error::Io(_)) => (Kind::Failed, Code::Io, None),
++                Err(_) => (Kind::Failed, Code::Protocol, None),
++            };
++            engine.capture(2, Module::Websocket, kind, code, None, Some(url), status);
++        }
+         match result {
+             Ok(stream) => {
+                 upsert_tls_cache(url, tls_type, danger_accept_invalid_cert.unwrap_or(false));
+@@ -296,6 +331,30 @@
+                 }
+             },
+         }
++
++        }).await;
++        match &diagnostic_result {
++            Ok(value) => {
++                let _ = value;
++                diagnostic.event(
++                    Action::WebsocketUpgrade,
++                    Module::Websocket,
++                    Kind::Completed,
++                    Code::None,
++                    None,
++                    None,
++                );
++            }
++            Err(_) => diagnostic.event(
++                Action::WebsocketUpgrade,
++                Module::Websocket,
++                Kind::Failed,
++                Code::Unknown,
++                None,
++                None,
++            ),
++        }
++        diagnostic_result
+     }
+ 
+     pub async fn new<T: AsRef<str>>(

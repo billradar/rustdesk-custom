@@ -65,7 +65,7 @@ def discover(run_id='', allow_retired_skip=False):
     cargo = api(f'repos/{OFFICIAL}/contents/Cargo.toml?ref={sha}')
     version = tomllib.loads(base64.b64decode(cargo['content']).decode())['package']['version']
     try:
-        selection = profile_for_version(version, channel='nightly')
+        selection = profile_for_version(version, channel='nightly', source_sha=sha)
     except ValueError as error:
         # Match Stable's distinction between historical mappings and new-build
         # admission: an archived profile is valid history, not buildable input.
@@ -92,12 +92,15 @@ def require_nightly_build_profile(data):
     for build, production signing, aggregation or Draft creation. Do not trust
     a flag supplied in a discovery artifact to grant build admission.
     """
-    selection = profile_for_version(data['upstream_version'], channel='nightly')
+    sha = data.get('upstream_sha', '')
+    if not re.fullmatch(r'[0-9a-f]{40}', sha):
+        raise ValueError('Nightly build requires an exact official source SHA')
+    selection = profile_for_version(data['upstream_version'], channel='nightly', source_sha=sha)
     if data.get('patchset') != selection['selected']:
         raise ValueError('Nightly patchset differs from selected Patch Profile')
     if selection['compatibility_test_only']:
         raise ValueError('Compatibility-test-only Patch Profile cannot enter a Nightly build or Draft')
-    for key in ('profile', 'fallback', 'compatibility_test_only', 'stable_allowed'):
+    for key in ('profile', 'fallback', 'source_match', 'compatibility_test_only', 'stable_allowed'):
         if key in data and data[key] != selection[key]:
             raise ValueError('Nightly discovery Patch Profile policy mismatch: ' + key)
     return selection
@@ -358,6 +361,7 @@ def dedup():
     if mode not in ('dry-run', 'draft') or wayland not in ('true', 'false') or signing not in ('true', 'false'):
         raise ValueError('Invalid Nightly dedup configuration')
     require_nightly_build_profile(dict(upstream_version=os.environ['UPSTREAM_VERSION'],
+                                      upstream_sha=os.environ.get('UPSTREAM_EXPECTED_SHA', ''),
                                       patchset=os.environ['PATCHSET']))
     force_retry = requested_force_retry()
     if force_retry and mode == 'dry-run':

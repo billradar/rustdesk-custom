@@ -216,7 +216,16 @@ elif command == 'package':
                     prepared_source_manifest_hash=hashlib.sha256((tree / 'source-manifest.json').read_bytes()).hexdigest(),
                     build_adapter_signature=manifest['build_adapter_signature'])
         from scripts.build.build_adapter import check
-        profile = check(tree)
+        if 'formal_validation' in manifest:
+            from scripts.build.formal_validation import worker_identity
+            if configuration!='TEST ONLY' or WINDOWS_ARCH!='x86_64':
+                raise ValueError('Formal source cannot enter production or experimental Windows packaging')
+            info['formal_source_evidence']=worker_identity(tree,variant)
+            profile=check(tree,recipe_review=True)
+            if profile['signature']!=manifest['build_adapter_signature']:
+                raise ValueError('Formal Windows build adapter signature mismatch')
+        else:
+            profile = check(tree)
         if WINDOWS_ARCH=='aarch64':
             from scripts.build.windows_arm64 import verify_transform
             profile=verify_transform(tree)

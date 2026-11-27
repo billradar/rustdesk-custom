@@ -1,10 +1,14 @@
 name: Stable Release Pipeline
-run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+run-name: Stable ${{ inputs.upstream_ref || 'latest' }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}${{ inputs.formal_source_sha != '' && ' / formal-v4-test-only' || '' }}
 env:
   PYTHONPATH: .
 'on':
   workflow_dispatch:
     inputs:
+      formal_source_sha:
+        type: string
+        default: ''
+        description: Explicit non-release v4 source SHA; requires dry-run, no Wayland, non-main branch
       include_wayland:
         type: boolean
         default: true
@@ -32,8 +36,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  formal-gate:
+    name: Validate explicit formal v4 dry-run boundary
+    if: inputs.formal_source_sha != ''
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      FORMAL_ENTRY_CHANNEL: stable
+      FORMAL_SOURCE_SHA: ${{ inputs.formal_source_sha }}
+      RELEASE_MODE: ${{ inputs.release_mode }}
+      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+      FORCE_RETRY: ${{ inputs.force_retry && 'true' || 'false' }}
+      REQUESTED_REF: ${{ inputs.upstream_ref }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - run: python3 -m scripts.release.formal_entry gate
+  formal-dry-run:
+    name: Run all 13 admitted v4 targets without release credentials
+    needs: formal-gate
+    if: inputs.formal_source_sha != '' && needs.formal-gate.result == 'success'
+    uses: ./.github/workflows/build-validation.yml
+    with:
+      include_linux: true
   resolve:
     name: '01 · Resolve Stable source identity'
+    if: inputs.formal_source_sha == ''
     runs-on: ubuntu-22.04
     outputs:
       upstream_sha: ${{ steps.resolve.outputs.upstream_sha }}
@@ -71,10 +102,11 @@ jobs:
         CHANNEL: stable
       run: python3 scripts/release/channel.py resolve --channel "$CHANNEL" --ref "$REQUESTED_REF" --discovery-only
     - id: patchset
-      name: Select Stable patchset by version boundary / exact maintained Profile
+      name: Select Stable patchset by exact official source Profile
       env:
         UPSTREAM_VERSION: ${{ steps.resolve.outputs.version }}
-      run: python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION" --channel stable
+        UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
+      run: python3 scripts/upstream/patchsets.py --version "$UPSTREAM_VERSION" --channel stable "$UPSTREAM_SHA"
     - name: Validate Stable execution identity
       env:
         UPSTREAM_SHA: ${{ steps.resolve.outputs.upstream_sha }}
@@ -242,6 +274,7 @@ jobs:
     name: '05 · Sign Stable Android production artifacts (YubiKey PIV 9C)'
     needs: [resolve, android-build]
     if: >-
+      inputs.formal_source_sha == '' &&
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == format('{0}/.github/workflows/tag.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' &&
@@ -331,6 +364,7 @@ jobs:
       lock_artifact: ${{ needs.resolve.outputs.lock_artifact }}
       signing_enabled: ${{ needs.resolve.outputs.signing_enabled }}
     if: >-
+      inputs.formal_source_sha == '' &&
       always() &&
       github.event_name == 'workflow_dispatch' &&
       needs.windows-build.result == 'success' &&
@@ -422,6 +456,7 @@ jobs:
     name: '07B · Create Stable Draft'
     needs: aggregate
     if: >-
+      inputs.formal_source_sha == '' &&
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
       needs.aggregate.outputs.draft_needed == 'true' &&

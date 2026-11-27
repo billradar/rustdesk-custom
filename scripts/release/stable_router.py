@@ -39,7 +39,7 @@ def discovery():
         'upstream_ref': release['upstream_tag'],
         'upstream_sha': release['upstream_sha'],
         'version': release['version'],
-        'patchset': patchset_for_version(release['version'], channel='stable'),
+        'patchset': patchset_for_version(release['version'], channel='stable', source_sha=release['upstream_sha']),
     }
     return data
 

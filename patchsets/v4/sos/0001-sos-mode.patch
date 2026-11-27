@@ -1,0 +1,11 @@
+diff --git a/src/common.rs b/src/common.rs
+--- a/src/common.rs
++++ b/src/common.rs
+@@ -2087,6 +2087,7 @@
+         hard_settings.insert("password".to_owned(), env!("RUSTDESK_PASSWORD").to_owned());
+         hard_settings.insert("verification-method".to_owned(), "use-permanent-password".to_owned());
+     }
++    config::BUILTIN_SETTINGS.write().unwrap().insert("sos-mode".to_owned(), "Y".to_owned());
+     {
+         let mut defaults = config::DEFAULT_SETTINGS.write().unwrap();
+         defaults

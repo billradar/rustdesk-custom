@@ -21,7 +21,7 @@ def fixture():
     assets=[dict(id=i,name=name,size=10,digest='sha256:'+'f'*64,state='uploaded') for i,name in enumerate(('update-manifest.json','client.deb'),1)]
     release=dict(id=7,name=TAG,tag_name=TAG,draft=True,prerelease=False,immutable=False,
                  target_commitish='a'*40,updated_at='unchanged',assets=assets)
-    value=dict(upstream_version='1.5.3',patchset='v3',patch_revision='v3.3',
+    value=dict(upstream_version='1.5.3',upstream_sha='95cca3f661f635b3cc85c04935fe8d96d8f432ef',patchset='v3',patch_revision='v3.3',
                common_patch_hash='c'*64,sos_patch_hash='d'*64,custom_repository_sha='a'*40,build_run='42',android_signing_enabled=False,android_production_signed=False)
     statement=dict(_type='https://in-toto.io/Statement/v1',predicateType='https://in-toto.io/attestation/release/v0.2',
         predicate=dict(databaseId='7',ownerId=p.attestation.OWNER_ID,repositoryId=p.attestation.REPOSITORY_ID,

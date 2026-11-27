@@ -46,6 +46,18 @@ def validate(folder):
         raise ValueError('SOS patch hash mismatch')
     if info['runtime_ui_validation'] != 'SKIPPED BY USER' or info['real_remote_session_validation'] != 'NOT TESTED':
         raise ValueError('Runtime status must not imply validation')
+    if (folder/'source-manifest.json').exists():
+        manifest=json.loads((folder/'source-manifest.json').read_bytes())
+        if 'formal_validation' in manifest:
+            from scripts.build.formal_validation import verify_manifest
+            if (info.get('configuration')!='TEST ONLY' or info.get('channel')!='ci' or
+                    os.environ.get('FORMAL_VALIDATION')!='true' or arch!='x86_64'):
+                raise ValueError('Formal Windows package cannot acquire release authority')
+            marker=verify_manifest(manifest)
+            evidence=info.get('formal_source_evidence',{})
+            if evidence!={'formal_validation':marker,'source_manifest_sha256':hashlib.sha256((folder/'source-manifest.json').read_bytes()).hexdigest(),
+                          'variant':info['variant'],'release_eligible':False}:
+                raise ValueError('Formal Windows source evidence mismatch')
     if os.environ.get('BUILD_CONFIGURATION') == 'PRODUCTION':
         expected_repository = os.environ.get('GITHUB_REPOSITORY', 'billradar/rustdesk-custom')
         if info.get('custom_repository') != expected_repository or info.get('architecture') != arch:

@@ -1,10 +1,14 @@
 name: Nightly Build Pipeline
-run-name: Nightly ${{ inputs.display_label || format('latest / {0}', github.sha) }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}
+run-name: Nightly ${{ inputs.display_label || format('latest / {0}', github.sha) }} / ${{ inputs.release_mode }} / wayland=${{ inputs.include_wayland && 'true' || 'false' }} / android-signing=${{ vars.ANDROID_PRODUCTION_SIGNING_ENABLED || 'false' }}${{ inputs.formal_source_sha != '' && ' / formal-v4-test-only' || '' }}
 env:
   PYTHONPATH: .
 'on':
   workflow_dispatch:
     inputs:
+      formal_source_sha:
+        type: string
+        default: ''
+        description: Explicit non-release v4 source SHA; requires dry-run, no Wayland, non-main branch
       release_mode:
         type: choice
         default: draft
@@ -39,8 +43,37 @@ concurrency:
   group: nightly-latest
   cancel-in-progress: false
 jobs:
+  formal-gate:
+    name: Validate explicit formal v4 dry-run boundary
+    if: inputs.formal_source_sha != ''
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      FORMAL_ENTRY_CHANNEL: nightly
+      FORMAL_SOURCE_SHA: ${{ inputs.formal_source_sha }}
+      RELEASE_MODE: ${{ inputs.release_mode }}
+      INCLUDE_WAYLAND: ${{ inputs.include_wayland && 'true' || 'false' }}
+      FORCE_RETRY: ${{ inputs.force_retry && 'true' || 'false' }}
+      NIGHTLY_DISPLAY_LABEL: ${{ inputs.display_label }}
+      OFFICIAL_RUN_ID: ${{ inputs.official_run_id }}
+      ROUTER_EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - run: python3 -m pip install -r requirements.txt
+    - run: python3 -m scripts.release.formal_entry gate
+  formal-dry-run:
+    name: Run all 13 admitted v4 targets without release credentials
+    needs: formal-gate
+    if: inputs.formal_source_sha != '' && needs.formal-gate.result == 'success'
+    uses: ./.github/workflows/build-validation.yml
+    with:
+      include_linux: true
   resolve:
     if: >-
+      inputs.formal_source_sha == '' &&
       github.event_name == 'workflow_dispatch' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
     runs-on: ubuntu-22.04
@@ -133,6 +166,7 @@ jobs:
     name: Propose report-only review draft
     needs: interface-review
     if: >-
+      inputs.formal_source_sha == '' &&
       github.repository == 'billradar/rustdesk-custom' &&
       github.ref == 'refs/heads/main' &&
       github.event_name == 'workflow_dispatch' &&
@@ -235,6 +269,7 @@ jobs:
     name: 'Sign Nightly Android production artifacts (YubiKey PIV 9C)'
     needs: [resolve, android-build]
     if: >-
+      inputs.formal_source_sha == '' &&
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' &&
@@ -309,6 +344,7 @@ jobs:
   aggregate:
     needs: [resolve, windows-build, platforms-build, android-build, wayland-build, android-sign]
     if: >-
+      inputs.formal_source_sha == '' &&
       always() && needs.resolve.outputs.dedup_skip != 'true' && needs.windows-build.result == 'success' &&
       needs.platforms-build.result == 'success' && needs.android-build.result == 'success' &&
       (!inputs.include_wayland || needs.wayland-build.result == 'success') &&
@@ -394,6 +430,7 @@ jobs:
       group: rustdesk-nightly-release-write
       cancel-in-progress: false
     if: >-
+      inputs.formal_source_sha == '' &&
       github.ref == 'refs/heads/main' &&
       github.workflow_ref == format('{0}/.github/workflows/nightly.yml@refs/heads/main', github.repository) &&
       github.event_name == 'workflow_dispatch' && inputs.release_mode == 'draft' &&

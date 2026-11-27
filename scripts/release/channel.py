@@ -9,6 +9,7 @@ from scripts.upstream.patchset_version import current, SCHEMA as VERSION_SEMANTI
 from scripts.release.production import assets, REPOSITORY
 from scripts.release.naming import windows_installer_name
 ROOT=Path(__file__).resolve().parents[2]
+CI_BASELINE=ROOT/'metadata/build/ci-upstream-baseline.json'
 
 def outputs(data):
     Path('.work').mkdir(exist_ok=True)
@@ -84,11 +85,11 @@ def require_release_tag(row, version):
     if not tag: raise ValueError('Existing Build Identity has invalid revision tag')
     return tag
 
-def next_patch_revision(version, patchset):
+def next_patch_revision(version, patchset, source_sha=None):
     """Current Patchset content revision; never allocate from GitHub Releases."""
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
         raise ValueError('Invalid Stable upstream version')
-    require_selection(version, patchset, channel='stable')
+    require_selection(version, patchset, channel='stable', source_sha=source_sha)
     if not PATCHSET_RE.fullmatch(patchset):
         raise ValueError('Invalid Patchset version namespace')
     try:
@@ -123,7 +124,7 @@ def release_preflight(data, *, dry_run=False):
     if not PATCHSET_RE.fullmatch(data.get("patchset","")): raise ValueError("Invalid patchset")
     if data.get('upstream_ref')!=data.get('upstream_tag') or data.get('upstream_tag') not in (data['version'],'v'+data['version']):
         raise ValueError('Locked stable ref mismatch')
-    require_selection(data['version'], data['patchset'], channel='stable')
+    require_selection(data['version'], data['patchset'], channel='stable', source_sha=data['upstream_sha'])
     custom_sha=os.environ.get('GITHUB_SHA','')
     if not re.fullmatch(r'[0-9a-f]{40}',custom_sha): raise ValueError('Stable preflight requires the exact custom repository SHA')
     wayland_included,wayland_policy_sha256=wayland_identity()
@@ -137,7 +138,7 @@ def release_preflight(data, *, dry_run=False):
                                     signing_enabled)
     # Immutable tag is the reviewed Patchset content revision, not an
     # incrementing Release count. Historical tags retain original semantics.
-    revision = next_patch_revision(data['version'], data['patchset'])
+    revision = next_patch_revision(data['version'], data['patchset'], source_sha=data['upstream_sha'])
     if 'patch_revision' in data and data['patch_revision'] != revision:
         raise ValueError('Locked Patchset content revision drift')
     data['patch_revision'] = data['revision'] = data['patchset_version'] = revision
@@ -178,6 +179,62 @@ def release_preflight(data, *, dry_run=False):
                 build_identity=current_identity,custom_repository_sha=value['custom_repository_sha'])
     return data
 
+def ci_baseline_selection(baseline):
+    """Require exact SHA-first Profile selection; never permit candidate or fallback."""
+    version, name, sha = (baseline[k] for k in ('upstream_version','patchset','upstream_sha'))
+    selected=require_selection(version,name,channel='ci',source_sha=sha)
+    if not selected.get('source_match'):
+        raise ValueError('CI baseline requires an exact source Patch Profile')
+    if selected['compatibility_test_only'] or selected.get('fallback') or not selected['stable_allowed']:
+        raise ValueError('Default CI baseline requires an explicitly maintained Patch Profile')
+    return selected
+
+
+def ci_baseline():
+    """Reviewed immutable source and current patch bytes; full CI remains mandatory."""
+    baseline=json.loads(CI_BASELINE.read_text())
+    required={'schema','repository','upstream_sha','upstream_version','patchset',
+              'patch_revision','patch_hashes','source_review','validation'}
+    if not isinstance(baseline,dict) or set(baseline)!=required:
+        raise ValueError('Invalid reviewed CI upstream baseline manifest')
+    if baseline['schema']!='ci-upstream-baseline-v2' or baseline['repository']!='rustdesk/rustdesk':
+        raise ValueError('Unexpected CI upstream baseline schema or repository')
+    if not isinstance(baseline['upstream_sha'],str) or not re.fullmatch(r'[0-9a-f]{40}',baseline['upstream_sha']):
+        raise ValueError('CI upstream baseline requires a full immutable SHA')
+    if not isinstance(baseline['upstream_version'],str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',baseline['upstream_version']):
+        raise ValueError('Invalid CI upstream baseline version')
+    # The source audit establishes source identity, not a successful build of
+    # the current revision. Never relabel an older CI run as current evidence.
+    review_path='docs/audits/stable-1.5.3-admission/review.json'
+    if baseline['source_review']!=review_path or baseline['validation']!='full-ci-required':
+        raise ValueError('CI baseline source review or validation policy mismatch')
+    review=json.loads((ROOT/review_path).read_text())
+    release=review['official_release']
+    tag=review['official_tag']
+    audited=review['source_checks']
+    version=baseline['upstream_version']
+    sha=baseline['upstream_sha']
+    if (review.get('schema')!='patch-profile-admission-audit-v1'
+            or release['draft'] is not False or release['prerelease'] is not False
+            or release['tag_name'].lstrip('v')!=version
+            or tag['ref']!='refs/tags/'+release['tag_name']
+            or tag['object']!={'type':'commit','sha':sha}
+            or audited['upstream_sha']!=sha or audited['upstream_version']!=version
+            or audited['selected']!=baseline['patchset']
+            or audited['stable_allowed'] is not True or audited['fallback'] is not False
+            or audited['compatibility_test_only'] is not False):
+        raise ValueError('CI baseline does not match reviewed official source')
+    selected=ci_baseline_selection(baseline)
+    if selected['profile']!=audited['profile']:
+        raise ValueError('CI baseline Profile differs from source review')
+    patch=verify(baseline['patchset'])
+    if (type(baseline['patch_revision']) is not int
+            or baseline['patch_revision']!=patch['revision']
+            or baseline['patch_hashes']!=patch['hashes']):
+        raise ValueError('CI baseline patch revision or hashes changed; review manifest')
+    return baseline
+
+
 def resolve(channel,ref='',discovery_only=False):
     if channel not in ('ci','stable'):
         raise ValueError('Unsupported channel here; use the verified official-run Nightly resolver')
@@ -185,10 +242,23 @@ def resolve(channel,ref='',discovery_only=False):
         data=choose_stable(ref)
         data['upstream_ref']=data['upstream_tag']
     else:
-        repo=api('repos/rustdesk/rustdesk');branch=repo['default_branch']
-        chosen=ref or branch
-        data={'upstream_sha':resolve_ref(chosen),'upstream_branch':chosen,'upstream_ref':chosen,
-              'upstream_tag':'','build_needed':True,'draft_needed':False}
+        # Normal PR/main CI uses an exact reviewed source and locked patch revision.
+        # Explicit --ref remains available for manual/ad-hoc checks and is used
+        # by the separately scheduled upstream-main compatibility workflow.
+        if ref:
+            chosen=ref
+            actual_sha=resolve_ref(chosen)
+            source_policy='explicit-upstream-ref'
+        else:
+            baseline=ci_baseline()
+            chosen=baseline['upstream_sha']
+            actual_sha=resolve_ref(chosen)
+            if actual_sha!=baseline['upstream_sha']:
+                raise ValueError('Pinned CI upstream source identity mismatch')
+            source_policy='reviewed-ci-baseline'
+        data={'upstream_sha':actual_sha,'upstream_branch':chosen,'upstream_ref':chosen,
+              'upstream_tag':'','build_needed':True,'draft_needed':False,
+              'ci_source_policy':source_policy}
     data['channel']=channel;outputs(data)
 
 def validate_prepared(infos,folders):
@@ -234,7 +304,7 @@ def draft(root):
     if any(i['channel']!='stable' for i in infos.values()):raise ValueError('Only stable creates drafts')
     _,directory=assets(root)
     info=infos['standard']
-    expected_version=next_patch_revision(info['upstream_version'], info['patchset'])
+    expected_version=next_patch_revision(info['upstream_version'], info['patchset'], source_sha=info['upstream_sha'])
     if info['patch_revision'] != expected_version:
         raise ValueError('Artifact Patchset content revision changed before draft')
     tag=f'v{info["upstream_tag"].lstrip("v")}-custom.{expected_version}'
