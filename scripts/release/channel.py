@@ -179,29 +179,65 @@ def release_preflight(data, *, dry_run=False):
                 build_identity=current_identity,custom_repository_sha=value['custom_repository_sha'])
     return data
 
+def ci_baseline_selection(baseline, registry):
+    """Use SHA-first routing when available; never admit an unknown fallback."""
+    version, name, sha = (baseline[k] for k in ('upstream_version','patchset','upstream_sha'))
+    if 'exact_sources' in registry:
+        selected=require_selection(version,name,channel='ci',source_sha=sha)
+        if not selected.get('source_match'):
+            raise ValueError('CI baseline requires an exact source Patch Profile')
+    else:
+        # Pre-SHA-router branch: ci_baseline() has already bound the exact
+        # official tag, source and Profile to the checked-in admission audit.
+        selected=require_selection(version,name,channel='ci')
+    if selected['compatibility_test_only'] or selected.get('fallback') or not selected['stable_allowed']:
+        raise ValueError('Default CI baseline requires an explicitly maintained Patch Profile')
+    return selected
+
+
 def ci_baseline():
-    """Reviewable, immutable default upstream for repository CI (not a release approval)."""
+    """Reviewed immutable source and current patch bytes; full CI remains mandatory."""
     baseline=json.loads(CI_BASELINE.read_text())
     required={'schema','repository','upstream_sha','upstream_version','patchset',
-              'evidence_run_id','evidence_url','validation'}
+              'patch_revision','patch_hashes','source_review','validation'}
     if not isinstance(baseline,dict) or set(baseline)!=required:
         raise ValueError('Invalid reviewed CI upstream baseline manifest')
-    if baseline['schema']!='ci-upstream-baseline-v1' or baseline['repository']!='rustdesk/rustdesk':
+    if baseline['schema']!='ci-upstream-baseline-v2' or baseline['repository']!='rustdesk/rustdesk':
         raise ValueError('Unexpected CI upstream baseline schema or repository')
     if not isinstance(baseline['upstream_sha'],str) or not re.fullmatch(r'[0-9a-f]{40}',baseline['upstream_sha']):
         raise ValueError('CI upstream baseline requires a full immutable SHA')
     if not isinstance(baseline['upstream_version'],str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',baseline['upstream_version']):
         raise ValueError('Invalid CI upstream baseline version')
-    if not isinstance(baseline['evidence_run_id'],int) or baseline['evidence_run_id']<=0:
-        raise ValueError('Missing prior passing CI evidence')
-    if baseline['evidence_url']!=f"https://github.com/billradar/rustdesk-custom/actions/runs/{baseline['evidence_run_id']}":
-        raise ValueError('CI baseline evidence does not match run ID')
-    if baseline['validation']!='completed-success-2026-11-17':
-        raise ValueError('CI baseline evidence status requires review')
-    selected=require_selection(baseline['upstream_version'],baseline['patchset'],channel='ci')
-    if selected['compatibility_test_only'] or not selected['stable_allowed']:
-        raise ValueError('Default CI baseline requires an explicitly maintained Patch Profile')
-    verify(baseline['patchset'])
+    # The source audit establishes source identity, not a successful build of
+    # the current revision. Never relabel an older CI run as current evidence.
+    review_path='docs/audits/stable-1.5.3-admission/review.json'
+    if baseline['source_review']!=review_path or baseline['validation']!='full-ci-required':
+        raise ValueError('CI baseline source review or validation policy mismatch')
+    review=json.loads((ROOT/review_path).read_text())
+    release=review['official_release']
+    tag=review['official_tag']
+    audited=review['source_checks']
+    version=baseline['upstream_version']
+    sha=baseline['upstream_sha']
+    if (review.get('schema')!='patch-profile-admission-audit-v1'
+            or release['draft'] is not False or release['prerelease'] is not False
+            or release['tag_name'].lstrip('v')!=version
+            or tag['ref']!='refs/tags/'+release['tag_name']
+            or tag['object']!={'type':'commit','sha':sha}
+            or audited['upstream_sha']!=sha or audited['upstream_version']!=version
+            or audited['selected']!=baseline['patchset']
+            or audited['stable_allowed'] is not True or audited['fallback'] is not False
+            or audited['compatibility_test_only'] is not False):
+        raise ValueError('CI baseline does not match reviewed official source')
+    registry=json.loads((ROOT/'metadata/patch-profiles.json').read_text())
+    selected=ci_baseline_selection(baseline,registry)
+    if selected['profile']!=audited['profile']:
+        raise ValueError('CI baseline Profile differs from source review')
+    patch=verify(baseline['patchset'])
+    if (type(baseline['patch_revision']) is not int
+            or baseline['patch_revision']!=patch['revision']
+            or baseline['patch_hashes']!=patch['hashes']):
+        raise ValueError('CI baseline patch revision or hashes changed; review manifest')
     return baseline
 
 
@@ -212,7 +248,7 @@ def resolve(channel,ref='',discovery_only=False):
         data=choose_stable(ref)
         data['upstream_ref']=data['upstream_tag']
     else:
-        # Normal PR/main CI uses a previously passing, reviewed source commit.
+        # Normal PR/main CI uses an exact reviewed source and locked patch revision.
         # Explicit --ref remains available for manual/ad-hoc checks and is used
         # by the separately scheduled upstream-main compatibility workflow.
         if ref:

@@ -7,16 +7,18 @@ from unittest.mock import patch
 
 from scripts.release import channel
 
-REVIEWED_SHA='54416dcaa127d209f2cfbdc4b08235bae78ccfe6'
+REVIEWED_SHA='95cca3f661f635b3cc85c04935fe8d96d8f432ef'
 
 
 class CiBaselineTests(unittest.TestCase):
-    def test_reviewed_baseline_matches_previous_successful_compatibility_run(self):
+    def test_reviewed_baseline_matches_exact_source_and_current_patch(self):
         value=channel.ci_baseline()
         self.assertEqual(value['upstream_sha'],REVIEWED_SHA)
         self.assertEqual(value['upstream_version'],'1.5.3')
         self.assertEqual(value['patchset'],'v3')
-        self.assertEqual(value['evidence_run_id'],44107538838)
+        self.assertEqual(value['patch_revision'],9)
+        self.assertEqual(value['patch_hashes'],channel.verify('v3')['hashes'])
+        self.assertEqual(value['validation'],'full-ci-required')
 
     def test_default_ci_resolves_immutable_baseline_not_official_main(self):
         with patch.object(channel,'api',side_effect=AssertionError('CI queried moving upstream main')), \
@@ -55,7 +57,10 @@ class CiBaselineTests(unittest.TestCase):
         cases=[
             dict(original,upstream_sha='main'),
             dict(original,repository='attacker/rustdesk'),
-            dict(original,evidence_run_id=0),
+            dict(original,upstream_sha='54416dcaa127d209f2cfbdc4b08235bae78ccfe6'),
+            dict(original,patch_revision=7),
+            dict(original,patch_hashes={'common':'a'*64,'sos':'b'*64}),
+            dict(original,source_review='../unreviewed.json'),
             dict(original,validation='unreviewed'),
             dict(original,patchset='v1'),
             dict(original,upstream_version='1.5.1'),
@@ -67,6 +72,20 @@ class CiBaselineTests(unittest.TestCase):
                     path.write_text(json.dumps(data))
                     with patch.object(channel,'CI_BASELINE',path),self.assertRaises((ValueError,RuntimeError)):
                         channel.ci_baseline()
+
+    def test_sha_first_integration_rejects_fallback_and_candidates(self):
+        baseline=channel.ci_baseline()
+        registry={'exact_sources':{}}
+        valid=dict(profile='rd-1.5.3',source_match=True,stable_allowed=True,
+                   compatibility_test_only=False,fallback=False)
+        with patch.object(channel,'require_selection',return_value=valid) as select:
+            self.assertEqual(channel.ci_baseline_selection(baseline,registry),valid)
+        select.assert_called_once_with('1.5.3','v3',channel='ci',source_sha=REVIEWED_SHA)
+        for changes in (dict(source_match=False),dict(fallback=True),
+                        dict(stable_allowed=False),dict(compatibility_test_only=True)):
+            with self.subTest(changes=changes),patch.object(channel,'require_selection',return_value=dict(valid,**changes)):
+                with self.assertRaises(ValueError):
+                    channel.ci_baseline_selection(baseline,registry)
 
     def test_workflow_upstream_monitor_stays_explicit_and_is_not_suppressed(self):
         root=Path(__file__).resolve().parents[2]

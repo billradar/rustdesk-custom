@@ -1,10 +1,14 @@
 {
-  "schema": "ci-upstream-baseline-v1",
+  "schema": "ci-upstream-baseline-v2",
   "repository": "rustdesk/rustdesk",
-  "upstream_sha": "54416dcaa127d209f2cfbdc4b08235bae78ccfe6",
+  "upstream_sha": "95cca3f661f635b3cc85c04935fe8d96d8f432ef",
   "upstream_version": "1.5.3",
   "patchset": "v3",
-  "evidence_run_id": 44107538838,
-  "evidence_url": "https://github.com/billradar/rustdesk-custom/actions/runs/44107538838",
-  "validation": "completed-success-2026-11-17"
+  "patch_revision": 9,
+  "patch_hashes": {
+    "common": "96c198122eb8053deac05c7d22a08af8503701b2fb63aa2f94564bc8296dd3d2",
+    "sos": "076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813"
+  },
+  "source_review": "docs/audits/stable-1.5.3-admission/review.json",
+  "validation": "full-ci-required"
 }

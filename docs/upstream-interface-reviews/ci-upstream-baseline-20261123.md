@@ -1,24 +1,12 @@
-# CI upstream source routing — 2026-11-23
+# CI upstream source routing — reviewed exact source
 
-## Purpose
+Ordinary push/PR CI checks an immutable reviewed source; explicit upstream refs and the separate six-hour upstream-main monitor retain the existing fail-closed compatibility checks.
 
-Ordinary push and pull-request CI must validate repository changes against an **immutable, previously passing official RustDesk source**, not against a moving upstream main that can change during an unrelated dependency update. The latter is still tested independently and must remain fail-closed.
+- Official RustDesk 1.5.3 tag: `95cca3f661f635b3cc85c04935fe8d96d8f432ef`.
+- Source identity audit: `docs/audits/stable-1.5.3-admission/review.json` (historical source review, not proof of current patch build).
+- Patch Profile v3 revision 9; Common SHA256 `96c198122eb8053deac05c7d22a08af8503701b2fb63aa2f94564bc8296dd3d2`, SOS SHA256 `076a08c0d4a710e19ce08fd6e77f0c207293868b98c83a6471ab9a77e5d40813`.
+- Manifest `metadata/build/ci-upstream-baseline.json` binds exact source, numeric version, Profile, revision and patch hashes. Full CI is required; no prior complete CI success is claimed for this new baseline until the new run finishes.
 
-## Reviewed normal CI baseline
+The older [run 44107538838](https://github.com/billradar/rustdesk-custom/actions/runs/44107538838) tested `54416dcaa127d209f2cfbdc4b08235bae78ccfe6` with v3.7. It is historical evidence only, not current baseline qualification.
 
-- Official repository: `rustdesk/rustdesk`
-- Source commit: [`54416dcaa127d209f2cfbdc4b08235bae78ccfe6`](https://github.com/rustdesk/rustdesk/commit/54416dcaa127d209f2cfbdc4b08235bae78ccfe6)
-- Official source version: `1.5.3`
-- Patch Profile: `v3` (Standard and SOS)
-- Previous successful PR CI: [Run #44107538838](https://github.com/billradar/rustdesk-custom/actions/runs/44107538838)
-- Manifest: `metadata/build/ci-upstream-baseline.json`
-
-`scripts/release/channel.py resolve --channel ci` reads this manifest, requires a full official source SHA, checks its numeric version and the explicitly maintained Patch Profile, verifies patch integrity, resolves the immutable SHA on GitHub, and rejects an identity mismatch. Ordinary PR/main CI retains all existing compatibility and qualification gates; this is not a skipped test or a forced green result.
-
-## Independent upstream main checks
-
-`.github/workflows/upstream-main-compatibility.yml` already checks official current main on the existing 6-hour schedule or manual dispatch. It passes `--ref "$UPSTREAM_SHA"` explicitly, bypassing the normal CI baseline selection and retaining unknown build-adapter and patch-profile failures. Manual CI dispatch can also override `upstream_ref` to test another official upstream commit.
-
-## Boundaries
-
-This does **not approve** the unreviewed `51f94394` build adapter, publish artifacts, promote Stable, merge v4, or change PR #274. A future CI baseline must be an explicitly reviewed manifest update supported by a successful, inspectable compatibility CI run. The upstream main monitor may still fail when official HEAD adds unreviewed build interfaces: such failures remain visible.
+The legacy version selector is used only on branches without an exact-source registry, after the official tag/source audit has been verified. When the SHA-first registry from #274 is present, the baseline selector requires an exact source match and rejects fallback and candidate profiles. No new Stable/Nightly admission or release authority is granted. Any baseline or patch revision/hash change must be reviewed and validated by full CI. Explicit upstream-main checks remain separate and are not suppressed.
