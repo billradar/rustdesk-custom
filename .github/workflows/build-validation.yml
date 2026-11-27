@@ -1,18 +1,26 @@
-name: Staging v4 desktop mobile real package smoke (no publish)
-on:
+name: Full platform build validation (no publication)
+'on':
   pull_request:
     paths:
-      - '.github/workflows/staging-v4-desktop-mobile-packages.yml'
+      - '.github/workflows/build-validation*.yml'
+      - '.github/workflows/prepare-source.yml'
+      - '.github/workflows/compat-check.yml'
+      - '.github/workflows/tag.yml'
+      - '.github/workflows/nightly.yml'
       - 'scripts/build/**'
       - 'scripts/platform/**'
+      - 'scripts/source/**'
+      - 'scripts/upstream/**'
+      - 'scripts/release/formal_entry*'
+      - 'metadata/build/**'
       - 'metadata/platform/**'
-      - 'patchsets/v4/**'
-  workflow_dispatch: {}
+      - 'metadata/patch-profiles.json'
+      - 'patchsets/**'
   workflow_call:
     inputs:
       include_linux:
         type: boolean
-        default: false
+        default: true
 permissions:
   contents: read
   actions: read
@@ -293,16 +301,16 @@ jobs:
 
   linux:
     name: Reuse the same formal source pair for all four Linux targets
-    if: inputs.include_linux
+    if: github.event_name == 'pull_request' || inputs.include_linux
     needs: [compatibility, formal-prepare]
-    uses: ./.github/workflows/staging-v4-linux-packages.yml
+    uses: ./.github/workflows/build-validation-linux.yml
     with:
       reuse_prepared: true
       prepared_standard: ${{ needs.formal-prepare.outputs.standard_artifact }}
       prepared_sos: ${{ needs.formal-prepare.outputs.sos_artifact }}
   formal-summary:
     name: Verify all thirteen same-run package reports (no release authority)
-    if: ${{ always() && !cancelled() && inputs.include_linux }}
+    if: ${{ always() && !cancelled() && (github.event_name == 'pull_request' || inputs.include_linux) }}
     needs: [compatibility, formal-prepare, macos-arm64-bridge, package, linux]
     runs-on: ubuntu-22.04
     permissions:

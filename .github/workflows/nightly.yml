@@ -68,7 +68,7 @@ jobs:
     name: Run all 13 admitted v4 targets without release credentials
     needs: formal-gate
     if: inputs.formal_source_sha != '' && needs.formal-gate.result == 'success'
-    uses: ./.github/workflows/staging-v4-desktop-mobile-packages.yml
+    uses: ./.github/workflows/build-validation.yml
     with:
       include_linux: true
   resolve:

@@ -47,7 +47,7 @@ class FormalWorkerContract(unittest.TestCase):
                 os.chdir(old)
 
     def test_all_supported_package_targets_unpack_formal_source(self):
-        for filename,job in [('staging-v4-desktop-mobile-packages.yml','package'),('staging-v4-linux-packages.yml','native')]:
+        for filename,job in [('build-validation.yml','package'),('build-validation-linux.yml','native')]:
             w=yaml.safe_load((ROOT/'.github/workflows'/filename).read_text())
             prepare=w['jobs']['formal-prepare']
             self.assertEqual(prepare['uses'],'./.github/workflows/prepare-source.yml')

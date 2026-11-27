@@ -203,3 +203,344 @@ jobs:
         path: .work/dashboard/
         if-no-files-found: warn
         retention-days: 30
+
+  # Historical exact-source regression fixtures. Preserve the original checks,
+  # but do not run them in the production router or documentation-only CI.
+
+  historical-patch-applicability:
+    if: github.event_name == 'pull_request' && needs.classify.outputs.change_class == 'FUNCTIONAL'
+    needs: classify
+    name: Check v4 ${{ matrix.variant }} (no publish)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [standard, sos]
+    env:
+      PYTHONPATH: .
+      UPSTREAM_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      EXPECTED_HBB: 450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify candidate metadata, changelog and selection contracts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/upstream/patchsets.py scripts/source/verify_source.py
+          python3 -m scripts.upstream.source_profile_contract
+          python3 - <<'PY'
+          from scripts.upstream.patchsets import verify
+          from scripts.upstream.patchset_version import current
+          data=verify('v4')
+          assert data['status']=='candidate_only'
+          assert data['baseline']['hbb_common_sha']=='450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb'
+          current('v4')
+          print('v4 integrity and candidate policy: PASS')
+          PY
+      - name: Prepare exact official RustDesk source and submodule
+        run: |
+          set -euo pipefail
+          UPSTREAM_EXPECTED_SHA="$UPSTREAM_SHA" bash scripts/source/prepare.sh "$UPSTREAM_SHA" .work/v4/source
+          test "$(git -C .work/v4/source/libs/hbb_common rev-parse HEAD)" = "$EXPECTED_HBB"
+      - name: Enforce SHA-specific, CI-only Patch Profile
+        run: |
+          set -euo pipefail
+          python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --source .work/v4/source --channel ci --report .work/v4/selection.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('.work/v4/selection.json').read_text())
+          assert data['selected']=='v4' and data['source_match']
+          assert not data['stable_allowed'] and data['compatibility_test_only']
+          print('Exact source v4 candidate routing: PASS')
+          PY
+          if python3 scripts/upstream/patchsets.py "$UPSTREAM_SHA" --source .work/v4/source --channel stable; then
+            echo 'STOP: unapproved candidate was admitted to Stable' >&2
+            exit 1
+          fi
+      - name: Apply patches sequentially (fail closed)
+        run: |
+          set -euo pipefail
+          source scripts/validation/test_config.sh
+          bash scripts/source/apply_patches.sh .work/v4/source "${{ matrix.variant }}"
+          python3 scripts/source/verify_source.py .work/v4/source "${{ matrix.variant }}" --automation
+          grep -q 'Err(err) => last_error = Some(err)' .work/v4/source/libs/hbb_common/src/tcp.rs
+          grep -q 'err.context(message)' .work/v4/source/libs/hbb_common/src/tcp.rs
+          grep -q 'Action::DnsResolve' .work/v4/source/libs/hbb_common/src/tcp.rs
+          grep -q 'Action::ProxyConnect' .work/v4/source/libs/hbb_common/src/tcp.rs
+          echo 'Patch application and upstream TCP error preservation: PASS'
+
+  historical-hbb-compile:
+    if: github.event_name == 'pull_request' && needs.classify.outputs.change_class == 'FUNCTIONAL'
+    name: Check v4 hbb_common native Rust compilation (no publish)
+    needs: [classify, historical-patch-applicability]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: .
+      UPSTREAM_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      PATCHSET: v4
+      BUILD_CHANNEL: ci
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.work/v4/target
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Prepare exact source and apply isolated v4 Common
+        run: |
+          set -euo pipefail
+          UPSTREAM_EXPECTED_SHA="$UPSTREAM_SHA" bash scripts/source/prepare.sh "$UPSTREAM_SHA" .work/v4/source
+          source scripts/validation/test_config.sh
+          bash scripts/source/apply_patches.sh .work/v4/source standard
+      - name: Cargo-check hbb_common using official root lockfile
+        run: |
+          set -euo pipefail
+          source scripts/validation/test_config.sh
+          rustc --version
+          cargo --version
+          cargo check --manifest-path .work/v4/source/Cargo.toml --package hbb_common --lib --locked
+
+  admitted-source-patch-probe:
+    if: github.event_name == 'pull_request' && needs.classify.outputs.change_class == 'FUNCTIONAL'
+    needs: classify
+    name: Probe v4 patches against 51f94394 (${{ matrix.variant }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [standard, sos]
+    env:
+      PYTHONPATH: .
+      PATCHSET: v4
+      NEW_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      HBB_SHA: 450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Confirm v4 candidate routing and Stable denial
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from scripts.upstream.patchsets import profile_for_version, verify
+          verify('v4')
+          sha='51f94394ce61e1f3d26229565c326b2862cbdd1f'
+          profile=profile_for_version('1.5.3','ci',source_sha=sha)
+          assert profile['source_match'] and profile['selected']=='v4'
+          assert profile['compatibility_test_only'] and not profile['stable_allowed']
+          try:
+              profile_for_version('1.5.3','stable',source_sha=sha)
+              raise AssertionError('Candidate admitted into Stable')
+          except ValueError as exc:
+              assert 'Stable requires' in str(exc)
+          print('Exact-source v4 candidate routing: PASS; Stable denied')
+          PY
+      - name: Prepare official source, with no credentials or release controls
+        run: |
+          set -euo pipefail
+          bash scripts/source/prepare.sh "$NEW_SHA" .work/source-probe/source
+          test "$(git -C .work/source-probe/source rev-parse HEAD)" = "$NEW_SHA"
+          test "$(git -C .work/source-probe/source/libs/hbb_common rev-parse HEAD)" = "$HBB_SHA"
+      - name: Apply verified candidate using the real fail-closed patch route
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree=.work/source-probe/source
+          source scripts/validation/test_config.sh
+          bash scripts/source/apply_patches.sh "$tree" "${{ matrix.variant }}"
+          python3 scripts/source/verify_source.py "$tree" "${{ matrix.variant }}" --automation
+          echo "Exact SHA v4 Candidate source validation: PASS; no build or release permitted"
+
+  historical-linux-interface:
+    if: github.event_name == 'pull_request' && needs.classify.outputs.change_class == 'FUNCTIONAL'
+    needs: classify
+    name: Inspect official source and Linux DRM policy (no approval)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: .
+      REVIEWED_SHA: 6aec3069aec486ad7df07429a0a1ee411fc8d73a
+      CANDIDATE_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      NEW_MAIN_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install pinned repository analysis dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Verify code and stock Linux DRM guard regression
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/platform/platform_adapter.py scripts/platform/platform_package.py scripts/build/upstream_51f94394_review.py
+          python3 -m scripts.platform.platform_adapter_contract
+          python3 -m scripts.platform.wayland_contract
+      - name: Prepare immutable official source snapshots
+        run: |
+          set -euo pipefail
+          bash scripts/source/prepare.sh "$REVIEWED_SHA" .work/review-source/old
+          bash scripts/source/prepare.sh "$CANDIDATE_SHA" .work/review-source/candidate
+          bash scripts/source/prepare.sh "$NEW_MAIN_SHA" .work/review-source/new
+      - name: Record exact official Linux platform signatures for candidate review
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.platform.platform_adapter import inspect
+          rows=[]
+          for source in ('candidate','new'):
+              root=Path('.work/review-source')/source
+              for arch in ('x86_64','aarch64'):
+                  profile,_=inspect(root,'linux',arch)
+                  if profile['official_disabled']:
+                      raise ValueError('Official Linux job is disabled')
+                  item={'source':source,'arch':arch,'runner':profile['runner'],
+                        'signature':profile['signature'],
+                        'upstream_sha':__import__('subprocess').check_output(
+                            ['git','-C',str(root),'rev-parse','HEAD'],text=True).strip()}
+                  rows.append(item)
+                  print('LINUX_PLATFORM_SIGNATURE '+json.dumps(item,sort_keys=True))
+          (Path('.work/review-source')/'linux-platform-signatures.json').write_text(
+              json.dumps(rows,indent=2)+'\\n')
+          PY
+      - name: Reproduce matching adapter signatures and reject implicit DRM stock packaging
+        run: |
+          set -euo pipefail
+          python3 -m scripts.build.upstream_51f94394_review \
+            --old .work/review-source/old \
+            --candidate .work/review-source/candidate \
+            --current .work/review-source/new \
+            --report .work/review-source/main-51f94394-build-audit.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          reported=json.loads(Path('.work/review-source/main-51f94394-build-audit.json').read_text())
+          known=json.loads(Path('metadata/build/adapter-profiles.json').read_text())
+          assert not any(p['signature']==reported['new_main_signature'] for p in known['profiles']), 'STAGING ONLY: source is already approved; review staging policy'
+          assert reported['decision'].startswith('HOLD:')
+          assert set(reported['adapted_stock_linux']) == {'x86_64', 'aarch64'}
+          assert all(item['native_cargo_drm_disabled'] and item['package_no_drm_explicit'] and item['stale_library_refused'] for item in reported['adapted_stock_linux'].values())
+          print('Non-approving build interface review: PASS, signature remains blocked')
+          PY
+      - name: Validate exact-source CI candidate and reject Stable channel
+        run: |
+          set -euo pipefail
+          python3 scripts/build/build_adapter_contract.py
+          for name in candidate new; do
+            if [[ "$name" == candidate ]]; then expected="$CANDIDATE_SHA"; else expected="$NEW_MAIN_SHA"; fi
+            tree=".work/review-source/$name"
+            test "$(git -C "$tree" rev-parse HEAD)" = "$expected"
+            python3 scripts/build/build_adapter.py "$tree" \
+              --channel ci --output ".work/review-source/$name-candidate-report.json"
+            python3 - ".work/review-source/$name-candidate-report.json" "$expected" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          assert data['Build Compatibility']=='PASS'
+          assert data['ci_candidate_only'] is True
+          assert data['stable_allowed'] is False
+          assert data['candidate_source_sha']==sys.argv[2]
+          assert data['adapter_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          PY
+            if python3 scripts/build/build_adapter.py "$tree" \
+                --channel stable --output ".work/review-source/$name-stable-rejection.json"; then
+              echo 'STOP: candidate unexpectedly admitted to Stable' >&2
+              exit 1
+            fi
+          done
+      - name: CI-only Linux x64/arm64 platform admission, script rendering and release denials
+        run: |
+          set -euo pipefail
+          python3 -m scripts.platform.platform_adapter_contract
+          for source in candidate new; do
+            tree=".work/review-source/$source"
+            for arch in x86_64 aarch64; do
+              output=".work/review-source/$source-$arch"
+              python3 scripts/platform/platform_adapter.py "$tree" \
+                --platform linux --arch "$arch" --channel ci \
+                --linux-scripts "$output" --output "$output-profile.json"
+              python3 - "$output-profile.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1]))
+          assert value['ci_candidate_only'] is True
+          assert value['stable_allowed'] is False
+          assert value['platform_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          PY
+              bash -n "$output/install.sh"
+              bash -n "$output/build.sh"
+              grep -Fq -- '--no-drm' "$output/build.sh"
+              if python3 scripts/platform/platform_adapter.py "$tree" \
+                  --platform linux --arch "$arch" --channel stable \
+                  --output "$output-stable.json"; then
+                echo "STOP: Linux candidate admitted Stable" >&2
+                exit 1
+              fi
+              if python3 scripts/platform/platform_adapter.py "$tree" \
+                  --platform linux --arch "$arch" --channel nightly \
+                  --output "$output-nightly.json"; then
+                echo "STOP: Linux candidate admitted Nightly" >&2
+                exit 1
+              fi
+              if BUILD_FLAVOR=unattended-wayland python3 scripts/platform/platform_adapter.py "$tree" \
+                  --platform linux --arch "$arch" --channel ci \
+                  --output "$output-wayland.json"; then
+                echo "STOP: Linux candidate admitted unattended Wayland" >&2
+                exit 1
+              fi
+            done
+          done
+      - name: Retain comparison evidence for review
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: build-adapter-drm-review-51f94394
+          path: .work/review-source/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  historical-platform-interface:
+    if: github.event_name == 'pull_request' && needs.classify.outputs.change_class == 'FUNCTIONAL'
+    needs: classify
+    name: Review official ${{ matrix.platform }} interfaces (CI only)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows, android, macos]
+    env:
+      PYTHONPATH: .
+      PLATFORM: ${{ matrix.platform }}
+      REVIEWED_SHA: 6aec3069aec486ad7df07429a0a1ee411fc8d73a
+      CANDIDATE_SHA: 9724512429b053be04cdb843345e99ddcccdb80e
+      NEW_MAIN_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install repository review dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Verify exact-source candidate and release-denial contracts
+        run: python3 -m scripts.platform.platform_adapter_contract
+      - name: Fetch immutable official snapshots
+        run: |
+          set -euo pipefail
+          UPSTREAM_EXPECTED_SHA="$REVIEWED_SHA" bash scripts/source/prepare.sh "$REVIEWED_SHA" .work/platform-review/old
+          UPSTREAM_EXPECTED_SHA="$CANDIDATE_SHA" bash scripts/source/prepare.sh "$CANDIDATE_SHA" .work/platform-review/candidate
+          UPSTREAM_EXPECTED_SHA="$NEW_MAIN_SHA" bash scripts/source/prepare.sh "$NEW_MAIN_SHA" .work/platform-review/current
+      - name: Compare reviewed and candidate interfaces without granting release admission
+        run: |
+          set -euo pipefail
+          python3 -m scripts.build.staging_platform_review "$PLATFORM" .work/platform-review
+      - name: Retain interface evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: v4-${{ matrix.platform }}-interface-review
+          path: .work/platform-review/reports/*.json
+          if-no-files-found: warn
+          retention-days: 14

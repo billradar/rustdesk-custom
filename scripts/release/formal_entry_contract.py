@@ -40,13 +40,18 @@ class EntryContract(unittest.TestCase):
             gate=jobs['formal-gate'];call=jobs['formal-dry-run']
             self.assertEqual(gate['permissions'],{'contents':'read'})
             self.assertEqual(call['needs'],'formal-gate')
-            self.assertEqual(call['uses'],'./.github/workflows/staging-v4-desktop-mobile-packages.yml')
+            self.assertEqual(call['uses'],'./.github/workflows/build-validation.yml')
             self.assertTrue(call['with']['include_linux'])
             self.assertNotIn('secrets',call)
             for key in ('android-sign','aggregate','draft'):
                 self.assertIn("inputs.formal_source_sha == ''",jobs[key]['if'])
-        desktop=yaml.safe_load((ROOT/'.github/workflows/staging-v4-desktop-mobile-packages.yml').read_text())
-        linux=yaml.safe_load((ROOT/'.github/workflows/staging-v4-linux-packages.yml').read_text())
+        desktop=yaml.safe_load((ROOT/'.github/workflows/build-validation.yml').read_text())
+        linux=yaml.safe_load((ROOT/'.github/workflows/build-validation-linux.yml').read_text())
+        self.assertEqual(set(desktop['on']),{'pull_request','workflow_call'})
+        self.assertEqual(set(linux['on']),{'workflow_call'})
+        self.assertIn("github.event_name == 'pull_request'",desktop['jobs']['linux']['if'])
+        self.assertIn("github.event_name == 'pull_request'",desktop['jobs']['formal-summary']['if'])
+        self.assertEqual(desktop['jobs']['linux']['uses'],'./.github/workflows/build-validation-linux.yml')
         self.assertEqual(desktop['jobs']['linux']['with']['reuse_prepared'],True)
         self.assertIn('formal-prepare.outputs.standard_artifact',desktop['jobs']['linux']['with']['prepared_standard'])
         self.assertIn('formal-prepare.outputs.sos_artifact',desktop['jobs']['linux']['with']['prepared_sos'])
@@ -54,6 +59,20 @@ class EntryContract(unittest.TestCase):
             self.assertEqual(linux['jobs'][key]['if'],'!inputs.reuse_prepared')
         self.assertNotIn('secrets',desktop['jobs']['linux'])
         self.assertIn('linux',desktop['jobs']['formal-summary']['needs'])
+
+    def test_historical_regressions_live_in_main_ci_not_release_graph(self):
+        ci=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
+        for job in ('historical-patch-applicability','historical-hbb-compile',
+                    'admitted-source-patch-probe','historical-linux-interface',
+                    'historical-platform-interface'):
+            row=ci['jobs'][job]
+            self.assertIn("github.event_name == 'pull_request'",row['if'])
+            self.assertIn("needs.classify.outputs.change_class == 'FUNCTIONAL'",row['if'])
+            self.assertIn('classify',row['needs'])
+            self.assertNotIn('secrets.',json.dumps(row))
+        self.assertIn('historical-patch-applicability',ci['jobs']['historical-hbb-compile']['needs'])
+        self.assertFalse(list((ROOT/'.github/workflows').glob('staging-v4-*.yml')))
+        self.assertFalse((ROOT/'.github/workflows/staging-upstream-51f94394-build-audit.yml').exists())
 
     def test_aggregate_rejects_missing_and_cross_variant_reports(self):
         with tempfile.TemporaryDirectory() as td,patch.dict(os.environ,ENV,clear=True):

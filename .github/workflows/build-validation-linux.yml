@@ -1,14 +1,16 @@
-name: Staging v4 Linux Standard and SOS Rust compile (no publish)
-on:
-  pull_request:
-    paths:
-      - '.github/workflows/staging-v4-linux-native.yml'
-      - 'scripts/build/linux.sh'
-      - 'scripts/build/linux_ci_contract.py'
-      - 'metadata/platform/ci-candidates.json'
-      - 'scripts/platform/platform_adapter.py'
-      - 'patchsets/v4/**'
-  workflow_dispatch: {}
+name: Linux package validation (no publication)
+'on':
+  workflow_call:
+    inputs:
+      reuse_prepared:
+        type: boolean
+        default: false
+      prepared_standard:
+        type: string
+        default: ''
+      prepared_sos:
+        type: string
+        default: ''
 permissions:
   contents: read
   # The called compatibility workflow's report job needs Actions artifact read.
@@ -17,17 +19,31 @@ jobs:
   # The same reviewed official Bridge pipeline used by the primary CI,
   # including the exact source/signature/profile checks.
   compatibility:
+    if: '!inputs.reuse_prepared'
     uses: ./.github/workflows/compat-check.yml
     with:
       upstream_repository: rustdesk/rustdesk
       upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       channel: ci
+  formal-prepare:
+    if: '!inputs.reuse_prepared'
+    name: Prepare formal Linux variant sources (no production credentials)
+    uses: ./.github/workflows/prepare-source.yml
+    with:
+      formal_validation: true
+      upstream_ref: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      upstream_sha: 51f94394ce61e1f3d26229565c326b2862cbdd1f
+      patchset: v4
+      channel: ci
   native:
-    needs: compatibility
-    name: Real Rust Linux ${{ matrix.arch }} ${{ matrix.variant }} check (no publication)
+    needs: [compatibility, formal-prepare]
+    if: >-
+      always() && !cancelled() &&
+      (inputs.reuse_prepared || (needs.compatibility.result == 'success' && needs.formal-prepare.result == 'success'))
+    name: Real DEB/RPM Linux ${{ matrix.arch }} ${{ matrix.variant }} (no publication)
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -53,6 +69,10 @@ jobs:
       PYTHONPATH: .
       PATCHSET: v4
       BUILD_CHANNEL: ci
+      BUILD_CONFIGURATION: 'TEST ONLY'
+      FORMAL_VALIDATION: 'true'
+      PLATFORM: linux
+      VARIANT: ${{ matrix.variant }}
       UPSTREAM_EXPECTED_SHA: 51f94394ce61e1f3d26229565c326b2862cbdd1f
       CARGO_INCREMENTAL: '0'
       CARGO_BUILD_JOBS: '2'
@@ -63,10 +83,18 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
+      - name: Require complete shared source pair for reusable invocation
+        if: inputs.reuse_prepared
+        env:
+          STANDARD_ARTIFACT: ${{ inputs.prepared_standard }}
+          SOS_ARTIFACT: ${{ inputs.prepared_sos }}
+        run: |
+          test -n "$STANDARD_ARTIFACT" && test -n "$SOS_ARTIFACT" && test "$STANDARD_ARTIFACT" != "$SOS_ARTIFACT"
       - name: Install repository validation prerequisites
         run: |
           python3 -m pip install -r requirements.txt
           python3 -m scripts.build.linux_ci_contract
+          python3 -m py_compile scripts/build/linux_ci_package.py
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: '1.75.0'
@@ -79,6 +107,12 @@ jobs:
           cargo --version
           cargo fmt --version
           rustup component list --installed | grep -E '^rustfmt-'
+      - name: Free ephemeral runner space before official Docker/Flutter package build
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
+          df -h
       - name: Install native build libraries (no credentials)
         run: |
           set -euo pipefail
@@ -90,37 +124,17 @@ jobs:
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             protobuf-compiler nasm ninja-build libdbus-1-dev
-      - name: Prepare and patch exact official upstream
-        env:
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          set -euo pipefail
-          # Patch application requires compile-time fixture values; steps
-          # have independent shells, so source them explicitly here too.
-          source scripts/validation/test_config.sh
-          test "$RUSTDESK_ID_SERVER" = test.invalid
-          bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/native/source
-          bash scripts/source/apply_patches.sh .work/native/source "$VARIANT"
-          python3 scripts/source/verify_source.py .work/native/source "$VARIANT" --automation
-      # Download the Bridge generated within this exact workflow run, then use
-      # Stable's existing source/SHA/hash-verified restoration implementation.
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3
         with:
-          name: test-bridge-${{ github.run_id }}
-          path: .work/native/bridge
-      - name: Restore and hash-check official Bridge before native build
+          name: ${{ matrix.variant == 'standard' && (inputs.reuse_prepared && inputs.prepared_standard || needs.formal-prepare.outputs.standard_artifact) || (inputs.reuse_prepared && inputs.prepared_sos || needs.formal-prepare.outputs.sos_artifact) }}
+          path: .work/formal-bundle
+      - name: Unpack formal prepared source before actual Linux build
         run: |
           set -euo pipefail
-          python3 scripts/release/package.py restore-bridge .work/native/source .work/native/bridge
-          test -s .work/native/source/src/bridge_generated.rs
-          test -s .work/native/source/src/bridge_generated.io.rs
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          info=json.loads(Path('.work/native/bridge/bridge-info.json').read_text())
-          assert info['upstream_sha']=='51f94394ce61e1f3d26229565c326b2862cbdd1f'
-          print('Same-run official Bridge restored with SHA/hash verification')
-          PY
+          source scripts/validation/test_config.sh
+          python3 scripts/source/prepared_source.py unpack --bundle .work/formal-bundle --destination .work/native --variant "$VARIANT" --sha "$UPSTREAM_EXPECTED_SHA" --patchset "$PATCHSET" --formal-validation
+          rm -rf -- .work/formal-bundle
+          python3 scripts/source/verify_source.py .work/native/source "$VARIANT" --automation
       - name: Require source-bound Linux CI adapter, never release qualification
         id: profile
         env:
@@ -138,6 +152,7 @@ jobs:
           assert p['runner']==os.environ['EXPECTED_RUNNER']
           assert p['ci_candidate_only'] is True and p['stable_allowed'] is False
           assert p['platform_review_status']=='CI_CANDIDATE_NOT_RELEASE_APPROVED'
+          assert p['production_recipe_approved'] is True and p['release_eligible'] is False
           recipe=Path('.work/native/recipe/build.sh').read_text()
           assert 'hwcodec,flutter,unix-file-copy-paste --release' in recipe
           assert 'hwcodec,flutter,unix-file-copy-paste,drm' not in recipe
@@ -178,20 +193,25 @@ jobs:
           assert manifest['vcpkg-configuration']['default-registry']['baseline']==sys.argv[2]
           assert sys.argv[3] in ('x64-linux','arm64-linux')
           PY
-      - name: Shared Stable Linux core CI probe (no package or publication)
+      - name: Build real DEB/RPM using Stable Linux core (CI fixture, no publication)
         env:
           PLATFORM_ARCH: ${{ matrix.arch }}
           VARIANT: ${{ matrix.variant }}
           PREPARED_SOURCE_DIR: ${{ github.workspace }}/.work/native/source
-          BUILD_CONFIGURATION: CI_TEST
+          BUILD_CONFIGURATION: CI_PACKAGE_TEST
         run: |
           set -euo pipefail
           bash scripts/build/linux.sh
-      - name: Retain safe compiler text diagnostics only
+      - name: Delete fictional CI packages from job workspace
+        if: always()
+        run: |
+          # Test archives are not and must never be distributable release assets.
+          rm -rf -- .work/native/source .work/formal-bundle
+      - name: Retain safe metadata and hash evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: v4-linux-native-${{ matrix.arch }}-${{ matrix.variant }}-compile-report
-          path: .work/native/cargo-native.log
+          name: v4-linux-deb-rpm-${{ matrix.arch }}-${{ matrix.variant }}-smoke-report
+          path: .work/native/package-report.json
           if-no-files-found: warn
           retention-days: 7
