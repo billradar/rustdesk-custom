@@ -42,7 +42,7 @@ class SourceIntegrationContract(unittest.TestCase):
 
     def test_ci_and_stable_bridge_use_same_generator_but_separate_receipts(self):
         for name,module in (('build-stable-platforms.yml','macos_arm64 bridge-info'),
-                            ('staging-v4-desktop-mobile-packages.yml','macos_arm64_ci bridge-info')):
+                            ('build-validation.yml','macos_arm64_ci bridge-info')):
             w=yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
             steps=w['jobs']['macos-arm64-bridge']['steps']
             step=next(s for s in steps if 'generate_flutter344_bridge.sh' in s.get('run',''))
