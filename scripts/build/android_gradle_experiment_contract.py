@@ -4,7 +4,20 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.build.android_gradle_experiment import seed_dependencies
+from scripts.build.android_gradle_experiment import FLUTTER_PREFIX, assemble_seconds, seed_dependencies
+
+
+class TimingContract(unittest.TestCase):
+    def test_completed_flutter_status_in_verbose_and_standard_formats(self):
+        for line, expected in (
+            ("[+282100 ms] Running Gradle task 'assembleRelease'... (completed in 282.1s)", 282.1),
+            ("[   +2 ms] Running Gradle task 'assembleRelease'... (completed in 1,234ms)", 1.234),
+            ("Running Gradle task 'assembleRelease'...                          292.3s", 292.3),
+            ("Running Gradle task 'assembleRelease'...", None),
+            ("Running Gradle task 'assembleDebug'... (completed in 17.9s)", None),
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(assemble_seconds(FLUTTER_PREFIX.sub('', line, count=1)), expected)
 
 
 class SeedContract(unittest.TestCase):

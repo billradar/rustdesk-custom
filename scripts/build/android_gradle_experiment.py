@@ -31,8 +31,19 @@ TRANSFER = re.compile(r'^Downloading https://(?:repo\.maven\.apache\.org|dl\.goo
                       r'maven\.google\.com|plugins\.gradle\.org)/\S+')
 FLUTTER_PREFIX = re.compile(r'^\[\s*(?:[+-]?\d+\s*ms)?\]\s*')
 CLASSPATH = re.compile(r'^BRF_GRADLE_CLASSPATH_MS=(\d+)$')
-ASSEMBLE = re.compile(r"Running Gradle task 'assembleRelease'\.\.\.\s+([\d.]+)s")
+ASSEMBLE = re.compile(
+    r"Running Gradle task 'assembleRelease'\.\.\.\s+(?:\(completed in )?"
+    r"(\d+(?:,\d{3})*(?:\.\d+)?)(ms|s)\)?"
+)
 PACKAGE_REPORT = Path('.work/native/package-report.json')
+
+
+def assemble_seconds(line):
+    match = ASSEMBLE.fullmatch(line)
+    if match is None:
+        return None
+    duration = float(match[1].replace(',', ''))
+    return duration / 1000 if match[2] == 'ms' else duration
 
 
 def seed_dependencies(cold, warm):
@@ -63,8 +74,9 @@ def sample(tree, directory):
             line = FLUTTER_PREFIX.sub('', raw.strip(), count=1)
             if match := CLASSPATH.fullmatch(line):
                 counters['included_compile_classpath_ms'].append(int(match[1]))
-            if match := ASSEMBLE.search(line):
-                counters['assemble_release_seconds'].append(float(match[1]))
+            duration = assemble_seconds(line)
+            if duration is not None:
+                counters['assemble_release_seconds'].append(duration)
             counters['repository_download_log_lines'] += bool(TRANSFER.match(line))
             counters['maven_429_log_lines'] += ('repo.maven.apache.org/' in line
                                                 and 'Received status code 429' in line)
