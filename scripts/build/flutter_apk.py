@@ -1,6 +1,7 @@
 """Invoke the approved Android ABI command at the dependency recovery boundary."""
 
 import argparse
+import os
 from pathlib import Path
 import sys
 
@@ -23,9 +24,12 @@ def main():
         return not output.exists() and not output.is_symlink()
 
     clean_start = output_absent()
+    command = ['flutter', 'build', 'apk', '--' + args.build, '--target-platform', args.target_platform, '--split-per-abi']
+    if os.environ.get('BRF_GRADLE_EXPERIMENT') == '1' and os.environ.get('BRF_FLUTTER_GRADLE_ROOT'):
+        # Flutter otherwise passes -q to Gradle, hiding dependency downloads.
+        command.append('--verbose')
     return reliability.exit_code(reliability.run(
-        reliability.MAVEN,
-        ['flutter', 'build', 'apk', '--' + args.build, '--target-platform', args.target_platform, '--split-per-abi'],
+        reliability.MAVEN, command,
         root, replay_safe=lambda: clean_start and output_absent(),
     ))
 

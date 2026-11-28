@@ -20,6 +20,10 @@ git -C "$sdk" apply --check "$source/.github/patches/flutter_3.24.4_dropdown_men
 git -C "$sdk" apply "$source/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
 python3 scripts/platform/platform_commands.py "$source" android "$PLATFORM_ARCH" deps
 python3 scripts/platform/platform_commands.py "$source" android "$PLATFORM_ARCH" native
+if [[ "${BRF_GRADLE_EXPERIMENT:-}" == 1 ]]; then
+    python3 -m scripts.build.android_gradle_experiment
+    exit
+fi
 # The reviewed official job uses debug signing. This is TEST SIGNED, never production signed.
 python3 scripts/platform/platform_commands.py "$source" android "$PLATFORM_ARCH" package
 if [[ "${BUILD_CHANNEL:-stable}" == ci ]]; then

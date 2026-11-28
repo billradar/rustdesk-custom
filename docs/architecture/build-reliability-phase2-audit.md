@@ -65,3 +65,9 @@ For the first controlled comparison, start with x86_64 Standard, the observed Ni
 - [Pinned Flutter action](https://github.com/subosito/flutter-action/blob/1a449444c387b1966244ae4d4f8c696479add0b2/action.yaml)
 - [Pinned setup-ndk action](https://github.com/nttld/setup-ndk/blob/ed92fe6cadad69be94a966a7ee3271275e62f779/action.yml)
 - [Pinned run-vcpkg action](https://github.com/lukka/run-vcpkg/blob/b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2/action.yml)
+
+## Paired fixture implementation
+
+The stacked Phase 2 pull request runs the pair in its Android x86_64 Standard matrix cell. It keeps the fixture tree and verified native inputs at their canonical paths, snapshots the Flutter project before the first APK command, and restores that snapshot for the second command. Each sample starts with its own Gradle home and Pub cache. The warm sample receives only Gradle's `caches/modules-2` dependency files, excluding locks and garbage collection state. Both samples resolve online with task-output caching and persistent Gradle daemons disabled.
+
+The numeric report records package wall time, observable download log lines and rate-limit messages, Flutter's aggregate Gradle time, and observed resolution intervals for the included Flutter build's root `compileClasspath`. Download lines are not byte counts or a cache hit ratio. A missing timing appears as an empty sample list and needs investigation before drawing conclusions. Both APKs use the existing fixture verifier, and the warm package report remains the normal matrix input. Only JSON metadata is uploaded. The dependency contents, tool homes and APKs remain local to the fixture job.

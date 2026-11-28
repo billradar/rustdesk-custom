@@ -279,6 +279,7 @@ jobs:
       - name: Shared Stable build core with fictional fixture only
         env:
           BRF_MODE: ${{ matrix.platform == 'windows' && 'off' || 'canary' }}
+          BRF_GRADLE_EXPERIMENT: ${{ github.event_name == 'pull_request' && github.base_ref == 'feature/build-reliability-framework' && matrix.platform == 'android' && matrix.arch == 'x86_64' && '1' || '0' }}
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         run: |
@@ -293,6 +294,14 @@ jobs:
       - name: Remove installable fixture packages and source from runner
         if: always()
         run: rm -rf -- .work/native/source .work/formal-bundle .work/native/mac-arm-bridge artifacts
+      - name: Retain Gradle experiment measurements
+        if: ${{ always() && github.event_name == 'pull_request' && github.base_ref == 'feature/build-reliability-framework' && matrix.platform == 'android' && matrix.arch == 'x86_64' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: brf-gradle-experiment-${{ github.run_attempt }}
+          path: .work/native/gradle-experiment.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Retain metadata evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
