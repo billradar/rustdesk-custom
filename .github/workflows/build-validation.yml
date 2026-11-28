@@ -58,6 +58,8 @@ jobs:
       - run: python3 -m pip install -r requirements.txt
       - name: Fetch and check exact official dedicated Bridge recipe
         id: profile
+        env:
+          BRF_MODE: canary
         run: |
           bash scripts/source/prepare.sh "$UPSTREAM_EXPECTED_SHA" .work/mac-arm-ci-bridge
           python3 -m scripts.build.macos_arm64_ci profile .work/mac-arm-ci-bridge
@@ -276,6 +278,7 @@ jobs:
         run: '"$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"'
       - name: Shared Stable build core with fictional fixture only
         env:
+          BRF_MODE: ${{ matrix.platform == 'windows' && 'off' || 'canary' }}
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         run: |

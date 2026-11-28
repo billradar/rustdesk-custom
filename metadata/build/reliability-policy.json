@@ -1,0 +1,20 @@
+{
+  "schema": "build-reliability-policy-v1",
+  "operations": {
+    "android-flutter-apk": {
+      "delays": [60],
+      "budget_seconds": 7200,
+      "categories": ["NET_RATE_LIMIT"]
+    },
+    "upstream-fetch": {
+      "delays": [15, 30, 60],
+      "budget_seconds": 300,
+      "categories": ["NET_CONNECT_FAILED", "NET_CONNECT_TIMEOUT", "NET_READ_TIMEOUT", "NET_CONNECTION_RESET", "NET_DNS_TEMPORARY", "NET_SERVER_ERROR"]
+    },
+    "mac-intel-cargo-fetch": {
+      "delays": [15, 30, 60],
+      "budget_seconds": 420,
+      "categories": ["NET_CONNECT_FAILED", "NET_CONNECT_TIMEOUT", "NET_READ_TIMEOUT", "NET_CONNECTION_RESET", "NET_DNS_TEMPORARY", "NET_SERVER_ERROR"]
+    }
+  }
+}
