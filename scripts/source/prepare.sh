@@ -7,7 +7,10 @@ mkdir -p "$destination"
 [[ -z "$(ls -A "$destination")" ]] || { echo 'Workspace must be empty; no existing files are reset or deleted.' >&2; exit 1; }
 git -C "$destination" init --quiet
 git -C "$destination" remote add origin https://github.com/rustdesk/rustdesk.git
-git -C "$destination" fetch --depth=1 origin "$ref"
+case "${OSTYPE:-}" in
+  msys*|cygwin*) git -C "$destination" fetch --depth=1 origin "$ref" ;;
+  *) python3 "$(dirname "${BASH_SOURCE[0]}")/../build/reliability.py" "$destination" "$ref" ;;
+esac
 sha=$(git -C "$destination" rev-parse 'FETCH_HEAD^{commit}')
 [[ -z "${UPSTREAM_EXPECTED_SHA:-}" || "$sha" == "$UPSTREAM_EXPECTED_SHA" ]] || { echo 'Upstream SHA mismatch' >&2; exit 1; }
 git -C "$destination" checkout --quiet --detach "$sha"
