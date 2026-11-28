@@ -2,7 +2,7 @@
   "schema": "build-reliability-policy-v1",
   "operations": {
     "android-flutter-apk": {
-      "delays": [60],
+      "delays": [240],
       "budget_seconds": 7200,
       "categories": ["NET_RATE_LIMIT"]
     },

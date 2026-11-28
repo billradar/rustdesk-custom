@@ -83,6 +83,16 @@ class ReliabilityContract(unittest.TestCase):
             self.assertEqual(brf.retry_delay(60, 200, '120'), 120)
             self.assertIsNone(brf.retry_delay(60, 100, '120'))
 
+    def test_android_canary_reserves_time_for_the_single_replay(self):
+        failed = (19, RATE_LIMIT, False)
+        with patch.object(brf, 'mode', return_value='canary'), \
+                patch.object(brf, 'execute', return_value=failed) as execute, \
+                patch.object(brf.random, 'uniform', return_value=1.2), \
+                patch.object(brf, 'event'), patch.object(brf.time, 'sleep') as sleep:
+            self.assertEqual(brf.run(brf.MAVEN, ['flutter'], '.'), 19)
+            sleep.assert_called_once_with(288)
+            self.assertEqual(execute.call_count, 2)
+
     def test_replay_success_and_stops(self):
         failed = (19, RATE_LIMIT, False)
         cases = (

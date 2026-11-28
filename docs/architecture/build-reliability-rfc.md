@@ -7,11 +7,11 @@ On 2026-11-28 UTC, main was `7f9e49442b710bad1f63ba89a6ddf69af4415314`. It was t
 | Run | Attempt 1 job evidence | Reported cause |
 | --- | --- | --- |
 | [45575858636](https://github.com/billradar/rustdesk-custom/actions/runs/45575858636) | 139079669780, Android ARM64 | Maven Central 429 |
-| [45946263501](https://github.com/billradar/rustdesk-custom/actions/runs/45946263501) | 140334144663, Android ARMv7; 140334144624, macOS Intel Standard | Maven Central 429; reported BlobNotFound on log retrieval, original macOS cause unknown |
+| [45946263501](https://github.com/billradar/rustdesk-custom/actions/runs/45946263501) | 140334144663, Android ARMv7; 140334144624, macOS Intel Standard | Maven Central 429; BlobNotFound on log retrieval; job annotation records runner communication loss with unknown underlying cause |
 | [45979264908](https://github.com/billradar/rustdesk-custom/actions/runs/45979264908) | 140442853377, Android x86_64; 140442853392, macOS Intel SOS | Maven Central 429; GitHub 443 connection establishment failed while fetching sciter-rs |
 | [46025461800](https://github.com/billradar/rustdesk-custom/actions/runs/46025461800) | 140600079743, Android x86_64; 140638802195, 13-target gate | Maven Central 429; API confirms gate failed at Reject incomplete target execution |
 
-The first three runs concluded successfully on attempt 2; the fourth failed on attempt 1. Historical causes above come from the incident brief. Job metadata was independently retrieved but signed log downloads were forbidden from this environment. The reported Azure error concerns evidence availability. Missing logs and artifacts do not confer recovery authority.
+The first three runs concluded successfully on attempt 2; the fourth failed on attempt 1. GitHub job logs retrieved through the connector confirm all four Maven 429 occurrences and the sciter-rs connection failure. The Mac Intel Standard log endpoint returned HTTP 404 with Azure BlobNotFound. The reported Azure error concerns evidence availability. Missing logs and artifacts do not confer recovery authority.
 
 ## Current execution and ownership
 
@@ -23,11 +23,17 @@ The first three runs concluded successfully on attempt 2; the fourth failed on a
 
 ## Phase 1 design and verification
 
-Apply one operation allowlist and versioned policy to three narrow call sites. The shallow upstream fetch can safely repeat in the same private Git directory before checkout. Mac Intel may prefetch the locked target dependency graph before the upstream build step with Cargo's own retries disabled for the prefetch and Git CLI enabled. Cargo and the approved build recipe still enforce their normal build behavior. Android keeps the Gradle edits, native copy, and APK move outside the retry boundary. Only a verified Maven Central 429 during Gradle compile classpath resolution qualifies, with the package output location checked before replay. Limit the Flutter boundary to one outer replay to bound its internal retry. Preserve the raw failure and existing release, source, bridge, and package gates.
+Apply one operation allowlist and versioned policy to three narrow call sites. The shallow upstream fetch can safely repeat in the same private Git directory before checkout. Mac Intel may prefetch the locked target dependency graph before the upstream build step with Cargo's own retries disabled for the prefetch and Git CLI enabled. Cargo and the approved build recipe still enforce their normal build behavior. Android keeps the Gradle edits, native copy, and APK move outside the retry boundary. Only a verified Maven Central 429 during Gradle compile classpath resolution qualifies, with the package output location checked before replay. Limit the Flutter boundary to one outer replay to bound its internal retry. The base delay is 240 seconds with upward jitter up to 20% (240–288 seconds total). Preserve the raw failure and existing release, source, bridge, and package gates.
 
 Recovery is active only in the credential-free full-validation canary. Other POSIX shared call sites observe without adding execution deadlines or recovery; Windows Git Bash uses its original command. The active execution budget is monotonic and scoped to one operation in one job, including waits, execution and cleanup allowance. Retry events carry controlled fields only. No new network categories are eligible for workflow reruns. Unknown, deterministic and mixed failures remain failures. No cache writes or external fault injection are introduced.
 
 Use offline fault injection for classifier, timing, output safety, policy validation, process cleanup, and retry decisions, plus the existing observer, SDK, router, prepared-source, qualification and bridge contracts. Run full platform validation at the resulting PR head before judging recovery ready. Stable and Nightly formal dry-runs need separate evidence. Production signing, runtime remote sessions, Windows process supervision and release publication are outside this canary.
+
+### Hosted canary evidence
+
+The initial BRF head `eea08195e824553c3863b50a24a89ecdba5e71dc` passed the 13-target [PR validation](https://github.com/billradar/rustdesk-custom/actions/runs/46091763571) on attempt 1, with aggregate artifact `15243934406`. [Ordinary CI](https://github.com/billradar/rustdesk-custom/actions/runs/46091763553) also passed on attempt 1. The PR's three Android job logs had no observed 429 or BRF recovery event.
+
+On the same head, [Nightly Android x86_64](https://github.com/billradar/rustdesk-custom/actions/runs/46091805043/job/140817313577) observed Maven Central 429 for both javawriter and ASM. BRF scheduled its single replay after 60.51 seconds, then recorded `EXHAUSTED` and preserved exit code 1 when the same responses recurred. The revised canary uses the longest base delay proposed in the incident brief while retaining the same outer attempt count. This is a test hypothesis about the useful waiting period. Successful hosted recovery under rate limiting remains to be observed.
 
 ## Later phases and rollback
 
